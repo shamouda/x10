@@ -26,21 +26,22 @@ import x10.matrix.Vector;
 import x10.matrix.util.MathTool;
 import x10.matrix.block.Grid;
 import x10.matrix.block.BlockMatrix;
-import x10.matrix.comm.DataArrayPLH;
-import x10.matrix.comm.ArrayGather;
-import x10.matrix.comm.ArrayScatter;
+
 import x10.util.resilient.DistObjectSnapshot;
 import x10.util.resilient.Snapshottable;
 import x10.util.resilient.VectorSnapshotInfo;
+
+import x10.util.Team;
 
 public type DistVector(m:Long)=DistVector{self.M==m};
 public type DistVector(v:DistVector)=DistVector{self==v};
 
 public class DistVector(M:Long) implements Snapshottable {
     public var distV:PlaceLocalHandle[Vector];
-    //Repack dist vector to dist array
-    public var distData:DataArrayPLH;
-    public transient var segSize:Rail[Long]; //this should be the same size as the place group
+    public transient var segSize:Rail[Int]; //this should be the same size as the place group
+    
+    public var segSizePLH:PlaceLocalHandle[Rail[Int]];
+    
     /*
      * Time profiling
      */
@@ -49,26 +50,29 @@ public class DistVector(M:Long) implements Snapshottable {
     
     /*The place group used for distribution*/
     private var places:PlaceGroup;
-
+    private var team:Team;
+    
     public def places() = places;
     
     //oldSegSize used only for remake and restore
-    private var snapshotSegSize:Rail[Long];
+    private var snapshotSegSize:Rail[Int];
 
-    public def this(m:Long, vs:PlaceLocalHandle[Vector], segsz:Rail[Long], pg:PlaceGroup) {
+    public def this(m:Long, vs:PlaceLocalHandle[Vector], segsz:Rail[Int], pg:PlaceGroup) {
         property(m);
         assert (segsz.size == pg.size()) :
             "number of vector segments must be equal to number of places";
         distV  = vs;
         segSize = segsz;
         places = pg;
-        distData = PlaceLocalHandle.make[Rail[ElemType]](places, ()=>vs().d);
+        team = new Team(places);
+        
+        segSizePLH = PlaceLocalHandle.make[Rail[Int]](pg, ()=>segsz);
     }
 
     public static def make(m:Long, segNum:Long, pg:PlaceGroup):DistVector(m) {
         val hdv = PlaceLocalHandle.make[Vector](pg,
                             ()=>Vector.make(Grid.compBlockSize(m, segNum, pg.indexOf(here))));
-        val slst = new Rail[Long](segNum, (i:Long)=>Grid.compBlockSize(m, segNum, i as Int));
+        val slst = new Rail[Int](segNum, (i:Long)=>Grid.compBlockSize(m, segNum, i as Int) as Int);
         return new DistVector(m, hdv, slst, pg) as DistVector(m);
     }
     
@@ -78,12 +82,12 @@ public class DistVector(M:Long) implements Snapshottable {
     
     public static def make(m:Long) = make (m, Place.places());
 
-    public static def make(m:Long, segsz:Rail[Long], pg:PlaceGroup):DistVector(m) {
+    public static def make(m:Long, segsz:Rail[Int], pg:PlaceGroup):DistVector(m) {
         val hdv = PlaceLocalHandle.make[Vector](pg, ()=>Vector.make(segsz(pg.indexOf(here))));
         return new DistVector(m, hdv, segsz, pg) as DistVector(m);
     }
     
-    public static def make(m:Long, segsz:Rail[Long]):DistVector(m) = make (m, segsz, Place.places());
+    public static def make(m:Long, segsz:Rail[Int]):DistVector(m) = make (m, segsz, Place.places());
 
     public def alloc(m:Long, pg:PlaceGroup):DistVector(m) = make(m, pg);
     public def alloc(pg:PlaceGroup) = alloc(M, pg);
@@ -145,11 +149,29 @@ public class DistVector(M:Long) implements Snapshottable {
     }
 
     public def copyTo(vec:Vector(M)):void {
-        ArrayGather.gather(distData, vec.d, segSize, places);
+        val root = here;
+        val gr = new GlobalRail[ElemType](vec.d);
+        finish for (place in places) at (place) async {
+            val src = distV().d;
+            var dst:Rail[ElemType] = null;
+            if (here.id == root.id){
+                dst = gr();
+            }            
+            team.gatherv(root, src, 0, dst, 0, segSizePLH());           
+        }
     }
 
     public def copyFrom(vec:Vector(M)): void {
-        ArrayScatter.scatter(vec.d, distData, segSize, places);
+        val root = here;
+        val gr = new GlobalRail[ElemType](vec.d);
+        finish for (place in places) at (place) async {
+            var src:Rail[ElemType] = null;
+            val dst = distV().d;
+            if (here.id == root.id){
+                src = gr();
+            }            
+            team.scatterv(root,src, 0, dst, 0, segSizePLH());
+        }
     }
 
     /**
@@ -163,7 +185,7 @@ public class DistVector(M:Long) implements Snapshottable {
         return nv;
     }
 
-    private def find(var pos:Long, segments:Rail[Long]):Pair[Long, Long] {        
+    private def find(var pos:Long, segments:Rail[Int]):Pair[Long, Long] {        
         for (var i:Long=0; i<segments.size; i++) {
             if (pos < segments(i))
                 return new Pair[Long,Long](i, pos);
@@ -484,15 +506,16 @@ public class DistVector(M:Long) implements Snapshottable {
     /**
      * Remake the DistVector over a new PlaceGroup
      */
-    public def remake(segsz:Rail[Long], newPg:PlaceGroup){        
+    public def remake(segsz:Rail[Int], newPg:PlaceGroup){        
         assert (segsz.size == newPg.size()) :
             "number of vector segments must be equal to number of places";
         PlaceLocalHandle.destroy(places, distV, (Place)=>true);
+        PlaceLocalHandle.destroy(places, segSizePLH, (Place)=>true);
         distV = PlaceLocalHandle.make[Vector](newPg, ()=>Vector.make(segsz(newPg.indexOf(here))));        
         segSize = segsz;
-        PlaceLocalHandle.destroy(places, distData, (Place)=>true);
-        distData = PlaceLocalHandle.make[Rail[ElemType]](newPg, ()=>distV().d);
         places = newPg;
+        team = new Team(places);
+        segSizePLH = PlaceLocalHandle.make[Rail[Int]](newPg, ()=>segsz);
     }
     
     /**
@@ -501,7 +524,7 @@ public class DistVector(M:Long) implements Snapshottable {
     public def remake(newPg:PlaceGroup){
         val m = M;        
         val segNum = newPg.size;
-        val slst = new Rail[Long](segNum, (i:Long)=>Grid.compBlockSize(m, segNum, i as Int));
+        val slst = new Rail[Int](segNum, (i:Long)=>Grid.compBlockSize(m, segNum, i as Int) as Int);
         remake (slst, newPg);
     }
 
@@ -571,16 +594,16 @@ public class DistVector(M:Long) implements Snapshottable {
         //val startTime = Timer.milliTime();
         val newSegSize = segSize;
         
-        val newSegmentsOffsets = new Rail[Long](places.size());
-        newSegmentsOffsets(0) = 0;
+        val newSegmentsOffsets = new Rail[Int](places.size());
+        newSegmentsOffsets(0) = 0n;
         for (var i:Long = 1; i < places.size(); i++) {
             for (var j:Long = 0; j < i; j++) {
                 newSegmentsOffsets(i) += newSegSize(j);
             }
         }
         
-        val oldSegmentsOffsets = new Rail[Long](snapshotSegSize.size);
-        oldSegmentsOffsets(0) = 0;
+        val oldSegmentsOffsets = new Rail[Int](snapshotSegSize.size);
+        oldSegmentsOffsets(0) = 0n;
         for (var i:Long = 1; i < snapshotSegSize.size; i++) {
             for (var j:Long = 0; j < i; j++) {
                 oldSegmentsOffsets(i) += snapshotSegSize(j);

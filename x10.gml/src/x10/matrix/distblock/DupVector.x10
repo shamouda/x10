@@ -21,22 +21,18 @@ import x10.matrix.ElemType;
 
 import x10.matrix.util.Debug;
 
-import x10.matrix.comm.ArrayBcast;
-import x10.matrix.comm.ArrayReduce;
-import x10.matrix.comm.DataArrayPLH;
-
 import x10.util.resilient.DistObjectSnapshot;
 import x10.util.resilient.Snapshottable;
 import x10.util.resilient.VectorSnapshotInfo;
+
+import x10.util.Team;
 
 public type DupVector(m:Long)=DupVector{self.M==m};
 public type DupVector(v:DupVector)=DupVector{self==v};
 
 public class DupVector(M:Long) implements Snapshottable {
     public var dupV:PlaceLocalHandle[Vector];
-    private var dupData:DataArrayPLH;//Repackage vector.d
-    public  var tmpData:DataArrayPLH;
-    private transient var tmpReady:Boolean;
+    
     /*
      * Time profiling
      */
@@ -45,14 +41,14 @@ public class DupVector(M:Long) implements Snapshottable {
     
     /*The place group used for distribution*/
     private var places:PlaceGroup;
+    public var team:Team;
 
     public def this(vs:PlaceLocalHandle[Vector], pg:PlaceGroup) {
         val m = vs().M;
         property(m);
         dupV  = vs;
-        tmpReady = false;
         places = pg;
-        dupData = PlaceLocalHandle.make[Rail[ElemType]](places, ()=>vs().d);
+        team = new Team(places);
     }
 
     public static def make(v:Vector, pg:PlaceGroup):DupVector(v.M){
@@ -88,12 +84,6 @@ public class DupVector(M:Long) implements Snapshottable {
         finish ateach(Dist.makeUnique(places)) {
             dupV().reset();
         }
-    }
-
-    public def allocTmp() : void {
-        if (tmpReady) return;
-        tmpReady = true;
-        tmpData = PlaceLocalHandle.make[Rail[ElemType]](places, ()=>new Rail[ElemType](dupV().M));
     }
 
     public def init(dv:ElemType) : DupVector(this) {
@@ -299,31 +289,52 @@ public class DupVector(M:Long) implements Snapshottable {
 
 
     public def sync():void {
-        /* Timing */ val st = Timer.milliTime();        
-        ArrayBcast.bcast(dupData, places);
+        /* Timing */ val st = Timer.milliTime();
+        val root = here;
+        finish for (place in places) at (place) async {
+            var src:Rail[ElemType] = null;
+            val dst = dupV().d;
+            if (here.id == root.id){
+                src = dupV().d;
+            }        	
+            team.bcast(root, src, 0, dst, 0, M);
+        }
         /* Timing */ commTime += Timer.milliTime() - st;
     }
 
-    public def reduce(opFunc:(Rail[ElemType],Rail[ElemType],Long)=>Int): void {
-        allocTmp();
-        /* Timing */ val st = Timer.milliTime();
-        ArrayReduce.reduce(dupData, tmpData, this.M, places, opFunc);
+    public def reduce(op:Int): void {
+        /* Timing */ val st = Timer.milliTime();        
+        val root = here;
+        finish for (place in places) at (place) async {
+        	val src = dupV().d;
+            val dst = dupV().d; // if null at non-root, Team hangs
+            //if (here.id == root.id){
+        	//    dst = dupV().d;
+            //}
+        	team.reduce(root, src, 0, dst, 0, M, op);
+        }
         /* Timing */ commTime += Timer.milliTime() - st;
     }
     
     public def reduceSum(): void {
-        allocTmp();
         /* Timing */ val st = Timer.milliTime();        
-        ArrayReduce.reduceSum(dupData, tmpData, this.M, places);        
+        reduce(Team.ADD);
         /* Timing */ commTime += Timer.milliTime() - st;
     }
     
+    public def allReduce(op:Int): void {
+    	finish for (place in places) at (place) async {
+    		val src = dupV().d;
+    		val dst = dupV().d;
+    		team.allreduce(src, 0, dst, 0, M, op);
+    	}
+    }
+    
     public def allReduceSum(): void {
-        allocTmp();
-        /* Timing */ val st = Timer.milliTime();
-        ArrayReduce.allReduceSum(dupData, tmpData, this.M, places);
+        /* Timing */ val st = Timer.milliTime();        
+        allReduce(Team.ADD);
         /* Timing */ commTime += Timer.milliTime() - st;
-    }    
+    }
 
     public def likeMe(that:DupVector): Boolean = (this.M==that.M);
         
@@ -452,15 +463,10 @@ public class DupVector(M:Long) implements Snapshottable {
      * Remake the DupVector over a new PlaceGroup
      */
     public def remake(newPg:PlaceGroup){
-        PlaceLocalHandle.destroy(places, dupV, (Place)=>true);    
-        dupV = PlaceLocalHandle.make[Vector](newPg, ()=>Vector.make(M));    
-        if (tmpReady){
-            tmpReady = false;
-            PlaceLocalHandle.destroy(places, tmpData, (Place)=>true);
-        }
-        PlaceLocalHandle.destroy(places, dupData, (Place)=>true);
-        dupData = PlaceLocalHandle.make[Rail[ElemType]](newPg, ()=>dupV().d); 
+        PlaceLocalHandle.destroy(places, dupV, (Place)=>true);
+        dupV = PlaceLocalHandle.make[Vector](newPg, ()=>Vector.make(M));         
         places = newPg;
+        team = new Team(places);
     }
     
     /*

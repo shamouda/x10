@@ -17,8 +17,10 @@ import x10.util.Timer;
 import x10.matrix.Matrix;
 import x10.matrix.DenseMatrix;
 import x10.matrix.Vector;
+import x10.util.Team;
+import x10.matrix.ElemType;
 
-public class DistDupVectorMult  { 
+public class DistDupVectorMult  {
 
     public static def comp(mA:DistBlockMatrix, vB:DistVector(mA.N), vC:DupVector(mA.M), plus:Boolean):DupVector(vC) {
         assert (mA.isDistHorizontal()) :
@@ -32,10 +34,13 @@ public class DistDupVectorMult  {
             at(places(p)) async {
                 if (here.id() != rootpid || plus == false) vC.local().reset();
                 BlockVectorMult.comp(mA.handleBS(), vB.distV(), offsetB, vC.local(), 0, true);
+                
+                val src = vC.dupV().d;
+                val dst = vC.dupV().d;
+                vC.team.allreduce(src, 0, dst, 0,vC.M, Team.ADD);
             }
         }
         vC.calcTime += Timer.milliTime() - stt;
-        vC.allReduceSum();
         return vC;
     }
     
@@ -69,10 +74,13 @@ public class DistDupVectorMult  {
                 if (here.id() != rootpid || plus == false) vC.local().reset();
 
                 BlockVectorMult.comp(vB.distV(), offsetB, mA.handleBS(), vC.local(), 0, true);
+                
+                val src = vC.dupV().d;
+                val dst = vC.dupV().d;
+                vC.team.allreduce(src, 0, dst, 0, vC.M, Team.ADD);
             }
         }
-        vC.calcTime += Timer.milliTime() - stt;        
-        vC.allReduceSum();
+        vC.calcTime += Timer.milliTime() - stt;
         return vC;
     }
     
@@ -92,68 +100,115 @@ public class DistDupVectorMult  {
 
         return vC;                
     }
-    
+
     public static def comp(mA:DistBlockMatrix, vB:DupVector(mA.N), vC:DupVector(mA.M), plus:Boolean):DupVector(vC) {
         val places = mA.getPlaces();
-        //Bcast vector to all places. 
-        vB.sync();
 
         var stt:Long = Timer.milliTime();
+        val root = here;
         //Make copy of output local copy
         if (plus) {
             val tmpc = vC.local().clone();
             finish ateach(Dist.makeUnique(places)) {
+                ////Bcast vector to all places. 
+                var vBsrc:Rail[ElemType] = null;
+                val vBdst = vB.dupV().d;
+                if (here.id == root.id){
+                    vBsrc = vB.dupV().d;
+                }
+                vB.team.bcast(root, vBsrc, 0, vBdst, 0, vB.M);
+
                 vC.local().reset();
                 BlockVectorMult.comp(mA.handleBS(), vB.local(), vC.local(),  true);
-            }
-            vC.calcTime += Timer.milliTime() - stt;
-            vC.reduceSum();
 
-            stt = Timer.milliTime();
-            val vc = vC.local();
-            if (plus) vc.cellAdd(tmpc as Vector(vc.M));
+                val src = vC.dupV().d;
+                val dst = vC.dupV().d;
+                vC.team.reduce(root, src, 0, dst, 0, vC.M, Team.ADD);
+
+                var vCsrc:Rail[ElemType] = null;
+                val vCdst = vC.dupV().d;
+                if (here.id == root.id){
+                    vC.local().cellAdd(tmpc as Vector(vC.M));
+                    vCsrc = vC.dupV().d;
+                }
+                vC.team.bcast(root, vCsrc, 0, vCdst, 0, vC.M);
+                
+            }
             vC.calcTime += Timer.milliTime() - stt;
         } else {
             finish ateach(Dist.makeUnique(places)) {
+                ////Bcast vector to all places. 
+                var vBsrc:Rail[ElemType] = null;
+                val vBdst = vB.dupV().d;
+                if (here.id == root.id){
+                    vBsrc = vB.dupV().d;
+                }
+                vB.team.bcast(root, vBsrc, 0, vBdst, 0, vB.M);
+
                 vC.local().reset();
                 BlockVectorMult.comp(mA.handleBS(), vB.local(), vC.local(),  true);
+                
+                val src = vC.dupV().d;
+                val dst = vC.dupV().d;
+                vC.team.allreduce(src, 0, dst, 0, vC.M, Team.ADD);                    
             }
             vC.calcTime += Timer.milliTime() - stt;
-            vC.reduceSum();
         }
-        vC.sync();
         return vC;
     }
     
     public static def comp(vB:DupVector, mA:DistBlockMatrix(vB.M), vC:DupVector(mA.N), plus:Boolean):DupVector(vC) {
         val places = mA.getPlaces();
-        vB.sync();
 
         var stt:Long = Timer.milliTime();
+        val root = here;
         //Make copy of output local copy
         if (plus) {
             val tmpc = vC.local().clone();
         
             finish ateach(Dist.makeUnique(places)) {
+                var vBsrc:Rail[ElemType] = null;
+                val vBdst = vB.dupV().d;
+                if (here.id == root.id){
+                    vBsrc = vB.dupV().d;
+                }
+                vB.team.bcast(root, vBsrc, 0, vBdst, 0, vB.M);
+
                 vC.local().reset();
                 BlockVectorMult.comp(vB.local(), mA.handleBS(), vC.local(), plus);
+                
+                val src = vC.dupV().d;
+                val dst = vC.dupV().d;
+                vC.team.reduce(root, src, 0, dst, 0, vC.M, Team.ADD);
+                
+                var vCsrc:Rail[ElemType] = null;
+                val vCdst = vC.dupV().d;
+                if (here.id == root.id){
+                    vC.local().cellAdd(tmpc as Vector(vC.M));
+                    vCsrc = vC.dupV().d;
+                }
+                vC.team.bcast(root, vCsrc, 0, vCdst, 0, vC.M);
             }
             vC.calcTime += Timer.milliTime() - stt;
-            vC.reduceSum();
-
-            stt = Timer.milliTime();
-            val vc = vC.local();
-            vc.cellAdd(tmpc as Vector(vc.M));
-            vC.calcTime += Timer.milliTime() - stt;
+            
         } else {
             finish ateach(Dist.makeUnique(places)) {
+                var vBsrc:Rail[ElemType] = null;
+                val vBdst = vB.dupV().d;
+                if (here.id == root.id){
+                    vBsrc = vB.dupV().d;
+                }
+                vB.team.bcast(root, vBsrc, 0, vBdst, 0, vB.M);
+            
                 vC.local().reset();
                 BlockVectorMult.comp(vB.local(), mA.handleBS(), vC.local(), plus);
+                
+                val src = vC.dupV().d;
+                val dst = vC.dupV().d;
+                vC.team.allreduce(src, 0, dst, 0, vC.M, Team.ADD);
             }
             vC.calcTime += Timer.milliTime() - stt;
-            vC.reduceSum();    
         }
-        vC.sync();
         return vC;
     }
 }

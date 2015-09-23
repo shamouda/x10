@@ -823,13 +823,13 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      * while DistVector dose not use blocking, meaning each place is assigned with only one vector segment which
      * is same as the total rows of the block set of DistBlockMatrix in that place.
      */
-    public def getAggRowBs():Rail[Long] = gdist.getAggRowBs(getGrid());
+    public def getAggRowBs():Rail[Int] = gdist.getAggRowBs(getGrid());
     
     /**
      * Returns array of integers. Each value is the total number of columns in the place of its indexing value.
      * This method is used to create a DistVector corresponding to the columns of this DistBlockMatrix instance.
      */
-    public def getAggColBs():Rail[Long] = gdist.getAggColBs(getGrid());
+    public def getAggColBs():Rail[Int] = gdist.getAggColBs(getGrid());
 
     public def isDistHorizontal():Boolean {
         if (gdist != null) {
