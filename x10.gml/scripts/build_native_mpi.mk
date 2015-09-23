@@ -30,7 +30,7 @@ x10src		= $(target).x10
 
 ##----------------------------------
 
-MPI_FLAG    = -define MPI_COMMU -cxx-prearg -DMPI_COMMU
+MPI_FLAG    = #-define MPI_COMMU -cxx-prearg -DMPI_COMMU
 MPI_GML_LIB	= -classpath $(base_dir_elem)/native_mpi_gml_$(GML_ELEM_TYPE).jar -x10lib $(base_dir_elem)/native_mpi_gml.properties
 
 ###################################################
