@@ -195,7 +195,7 @@ endif
 
 #-define ENABLE_RING_COMM
 
-MPI_X10CXXFLAGS = -x10rt mpi -define MPI_COMMU -cxx-prearg -DMPI_COMMU 
+MPI_X10CXXFLAGS = -x10rt mpi #-define MPI_COMMU -cxx-prearg -DMPI_COMMU 
 
 ###################################################
 # X10 file built rules
