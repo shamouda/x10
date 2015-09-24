@@ -31,6 +31,7 @@ import x10.util.resilient.DistObjectSnapshot;
 import x10.util.resilient.Snapshottable;
 import x10.util.resilient.VectorSnapshotInfo;
 
+import x10.util.RailUtils;
 import x10.util.Team;
 
 public type DistVector(m:Long)=DistVector{self.M==m};
@@ -41,6 +42,7 @@ public class DistVector(M:Long) implements Snapshottable {
     public transient var segSize:Rail[Int]; //this should be the same size as the place group
     
     public var segSizePLH:PlaceLocalHandle[Rail[Int]];
+    public var offsetsPLH:PlaceLocalHandle[Rail[Int]];
     
     /*
      * Time profiling
@@ -67,7 +69,14 @@ public class DistVector(M:Long) implements Snapshottable {
         team = new Team(places);
         
         segSizePLH = PlaceLocalHandle.make[Rail[Int]](pg, ()=>segsz);
+        val offsets = RailUtils.scanExclusive(segsz, (x:Int, y:Int) => x+y, 0n);
+        offsetsPLH = PlaceLocalHandle.make[Rail[Int]](pg, ()=>offsets);
     }
+    
+    public def getOffset():Int{
+         return offsetsPLH()(places.indexOf(here));
+    }
+    
 
     public static def make(m:Long, segNum:Long, pg:PlaceGroup):DistVector(m) {
         val hdv = PlaceLocalHandle.make[Vector](pg,
@@ -342,6 +351,7 @@ public class DistVector(M:Long) implements Snapshottable {
 
     public def mult(mA:DistBlockMatrix(M), vB:DupVector(mA.N))      = DistDupVectorMult.comp(mA, vB, this, false);
     public def mult(vB:DupVector, mA:DistBlockMatrix(vB.M, this.M)) = DistDupVectorMult.comp(vB, mA, this, false);
+    public def mult_local(mA:DistBlockMatrix(M), vB:DupVector(mA.N))      = DistDupVectorMult.comp_local(mA, vB, this, false);
 
     //FIXME: review the correctness of using places here
     public operator this % (that:DistBlockMatrix(this.M)) = 
@@ -511,11 +521,16 @@ public class DistVector(M:Long) implements Snapshottable {
             "number of vector segments must be equal to number of places";
         PlaceLocalHandle.destroy(places, distV, (Place)=>true);
         PlaceLocalHandle.destroy(places, segSizePLH, (Place)=>true);
+        PlaceLocalHandle.destroy(places, offsetsPLH, (Place)=>true);
+        
         distV = PlaceLocalHandle.make[Vector](newPg, ()=>Vector.make(segsz(newPg.indexOf(here))));        
         segSize = segsz;
         places = newPg;
         team = new Team(places);
         segSizePLH = PlaceLocalHandle.make[Rail[Int]](newPg, ()=>segsz);
+        
+        val offsets = RailUtils.scanExclusive(segsz, (x:Int, y:Int) => x+y, 0n);
+        offsetsPLH = PlaceLocalHandle.make[Rail[Int]](newPg, ()=>offsets);
     }
     
     /**

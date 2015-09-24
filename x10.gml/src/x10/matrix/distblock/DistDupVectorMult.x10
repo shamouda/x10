@@ -61,6 +61,15 @@ public class DistDupVectorMult  {
         return vC;                
     }
 
+    public static def comp_local(mA:DistBlockMatrix, vB:DupVector(mA.N), vC:DistVector(mA.M), plus:Boolean):DistVector(vC) {
+        //make the validation in the application!!!!, need to avoid copying remote data, some vars are transient
+        //assert (mA.isDistVertical()) :
+        //    "First dist block matrix must have vertical distribution";
+        
+        BlockVectorMult.comp(mA.handleBS(), vB.local(), 0, vC.distV(), vC.getOffset(), plus);
+        
+        return vC;
+    }
     public static def comp(vB:DistVector, mA:DistBlockMatrix(vB.M), vC:DupVector(mA.N), plus:Boolean):DupVector(vC) {
         assert (mA.isDistVertical()) :
             "Second operand dist block matrix must have vertical distribution";        
@@ -81,6 +90,27 @@ public class DistDupVectorMult  {
             }
         }
         vC.calcTime += Timer.milliTime() - stt;
+        return vC;
+    }
+    
+    //TODO: remove the root parameter
+    //TODO: who should perform the validation?
+    public static def comp_local(root:Place, vB:DistVector, mA:DistBlockMatrix(vB.M), vC:DupVector(mA.N), plus:Boolean):DupVector(vC) {
+        //assert (mA.isDistVertical()) :
+        //    "Second operand dist block matrix must have vertical distribution";        
+        
+        val rootpid = root.id();
+        val offsetB = vB.getOffset();
+        
+        //TODO: can we remove this condition and use the plus param instead of "true" in the call below
+        if (here.id() != rootpid || plus == false) vC.local().reset();
+
+        BlockVectorMult.comp(vB.distV(), offsetB, mA.handleBS(), vC.local(), 0, true);
+    
+        val src = vC.dupV().d;
+        val dst = vC.dupV().d;
+        vC.team.allreduce(src, 0, dst, 0, vC.M, Team.ADD);
+            
         return vC;
     }
     

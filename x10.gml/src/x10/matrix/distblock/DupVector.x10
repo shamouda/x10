@@ -277,6 +277,7 @@ public class DupVector(M:Long) implements Snapshottable {
 
     public def mult(mA:DistBlockMatrix(this.M), vB:DistVector(mA.N)) = DistDupVectorMult.comp(mA, vB, this, false);
     public def mult(vB:DistVector, mA:DistBlockMatrix(vB.M, this.M)) = DistDupVectorMult.comp(vB, mA, this, false);
+    public def mult_local(root:Place, vB:DistVector, mA:DistBlockMatrix(vB.M, this.M)) = DistDupVectorMult.comp_local(root, vB, mA, this, false);
     public def mult(mA:DistBlockMatrix(this.M), vB:DupVector(mA.N))  = DistDupVectorMult.comp(mA, vB, this, false);
     public def mult(vB:DupVector, mA:DistBlockMatrix(vB.M, this.M))  = DistDupVectorMult.comp(vB, mA, this, false);
     
@@ -301,6 +302,19 @@ public class DupVector(M:Long) implements Snapshottable {
         }
         /* Timing */ commTime += Timer.milliTime() - st;
     }
+    
+    
+    public def sync_local(root:Place):void {
+        /* Timing */ val st = Timer.milliTime();
+        var src:Rail[ElemType] = null;
+        val dst = dupV().d;
+        if (here.id == root.id){
+            src = dupV().d;
+        }
+        team.bcast(root, src, 0, dst, 0, M);    
+        /* Timing */ commTime += Timer.milliTime() - st;
+    }
+    
 
     public def reduce(op:Int): void {
         /* Timing */ val st = Timer.milliTime();        
