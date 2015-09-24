@@ -63,6 +63,9 @@ public class LinearRegression implements ResilientIterativeApp {
     private val nzd:Float;
     private var places:PlaceGroup;
     private val root:Place;
+    private val clock:Clock;
+    
+    private val appTempDataPLH:PlaceLocalHandle[AppTempData];
     
     public def this(v:DistBlockMatrix, y:DistVector(v.M), it:Long, chkpntIter:Long, sparseDensity:Float, places:PlaceGroup) {
         maxIterations = it;
@@ -83,6 +86,10 @@ public class LinearRegression implements ResilientIterativeApp {
         nzd = sparseDensity;
         this.places = places;
         root = here;
+        
+        clock = Clock.make();
+        
+        appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());
     }
     
     public def isFinished() {
@@ -100,16 +107,16 @@ public class LinearRegression implements ResilientIterativeApp {
         finish for (var p:Long=0; p<places.size(); p++) {       
             at (places(p)) async {
                 dupR.mult_local(root, y, V);
+                
+                dupR.local().copyTo(r);
+                // 5: p=-r
+                r.copyTo(d_p.local());
+                // 4: r=-(t(V) %*% y)
+                r.scale(-1.0 as ElemType);
+                // 6: norm_r2=sum(r*r)
+                appTempDataPLH().norm_r2 = r.dot(r);
             }
-        }
-        
-        dupR.local().copyTo(r);
-        // 5: p=-r
-        r.copyTo(d_p.local());
-        // 4: r=-(t(V) %*% y)
-        r.scale(-1.0 as ElemType);
-        // 6: norm_r2=sum(r*r)
-        norm_r2 = r.dot(r);
+        }        
         
         new ResilientExecutor(checkpointFreq, places).run(this);
         
@@ -124,48 +131,52 @@ public class LinearRegression implements ResilientIterativeApp {
         // Parallel computing
         ///assert (V.isDistVertical()) : "First dist block matrix must have vertical distribution";        
         finish for (var p:Long=0; p<places.size(); p++) {       
-        	at (places(p)) async {
-            	d_p.sync_local(root);
+        	at (places(p)) async clocked(clock) {
+            	//d_p.sync_local(root);
             
                 // 10: q=((t(V) %*% (V %*% p)) )
 
                 //////Global view step:  d_q.mult(Vp.mult(V, d_p), V);           
             	Vp.mult_local(V, d_p);
             
-                d_p.team.barrier();
+                /////clock.advanceAll();    not needed, the next operation depends only on my own local part
                 
             	d_q.mult_local(root, Vp, V);
+            
+            
+            
+                // Sequential computing
+            
+                var ct:Long = Timer.milliTime();
+                //q = q + lambda*p
+                val p = d_p.local();
+                val q = d_q.local();
+                q.scaleAdd(lambda, p);
+            
+                // 11: alpha= norm_r2/(t(p)%*%q);
+                val alpha = norm_r2 / p.dotProd(q);
+             
+                // 12: w=w+alpha*p;
+                w.scaleAdd(alpha, p);
+            
+                // 13: old norm r2=norm r2;
+                val old_norm_r2 = appTempDataPLH().norm_r2;
+            
+                // 14: r=r+alpha*q;
+                r.scaleAdd(alpha, q);
+
+                // 15: norm_r2=sum(r*r);
+                appTempDataPLH().norm_r2 = r.dot(r);
+
+                // 16: beta=norm_r2/old_norm_r2;
+                val beta = appTempDataPLH().norm_r2/old_norm_r2;
+            
+                // 17: p=-r+beta*p;
+                p.scale(beta).cellSub(r);
         	}
         }
         
-        // Sequential computing
         
-        var ct:Long = Timer.milliTime();
-        //q = q + lambda*p
-        val p = d_p.local();
-        val q = d_q.local();
-        q.scaleAdd(lambda, p);
-        
-        // 11: alpha= norm_r2/(t(p)%*%q);
-        val alpha = norm_r2 / p.dotProd(q);
-        
-        // 12: w=w+alpha*p;
-        w.scaleAdd(alpha, p);
-        
-        // 13: old norm r2=norm r2;
-        val old_norm_r2 = norm_r2;
-        
-        // 14: r=r+alpha*q;
-        r.scaleAdd(alpha, q);
-
-        // 15: norm_r2=sum(r*r);
-        norm_r2 = r.dot(r);
-
-        // 16: beta=norm_r2/old_norm_r2;
-        val beta = norm_r2/old_norm_r2;
-        
-        // 17: p=-r+beta*p;
-        p.scale(beta).cellSub(r);
         
         seqCompT += Timer.milliTime() - ct;
         
@@ -207,5 +218,9 @@ public class LinearRegression implements ResilientIterativeApp {
         Console.OUT.println("Restore succeeded. Restarting from iteration["+iter+"] norm["+norm_r2+"] ...");
         //Console.OUT.println("Load Balance After Restore: ");
         //V.printLoadStatistics();
+    }
+    
+    class AppTempData{
+        public var norm_r2:ElemType;        
     }
 }
