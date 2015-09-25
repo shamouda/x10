@@ -16,12 +16,15 @@ import x10.util.Timer;
 import x10.util.Random;
 import x10.matrix.util.PlaceGroupBuilder;
 import x10.util.resilient.PlaceHammer;
+import x10.regionarray.Dist;
 
 public class ResilientExecutor {
     private val store:ResilientStoreForApp;
     private var places:PlaceGroup;
     private val itersPerCheckpoint:Long;
     private var isResilient:Boolean = false;
+    private var isLocalStep:Boolean = false;
+    
     private val VERBOSE = false;
 
     private var runTime:Long = 0;
@@ -35,9 +38,10 @@ public class ResilientExecutor {
     
     private var restoreJustDone:Boolean = false;
     
-    public def this(itersPerCheckpoint:Long, places:PlaceGroup) {
+    public def this(itersPerCheckpoint:Long, places:PlaceGroup, isLocalStep:Boolean) {
         this.places = places;
         this.itersPerCheckpoint = itersPerCheckpoint;
+        this.isLocalStep = isLocalStep;        
         if (itersPerCheckpoint > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0) {
             isResilient = true;
             store = new ResilientStoreForApp();
@@ -124,7 +128,14 @@ public class ResilientExecutor {
                 }
 
                 val startStep = Timer.milliTime();
-                app.step();
+                if (isLocalStep){                    
+                    finish ateach(Dist.makeUnique(places)) {
+                        app.step_local();
+                    }
+                }
+                else{
+                    app.step();
+                }
                 stepExecTime += (Timer.milliTime() - startStep);
                 stepExecCount++;
 

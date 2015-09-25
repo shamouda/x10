@@ -15,10 +15,19 @@ public interface ResilientIterativeApp {
     public def isFinished():Boolean;
 
     /**
-     * Perform a single step of the computation
+     * Perform a single step of the computation on all places
      * and update the finished status as required.
      */
     public def step():void;
+    
+    
+    /**
+     * Perform a single step of the computation on a single place
+     * and update the finished status as required.
+     */
+    public def step_local():void;
+
+    
 
     /**
      * Checkpoint the application state at all places.

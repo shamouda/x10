@@ -53,7 +53,6 @@ public class LinearRegression implements ResilientIterativeApp {
     
     var norm_r2:ElemType;
     var lastCheckpointNorm:ElemType;
-    var iter:Long;
     
     //----Profiling-----
     public var parCompT:Long=0;
@@ -88,7 +87,7 @@ public class LinearRegression implements ResilientIterativeApp {
     }
     
     public def isFinished() {
-        return iter >= maxIterations;
+        return appTempDataPLH().iter >= maxIterations;
     }
     
     public def run() {
@@ -114,7 +113,7 @@ public class LinearRegression implements ResilientIterativeApp {
             }
         }        
         
-        new ResilientExecutor(checkpointFreq, places).run(this);
+        new ResilientExecutor(checkpointFreq, places, true).run(this);
         
         //////TODO: change the implementation for using the local functions
         //////parCompT = dupR.getCalcTime() + d_q.getCalcTime() + Vp.getCalcTime();
@@ -124,10 +123,13 @@ public class LinearRegression implements ResilientIterativeApp {
     }
     
     public def step() {
+         throw new Exception("Global view step not implemented ...");
+    }
+    
+    public def step_local() {
         // Parallel computing
 
-        finish for (var pl:Long=0; pl<places.size(); pl++) {
-        	at (places(pl)) async {
+
             	//d_p.sync_local(root);
                 // 10: q=((t(V) %*% (V %*% p)) )
 
@@ -166,10 +168,9 @@ public class LinearRegression implements ResilientIterativeApp {
                 // 17: p=-r+beta*p;
                 p.scale(beta).cellSub(r);
                 
-        	}
-        }
+
         
-        iter++;
+                appTempDataPLH().iter++;
     }
     
     public def checkpoint(resilientStore:ResilientStoreForApp) {       
@@ -201,15 +202,16 @@ public class LinearRegression implements ResilientIterativeApp {
         store.restore();
         
         //adjust the iteration number and the norm value
-        iter = lastCheckpointIter;
-        norm_r2 = lastCheckpointNorm;
+        appTempDataPLH().iter = lastCheckpointIter;
+        appTempDataPLH().norm_r2 = lastCheckpointNorm;
         places = newPg;        
-        Console.OUT.println("Restore succeeded. Restarting from iteration["+iter+"] norm["+norm_r2+"] ...");
+        Console.OUT.println("Restore succeeded. Restarting from iteration["+appTempDataPLH().iter+"] norm["+appTempDataPLH().norm_r2+"] ...");
         //Console.OUT.println("Load Balance After Restore: ");
         //V.printLoadStatistics();
     }
     
     class AppTempData{
-        public var norm_r2:ElemType;        
+        public var norm_r2:ElemType;
+        public var iter:Long;
     }
 }
