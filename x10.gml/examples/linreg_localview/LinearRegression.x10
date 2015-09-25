@@ -60,7 +60,7 @@ public class LinearRegression implements ResilientIterativeApp {
     public var commT:Long;
     private val nzd:Float;
     private var places:PlaceGroup;
-    private val root:Place;   
+    private val root:Place;
     
     private var appTempDataPLH:PlaceLocalHandle[AppTempData];
     
