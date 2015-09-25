@@ -9,8 +9,6 @@
  *  (C) Copyright IBM Corporation 2011-2014.
  *  (C) Copyright Sara Salem Hamouda 2014.
  */
-package linreg;
-
 import x10.matrix.Vector;
 import x10.matrix.ElemType;
 
@@ -39,7 +37,8 @@ public class LinearRegression implements ResilientIterativeApp {
     public val V:DistBlockMatrix;
     /** Vector of training regression targets */
     public val y:DistVector(V.M);
-    /** Learned model weight vector, used for future predictions */
+    /** Learned model weight vector, used for future predictions */    
+    public val d_w:DupVector(V.N);
     public val w:Vector(V.N);
     
     public val maxIterations:Long;
@@ -47,7 +46,7 @@ public class LinearRegression implements ResilientIterativeApp {
     val d_p:DupVector(V.N);
     val Vp:DistVector(V.M);
     
-    val r:Vector(V.N);
+    val d_r:DupVector(V.N);
     val d_q:DupVector(V.N);
     
     private val checkpointFreq:Long;
@@ -62,10 +61,9 @@ public class LinearRegression implements ResilientIterativeApp {
     public var commT:Long;
     private val nzd:Float;
     private var places:PlaceGroup;
-    private val root:Place;
-    private val clock:Clock;
+    private val root:Place;   
     
-    private val appTempDataPLH:PlaceLocalHandle[AppTempData];
+    private var appTempDataPLH:PlaceLocalHandle[AppTempData];
     
     public def this(v:DistBlockMatrix, y:DistVector(v.M), it:Long, chkpntIter:Long, sparseDensity:Float, places:PlaceGroup) {
         maxIterations = it;
@@ -74,22 +72,19 @@ public class LinearRegression implements ResilientIterativeApp {
         
         Vp = DistVector.make(V.M, V.getAggRowBs(), places);
         
-        r  = Vector.make(V.N);
+        d_r  = DupVector.make(V.N, places);
         d_p= DupVector.make(V.N, places);
         
         d_q= DupVector.make(V.N, places);
         
-        w  = Vector.make(V.N);
+        d_w = DupVector.make(V.N, places);       
+        w = d_w.local();
         
         this.checkpointFreq = chkpntIter;
         
         nzd = sparseDensity;
         this.places = places;
         root = here;
-        
-        clock = Clock.make();
-        
-        appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());
     }
     
     public def isFinished() {
@@ -98,17 +93,18 @@ public class LinearRegression implements ResilientIterativeApp {
     
     public def run() {
         
-        assert (V.isDistVertical()) : "dist block matrix must have vertical distribution";   
+        assert (V.isDistVertical()) : "dist block matrix must have vertical distribution";
+        appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());
     
-        val dupR = DupVector.make(V.N, places);
         // 4: r=-(t(V) %*% y)
         /////dupR.mult(y, V);
         
         finish for (var p:Long=0; p<places.size(); p++) {       
             at (places(p)) async {
-                dupR.mult_local(root, y, V);
+                d_r.mult_local(root, y, V);
                 
-                dupR.local().copyTo(r);
+                val r = d_r.local(); 
+                
                 // 5: p=-r
                 r.copyTo(d_p.local());
                 // 4: r=-(t(V) %*% y)
@@ -129,35 +125,31 @@ public class LinearRegression implements ResilientIterativeApp {
     
     public def step() {
         // Parallel computing
-        ///assert (V.isDistVertical()) : "First dist block matrix must have vertical distribution";        
-        finish for (var p:Long=0; p<places.size(); p++) {       
-        	at (places(p)) async clocked(clock) {
+
+        finish for (var pl:Long=0; pl<places.size(); pl++) {
+        	at (places(pl)) async {
             	//d_p.sync_local(root);
-            
                 // 10: q=((t(V) %*% (V %*% p)) )
 
                 //////Global view step:  d_q.mult(Vp.mult(V, d_p), V);           
             	Vp.mult_local(V, d_p);
-            
-                /////clock.advanceAll();    not needed, the next operation depends only on my own local part
                 
             	d_q.mult_local(root, Vp, V);
             
-            
-            
-                // Sequential computing
+                // Replicated Computation at each place
             
                 var ct:Long = Timer.milliTime();
                 //q = q + lambda*p
                 val p = d_p.local();
                 val q = d_q.local();
+                val r = d_r.local(); 
                 q.scaleAdd(lambda, p);
             
                 // 11: alpha= norm_r2/(t(p)%*%q);
-                val alpha = norm_r2 / p.dotProd(q);
+                val alpha = appTempDataPLH().norm_r2 / p.dotProd(q);
              
                 // 12: w=w+alpha*p;
-                w.scaleAdd(alpha, p);
+                d_w.local().scaleAdd(alpha, p);
             
                 // 13: old norm r2=norm r2;
                 val old_norm_r2 = appTempDataPLH().norm_r2;
@@ -173,12 +165,9 @@ public class LinearRegression implements ResilientIterativeApp {
             
                 // 17: p=-r+beta*p;
                 p.scale(beta).cellSub(r);
+                
         	}
         }
-        
-        
-        
-        seqCompT += Timer.milliTime() - ct;
         
         iter++;
     }
@@ -188,8 +177,8 @@ public class LinearRegression implements ResilientIterativeApp {
         resilientStore.saveReadOnly(V);
         resilientStore.save(d_p);
         resilientStore.save(d_q);
-        resilientStore.save(r);
-        resilientStore.save(w);
+        resilientStore.save(d_r);
+        resilientStore.save(d_w);
         resilientStore.commit();
         lastCheckpointNorm = norm_r2;
     }

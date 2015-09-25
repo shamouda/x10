@@ -26,9 +26,6 @@ import x10.matrix.util.Debug;
 import x10.matrix.util.MathTool;
 import x10.matrix.util.PlaceGroupBuilder;
 
-import linreg.LinearRegression;
-import linreg.SeqLinearRegression;
-
 /**
  * Test harness for Linear Regression using GML
  */

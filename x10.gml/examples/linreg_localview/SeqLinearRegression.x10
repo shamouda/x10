@@ -8,8 +8,6 @@
  *
  *  (C) Copyright IBM Corporation 2011-2014.
  */
-package linreg;
-
 import x10.matrix.DenseMatrix;
 import x10.matrix.Vector;
 import x10.matrix.ElemType;
