@@ -235,8 +235,8 @@ managed_gml		: $(lib_src)
 native_gml		: $(lib_src) 
 		@($(MAKE) clib target=native_gml src="$(lib_src)")
 
-native_mpi_gml	: $(lib_src) $(mpi_wrap) 
-		@($(MAKE) clib target=$@ src="$(lib_src) $(mpi_wrap)" extra_opts='$(MPI_X10CXXFLAGS)')
+native_mpi_gml	: $(lib_src)
+		@($(MAKE) clib target=$@ src="$(lib_src)" extra_opts='$(MPI_X10CXXFLAGS)')
 
 ### build basic non-dist lib, single place (sequential matrix lib)
 managed_seq_gml	: $(seq_src)
