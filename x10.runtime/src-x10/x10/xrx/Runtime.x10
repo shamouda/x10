@@ -117,10 +117,10 @@ public final class Runtime {
     @Native("java", "x10.runtime.impl.java.Runtime.runAsyncAt((long)(#epoch), (int)(#id), #body, #finishState, #prof, #preSendAction)")
     @Native("c++", "::x10aux::run_async_at((x10_long)(#id), #body, #finishState, #prof, #preSendAction)")
     public static native def x10rtSendAsyncInternal(epoch:Long, id:Long, body:()=>void, finishState:FinishState, 
-                                            prof:Profile, preSendAction:()=>void):void;
+                                                     prof:Profile, preSendAction:()=>void):void;
 
     public static def x10rtSendAsync(id:Long, body:()=>void, finishState:FinishState, 
-                                            prof:Profile, preSendAction:()=>void):void {
+                                     prof:Profile, preSendAction:()=>void):void {
         val epoch = epoch();
         if (CANCELLABLE) {
             if (activity() != null && activity().epoch < epoch) throw new CancellationException();
@@ -659,8 +659,7 @@ public final class Runtime {
             };
             submitLocalActivity(new Activity(epoch, asyncBody, state));
         } else {
-            val preSendAction = ()=>{ state.notifySubActivitySpawn(place); };
-            x10rtSendAsync(place.id, body, state, prof, preSendAction); // optimized case
+            state.spawnRemoteActivity(place, body, prof);
         }
         Unsafe.dealloc(body);
     }
@@ -1364,7 +1363,7 @@ public final class Runtime {
         if (RESILIENT_MODE==Configuration.RESILIENT_MODE_NONE || RESILIENT_MODE==Configuration.RESILIENT_MODE_X10RT_ONLY) {
             return new FinishState.Finish();
         } else {
-            return FinishResilient.make(null/*parent*/, null/*latch*/);
+            return FinishResilient.make(null);
         }
     }
 
@@ -1372,7 +1371,7 @@ public final class Runtime {
         if (RESILIENT_MODE==Configuration.RESILIENT_MODE_NONE || RESILIENT_MODE==Configuration.RESILIENT_MODE_X10RT_ONLY) {
             return new FinishState.Finish();
         } else {
-            return FinishResilient.make(parent, null/*latch*/);
+            return FinishResilient.make(parent);
         }
     }
 
@@ -1420,7 +1419,7 @@ public final class Runtime {
                 f = new FinishState.Finish();
             }
         } else {
-            f = FinishResilient.make(null/*parent*/, null/*latch*/);
+            f = FinishResilient.make(null);
         }
 
         return activity().swapFinish(f);
