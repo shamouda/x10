@@ -38,8 +38,7 @@ public class LinearRegression implements ResilientIterativeApp {
     /** Vector of training regression targets */
     public val y:DistVector(V.M);
     /** Learned model weight vector, used for future predictions */    
-    public val d_w:DupVector(V.N);
-    public val w:Vector(V.N);
+    public val d_w:DupVector(V.N);    
     
     public val maxIterations:Long;
     
@@ -76,8 +75,7 @@ public class LinearRegression implements ResilientIterativeApp {
         
         d_q= DupVector.make(V.N, places);
         
-        d_w = DupVector.make(V.N, places);       
-        w = d_w.local();
+        d_w = DupVector.make(V.N, places);      
         
         this.checkpointFreq = chkpntIter;
         
@@ -93,25 +91,7 @@ public class LinearRegression implements ResilientIterativeApp {
     public def run() {
         
         assert (V.isDistVertical()) : "dist block matrix must have vertical distribution";
-        appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());
-    
-        // 4: r=-(t(V) %*% y)
-        /////dupR.mult(y, V);
-        
-        finish for (var p:Long=0; p<places.size(); p++) {       
-            at (places(p)) async {
-                d_r.mult_local(root, y, V);
-                
-                val r = d_r.local(); 
-                
-                // 5: p=-r
-                r.copyTo(d_p.local());
-                // 4: r=-(t(V) %*% y)
-                r.scale(-1.0 as ElemType);
-                // 6: norm_r2=sum(r*r)
-                appTempDataPLH().norm_r2 = r.dot(r);
-            }
-        }        
+        appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());         
         
         new ResilientExecutor(checkpointFreq, places, true).run(this);
         
@@ -119,8 +99,10 @@ public class LinearRegression implements ResilientIterativeApp {
         //////parCompT = dupR.getCalcTime() + d_q.getCalcTime() + Vp.getCalcTime();
         /////commT = dupR.getCommTime() + d_q.getCommTime() + d_p.getCommTime() + Vp.getCommTime();
 
-        return w;
+        return d_w.local();
     }
+    
+    public def getResult() = d_w.local();
     
     public def step() {
          throw new Exception("Global view step not implemented ...");
@@ -128,49 +110,60 @@ public class LinearRegression implements ResilientIterativeApp {
     
     public def step_local() {
         // Parallel computing
-
-
-            	//d_p.sync_local(root);
-                // 10: q=((t(V) %*% (V %*% p)) )
-
-                //////Global view step:  d_q.mult(Vp.mult(V, d_p), V);           
-            	Vp.mult_local(V, d_p);
-                
-            	d_q.mult_local(root, Vp, V);
-            
-                // Replicated Computation at each place
-            
-                var ct:Long = Timer.milliTime();
-                //q = q + lambda*p
-                val p = d_p.local();
-                val q = d_q.local();
-                val r = d_r.local(); 
-                q.scaleAdd(lambda, p);
-            
-                // 11: alpha= norm_r2/(t(p)%*%q);
-                val alpha = appTempDataPLH().norm_r2 / p.dotProd(q);
-             
-                // 12: w=w+alpha*p;
-                d_w.local().scaleAdd(alpha, p);
-            
-                // 13: old norm r2=norm r2;
-                val old_norm_r2 = appTempDataPLH().norm_r2;
-            
-                // 14: r=r+alpha*q;
-                r.scaleAdd(alpha, q);
-
-                // 15: norm_r2=sum(r*r);
-                appTempDataPLH().norm_r2 = r.dot(r);
-
-                // 16: beta=norm_r2/old_norm_r2;
-                val beta = appTempDataPLH().norm_r2/old_norm_r2;
-            
-                // 17: p=-r+beta*p;
-                p.scale(beta).cellSub(r);
-                
-
+    
+        if (appTempDataPLH().iter == 0) {
+            d_r.mult_local(root, y, V);
         
-                appTempDataPLH().iter++;
+            val r = d_r.local(); 
+        
+            // 5: p=-r
+            r.copyTo(d_p.local());
+            // 4: r=-(t(V) %*% y)
+            r.scale(-1.0 as ElemType);
+            // 6: norm_r2=sum(r*r)
+            appTempDataPLH().norm_r2 = r.dot(r);
+        }
+
+
+        //d_p.sync_local(root);
+        // 10: q=((t(V) %*% (V %*% p)) )
+
+        //////Global view step:  d_q.mult(Vp.mult(V, d_p), V);           
+        Vp.mult_local(V, d_p);
+                
+        d_q.mult_local(root, Vp, V);
+            
+        // Replicated Computation at each place
+            
+        var ct:Long = Timer.milliTime();
+        //q = q + lambda*p
+        val p = d_p.local();
+        val q = d_q.local();
+        val r = d_r.local(); 
+        q.scaleAdd(lambda, p);
+            
+        // 11: alpha= norm_r2/(t(p)%*%q);
+        val alpha = appTempDataPLH().norm_r2 / p.dotProd(q);
+             
+        // 12: w=w+alpha*p;
+        d_w.local().scaleAdd(alpha, p);
+            
+        // 13: old norm r2=norm r2;
+        val old_norm_r2 = appTempDataPLH().norm_r2;
+            
+        // 14: r=r+alpha*q;
+        r.scaleAdd(alpha, q);
+
+        // 15: norm_r2=sum(r*r);
+        appTempDataPLH().norm_r2 = r.dot(r);
+
+        // 16: beta=norm_r2/old_norm_r2;
+        val beta = appTempDataPLH().norm_r2/old_norm_r2;
+            
+        // 17: p=-r+beta*p;
+        p.scale(beta).cellSub(r);                
+        
+        appTempDataPLH().iter++;
     }
     
     public def checkpoint(resilientStore:ResilientStoreForApp) {       
