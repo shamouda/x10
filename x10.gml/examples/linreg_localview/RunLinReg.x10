@@ -164,7 +164,7 @@ public class RunLinReg {
         if (print) {
             Console.OUT.println("Input sparse matrix X\n" + X);
             Console.OUT.println("Input dense matrix y\n" + y);
-            Console.OUT.println("Output dense matrix w\n" + parLR.w);
+            Console.OUT.println("Output dense matrix w\n" + parLR.getResult());
         }
 
         if (verify) {
@@ -174,8 +174,8 @@ public class RunLinReg {
             Debug.flushln("Starting sequential linear regression");
             seqLR.run();
             Debug.flushln("Verifying results against sequential version");
-
-            if (equalsRespectNaN(parLR.w, seqLR.w as Vector(parLR.w.M))) {
+            
+            if (equalsRespectNaN(parLR.getResult(), seqLR.w as Vector(parLR.getResult().M))) {
                 Console.OUT.println("Verification passed.");
             } else {
                 Console.OUT.println("Verification failed!");
