@@ -529,4 +529,38 @@ public class DupVector(M:Long) implements Snapshottable {
             }
         }
     }
+    
+    
+    public def makeSnapshot_local(snapshot:DistObjectSnapshot):void {        
+        val mode = System.getenv("X10_RESILIENT_STORE_MODE");
+        if (mode == null || mode.equals("0")){
+            if (here.id == 0){
+                val data = dupV();
+                val placeIndex = 0;
+                snapshot.save(DUMMY_KEY, new VectorSnapshotInfo(placeIndex, data.d));
+            }
+        } else {            
+            val data = dupV();
+            val placeIndex = places.indexOf(here);
+            snapshot.save(placeIndex, new VectorSnapshotInfo(placeIndex, data.d));            
+        }
+    }
+    
+    
+    public def restoreSnapshot_local(snapshot:DistObjectSnapshot) {
+        val mode = System.getenv("X10_RESILIENT_STORE_MODE");
+        if (mode == null || mode.equals("0")){        
+            if (here.id == 0){
+                val dupSnapshotInfo:VectorSnapshotInfo = snapshot.load(DUMMY_KEY) as VectorSnapshotInfo;
+                new Vector(dupSnapshotInfo.data).copyTo(dupV());
+            }            
+            sync_local(Place(0));
+        } else {
+            val segmentPlaceIndex = places.indexOf(here);
+            val storedVector = snapshot.load(segmentPlaceIndex) as VectorSnapshotInfo;
+            val srcRail = storedVector.data;
+            val dstRail = dupV().d;
+            Rail.copy(srcRail, 0, dstRail, 0, srcRail.size);
+        }
+    }
 }

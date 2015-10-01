@@ -29,7 +29,8 @@ public class DistDupVectorMult  {
         val places = mA.getPlaces();
         var offb:Long = 0;
         val rootpid = here.id();
-        finish for (var p:Long=0; p<places.size(); offb+=vB.segSize(p), p++) {
+        val vBsegSize =  vB.getSegSize();
+        finish for (var p:Long=0; p<places.size(); offb+=vBsegSize(p), p++) {
             val offsetB = offb;
             at(places(p)) async {
                 if (here.id() != rootpid || plus == false) vC.local().reset();
@@ -50,7 +51,8 @@ public class DistDupVectorMult  {
         val stt = Timer.milliTime();        
         val places = mA.getPlaces();        
         var offc:Long = 0;
-        finish for (var p:Long=0; p<places.size(); offc+=vC.segSize(p), p++) {
+        val vCsegSize =  vC.getSegSize();
+        finish for (var p:Long=0; p<places.size(); offc+=vCsegSize(p), p++) {
             val offsetC = offc;
             at(places(p)) async {
                 BlockVectorMult.comp(mA.handleBS(), vB.local(), 0, vC.distV(), offsetC, plus);
@@ -77,7 +79,8 @@ public class DistDupVectorMult  {
         val places = mA.getPlaces();
         var offb:Long=0;
         val rootpid = here.id();
-        finish for (var p:Long=0; p<places.size(); offb+=vB.segSize(p), p++) {
+        val vBsegSize =  vB.getSegSize();
+        finish for (var p:Long=0; p<places.size(); offb+=vBsegSize(p), p++) {
             val offsetB = offb;
             at(places(p)) async {
                 if (here.id() != rootpid || plus == false) vC.local().reset();
@@ -120,7 +123,8 @@ public class DistDupVectorMult  {
         val stt = Timer.milliTime();
         val places = mA.getPlaces();
         var offc:Long = 0;
-        finish for (var p:Long=0; p<places.size(); offc+=vC.segSize(p), p++) {
+        val vCsegSize =  vC.getSegSize();
+        finish for (var p:Long=0; p<places.size(); offc+=vCsegSize(p), p++) {
             val offsetC = offc;
             at(places(p)) async {
                 BlockVectorMult.comp(vB.local(), 0, mA.handleBS(), vC.distV(), offsetC, plus);
