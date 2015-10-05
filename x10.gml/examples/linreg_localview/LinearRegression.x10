@@ -11,7 +11,7 @@
  */
 import x10.matrix.Vector;
 import x10.matrix.ElemType;
-
+import x10.regionarray.Dist;
 import x10.util.Timer;
 
 import x10.matrix.distblock.DistBlockMatrix;
@@ -21,15 +21,15 @@ import x10.matrix.distblock.DistVector;
 import x10.matrix.util.Debug;
 import x10.matrix.util.PlaceGroupBuilder;
 
-import x10.util.resilient.ResilientIterativeApp;
-import x10.util.resilient.ResilientExecutor;
+import x10.util.resilient.LocalViewResilientIterativeApp;
+import x10.util.resilient.LocalViewResilientExecutor;
 import x10.util.resilient.ResilientStoreForApp;
 
 /**
  * Parallel linear regression based on GML distributed
  * dense/sparse matrix
  */
-public class LinearRegression implements ResilientIterativeApp {
+public class LinearRegression implements LocalViewResilientIterativeApp {
     public static val MAX_SPARSE_DENSITY = 0.1f;
     static val lambda = 1e-6 as Float; // regularization parameter
     
@@ -49,8 +49,6 @@ public class LinearRegression implements ResilientIterativeApp {
     val d_q:DupVector(V.N);
     
     private val checkpointFreq:Long;
-    
-    var norm_r2:ElemType;
     var lastCheckpointNorm:ElemType;
     
     //----Profiling-----
@@ -58,7 +56,6 @@ public class LinearRegression implements ResilientIterativeApp {
     public var seqCompT:Long=0;
     public var commT:Long;
     private val nzd:Float;
-    private var places:PlaceGroup;
     private val root:Place;
     
     private var appTempDataPLH:PlaceLocalHandle[AppTempData];
@@ -80,37 +77,25 @@ public class LinearRegression implements ResilientIterativeApp {
         this.checkpointFreq = chkpntIter;
         
         nzd = sparseDensity;
-        this.places = places;
         root = here;
     }
     
-    public def isFinished() {
+    public def isFinished_local() {
         return appTempDataPLH().iter >= maxIterations;
     }
     
     public def run() {
-        
         assert (V.isDistVertical()) : "dist block matrix must have vertical distribution";
-        appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());         
-        
-        new ResilientExecutor(checkpointFreq, places, true).run(this);
-        
-        //////TODO: change the implementation for using the local functions
-        //////parCompT = dupR.getCalcTime() + d_q.getCalcTime() + Vp.getCalcTime();
-        /////commT = dupR.getCommTime() + d_q.getCommTime() + d_p.getCommTime() + Vp.getCommTime();
-
+        val places = V.places();
+        appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());
+        new LocalViewResilientExecutor(checkpointFreq, places).run(this);
         return d_w.local();
     }
     
     public def getResult() = d_w.local();
     
-    public def step() {
-         throw new Exception("Global view step not implemented ...");
-    }
-    
     public def step_local() {
         // Parallel computing
-    
         if (appTempDataPLH().iter == 0) {
             d_r.mult_local(root, y, V);
         
@@ -130,7 +115,7 @@ public class LinearRegression implements ResilientIterativeApp {
 
         //////Global view step:  d_q.mult(Vp.mult(V, d_p), V);           
         Vp.mult_local(V, d_p);
-                
+        
         d_q.mult_local(root, Vp, V);
             
         // Replicated Computation at each place
@@ -162,11 +147,13 @@ public class LinearRegression implements ResilientIterativeApp {
             
         // 17: p=-r+beta*p;
         p.scale(beta).cellSub(r);                
+       
+        appTempDataPLH().iter++;        
         
-        appTempDataPLH().iter++;
     }
     
-    public def checkpoint(resilientStore:ResilientStoreForApp) {       
+    
+    public def checkpoint(resilientStore:ResilientStoreForApp) {    
         resilientStore.startNewSnapshot();
         resilientStore.saveReadOnly(V);
         resilientStore.save(d_p);
@@ -174,13 +161,14 @@ public class LinearRegression implements ResilientIterativeApp {
         resilientStore.save(d_r);
         resilientStore.save(d_w);
         resilientStore.commit();
-        lastCheckpointNorm = norm_r2;
+        lastCheckpointNorm = appTempDataPLH().norm_r2;
     }
     
     /**
      * Restore from the snapshot with new PlaceGroup
      */
     public def restore(newPg:PlaceGroup, store:ResilientStoreForApp, lastCheckpointIter:Long) {
+        val oldPlaces = V.places();
         val newRowPs = newPg.size();
         val newColPs = 1;
         //remake all the distributed data structures
@@ -190,17 +178,22 @@ public class LinearRegression implements ResilientIterativeApp {
             V.remakeDense(newRowPs, newColPs, newPg);
         }
         d_p.remake(newPg);
-        Vp.remake(V.getAggRowBs(), newPg);
         d_q.remake(newPg);
-        store.restore();
+        d_r.remake(newPg);
+        d_w.remake(newPg);        
+        Vp.remake(V.getAggRowBs(), newPg);
         
+        store.restore_local(newPg);
+        
+        //TODO: make a snapshottable class for the app data
+        PlaceLocalHandle.destroy(oldPlaces, appTempDataPLH, (Place)=>true);
+        appTempDataPLH = PlaceLocalHandle.make[AppTempData](newPg, ()=>new AppTempData());
         //adjust the iteration number and the norm value
-        appTempDataPLH().iter = lastCheckpointIter;
-        appTempDataPLH().norm_r2 = lastCheckpointNorm;
-        places = newPg;        
+        finish ateach(Dist.makeUnique(newPg)) {
+            appTempDataPLH().iter = lastCheckpointIter;
+            appTempDataPLH().norm_r2 = lastCheckpointNorm;
+        }
         Console.OUT.println("Restore succeeded. Restarting from iteration["+appTempDataPLH().iter+"] norm["+appTempDataPLH().norm_r2+"] ...");
-        //Console.OUT.println("Load Balance After Restore: ");
-        //V.printLoadStatistics();
     }
     
     class AppTempData{
