@@ -46,7 +46,9 @@ base_src=\
 	x10/matrix/util/VerifyTool.x10 \
 	x10/util/resilient/DistObjectSnapshot.x10 \
 	x10/util/resilient/ResilientExecutor.x10 \
+	x10/util/resilient/LocalViewResilientExecutor.x10 \
 	x10/util/resilient/ResilientIterativeApp.x10 \
+	x10/util/resilient/LocalViewResilientIterativeApp.x10 \
 	x10/util/resilient/ResilientStoreForApp.x10 \
 	x10/util/resilient/Snapshot.x10 \
 	x10/util/resilient/Snapshottable.x10 \
