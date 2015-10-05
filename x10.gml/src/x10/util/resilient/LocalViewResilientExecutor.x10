@@ -131,7 +131,7 @@ public class LocalViewResilientExecutor {
                         }
                         
                         app.step_local();
-                        Console.OUT.println("["+here+"] step completed globalIter["+placeTempData().globalIter+"] ...");
+                        if (VERBOSE) Console.OUT.println("["+here+"] step completed globalIter["+placeTempData().globalIter+"] ...");
                         placeTempData().globalIter++;
                         localIter++;
                     }
