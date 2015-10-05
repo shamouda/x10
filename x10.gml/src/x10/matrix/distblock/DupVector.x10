@@ -100,6 +100,11 @@ public class DupVector(M:Long) implements Snapshottable {
         return this;
     }
     
+    public def initRandom_local(root:Place) {
+        dupV().initRandom();
+        sync_local(root);
+    }
+    
     public def initRandom(lo:Int, up:Int) : DupVector(this) {
         dupV().initRandom(lo, up);
         sync();

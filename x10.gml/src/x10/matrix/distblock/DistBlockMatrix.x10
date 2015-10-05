@@ -385,13 +385,12 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
         return this;
     }
     
-    public def initRandom_local() : DistBlockMatrix(this) {    
+    public def initRandom_local() {    
         val blkitr = handleBS().iterator();
         while (blkitr.hasNext()) {
             val blk = blkitr.next();
             blk.initRandom();
         }
-        return this;
     }
     
     public def initRandom(lb:Long, ub:Long) : DistBlockMatrix(this){
@@ -644,6 +643,14 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
             }
         }
         return this;
+    }
+
+    public def scale_local(alpha:ElemType) {
+        val blkitr = handleBS().iterator();
+        while (blkitr.hasNext()) {
+            val blk = blkitr.next();
+            blk.getMatrix().scale(alpha);
+        }
     }
     
     public def cellAdd(that:Matrix(M,N)): Matrix(this)  {

@@ -172,6 +172,16 @@ public class DistVector(M:Long) implements Snapshottable {
             team.gatherv(root, src, 0, dst, 0, getSegSize());           
         }
     }
+    
+    public def copyTo(root:Place, vec:Vector(M)):void {
+        val src = distV().d;
+        var dst:Rail[ElemType] = null;
+        if (here.id == root.id){
+            dst = vec.d;
+        }            
+        team.gatherv(root, src, 0, dst, 0, getSegSize());
+    }
+
 
     public def copyFrom(vec:Vector(M)): void {
         val root = here;
@@ -185,6 +195,16 @@ public class DistVector(M:Long) implements Snapshottable {
             team.scatterv(root,src, 0, dst, 0, getSegSize());
         }
     }
+    
+    public def copyFrom_local(root:Place, vec:Vector(M)): void {
+        var src:Rail[ElemType] = null;
+        val dst = distV().d;
+        if (here.id == root.id){
+            src = vec.d;
+        }
+        team.scatterv(root,src, 0, dst, 0, getSegSize());
+    }
+    
 
     /**
      * For debug and verification use only. 
@@ -235,6 +255,10 @@ public class DistVector(M:Long) implements Snapshottable {
             distV().scale(a);
         }
         return this;
+    }
+    
+    public def scale_local(a:ElemType) {
+        distV().scale(a);
     }
 
     /**
@@ -343,7 +367,18 @@ public class DistVector(M:Long) implements Snapshottable {
         };
         return dot;
     }
-        
+
+    
+    public def dot_local(v:DupVector(M), result:Rail[Double]) {
+        val offset=getOffset();
+        val dist = distV();
+        val dup = v.local();
+        val src = new Rail[Double](1);
+        val s = getSegSize()(places.indexOf(here));
+        for (i in 0..(s-1))
+            src(0) += dist(i) * dup(offset+i);
+        team.allreduce(src, 0, result, 0, 1, Team.ADD);
+    }
 
     // Multiplication operations 
 
