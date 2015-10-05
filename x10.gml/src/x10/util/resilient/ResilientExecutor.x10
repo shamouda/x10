@@ -16,15 +16,12 @@ import x10.util.Timer;
 import x10.util.Random;
 import x10.matrix.util.PlaceGroupBuilder;
 import x10.util.resilient.PlaceHammer;
-import x10.regionarray.Dist;
 
 public class ResilientExecutor {
     private val store:ResilientStoreForApp;
     private var places:PlaceGroup;
     private val itersPerCheckpoint:Long;
     private var isResilient:Boolean = false;
-    private var isLocalStep:Boolean = false;
-    
     private val VERBOSE = false;
 
     private var runTime:Long = 0;
@@ -35,23 +32,12 @@ public class ResilientExecutor {
     private var stepExecTime:Long = 0;
     private var stepExecCount:Long = 0;
     private var hammer:PlaceHammer = null;
-    private val root:Place;  
     
-    private var execTempDataPLH:PlaceLocalHandle[ExecutorTempData];
+    private var restoreJustDone:Boolean = false;
     
-    class ExecutorTempData{
-        public var restoreJustDone:Boolean = false;
-        public var restoreRequired:Boolean = false;
-        public var iter:Long = 0;
-        public var lastCheckpointIter:Long = -1;
-    }
-    
-    
-    public def this(itersPerCheckpoint:Long, places:PlaceGroup, isLocalStep:Boolean) {
+    public def this(itersPerCheckpoint:Long, places:PlaceGroup) {
         this.places = places;
         this.itersPerCheckpoint = itersPerCheckpoint;
-        this.isLocalStep = isLocalStep;
-        this.root = here;
         if (itersPerCheckpoint > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0) {
             isResilient = true;
             store = new ResilientStoreForApp();
@@ -66,101 +52,89 @@ public class ResilientExecutor {
 
     public def run(app:ResilientIterativeApp) {
         val startRun = Timer.milliTime();
-        
-        execTempDataPLH = PlaceLocalHandle.make[ExecutorTempData](places, ()=>new ExecutorTempData());
-        
+        var restoreRequired:Boolean = false;
+        var iter:Long = 0;
+        var lastCheckpointIter:Long = -1;
+
         if (isTimerHammerActive())
             hammer.startTimerHammer();
         
-        do{
+        while (!app.isFinished()) {
             try {
-                if (execTempDataPLH().restoreRequired) {
-                    if (execTempDataPLH().lastCheckpointIter > -1) {
+                if (restoreRequired) {
+                    if (lastCheckpointIter > -1) {
                         val startRestore = Timer.milliTime();
                         val newPG = PlaceGroupBuilder.createRestorePlaceGroup(places);
-                        Console.OUT.println("restoring at iter " + execTempDataPLH().lastCheckpointIter);
+                        Console.OUT.println("restoring at iter " + lastCheckpointIter);
 
                         if (isIterativeHammerActive()){
-                            val tmpIter = execTempDataPLH().iter;
+                            val tmpIter = iter;
                             async hammer.checkKillRestore(tmpIter);
                         }
-        
-                        app.restore(newPG, store, execTempDataPLH().lastCheckpointIter);
-        
-                        execTempDataPLH().iter = execTempDataPLH().lastCheckpointIter;
+                        
+                        app.restore(newPG, store, lastCheckpointIter);
+                        
+                        iter = lastCheckpointIter;
                         places = newPG;
                         if (VERBOSE){
                             Console.OUT.println("Used Places After Restore ...");
                             for (x in places)
                                 Console.OUT.println(x);
                         }
-                        execTempDataPLH().restoreRequired = false;
+                        restoreRequired = false;
                         restoreTime += (Timer.milliTime() - startRestore);
                         restoreCount++;
-                        execTempDataPLH().restoreJustDone = true;
+                        
+                        restoreJustDone = true;
                     } else {
                         throw new UnsupportedOperationException("failure occurred at iter "
-                            + execTempDataPLH().iter + " but no valid checkpoint exists!");
+                            + iter + " but no valid checkpoint exists!");
                     }
                 }
-        
-                finish ateach(Dist.makeUnique(places)) {
-                    while (!app.isFinished()) {
 
-                        if (isIterativeHammerActive()){
-                            val tmpIter = execTempDataPLH().iter;
-                            async hammer.checkKillStep(tmpIter);
-                        }
+                if (isIterativeHammerActive()){
+                    val tmpIter = iter;
+                    async hammer.checkKillStep(tmpIter);
+                }
 
-                        if (here.id == root.id){
-                            if (!execTempDataPLH().restoreJustDone) {
-                                //take new checkpoint only if restore was not done in this iteration
-                                if (isResilient && (execTempDataPLH().iter % itersPerCheckpoint) == 0) {
-                                    if (VERBOSE) Console.OUT.println("checkpointing at iter " + execTempDataPLH().iter);
-                                    try {
-                                        val startCheckpoint = Timer.milliTime();
+                if (!restoreJustDone) {
+                    //take new checkpoint only if restore was not done in this iteration
+                    if (isResilient && (iter % itersPerCheckpoint) == 0) {
+                        if (VERBOSE) Console.OUT.println("checkpointing at iter " + iter);
+                        try {
+                            val startCheckpoint = Timer.milliTime();
                 
-                                        if (isIterativeHammerActive()) {
-                                            val tmpIter = execTempDataPLH().iter;
-                                            async hammer.checkKillCheckpoint(tmpIter);
-                                        }
-                
-                                        app.checkpoint(store);
-                
-                                        execTempDataPLH().lastCheckpointIter = execTempDataPLH().iter;
-                                        checkpointTime += (Timer.milliTime() - startCheckpoint);
-                                        checkpointCount++;
-                                    } catch (ex:Exception) {
-                                        processCheckpointException(ex);
-                                        execTempDataPLH().restoreRequired = true;
-                                    }
-                                }
-                            } else {
-                                execTempDataPLH().restoreJustDone = false;
+                            if (isIterativeHammerActive()) {
+                                val tmpIter = iter;
+                                async hammer.checkKillCheckpoint(tmpIter);
                             }
-                        }
-
-                        val startStep = Timer.milliTime();
-                        if (isLocalStep){
-                            app.step_local();
-                        }
-                        else{
-                            app.step();
-                        }
-                        stepExecTime += (Timer.milliTime() - startStep);
-                        stepExecCount++;
-
-                        execTempDataPLH().iter++;
                 
+                            app.checkpoint(store);
+                
+                            lastCheckpointIter = iter;
+                            checkpointTime += (Timer.milliTime() - startCheckpoint);
+                            checkpointCount++;
+                        } catch (ex:Exception) {
+                            processCheckpointException(ex);
+                            restoreRequired = true;
+                        }
                     }
+                } else {
+                    restoreJustDone = false;
                 }
-            }
-            catch (iterEx:Exception) {
+
+                val startStep = Timer.milliTime();
+                app.step();
+                stepExecTime += (Timer.milliTime() - startStep);
+                stepExecCount++;
+
+                iter++;
+                
+            } catch (iterEx:Exception) {
                 processIterationException(iterEx);
-                execTempDataPLH().restoreRequired = true;
+                restoreRequired = true;
             }
-        }while(execTempDataPLH().restoreRequired);
-        
+        }
         runTime = (Timer.milliTime() - startRun);
         if (isTimerHammerActive())
             hammer.stopTimerHammer();
@@ -217,7 +191,4 @@ public class ResilientExecutor {
     
     private def isTimerHammerActive() = (hammer != null && hammer.isTimerHammer());
     private def isIterativeHammerActive() = (hammer != null && hammer.isIterativeHammer());
-    
-    
-    
 }

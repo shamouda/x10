@@ -101,18 +101,22 @@ public class PlaceHammer (configFile:String) {
     private var index:Long = 0;
     
     public def checkKillStep(iter:Long) {
-        checkKill(iter, "S");
+        checkKill(iter, "S", false);
     }
     
     public def checkKillCheckpoint(iter:Long) {
-        checkKill(iter, "C");
+        checkKill(iter, "C", false);
     }
     
     public def checkKillRestore(iter:Long) {
-        checkKill(iter, "R");
+        checkKill(iter, "R", false);
     }
     
-    private def checkKill(iter:Long, iterKillType:String) {
+    public def checkKillStep_local(iter:Long) {
+        checkKill(iter, "S", true);
+    }
+    
+    private def checkKill(iter:Long, iterKillType:String, isLocal:Boolean) {
         if (mode != 1)
             throw new UnsupportedOperationException("Wrong Hammer Mode Configurations ...");
         
@@ -131,13 +135,16 @@ public class PlaceHammer (configFile:String) {
             
             if (rec != null && rec.timeOrIter == iter && rec.iterKillType.equals(iterKillType)) {
                 index ++;
-                
-                for (p in Place.places()) {
-                    if (p.id == rec.placeId) {
-                        at(p) {
-                            Console.OUT.println("[Hammer Log] Killing ["+here+"] ...");
-                            System.killHere();
-                        }
+                if (!isLocal){
+                    at(Place(rec.placeId)) {
+                        Console.OUT.println("[Hammer Log] Killing ["+here+"] ...");
+                        System.killHere();
+                    }
+                }
+                else{
+                    if (here.id == rec.placeId) {
+                        Console.OUT.println("[Hammer Log] Killing ["+here+"] ...");
+                        System.killHere();
                     }
                 }
             }            

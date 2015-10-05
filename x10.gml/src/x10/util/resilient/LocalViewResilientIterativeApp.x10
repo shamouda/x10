@@ -10,22 +10,23 @@
  */
 package x10.util.resilient;
 
-public interface ResilientIterativeApp {
+public interface LocalViewResilientIterativeApp {
     /** @return true if computation has finished. */
-    public def isFinished():Boolean;
-
+    public def isFinished_local():Boolean;
+    
     /**
-     * Perform a single step of the computation
+     * Perform a single step of the computation on a single place
      * and update the finished status as required.
      */
-    public def step():void;
+    public def step_local():void;
+    
 
     /**
      * Checkpoint the application state at all places.
      * @param store a resilient store containing an application checkpoint
      */
     public def checkpoint(store:ResilientStoreForApp):void;
-
+    
     /**
      * Restore the application state to the new place group, using the last
      * consistent checkpoint from the resilient store.
@@ -34,4 +35,5 @@ public interface ResilientIterativeApp {
      * @param lastCheckpointIter the iteration number of the saved checkpoint
      */
     public def restore(newPlaces:PlaceGroup, store:ResilientStoreForApp, lastCheckpointIter:Long):void;
+    
 }
