@@ -565,6 +565,7 @@ public class Vector(M:Long) implements (Long) => ElemType, Snapshottable {
     /*
      * Snapshot mechanism
      */
+    //TODO: Vector should not be snapshottable
     private transient val DUMMY_KEY:Long = 8888L;
 
     public def makeSnapshot():DistObjectSnapshot {        
@@ -578,4 +579,8 @@ public class Vector(M:Long) implements (Long) => ElemType, Snapshottable {
         val vectorSnapshotInfo = snapshot.load(DUMMY_KEY) as VectorSnapshotInfo;        
         new Vector(vectorSnapshotInfo.data).copyTo(this);
     }
+
+    public def makeSnapshot_local(snapshot:DistObjectSnapshot) {}
+    public def restoreSnapshot_local(snapshot:DistObjectSnapshot) {}
+    
 }
