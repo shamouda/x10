@@ -480,7 +480,8 @@ public class DupVector(M:Long) implements Snapshottable {
         PlaceLocalHandle.destroy(places, dupV, (Place)=>true);
         dupV = PlaceLocalHandle.make[Vector](newPg, ()=>Vector.make(M));         
         places = newPg;
-        team = new Team(places);
+        team.delete();
+        team = new Team(newPg);
     }
     
     /*

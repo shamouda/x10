@@ -988,18 +988,15 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
         if (places.size() == newPg.size() || rebalanceMode == null || rebalanceMode.equals("0"))
             useOldGrid = true; // no matrix grid rebalancing
 
-        if (!useOldGrid){                        
+        if (!useOldGrid){
             val rowBs:Long = oldGrid.numRowBlocks; 
-            val colBs:Long = oldGrid.numColBlocks;            
+            val colBs:Long = oldGrid.numColBlocks;
             blks = PlaceLocalHandle.make[BlockSet](newPg, ()=>(BlockSet.make(M,N,rowBs,colBs,rowPs,colPs, newPg)));
         } else {
             blks = PlaceLocalHandle.make[BlockSet](newPg, ()=>(BlockSet.make(oldGrid,rowPs,colPs, newPg)));
         }
-        
         gdist = new DistGrid(blks().getGrid(), rowPs, colPs);
-        
         handleBS  = blks;
-        
         places = newPg;
     }
     
@@ -1372,28 +1369,17 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
             blockSetInfo.setBlockSet(data);
             snapshot.save(i, blockSetInfo);        
         }
-        Console.OUT.println("RestoreDistBlockMatrix: at["+here+"] saving grid: " + getGrid());
-        
         snapshotGridPLH().updateGrid(getGrid());
         snapshotGridPLH().updateDistMap(getMap());      
     }    
     
-    public def restoreSnapshot_local(snapshot:DistObjectSnapshot):void {
+    public def restoreSnapshot_local(snapshot:DistObjectSnapshot):void {    
         restoreSnapshot(snapshot, true);
     }
     
     public def restoreSnapshot(snapshot:DistObjectSnapshot, localFlag:Boolean) {
         val oldGrid = snapshotGridPLH().getGrid();
-        
-        Console.OUT.println("RestoreDistBlockMatrix: this.handleBS = " + this.handleBS);
-        Console.OUT.println("RestoreDistBlockMatrix: this.handleBS() = " + this.handleBS());
-        
-        
-        
         val newGrid = getGrid();
-        
-        Console.OUT.println("RestoreDistBlockMatrix: snapshotGridPLH().oldGrid: " + oldGrid + "  ,  newGrid: " + newGrid);
-        
         if (!localFlag){
             if (!oldGrid.equals(newGrid)) {
                 if (isDistVertical())
@@ -1422,8 +1408,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      * Restore the matrix element-by-element using the provided snapshot object 
      * @param snapshot a snapshot from which to restore the data
      */
-    private def restoreSnapshotElementByElement_local(snapshot:DistObjectSnapshot) {
-        Console.OUT.println("restoreSnapshotElementByElement_local ...");
+    private def restoreSnapshotElementByElement_local(snapshot:DistObjectSnapshot) {        
         val oldGrid = snapshotGridPLH().getGrid();
         val oldDistMap = snapshotGridPLH().getDistMap();
         val cached = GlobalRef(new HashMap[Long, BlockSetSnapshotInfo]());
@@ -1457,8 +1442,6 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     }
     
     private def restoreSnapshotBlockByBlock_local(snapshot:DistObjectSnapshot) {
-        Console.OUT.println("restoreSnapshotBlockByBlock_local ...");
-    
 //      val startTime = Timer.milliTime();
         val oldGrid = snapshotGridPLH().getGrid();
         val oldDistMap = snapshotGridPLH().getDistMap();
@@ -1501,54 +1484,35 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
                 val oldBlock = oldBlockSet.find(blockRowId, blockColId);
                 oldBlock.copyTo(newBlock);
             }
-        }
-        
-        //Console.OUT.println("DistBlockMatrix.RestoreTime["+(Timer.milliTime() - startTime)+"]");
+        }        
     }
     
-    private def restoreSnapshotSubBlocksVerticalDist_local(snapshot:DistObjectSnapshot) {
-        Console.OUT.println("DistBlockMatrix.restoreSnapshotSubBlocksVerticalDist_local ...");
-        if (snapshot == null){
-            Console.OUT.println("DistBlockMatrix: Snapshot object is null!!!");
-        }
-    
+    private def restoreSnapshotSubBlocksVerticalDist_local(snapshot:DistObjectSnapshot) {    
         val oldGrid = snapshotGridPLH().getGrid();
-        Console.OUT.println("00   oldGrid==null?" + (oldGrid == null));
         val oldMap = snapshotGridPLH().getDistMap();
-        Console.OUT.println("01   oldMap==null?" + (oldMap == null));
-    
         val newGrid = getGrid();
-        Console.OUT.println("02    newGrid==null?" + (newGrid == null));
-
+        
         val snapshotSegSize = oldGrid.rowBs;
-        Console.OUT.println("03    snapshotSize==null?" + (snapshotSegSize == null));
         val newSegSize = newGrid.rowBs;
-        Console.OUT.println("04    newSegSize==null?" + (newSegSize == null));
-
+        
         val newSegmentsOffsets = RailUtils.scanExclusive(newSegSize, (x:Long, y:Long) => x+y, 0);
-        Console.OUT.println("05");
         val oldSegmentsOffsets = RailUtils.scanExclusive(snapshotSegSize, (x:Long, y:Long) => x+y, 0);
-        Console.OUT.println("06");
+
         
         val blockList = handleBS().blocklist;
-        Console.OUT.println("07");
         val isSparse = blockList.size() == 0 || blockList.get(0).isSparse();
-        Console.OUT.println("08");
         
         val cached = new HashMap[Long, BlockSetSnapshotInfo]();        
-        Console.OUT.println("09");
         val newPlaceIndex:Long = places.indexOf(here);
-        Console.OUT.println("10");
+
         val blks = handleBS();
-        Console.OUT.println("11");
+
         val blkitr = blks.iterator();
-        Console.OUT.println("12");
         var currentBlockIndex:Long = -1;
-        Console.OUT.println("13");
+
         val tempBlocklist:ArrayList[MatrixBlock] = new ArrayList[MatrixBlock]();
-        Console.OUT.println("14");
+
         while (blkitr.hasNext()) {
-        
             val newBlk = blkitr.next();
             if (currentBlockIndex == -1) {
                 currentBlockIndex = newGrid.getBlockId(newBlk.myRowId, newBlk.myColId);
@@ -1649,7 +1613,6 @@ class SnapshotDistributionInfo{
     public var blockmap:Rail[Long];
 
     public def getGrid():Grid {
-        Console.OUT.println("M["+M+"] N["+N+"] rowBs["+rowBs+"]  colBs["+colBs+"] ...");
         return new Grid(M, N, rowBs, colBs);
     }
 
@@ -1661,7 +1624,6 @@ class SnapshotDistributionInfo{
     }
 
     public def getDistMap():DistMap {
-        Console.OUT.println("BlockMap["+blockmap+"]  numPlace["+numPlace+"] ...");
         return new DistMap(blockmap, numPlace);
     }
 

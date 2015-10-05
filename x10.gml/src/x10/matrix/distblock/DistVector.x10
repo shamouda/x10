@@ -530,6 +530,7 @@ public class DistVector(M:Long) implements Snapshottable {
         
         distV = PlaceLocalHandle.make[Vector](newPg, ()=>Vector.make(segsz(newPg.indexOf(here))));       
         places = newPg;
+        team.delete();
         team = new Team(places);
         segSizePLH = PlaceLocalHandle.make[Rail[Int]](newPg, ()=>segsz);
         
@@ -687,7 +688,7 @@ public class DistVector(M:Long) implements Snapshottable {
         Rail.copy(offsetsPLH(), 0, snapshotOffsetsPLH(), 0, offsetsPLH().size);
     }
     
-    public def restoreSnapshot_local(snapshot:DistObjectSnapshot) {
+    public def restoreSnapshot_local(snapshot:DistObjectSnapshot) {        
         //val startTime = Timer.milliTime();
         restoreSnapshot(snapshot, true);
         //Console.OUT.println("DistVector.RestoreTime["+(Timer.milliTime() - startTime)+"]");
