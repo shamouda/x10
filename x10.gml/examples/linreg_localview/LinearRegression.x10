@@ -25,6 +25,8 @@ import x10.util.resilient.LocalViewResilientIterativeApp;
 import x10.util.resilient.LocalViewResilientExecutor;
 import x10.util.resilient.ResilientStoreForApp;
 
+import x10.util.Team;
+
 /**
  * Parallel linear regression based on GML distributed
  * dense/sparse matrix
@@ -97,8 +99,12 @@ public class LinearRegression implements LocalViewResilientIterativeApp {
     public def step_local() {
         // Parallel computing
         if (appTempDataPLH().iter == 0) {
-            d_r.mult_local(root, y, V);
-        
+
+appTempDataPLH().globalCompTime -= Timer.milliTime();
+            d_r.mult_local(root, y, V);        
+appTempDataPLH().globalCompTime += Timer.milliTime();
+            
+appTempDataPLH().localCompTime -= Timer.milliTime();
             val r = d_r.local(); 
         
             // 5: p=-r
@@ -107,19 +113,22 @@ public class LinearRegression implements LocalViewResilientIterativeApp {
             r.scale(-1.0 as ElemType);
             // 6: norm_r2=sum(r*r)
             appTempDataPLH().norm_r2 = r.dot(r);
+            
+appTempDataPLH().localCompTime += Timer.milliTime();
         }
 
 
         //d_p.sync_local(root);
         // 10: q=((t(V) %*% (V %*% p)) )
 
-        //////Global view step:  d_q.mult(Vp.mult(V, d_p), V);           
+        //////Global view step:  d_q.mult(Vp.mult(V, d_p), V);
+appTempDataPLH().globalCompTime -= Timer.milliTime();
         Vp.mult_local(V, d_p);
-        
         d_q.mult_local(root, Vp, V);
-            
+appTempDataPLH().globalCompTime += Timer.milliTime();
+        
         // Replicated Computation at each place
-            
+appTempDataPLH().localCompTime -= Timer.milliTime();            
         var ct:Long = Timer.milliTime();
         //q = q + lambda*p
         val p = d_p.local();
@@ -149,7 +158,7 @@ public class LinearRegression implements LocalViewResilientIterativeApp {
         p.scale(beta).cellSub(r);                
        
         appTempDataPLH().iter++;        
-        
+appTempDataPLH().localCompTime += Timer.milliTime();
     }
     
     
@@ -196,8 +205,38 @@ public class LinearRegression implements LocalViewResilientIterativeApp {
         Console.OUT.println("Restore succeeded. Restarting from iteration["+appTempDataPLH().iter+"] norm["+appTempDataPLH().norm_r2+"] ...");
     }
     
+    public def printTimes(){
+        d_r.printTimes("d_r");
+        Vp.printTimes("Vp");
+        d_q.printTimes("d_q");
+        val prefix = "LinRegApp";
+    
+        val rootPlaces = V.places();
+        val team = new Team(rootPlaces);
+        val root = here;
+        finish ateach(Dist.makeUnique(rootPlaces)) {
+            val size = 2;
+            val src = new Rail[Double](size);
+            src(0) = appTempDataPLH().localCompTime ;
+            src(1) = appTempDataPLH().globalCompTime;
+    
+            val dst = new Rail[Double](size);
+    
+            team.reduce(root, src, 0, dst, 0, size, Team.MAX);
+    
+            if (here.id == root.id){
+                Console.OUT.println("["+prefix+"]  localCompTime: " + dst(0));
+                Console.OUT.println("["+prefix+"]  globalCompTime: " + dst(1));                
+            }
+        }    
+    }
+    
     class AppTempData{
         public var norm_r2:ElemType;
         public var iter:Long;
+        
+        public var localCompTime:Long;
+        public var globalCompTime:Long;
+        
     }
 }
