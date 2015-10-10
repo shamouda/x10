@@ -103,8 +103,10 @@ public class RunLinReg {
             }
             y = DistVector.make(X.M, places);
 
-            X.initRandom();
-            y.initRandom();
+            finish for (place in places) at(place) async {
+                X.initRandom_local();
+                y.initRandom_local();
+            }
         } else {
             val inputData = RegressionInputData.readFromFile(inputFile, places, false, 1.0 as ElemType, false);
             mX = inputData.numTraining;
@@ -126,7 +128,7 @@ public class RunLinReg {
                     val blk = blkitr.next();              
                     blk.init((i:Long, j:Long)=> trainingExamples((i-startRow)*numFeatures+j));
                 }
-                y.distV().init((i:Long)=> trainingLabels(i));
+                y.init_local((i:Long)=> trainingLabels(i));
             }
         }
 
@@ -160,6 +162,7 @@ public class RunLinReg {
         val totalTime = Timer.milliTime() - startTime;
 		Console.OUT.printf("Parallel linear regression --- Total: %8d ms, parallel: %8d ms, sequential: %8d ms, communication: %8d ms\n",
 				totalTime, parLR.parCompT, parLR.seqCompT, parLR.commT);
+        parLR.printTimes();
 
         if (print) {
             Console.OUT.println("Input sparse matrix X\n" + X);
