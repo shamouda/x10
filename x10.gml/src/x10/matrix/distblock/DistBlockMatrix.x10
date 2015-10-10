@@ -71,27 +71,17 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     transient var gdist:DistGrid = null;
 
     //The place group on which the matrix is distributed
-    private var places:PlaceGroup;
-    public def places() = places;
+    public def places() = handleBS().places;
     
-    //snapshotGrid and snapshotMap used only for restore    
-    public var snapshotGridPLH:PlaceLocalHandle[SnapshotDistributionInfo];    
-    
-    private static val rebalanceMode = System.getenv("X10_GML_REBALANCE");
-    
-    public def this(bs:PlaceLocalHandle[BlockSet], plcs:PlaceGroup, snapshotInfo:PlaceLocalHandle[SnapshotDistributionInfo]) {
+    public def this(bs:PlaceLocalHandle[BlockSet]) {
         super(bs().grid.M, bs().grid.N);
-        handleBS  = bs;    
-        places = plcs;
-        snapshotGridPLH = snapshotInfo;   
+        handleBS  = bs;  
     }
     
-    public def this(gridDist:DistGrid, bs:PlaceLocalHandle[BlockSet], plcs:PlaceGroup, snapshotInfo:PlaceLocalHandle[SnapshotDistributionInfo]) {
+    public def this(gridDist:DistGrid, bs:PlaceLocalHandle[BlockSet]) {
         super(bs().grid.M, bs().grid.N);
         gdist = gridDist;        
-        handleBS  = bs;        
-        places = plcs;
-        snapshotGridPLH = snapshotInfo;
+        handleBS  = bs;       
     }
     
     /**
@@ -107,9 +97,8 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      
      public static def make(g:Grid, dmap:DistMap, places:PlaceGroup):DistBlockMatrix(g.M, g.N){
         //Remote capture: g, dmap
-        val bs = PlaceLocalHandle.make[BlockSet](places, ()=>(new BlockSet(g, dmap, places)));//Remote capture
-        val snapshotGridPLH = PlaceLocalHandle.make[SnapshotDistributionInfo](places, ()=>(new SnapshotDistributionInfo()));   
-        return new DistBlockMatrix(bs, places, snapshotGridPLH) as DistBlockMatrix(g.M,g.N);
+        val bs = PlaceLocalHandle.make[BlockSet](places, ()=>(new BlockSet(g, dmap, places)));//Remote capture           
+        return new DistBlockMatrix(bs) as DistBlockMatrix(g.M,g.N);
     }
      
     public static def make(g:Grid, gridDist:DistGrid):DistBlockMatrix(g.M, g.N) = make(g, gridDist, Place.places());
@@ -117,9 +106,8 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     public static def make(g:Grid, gridDist:DistGrid, places:PlaceGroup):DistBlockMatrix(g.M, g.N){
         //Remote capture: g, dmap
         val dmap = gridDist.dmap;
-        val bs = PlaceLocalHandle.make[BlockSet](places, ()=>(new BlockSet(g, dmap, places)));//Remote capture
-        val snapshotGridPLH = PlaceLocalHandle.make[SnapshotDistributionInfo](places, ()=>(new SnapshotDistributionInfo()));   
-        return new DistBlockMatrix(gridDist, bs, places, snapshotGridPLH) as DistBlockMatrix(g.M,g.N);
+        val bs = PlaceLocalHandle.make[BlockSet](places, ()=>(new BlockSet(g, dmap, places)));//Remote capture           
+        return new DistBlockMatrix(gridDist, bs) as DistBlockMatrix(g.M,g.N);
     }
     
     /**
@@ -146,9 +134,8 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
         val blks = PlaceLocalHandle.make[BlockSet](places, 
                 ()=>(BlockSet.make(m,n,rowBs,colBs,rowPs,colPs, places)));
         val mygrid = blks().getGrid();
-        val gdist = new DistGrid(mygrid, rowPs, colPs);
-        val snapshotGridPLH = PlaceLocalHandle.make[SnapshotDistributionInfo](places, ()=>(new SnapshotDistributionInfo())); 
-        return new DistBlockMatrix(gdist, blks, places, snapshotGridPLH) as DistBlockMatrix(m,n);
+        val gdist = new DistGrid(mygrid, rowPs, colPs);         
+        return new DistBlockMatrix(gdist, blks) as DistBlockMatrix(m,n);
         
         //val grid = new Grid(m, n, rowBs, colBs);
         //val dstgrid = new DistGrid(grid, rowPs, colPs);
@@ -209,36 +196,32 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
         
         val ttbs = rowbs * colbs;
         val blks = PlaceLocalHandle.make[BlockSet](places, 
-                ()=>(new BlockSet(Grid.make(rowbs, colbs, rowPartFunc, colPartFunc), DistMap.make(ttbs, mapFunc, places.size()), places)));
-        val snapshotGridPLH = PlaceLocalHandle.make[SnapshotDistributionInfo](places, ()=>(new SnapshotDistributionInfo())); 
-        return new DistBlockMatrix(blks, places, snapshotGridPLH);
+                ()=>(new BlockSet(Grid.make(rowbs, colbs, rowPartFunc, colPartFunc), DistMap.make(ttbs, mapFunc, places.size()), places)));         
+        return new DistBlockMatrix(blks);
     }
 
     //Make a copy, but sharing partitioning grid and distribution map
     public static def makeDense(d:DistBlockMatrix):DistBlockMatrix(d.M,d.N) {
         val sblks = d.handleBS;
-        val dblks = PlaceLocalHandle.make[BlockSet](d.places, 
-                ()=>(BlockSet.makeDense(sblks().grid, sblks().dmap, d.places)));
-        val snapshotGridPLH = PlaceLocalHandle.make[SnapshotDistributionInfo](d.places, ()=>(new SnapshotDistributionInfo()));
-        return  new DistBlockMatrix(d.gdist, dblks, d.places,snapshotGridPLH) as DistBlockMatrix(d.M,d.N);
+        val dblks = PlaceLocalHandle.make[BlockSet](d.places(), 
+                ()=>(BlockSet.makeDense(sblks().grid, sblks().dmap, d.places())));        
+        return  new DistBlockMatrix(d.gdist, dblks) as DistBlockMatrix(d.M,d.N);
     }
     public static def makeDense(g:Grid, gd:DistGrid):DistBlockMatrix(g.M,g.N) =
         makeDense(g, gd, Place.places());
     
     public static def makeDense(g:Grid, gd:DistGrid, places:PlaceGroup):DistBlockMatrix(g.M,g.N) {
         val bs = PlaceLocalHandle.make[BlockSet](places, 
-                ()=>(BlockSet.makeDense(g, gd.dmap, places)));//Remote capture
-        val snapshotGridPLH = PlaceLocalHandle.make[SnapshotDistributionInfo](places, ()=>(new SnapshotDistributionInfo()));
-        return new DistBlockMatrix(gd, bs, places, snapshotGridPLH) as DistBlockMatrix(g.M,g.N);        
+                ()=>(BlockSet.makeDense(g, gd.dmap, places)));//Remote capture        
+        return new DistBlockMatrix(gd, bs) as DistBlockMatrix(g.M,g.N);        
     }
     public static def makeSparse(g:Grid, gd:DistGrid, nzp:Float):DistBlockMatrix(g.M,g.N) =
         makeSparse(g, gd, nzp, Place.places());
     
     public static def makeSparse(g:Grid, gd:DistGrid, nzp:Float, places:PlaceGroup):DistBlockMatrix(g.M,g.N) {
         val bs = PlaceLocalHandle.make[BlockSet](places, 
-                ()=>(BlockSet.makeSparse(g, gd.dmap, nzp, places)));//Remote capture
-        val snapshotGridPLH = PlaceLocalHandle.make[SnapshotDistributionInfo](places, ()=>(new SnapshotDistributionInfo()));
-        return new DistBlockMatrix(gd, bs, places, snapshotGridPLH) as DistBlockMatrix(g.M,g.N);        
+                ()=>(BlockSet.makeSparse(g, gd.dmap, nzp, places)));//Remote capture        
+        return new DistBlockMatrix(gd, bs) as DistBlockMatrix(g.M,g.N);        
     }
 
     public static def makeDense(g:Grid, d:DistMap):DistBlockMatrix(g.M,g.N) =
@@ -246,18 +229,16 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     
     public static def makeDense(g:Grid, d:DistMap, places:PlaceGroup):DistBlockMatrix(g.M,g.N) {
         val bs = PlaceLocalHandle.make[BlockSet](places, 
-                ()=>(BlockSet.makeDense(g, d, places)));//Remote capture
-        val snapshotGridPLH = PlaceLocalHandle.make[SnapshotDistributionInfo](places, ()=>(new SnapshotDistributionInfo()));
-        return new DistBlockMatrix(bs, places, snapshotGridPLH) as DistBlockMatrix(g.M,g.N);        
+                ()=>(BlockSet.makeDense(g, d, places)));//Remote capture        
+        return new DistBlockMatrix(bs) as DistBlockMatrix(g.M,g.N);        
     }
     public static def makeSparse(g:Grid, d:DistMap, nzp:Float):DistBlockMatrix(g.M,g.N) =
         makeSparse(g, d, nzp, Place.places());
     
     public static def makeSparse(g:Grid, d:DistMap, nzp:Float, places:PlaceGroup):DistBlockMatrix(g.M,g.N) {
         val bs = PlaceLocalHandle.make[BlockSet](places, 
-                ()=>(BlockSet.makeSparse(g, d, nzp, places)));//Remote capture
-        val snapshotGridPLH = PlaceLocalHandle.make[SnapshotDistributionInfo](places, ()=>(new SnapshotDistributionInfo()));
-        return new DistBlockMatrix(bs, places, snapshotGridPLH) as DistBlockMatrix(g.M,g.N);        
+                ()=>(BlockSet.makeSparse(g, d, nzp, places)));//Remote capture        
+        return new DistBlockMatrix(bs) as DistBlockMatrix(g.M,g.N);        
     }
     
     public static def makeDense(g:Grid):DistBlockMatrix(g.M,g.N) =
@@ -302,7 +283,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      * Allocate dense matrix for all blocks
      */    
     public def allocDenseBlocks():DistBlockMatrix(this) {
-        finish ateach(p in Dist.makeUnique(places)) {
+        finish ateach(p in Dist.makeUnique(places())) {
             handleBS().allocDenseBlocks();
         }
         return this;
@@ -313,7 +294,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      */
     public def allocSparseBlocks(nzd:Float):DistBlockMatrix(this) {
         //Remote capture: nnz
-        finish ateach(p in Dist.makeUnique(places)) {
+        finish ateach(p in Dist.makeUnique(places())) {
             handleBS().allocSparseBlocks(nzd);
         }
         return this;
@@ -324,7 +305,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      * If the block set has previosly allocated blocks, they will be deleted first.
      */
     private def allocAndInitNonUniformSparseBlocks(f:(Long,Long)=>ElemType):DistBlockMatrix(this) {        
-        finish ateach(p in Dist.makeUnique(places)) {
+        finish ateach(p in Dist.makeUnique(places())) {
             handleBS().clear(); // delete old blocks
             handleBS().allocAndInitNonUniformSparseBlocks(f);
         }
@@ -344,7 +325,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      * of the second operand in SUMMA
      */
     public def makeTempFrontRowBlocks(rowCnt:Long) =
-        PlaceLocalHandle.make[BlockSet](places,
+        PlaceLocalHandle.make[BlockSet](places(),
                 ()=>this.handleBS().makeFrontRowBlockSet(rowCnt));
     
     /**
@@ -354,16 +335,16 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      * columns from the first operand matrix in SUMMA
      */
     public def makeTempFrontColBlocks(colCnt:Long) =
-        PlaceLocalHandle.make[BlockSet](places,
+        PlaceLocalHandle.make[BlockSet](places(),
                 ()=>this.handleBS().makeFrontColBlockSet(colCnt));
 
     public def makeTempFrontColDenseBlocks(colCnt:Long) =
-        PlaceLocalHandle.make[BlockSet](places,
+        PlaceLocalHandle.make[BlockSet](places(),
                 ()=>this.handleBS().makeFrontColDenseBlockSet(colCnt));
     
     public def init(dval:ElemType):DistBlockMatrix(this){
         //Remote capture: dval 
-        finish ateach(p in Dist.makeUnique(places)) {
+        finish ateach(p in Dist.makeUnique(places())) {
             val blks = handleBS();
             val blkitr = blks.iterator();
             while (blkitr.hasNext()) {
@@ -375,7 +356,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     }
     
     public def initRandom() : DistBlockMatrix(this){
-        finish ateach(p in Dist.makeUnique(places)) {
+        finish ateach(p in Dist.makeUnique(places())) {
             val blkitr = handleBS().iterator();
             while (blkitr.hasNext()) {
                 val blk = blkitr.next();
@@ -394,7 +375,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     }
     
     public def initRandom(lb:Long, ub:Long) : DistBlockMatrix(this){
-        finish ateach(p in Dist.makeUnique(places)) {
+        finish ateach(p in Dist.makeUnique(places())) {
             val blkitr = handleBS().iterator();
             while (blkitr.hasNext()) {
                 val blk = blkitr.next();
@@ -417,7 +398,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      * Initial DistBlockMatrix with a given function
      */
     public def init(f:(Long,Long)=>ElemType): DistBlockMatrix(this) {
-        finish ateach(p in Dist.makeUnique(places)) {
+        finish ateach(p in Dist.makeUnique(places())) {
             val blks   = handleBS();
             val grid   = blks.grid;
             val blkitr = blks.iterator();
@@ -445,7 +426,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      */
     public def initBlock(bid:Long, f:(Long,Long)=>ElemType): DistBlockMatrix(this) {
         val pIndex = this.getMap().findPlaceIndex(bid);
-        at(places(pIndex)) {
+        at(places()(pIndex)) {
             val blk = handleBS().findBlock(bid);
             blk.init(f);
         }
@@ -462,8 +443,8 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     public def alloc(m:Long, n:Long) : DistBlockMatrix(m,n) {
         assert (m==M && n==N) :
             "Matrix dimension is not same";
-        val nm = DistBlockMatrix.make(getGrid(), getMap(), places) as DistBlockMatrix(m,n);
-        finish ateach(p in Dist.makeUnique(places)) {
+        val nm = DistBlockMatrix.make(getGrid(), getMap(), places()) as DistBlockMatrix(m,n);
+        finish ateach(p in Dist.makeUnique(places())) {
             val blkitr = handleBS().iterator();
             val nblk   = nm.handleBS();
             while (blkitr.hasNext()) {
@@ -475,21 +456,21 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     }
     
     public def clone():DistBlockMatrix(M,N) {
-        val bs = PlaceLocalHandle.make[BlockSet](places,     
-                    ()=>(handleBS().clone()));
-        val snapshotGridPLH = PlaceLocalHandle.make[SnapshotDistributionInfo](places, ()=>snapshotGridPLH().clone());
-        return new DistBlockMatrix(bs, places, snapshotGridPLH) as DistBlockMatrix(M,N);
+        val plcs = places();
+        val bs = PlaceLocalHandle.make[BlockSet](plcs,     
+                    ()=>(handleBS().clone()));        
+        return new DistBlockMatrix(bs) as DistBlockMatrix(M,N);
     }
     
     public def reset() {
-        finish ateach(p in Dist.makeUnique(places)) {
+        finish ateach(p in Dist.makeUnique(places())) {
             handleBS().reset();
         }
     }
     
     public def copyTo(that:DistBlockMatrix(M,N)) {
         val stt = Timer.milliTime();
-        finish ateach(p in Dist.makeUnique(places)) {
+        finish ateach(p in Dist.makeUnique(places())) {
             val sit  = this.handleBS().iterator();
             val dit  = that.handleBS().iterator();
             while (sit.hasNext()&&dit.hasNext()) {
@@ -579,7 +560,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
         val by  = loc(3);
         val pIndex = handleBS().dmap.findPlaceIndex(bid);
         //Remote capture: bid, bx, by, 
-        val dv = at(places(pIndex)) {
+        val dv = at(places()(pIndex)) {
             val blkset:BlockSet = this.handleBS();
             val blk:MatrixBlock = blkset.find(bid);
             if (blk == null) 
@@ -597,7 +578,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
         val by  = loc(3);
         val pIndex = handleBS().dmap.findPlaceIndex(bid);
         //Remote capture: bid, bx, by, 
-        at(places(pIndex)) {
+        at(places()(pIndex)) {
             val blkset:BlockSet = handleBS();
             val blk:MatrixBlock = blkset.find(bid);
             if (blk == null) 
@@ -625,7 +606,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     public def fetchBlock(bid:Long):MatrixBlock {
         val map = getMap();
         val pIndex = map.findPlaceIndex(bid);
-        val blk = at(places(pIndex)) handleBS().findBlock(bid);
+        val blk = at(places()(pIndex)) handleBS().findBlock(bid);
         return blk;
     }
     public def fetchBlock(rid:Long, cid:Long):MatrixBlock =
@@ -635,7 +616,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     public def getMap():DistMap = this.handleBS().dmap;
 
     public def scale(alpha:ElemType): DistBlockMatrix(this) {
-        finish ateach(p in Dist.makeUnique(places)) {
+        finish ateach(p in Dist.makeUnique(places())) {
             val blkitr = this.handleBS().iterator();
             while (blkitr.hasNext()) {
                 val blk = blkitr.next();
@@ -660,7 +641,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     }
     
     public def cellAdd(dv:ElemType): DistBlockMatrix(this) {
-        finish ateach(p in Dist.makeUnique(places))  {
+        finish ateach(p in Dist.makeUnique(places()))  {
             //Remote capture: dv
             val bitr:Iterator[MatrixBlock] = this.handleBS().iterator();
             
@@ -677,7 +658,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
         if (! likeMe(A))
             throw new UnsupportedOperationException("Distributed matrix not compatible");
         
-        finish ateach(p in Dist.makeUnique(places))  {
+        finish ateach(p in Dist.makeUnique(places()))  {
             val bsetA= A.handleBS();
             val itr = this.handleBS().iterator();
             while (itr.hasNext()) {
@@ -706,7 +687,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
         if (! likeMe(A))
             throw new UnsupportedOperationException("Distributed matrix not compatible for computing");
         
-        finish ateach(p in Dist.makeUnique(places)) {
+        finish ateach(p in Dist.makeUnique(places())) {
             val itr = this.handleBS().iterator();
             val blkA = A.handleBS();
             while (itr.hasNext()) {
@@ -733,7 +714,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     public def cellMult(A:DistBlockMatrix(M,N)): DistBlockMatrix(this) {
         if (! likeMe(A))
             throw new UnsupportedOperationException("Distributed matrix not compatible for computing");
-        finish ateach(p in Dist.makeUnique(places)) {
+        finish ateach(p in Dist.makeUnique(places())) {
             val itr  = this.handleBS().iterator();
             val blkA = A.handleBS();
             while (itr.hasNext()) {
@@ -761,7 +742,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
         if (! likeMe(A))
             throw new UnsupportedOperationException("Distributed matrix not compatible for computing");
         
-        finish ateach(p in Dist.makeUnique(places)) {
+        finish ateach(p in Dist.makeUnique(places())) {
             val blkit1 = this.handleBS().iterator();
             val blkit2 = A.handleBS().iterator();
             while (blkit1.hasNext()&&blkit2.hasNext()) {
@@ -853,13 +834,14 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      * Do not call this method, if distribution of blocks is not grid-like.
      */
     public def buildBlockMap() {
-        finish ateach(p in Dist.makeUnique(places)) {
+        finish ateach(p in Dist.makeUnique(places())) {
             handleBS().buildBlockMap();
         }
     }
     
     public def getAllDataCount():Long {
         var tt:Long = 0;
+        val places = places();
         for (var p:Long=0; p<places.size(); p++) {
             val ds = at(places(p)) handleBS().getAllBlocksDataCount();
             tt += ds;
@@ -912,15 +894,14 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     }
 
     public def localSync() {
-        finish ateach(p in Dist.makeUnique(places)) {
+        finish ateach(p in Dist.makeUnique(places())) {
             val bset = handleBS();
             bset.sync(bset.getFirst());
         }
     }
 
     public def getCalcTime() = calcTime;
-    public def getCommTime() = commTime;
-    public def getPlaces() = places;
+    public def getCommTime() = commTime;    
 
     /**
      * Check all blocks are same or not
@@ -928,6 +909,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     public def checkAllBlocksEqual() : Boolean {
         val rtmat:Matrix = handleBS().getFirst().getMatrix();
         var retval:Boolean = true;
+        val places = places();
         for (var p:Long=0 ; p<places.size() && retval; p++) {
             if (here.id() != places(p).id) {
                 retval &= at(places(p)) {
@@ -946,7 +928,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     
     public def getTotalDataSize():Long {
         var dsz:Long=0;
-        for (p in places) {
+        for (p in places()) {
             val c = at(p) { handleBS().getAllBlocksDataCount()};
             dsz += c;
         }
@@ -956,7 +938,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     public def toString():String {
         val output = new StringBuilder();
         output.add("-------- Dist Matrix Block size:["+M+" x "+N+"] ---------\n");
-        for (p in places) {
+        for (p in places()) {
             output.add(at(p) { handleBS().toString() });
         }
         output.add("--------------------------------------------------\n");
@@ -964,7 +946,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     }
     
     public def printLoadStatistics(){
-        for(p in places) {            
+        for(p in places()) {            
             at (p){                
                 val blks   = handleBS();
                 val count = blks.getStorageSize();                
@@ -986,13 +968,15 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      */
     public def remake(rowPs:Long, colPs:Long, newPg:PlaceGroup) {
         assert (rowPs*colPs==newPg.size()) :
-            "Block partitioning error: rowsPs["+rowPs+"]*colPs["+colPs+"] != newPg.size["+places.size()+"]";        
+            "Block partitioning error: rowsPs["+rowPs+"]*colPs["+colPs+"] != newPg.size["+newPg.size()+"]";
+        val oldPlaces = places();
         val oldGrid = getGrid();
         val blks:PlaceLocalHandle[BlockSet];
-        PlaceLocalHandle.destroy(places, handleBS, (Place)=>true);
+        PlaceLocalHandle.destroy(oldPlaces, handleBS, (Place)=>true);
 
         var useOldGrid:Boolean = false;
-        if (places.size() == newPg.size() || rebalanceMode == null || rebalanceMode.equals("0"))
+        val rebalanceMode = System.getenv("X10_GML_REBALANCE");
+        if (oldPlaces.size() == newPg.size() || rebalanceMode == null || rebalanceMode.equals("0"))
             useOldGrid = true; // no matrix grid rebalancing
 
         if (!useOldGrid){
@@ -1003,8 +987,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
             blks = PlaceLocalHandle.make[BlockSet](newPg, ()=>(BlockSet.make(oldGrid,rowPs,colPs, newPg)));
         }
         gdist = new DistGrid(blks().getGrid(), rowPs, colPs);
-        handleBS  = blks;
-        places = newPg;
+        handleBS  = blks;        
     }
     
      /**
@@ -1036,8 +1019,9 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      * @param newPg            the new place group to distribute the matrix over
      */
     public def remakeSparse(rowPs:Long, colPs:Long, nzd:Float, newPg:PlaceGroup) {
-        remake(rowPs, colPs, newPg); 
-        if (places.size() == newPg.size() || rebalanceMode == null || rebalanceMode.equals("0")) {
+        remake(rowPs, colPs, newPg);        
+        val rebalanceMode = System.getenv("X10_GML_REBALANCE");
+        if (places().size() == newPg.size() || rebalanceMode == null || rebalanceMode.equals("0")) {
             // no matrix grid rebalancing
             allocSparseBlocks(nzd);
         }
@@ -1057,9 +1041,8 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      * @param newPg         the new place group to distribute the matrix over
      */
     public def remakeSparse(g:Grid, d:DistMap, nzd:Float, newPg:PlaceGroup) {        
-        PlaceLocalHandle.destroy(places, handleBS, (Place)=>true);
-        handleBS = PlaceLocalHandle.make[BlockSet](newPg, ()=>(BlockSet.makeSparse(g, d, nzd, newPg)));
-        places = newPg;
+        PlaceLocalHandle.destroy(places(), handleBS, (Place)=>true);
+        handleBS = PlaceLocalHandle.make[BlockSet](newPg, ()=>(BlockSet.makeSparse(g, d, nzd, newPg)));        
     }
 
     /**
@@ -1090,9 +1073,8 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      * @param newPg         the new place group to distribute the matrix over
      */
     public def remakeDense(g:Grid, d:DistMap, newPg:PlaceGroup) {
-        PlaceLocalHandle.destroy(places, handleBS, (Place)=>true);   
+        PlaceLocalHandle.destroy(places(), handleBS, (Place)=>true);   
         handleBS = PlaceLocalHandle.make[BlockSet](newPg, ()=>(BlockSet.makeDense(g, d, newPg)));
-        places = newPg;
     }
     
     /**
@@ -1103,10 +1085,10 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
         val snapshot = DistObjectSnapshot.make();
         val blockList = handleBS().blocklist;
         val isSparse = blockList.get(0).isSparse();
-        
-        if (isSparse) {
-            finish ateach(pl in Dist.makeUnique(places)) {
-                val i = places.indexOf(here);
+        val rootPlaces = places();
+        if (isSparse) {            
+            finish ateach(pl in Dist.makeUnique(rootPlaces)) {
+                val i = places().indexOf(here);
                 val data = handleBS();
                 val blocksCount = data.blocklist.size();
                 val metadata = data.getBlocksMetaData();
@@ -1122,18 +1104,18 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
                 val blockSetInfo = new BlockSetSnapshotInfo(i, isSparse);
                 blockSetInfo.initSparse(blocksCount, metadata, allIndex, allValue);
                 snapshot.save(i, blockSetInfo);
-                snapshotGridPLH().updateGrid(getGrid());
-                snapshotGridPLH().updateDistMap(getMap());
+                handleBS().snapshotDistInfo.updateGrid(getGrid());
+                handleBS().snapshotDistInfo.updateDistMap(getMap());
             }
         } else {
-            finish ateach(pl in Dist.makeUnique(places)) {
-                val i = places.indexOf(here);
+            finish ateach(pl in Dist.makeUnique(rootPlaces)) {
+                val i = places().indexOf(here);
                 val data = handleBS();
                 val blockSetInfo = new BlockSetSnapshotInfo(i, isSparse);
                 blockSetInfo.setBlockSet(data);
                 snapshot.save(i, blockSetInfo);
-                snapshotGridPLH().updateGrid(getGrid());
-                snapshotGridPLH().updateDistMap(getMap());
+                handleBS().snapshotDistInfo.updateGrid(getGrid());
+                handleBS().snapshotDistInfo.updateDistMap(getMap());
             }
         }
         return snapshot;
@@ -1152,10 +1134,10 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      * @param snapshot a snapshot from which to restore the data
      */
     private def restoreSnapshotElementByElement(snapshot:DistObjectSnapshot) {              
-        val cached = PlaceLocalHandle.make[HashMap[Long,BlockSetSnapshotInfo]](places, ()=>new HashMap[Long, BlockSetSnapshotInfo]());        
+        val cached = PlaceLocalHandle.make[HashMap[Long,BlockSetSnapshotInfo]](places(), ()=>new HashMap[Long, BlockSetSnapshotInfo]());        
         val initFunc = (i:Long,j:Long)=> {
-            val oldGrid = snapshotGridPLH().getGrid();
-            val oldDistMap = snapshotGridPLH().getDistMap();
+            val oldGrid = handleBS().snapshotDistInfo.getGrid();
+            val oldDistMap = handleBS().snapshotDistInfo.getDistMap();
             /*
              * calculate saved place for a point (i,j) from oldPg
              */
@@ -1182,7 +1164,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
             allocAndInitNonUniformSparseBlocks(initFunc);
         else
             init(initFunc);
-        PlaceLocalHandle.destroy(places, cached, (Place)=>true);
+        PlaceLocalHandle.destroy(places(), cached, (Place)=>true);
     }
 
     /**
@@ -1191,9 +1173,9 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      */
     private def restoreSnapshotBlockByBlock(snapshot:DistObjectSnapshot) {
     //    val startTime = Timer.milliTime();        
-        finish ateach(p in Dist.makeUnique(places)) {
-            val oldGrid = snapshotGridPLH().getGrid();
-            val oldDistMap = snapshotGridPLH().getDistMap();
+        finish ateach(p in Dist.makeUnique(places())) {
+            val oldGrid = handleBS().snapshotDistInfo.getGrid();
+            val oldDistMap = handleBS().snapshotDistInfo.getDistMap();
             val newGrid = getGrid();
             
             var copyToTime:Long = 0;
@@ -1239,8 +1221,8 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     }
 
     private def restoreSnapshotSubBlocksVerticalDist(snapshot:DistObjectSnapshot) {
-        val oldGrid = snapshotGridPLH().getGrid();
-        val oldMap = snapshotGridPLH().getDistMap();
+        val oldGrid = handleBS().snapshotDistInfo.getGrid();
+        val oldMap = handleBS().snapshotDistInfo.getDistMap();
         val newGrid = getGrid();
 
         val snapshotSegSize = oldGrid.rowBs;
@@ -1252,9 +1234,9 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
         val blockList = handleBS().blocklist;
         val isSparse = blockList.size() == 0 || blockList.get(0).isSparse();
 
-        val cached = PlaceLocalHandle.make[HashMap[Long,BlockSetSnapshotInfo]](places, ()=>new HashMap[Long, BlockSetSnapshotInfo]());
-        finish ateach(p in Dist.makeUnique(places)) {
-            val newPlaceIndex:Long = places.indexOf(here);
+        val cached = PlaceLocalHandle.make[HashMap[Long,BlockSetSnapshotInfo]](places(), ()=>new HashMap[Long, BlockSetSnapshotInfo]());
+        finish ateach(p in Dist.makeUnique(places())) {
+            val newPlaceIndex:Long = places().indexOf(here);
 
             val blks = handleBS();
             val blkitr = blks.iterator();
@@ -1347,7 +1329,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
                 handleBS().blocklist.addAll(tempBlocklist);
             }
         }
-        PlaceLocalHandle.destroy(places, cached, (Place)=>true);
+        PlaceLocalHandle.destroy(places(), cached, (Place)=>true);
     }
 
     public def makeSnapshot_local(snapshot:DistObjectSnapshot):void {    
@@ -1355,7 +1337,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
         val isSparse = data.blocklist.get(0).isSparse();
     
         if (isSparse) {
-            val i = places.indexOf(here);
+            val i = places().indexOf(here);
             val blocksCount = data.blocklist.size();
             val metadata = data.getBlocksMetaData();
             val totalSize = data.getStorageSize();
@@ -1371,13 +1353,13 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
             blockSetInfo.initSparse(blocksCount, metadata, allIndex, allValue);
             snapshot.save(i, blockSetInfo);            
         } else {
-            val i = places.indexOf(here);
+            val i = places().indexOf(here);
             val blockSetInfo = new BlockSetSnapshotInfo(i, isSparse);
             blockSetInfo.setBlockSet(data);
             snapshot.save(i, blockSetInfo);        
         }
-        snapshotGridPLH().updateGrid(getGrid());
-        snapshotGridPLH().updateDistMap(getMap());      
+        handleBS().snapshotDistInfo.updateGrid(getGrid());
+        handleBS().snapshotDistInfo.updateDistMap(getMap());      
     }    
     
     public def restoreSnapshot_local(snapshot:DistObjectSnapshot):void {    
@@ -1385,7 +1367,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     }
     
     public def restoreSnapshot(snapshot:DistObjectSnapshot, localFlag:Boolean) {
-        val oldGrid = snapshotGridPLH().getGrid();
+        val oldGrid = handleBS().snapshotDistInfo.getGrid();
         val newGrid = getGrid();
         if (!localFlag){
             if (!oldGrid.equals(newGrid)) {
@@ -1416,8 +1398,8 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      * @param snapshot a snapshot from which to restore the data
      */
     private def restoreSnapshotElementByElement_local(snapshot:DistObjectSnapshot) {        
-        val oldGrid = snapshotGridPLH().getGrid();
-        val oldDistMap = snapshotGridPLH().getDistMap();
+        val oldGrid = handleBS().snapshotDistInfo.getGrid();
+        val oldDistMap = handleBS().snapshotDistInfo.getDistMap();
         val cached = GlobalRef(new HashMap[Long, BlockSetSnapshotInfo]());
         val initFunc = (i:Long,j:Long)=> {
             /*
@@ -1450,8 +1432,8 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     
     private def restoreSnapshotBlockByBlock_local(snapshot:DistObjectSnapshot) {
 //      val startTime = Timer.milliTime();
-        val oldGrid = snapshotGridPLH().getGrid();
-        val oldDistMap = snapshotGridPLH().getDistMap();
+        val oldGrid = handleBS().snapshotDistInfo.getGrid();
+        val oldDistMap = handleBS().snapshotDistInfo.getDistMap();
         val newGrid = getGrid();
         
         var copyToTime:Long = 0;
@@ -1495,8 +1477,8 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     }
     
     private def restoreSnapshotSubBlocksVerticalDist_local(snapshot:DistObjectSnapshot) {    
-        val oldGrid = snapshotGridPLH().getGrid();
-        val oldMap = snapshotGridPLH().getDistMap();
+        val oldGrid = handleBS().snapshotDistInfo.getGrid();
+        val oldMap = handleBS().snapshotDistInfo.getDistMap();
         val newGrid = getGrid();
         
         val snapshotSegSize = oldGrid.rowBs;
@@ -1510,7 +1492,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
         val isSparse = blockList.size() == 0 || blockList.get(0).isSparse();
         
         val cached = new HashMap[Long, BlockSetSnapshotInfo]();        
-        val newPlaceIndex:Long = places.indexOf(here);
+        val newPlaceIndex:Long = places().indexOf(here);
 
         val blks = handleBS();
 
@@ -1605,41 +1587,5 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
             handleBS().clear();
             handleBS().blocklist.addAll(tempBlocklist);
         }
-    }
-}
-
-class SnapshotDistributionInfo{
-    //Grid data
-    public var M:Long;
-    public var N:Long;
-    public var rowBs:Rail[Long];
-    public var colBs:Rail[Long];
-
-    //DistMap data        
-    public var numPlace:Long;
-    public var blockmap:Rail[Long];
-
-    public def getGrid():Grid {
-        return new Grid(M, N, rowBs, colBs);
-    }
-
-    public def updateGrid(g:Grid){
-        this.M = g.M;
-        this.N = g.N;
-        this.rowBs = g.rowBs;
-        this.colBs = g.colBs;
-    }
-
-    public def getDistMap():DistMap {
-        return new DistMap(blockmap, numPlace);
-    }
-
-    public def updateDistMap(m:DistMap){
-        this.numPlace = m.numPlace;
-        this.blockmap = m.blockmap;
-    }    
-
-    public def clone() : SnapshotDistributionInfo {
-        throw new Exception("Clone implementation missing");
     }
 }

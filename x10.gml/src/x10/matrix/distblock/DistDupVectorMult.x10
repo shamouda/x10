@@ -26,7 +26,7 @@ public class DistDupVectorMult  {
         assert (mA.isDistHorizontal()) :
             "First dist block matrix must have horizontal distribution";        
         val stt = Timer.milliTime();
-        val places = mA.getPlaces();
+        val places = mA.places();
         var offb:Long = 0;
         val rootpid = here.id();
         val vBsegSize =  vB.getSegSize();
@@ -34,11 +34,14 @@ public class DistDupVectorMult  {
             val offsetB = offb;
             at(places(p)) async {
                 if (here.id() != rootpid || plus == false) vC.local().reset();
-                BlockVectorMult.comp(mA.handleBS(), vB.distV(), offsetB, vC.local(), 0, true);
+                BlockVectorMult.comp(mA.handleBS(), vB.distV().vec, offsetB, vC.local(), 0, true);
                 
-                val src = vC.dupV().d;
-                val dst = vC.dupV().d;
+                val src = vC.dupV().vec.d;
+                val dst = vC.dupV().vec.d;
+                
+                vC.dupV().allReduceTime -= Timer.milliTime();
                 vC.team.allreduce(src, 0, dst, 0,vC.M, Team.ADD);
+                vC.dupV().allReduceTime += Timer.milliTime();
             }
         }
         vC.calcTime += Timer.milliTime() - stt;
@@ -49,13 +52,13 @@ public class DistDupVectorMult  {
         assert (mA.isDistVertical()) :
             "First dist block matrix must have vertical distribution";
         val stt = Timer.milliTime();        
-        val places = mA.getPlaces();        
+        val places = mA.places();        
         var offc:Long = 0;
         val vCsegSize =  vC.getSegSize();
         finish for (var p:Long=0; p<places.size(); offc+=vCsegSize(p), p++) {
             val offsetC = offc;
             at(places(p)) async {
-                BlockVectorMult.comp(mA.handleBS(), vB.local(), 0, vC.distV(), offsetC, plus);
+                BlockVectorMult.comp(mA.handleBS(), vB.local(), 0, vC.distV().vec, offsetC, plus);
             }
         }
         vC.calcTime += Timer.milliTime() - stt;
@@ -64,19 +67,15 @@ public class DistDupVectorMult  {
     }
 
     public static def comp_local(mA:DistBlockMatrix, vB:DupVector(mA.N), vC:DistVector(mA.M), plus:Boolean):DistVector(vC) {
-        //make the validation in the application!!!!, need to avoid copying remote data, some vars are transient
-        //assert (mA.isDistVertical()) :
-        //    "First dist block matrix must have vertical distribution";
-        
-        BlockVectorMult.comp(mA.handleBS(), vB.local(), 0, vC.distV(), vC.getOffset(), plus);
-        
+        BlockVectorMult.comp(mA.handleBS(), vB.local(), 0, vC.distV().vec, vC.getOffset(), plus);
         return vC;
     }
+    
     public static def comp(vB:DistVector, mA:DistBlockMatrix(vB.M), vC:DupVector(mA.N), plus:Boolean):DupVector(vC) {
         assert (mA.isDistVertical()) :
             "Second operand dist block matrix must have vertical distribution";        
         val stt = Timer.milliTime();
-        val places = mA.getPlaces();
+        val places = mA.places();
         var offb:Long=0;
         val rootpid = here.id();
         val vBsegSize =  vB.getSegSize();
@@ -85,34 +84,34 @@ public class DistDupVectorMult  {
             at(places(p)) async {
                 if (here.id() != rootpid || plus == false) vC.local().reset();
 
-                BlockVectorMult.comp(vB.distV(), offsetB, mA.handleBS(), vC.local(), 0, true);
+                BlockVectorMult.comp(vB.distV().vec, offsetB, mA.handleBS(), vC.local(), 0, true);
                 
-                val src = vC.dupV().d;
-                val dst = vC.dupV().d;
+                val src = vC.dupV().vec.d;
+                val dst = vC.dupV().vec.d;
+                vC.dupV().allReduceTime -= Timer.milliTime();
                 vC.team.allreduce(src, 0, dst, 0, vC.M, Team.ADD);
+                vC.dupV().allReduceTime += Timer.milliTime();
             }
         }
         vC.calcTime += Timer.milliTime() - stt;
         return vC;
     }
     
-    //TODO: remove the root parameter
-    //TODO: who should perform the validation?
     public static def comp_local(root:Place, vB:DistVector, mA:DistBlockMatrix(vB.M), vC:DupVector(mA.N), plus:Boolean):DupVector(vC) {
-        //assert (mA.isDistVertical()) :
-        //    "Second operand dist block matrix must have vertical distribution";        
+        assert (mA.isDistVertical()) :
+            "Second operand dist block matrix must have vertical distribution";        
         
         val rootpid = root.id();
-        val offsetB = vB.getOffset();
-        
-        //TODO: can we remove this condition and use the plus param instead of "true" in the call below
+        val offsetB = vB.getOffset();        
         if (here.id() != rootpid || plus == false) vC.local().reset();
 
-        BlockVectorMult.comp(vB.distV(), offsetB, mA.handleBS(), vC.local(), 0, true);
+        BlockVectorMult.comp(vB.distV().vec, offsetB, mA.handleBS(), vC.local(), 0, true);
     
-        val src = vC.dupV().d;
-        val dst = vC.dupV().d;
+        val src = vC.dupV().vec.d;
+        val dst = vC.dupV().vec.d;
+        vC.dupV().allReduceTime -= Timer.milliTime();
         vC.team.allreduce(src, 0, dst, 0, vC.M, Team.ADD);
+        vC.dupV().allReduceTime += Timer.milliTime();
             
         return vC;
     }
@@ -121,13 +120,13 @@ public class DistDupVectorMult  {
         assert (mA.isDistHorizontal()) :
             "Second operand dist block matrix must have horizontal distribution";
         val stt = Timer.milliTime();
-        val places = mA.getPlaces();
+        val places = mA.places();
         var offc:Long = 0;
         val vCsegSize =  vC.getSegSize();
         finish for (var p:Long=0; p<places.size(); offc+=vCsegSize(p), p++) {
             val offsetC = offc;
             at(places(p)) async {
-                BlockVectorMult.comp(vB.local(), 0, mA.handleBS(), vC.distV(), offsetC, plus);
+                BlockVectorMult.comp(vB.local(), 0, mA.handleBS(), vC.distV().vec, offsetC, plus);
             }
         }
         vC.calcTime += Timer.milliTime() - stt;
@@ -136,7 +135,7 @@ public class DistDupVectorMult  {
     }
 
     public static def comp(mA:DistBlockMatrix, vB:DupVector(mA.N), vC:DupVector(mA.M), plus:Boolean):DupVector(vC) {
-        val places = mA.getPlaces();
+        val places = mA.places();
 
         var stt:Long = Timer.milliTime();
         val root = here;
@@ -146,26 +145,33 @@ public class DistDupVectorMult  {
             finish ateach(Dist.makeUnique(places)) {
                 ////Bcast vector to all places. 
                 var vBsrc:Rail[ElemType] = null;
-                val vBdst = vB.dupV().d;
+                val vBdst = vB.dupV().vec.d;
                 if (here.id == root.id){
-                    vBsrc = vB.dupV().d;
+                    vBsrc = vB.dupV().vec.d;
                 }
+                vB.dupV().bcastTime -= Timer.milliTime();
                 vB.team.bcast(root, vBsrc, 0, vBdst, 0, vB.M);
+                vB.dupV().bcastTime += Timer.milliTime();
 
                 vC.local().reset();
                 BlockVectorMult.comp(mA.handleBS(), vB.local(), vC.local(),  true);
 
-                val src = vC.dupV().d;
-                val dst = vC.dupV().d;
+                val src = vC.dupV().vec.d;
+                val dst = vC.dupV().vec.d;
+                
+                vC.dupV().reduceTime -= Timer.milliTime();
                 vC.team.reduce(root, src, 0, dst, 0, vC.M, Team.ADD);
+                vC.dupV().reduceTime += Timer.milliTime();
 
                 var vCsrc:Rail[ElemType] = null;
-                val vCdst = vC.dupV().d;
+                val vCdst = vC.dupV().vec.d;
                 if (here.id == root.id){
                     vC.local().cellAdd(tmpc as Vector(vC.M));
-                    vCsrc = vC.dupV().d;
+                    vCsrc = vC.dupV().vec.d;
                 }
+                vC.dupV().bcastTime -= Timer.milliTime();
                 vC.team.bcast(root, vCsrc, 0, vCdst, 0, vC.M);
+                vC.dupV().bcastTime += Timer.milliTime();
                 
             }
             vC.calcTime += Timer.milliTime() - stt;
@@ -173,18 +179,23 @@ public class DistDupVectorMult  {
             finish ateach(Dist.makeUnique(places)) {
                 ////Bcast vector to all places. 
                 var vBsrc:Rail[ElemType] = null;
-                val vBdst = vB.dupV().d;
+                val vBdst = vB.dupV().vec.d;
                 if (here.id == root.id){
-                    vBsrc = vB.dupV().d;
+                    vBsrc = vB.dupV().vec.d;
                 }
+                
+                vB.dupV().bcastTime -= Timer.milliTime();
                 vB.team.bcast(root, vBsrc, 0, vBdst, 0, vB.M);
-
+                vB.dupV().bcastTime += Timer.milliTime();
+                
                 vC.local().reset();
                 BlockVectorMult.comp(mA.handleBS(), vB.local(), vC.local(),  true);
                 
-                val src = vC.dupV().d;
-                val dst = vC.dupV().d;
-                vC.team.allreduce(src, 0, dst, 0, vC.M, Team.ADD);                    
+                val src = vC.dupV().vec.d;
+                val dst = vC.dupV().vec.d;
+                vC.dupV().allReduceTime -= Timer.milliTime();
+                vC.team.allreduce(src, 0, dst, 0, vC.M, Team.ADD);
+                vC.dupV().allReduceTime += Timer.milliTime();
             }
             vC.calcTime += Timer.milliTime() - stt;
         }
@@ -192,7 +203,7 @@ public class DistDupVectorMult  {
     }
     
     public static def comp(vB:DupVector, mA:DistBlockMatrix(vB.M), vC:DupVector(mA.N), plus:Boolean):DupVector(vC) {
-        val places = mA.getPlaces();
+        val places = mA.places();
 
         var stt:Long = Timer.milliTime();
         val root = here;
@@ -202,44 +213,58 @@ public class DistDupVectorMult  {
         
             finish ateach(Dist.makeUnique(places)) {
                 var vBsrc:Rail[ElemType] = null;
-                val vBdst = vB.dupV().d;
+                val vBdst = vB.dupV().vec.d;
                 if (here.id == root.id){
-                    vBsrc = vB.dupV().d;
+                    vBsrc = vB.dupV().vec.d;
                 }
+                
+                vB.dupV().bcastTime -= Timer.milliTime();
                 vB.team.bcast(root, vBsrc, 0, vBdst, 0, vB.M);
-
+                vB.dupV().bcastTime += Timer.milliTime();
+                
                 vC.local().reset();
                 BlockVectorMult.comp(vB.local(), mA.handleBS(), vC.local(), plus);
                 
-                val src = vC.dupV().d;
-                val dst = vC.dupV().d;
-                vC.team.reduce(root, src, 0, dst, 0, vC.M, Team.ADD);
+                val src = vC.dupV().vec.d;
+                val dst = vC.dupV().vec.d;
+                
+                vC.dupV().reduceTime -= Timer.milliTime();
+                vC.team.reduce(root, src, 0, dst, 0, vC.M, Team.ADD);                
+                vC.dupV().reduceTime += Timer.milliTime();
                 
                 var vCsrc:Rail[ElemType] = null;
-                val vCdst = vC.dupV().d;
+                val vCdst = vC.dupV().vec.d;
                 if (here.id == root.id){
                     vC.local().cellAdd(tmpc as Vector(vC.M));
-                    vCsrc = vC.dupV().d;
-                }
+                    vCsrc = vC.dupV().vec.d;
+                }                
+                
+                vC.dupV().bcastTime -= Timer.milliTime();
                 vC.team.bcast(root, vCsrc, 0, vCdst, 0, vC.M);
+                vC.dupV().bcastTime += Timer.milliTime();
             }
             vC.calcTime += Timer.milliTime() - stt;
             
         } else {
             finish ateach(Dist.makeUnique(places)) {
                 var vBsrc:Rail[ElemType] = null;
-                val vBdst = vB.dupV().d;
+                val vBdst = vB.dupV().vec.d;
                 if (here.id == root.id){
-                    vBsrc = vB.dupV().d;
+                    vBsrc = vB.dupV().vec.d;
                 }
+                
+                vB.dupV().bcastTime -= Timer.milliTime();
                 vB.team.bcast(root, vBsrc, 0, vBdst, 0, vB.M);
-            
+                vB.dupV().bcastTime += Timer.milliTime();
+                
                 vC.local().reset();
                 BlockVectorMult.comp(vB.local(), mA.handleBS(), vC.local(), plus);
                 
-                val src = vC.dupV().d;
-                val dst = vC.dupV().d;
+                val src = vC.dupV().vec.d;
+                val dst = vC.dupV().vec.d;
+                vC.dupV().allReduceTime -= Timer.milliTime();
                 vC.team.allreduce(src, 0, dst, 0, vC.M, Team.ADD);
+                vC.dupV().allReduceTime += Timer.milliTime();
             }
             vC.calcTime += Timer.milliTime() - stt;
         }
