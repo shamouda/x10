@@ -26,18 +26,18 @@ public class LocalViewResilientExecutor {
     private var isResilient:Boolean = false;
     private val VERBOSE = true;
     
-    private var runTime:Long = 0;
-    private var checkpointTime:Long = 0;
-    private var checkpointCount:Long = 0;
-    private var restoreTime:Long = 0;
-    private var restoreCount:Long = 0;
-    private var stepExecTime:Long = 0;
-    private var stepExecCount:Long = 0;
+    private transient var runTime:Long = 0;
+    private transient var checkpointTime:Long = 0;
+    private transient var checkpointCount:Long = 0;
+    private transient var restoreTime:Long = 0;
+    private transient var restoreCount:Long = 0;
+    private transient var stepExecTime:Long = 0;
+    private transient var stepExecCount:Long = 0;
     private var hammer:PlaceHammer = null;
     
-    private var restoreRequired:Boolean = false;
-    private var restoreJustDone:Boolean = false;
-    private var lastCheckpointIter:Long = -1;
+    private transient var restoreRequired:Boolean = false;
+    private transient var restoreJustDone:Boolean = false;
+    private transient var lastCheckpointIter:Long = -1;
     
     class PlaceTempData {
         var globalIter:Long = 0;
