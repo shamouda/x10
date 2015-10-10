@@ -41,7 +41,7 @@ public class BlockSet  {
     
     public val blocklist:ArrayList[MatrixBlock];
     
-    private val places:PlaceGroup;
+    public val places:PlaceGroup;
     /**
      * This is used for fast access when distribution is DistGrid.
      */
@@ -50,6 +50,8 @@ public class BlockSet  {
     public var rowCastPlaceMap:CastPlaceMap;
     public var colCastPlaceMap:CastPlaceMap;
 
+    public var snapshotDistInfo:SnapshotDistributionInfo;
+    
     public def this(g:Grid, map:DistMap, plcs:PlaceGroup) {
         grid=g; dmap = map;
         blocklist = new ArrayList[MatrixBlock]();    
@@ -57,6 +59,7 @@ public class BlockSet  {
         rowCastPlaceMap=null;
         colCastPlaceMap=null;
         places = plcs;
+        snapshotDistInfo = new SnapshotDistributionInfo();
     }
 
     public def this(g:Grid, map:DistMap, bl:ArrayList[MatrixBlock], plcs:PlaceGroup) {
@@ -933,4 +936,41 @@ public class BlockSet  {
         return this;
     }   
 }
+
+class SnapshotDistributionInfo{
+    //Grid data
+    public var M:Long;
+    public var N:Long;
+    public var rowBs:Rail[Long];
+    public var colBs:Rail[Long];
+
+    //DistMap data        
+    public var numPlace:Long;
+    public var blockmap:Rail[Long];
+
+    public def getGrid():Grid {
+        return new Grid(M, N, rowBs, colBs);
+    } 
+
+    public def updateGrid(g:Grid){
+        this.M = g.M;
+        this .N = g.N;
+        this.rowBs = g.rowBs;
+        this.colBs = g.colBs;
+    }
+
+    public def getDistMap():DistMap {
+        return new DistMap(blockmap, numPlace);
+    }
+
+    public def updateDistMap(m:DistMap){
+        this.numPlace = m.numPlace;
+        this.blockmap = m.blockmap;
+    }    
+
+    public def clone() : SnapshotDistributionInfo {
+        throw new Exception("Clone implementation missing");
+    }
+}
+
 
