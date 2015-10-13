@@ -831,21 +831,23 @@ distV().allReduceTime += Timer.milliTime();
         val rootPlaces = distV().places;
         val root = here;
         finish ateach(Dist.makeUnique(rootPlaces)) {
-            val size = 4;
+            val size = 5;
             val src = new Rail[Double](size);
             src(0) = distV().multTime ;
-            src(1) = distV().allReduceTime;
-            src(2) = distV().scattervTime;
-            src(3) = distV().gathervTime;             
+            src(1) = distV().multComptTime;
+            src(2) = distV().allReduceTime;
+            src(3) = distV().scattervTime;
+            src(4) = distV().gathervTime;             
             val dst = new Rail[Double](size);
     
             team.reduce(root, src, 0, dst, 0, size, Team.MAX);
     
             if (here.id == root.id){
                 Console.OUT.println("["+prefix+"]  multTime: " + dst(0));
-                Console.OUT.println("["+prefix+"]  allReduceTime: " + dst(1));
-                Console.OUT.println("["+prefix+"]  reduceTime: " + dst(2));
-                Console.OUT.println("["+prefix+"]  bcastTime: " + dst(3));
+                Console.OUT.println("["+prefix+"]  multComptTime: " + dst(1));
+                Console.OUT.println("["+prefix+"]  allReduceTime: " + dst(2));
+                Console.OUT.println("["+prefix+"]  scattervTime: " + dst(3));
+                Console.OUT.println("["+prefix+"]  gathervTime: " + dst(4));
             }
         }    
     }
@@ -875,6 +877,7 @@ class DistVectorLocalState {
     }
     
     public var multTime:Long;
+    public var multComptTime:Long;
     public var allReduceTime:Long;
     public var scattervTime:Long;
     public var gathervTime:Long;

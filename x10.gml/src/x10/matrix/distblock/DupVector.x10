@@ -601,13 +601,14 @@ public class DupVector(M:Long) implements Snapshottable {
         val rootPlaces = dupV().places;
         val root = here;
         finish ateach(Dist.makeUnique(rootPlaces)) {
-            val size = 5;
+            val size = 6;
             val src = new Rail[Double](size);
             src(0) = dupV().multTime ;
-            src(1) = dupV().allReduceTime;
-            src(2) = dupV().reduceTime;
-            src(3) = dupV().bcastTime;
-            src(4) = dupV().calcTime;            
+            src(1) = dupV().multComptTime;
+            src(2) = dupV().allReduceTime;
+            src(3) = dupV().reduceTime;
+            src(4) = dupV().bcastTime;
+            src(5) = dupV().calcTime;            
             
             val dst = new Rail[Double](size);
             
@@ -615,10 +616,11 @@ public class DupVector(M:Long) implements Snapshottable {
             
             if (here.id == root.id){
                 Console.OUT.println("["+prefix+"]  multTime: " + dst(0));
-                Console.OUT.println("["+prefix+"]  allReduceTime: " + dst(1));
-                Console.OUT.println("["+prefix+"]  reduceTime: " + dst(2));
-                Console.OUT.println("["+prefix+"]  bcastTime: " + dst(3));
-                Console.OUT.println("["+prefix+"]  calcTime: " + dst(4));
+                Console.OUT.println("["+prefix+"]  multComptTime: " + dst(1));
+                Console.OUT.println("["+prefix+"]  allReduceTime: " + dst(2));
+                Console.OUT.println("["+prefix+"]  reduceTime: " + dst(3));
+                Console.OUT.println("["+prefix+"]  bcastTime: " + dst(4));
+                Console.OUT.println("["+prefix+"]  calcTime: " + dst(5));
             }
         }    
     }
@@ -639,7 +641,8 @@ class DupVectorLocalState {
         return new DupVectorLocalState(vec.clone(), places);
     }
     
-    public var multTime:Long;
+    public var multTime:Long;    
+    public var multComptTime:Long;
     public var allReduceTime:Long;
     public var reduceTime:Long;
     public var bcastTime:Long;
