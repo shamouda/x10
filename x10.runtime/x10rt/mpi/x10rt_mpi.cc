@@ -1631,10 +1631,7 @@ x10rt_coll_type x10rt_net_coll_support () {
 	else
         return X10RT_COLL_ALLBLOCKINGCOLLECTIVES;
 #else
-    return X10RT_COLL_NOCOLLECTIVES;
-    /*TODO: change it to X10RT_COLL_ALLBLOCKINGCOLLECTIVES;
-     * then modify MPI_COLLECTIVE to not abort
-     * */
+    return  X10RT_COLL_ALLBLOCKINGCOLLECTIVES;
 #endif
 }
 
@@ -2937,6 +2934,28 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
 #define SAVED(var) \
      cpe.env.MPI_COLLECTIVE_NAME.var
 #define MPI_COLLECTIVE_POSTPROCESS_END X10RT_NET_DEBUG("%s: %"PRIxPTR"_%"PRIxPTR,"end postprocess", SAVED(ch), SAVED(arg));
+#elif defined(OPEN_MPI_ULFM)
+#define MPI_COLLECTIVE(name, iname, ...) \
+    CollectivePostprocessEnv cpe; \
+    do { LOCK_IF_MPI_IS_NOT_MULTITHREADED; \
+        int mpiError = MPI_##name(__VA_ARGS__); \
+        if (!is_process_failure_error(mpiError) ) { \
+            fprintf(stderr, "[%s:%d] %s\n", \
+                    __FILE__, __LINE__, "Error in MPI_" #name); \
+            abort(); \
+        } \
+        UNLOCK_IF_MPI_IS_NOT_MULTITHREADED; \
+    } while(0)
+#define MPI_COLLECTIVE_SAVE(var) \
+     cpe.env.MPI_COLLECTIVE_NAME.var = var;
+#define MPI_COLLECTIVE_POSTPROCESS \
+     cpe.ch = ch; \
+     cpe.arg = arg; \
+    X10RT_NET_DEBUG("call handler %s","x10rt_net_handler_" TOSTR(MPI_COLLECTIVE_NAME)); \
+    CONCAT(x10rt_net_handler_,MPI_COLLECTIVE_NAME)(cpe);
+#define SAVED(var) \
+     cpe.env.MPI_COLLECTIVE_NAME.var
+#define MPI_COLLECTIVE_POSTPROCESS_END
 #else
 #define MPI_COLLECTIVE(name, iname, ...) \
     CollectivePostprocessEnv cpe; \
