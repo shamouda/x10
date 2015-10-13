@@ -24,7 +24,7 @@ public class LocalViewResilientExecutor {
     private transient var places:PlaceGroup;
     private val itersPerCheckpoint:Long;
     private var isResilient:Boolean = false;
-    private val VERBOSE = true;
+    private val VERBOSE = false;
     
     private transient var runTime:Long = 0;
     private transient var checkpointTime:Long = 0;
