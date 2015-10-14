@@ -206,73 +206,34 @@ appTempDataPLH().localCompTime += Timer.milliTime();
     }
     
     public def printTimes(){
+        d_r.printTimes("d_r", true);
+        d_q.printTimes("d_q", true);
+        Vp.printTimes("Vp", true);
+        
         val rootPlaces = V.places();
         val team = new Team(rootPlaces);
         val root = here;
         finish ateach(Dist.makeUnique(rootPlaces)) {
-            val size = 19;
+            val size = 2;
             val src = new Rail[Double](size);
             var index:Long = 0;
             //application data ======================
-            src(index++) = appTempDataPLH().localCompTime ;
-            src(index++) = appTempDataPLH().globalCompTime;
-            //d_r data===============================
-            src(index++) = d_r.dupV().multTime ;
-            src(index++) = d_r.dupV().multComptTime;
-            src(index++) = d_r.dupV().allReduceTime;
-            src(index++) = d_r.dupV().reduceTime;
-            src(index++) = d_r.dupV().bcastTime;
-            src(index++) = d_r.dupV().calcTime;  
-            //d_q data===============================
-            src(index++) = d_q.dupV().multTime ;
-            src(index++) = d_q.dupV().multComptTime;
-            src(index++) = d_q.dupV().allReduceTime;
-            src(index++) = d_q.dupV().reduceTime;
-            src(index++) = d_q.dupV().bcastTime;
-            src(index++) = d_q.dupV().calcTime;              
-            //Vp data===============================
-            src(index++) = Vp.distV().multTime ;
-            src(index++) = Vp.distV().multComptTime;
-            src(index++) = Vp.distV().allReduceTime;
-            src(index++) = Vp.distV().scattervTime;
-            src(index++) = Vp.distV().gathervTime;        
+            src(0) = appTempDataPLH().localCompTime ;
+            src(1) = appTempDataPLH().globalCompTime;                    
             
             val dstMax = new Rail[Double](size);
             val dstMin = new Rail[Double](size);
     
             team.allreduce(src, 0, dstMax, 0, size, Team.MAX);
-            team.allreduce(src, 0, dstMin, 0, size, Team.MAX);
-    
-            if (here.id == root.id){                
-                index = 0;
-                var prefix:String = "LinRegApp";
-                Console.OUT.println("["+prefix+"]  localCompTime: " + dstMax(index) + ":" + dstMin(index++));
-                Console.OUT.println("["+prefix+"]  globalCompTime: " + dstMax(index) + ":" + dstMin(index++));
-                
-                prefix = "d_r";
-                Console.OUT.println("["+prefix+"]  multTime: "  + dstMax(index) + ":" + dstMin(index++));
-                Console.OUT.println("["+prefix+"]  multComptTime: " + dstMax(index) + ":" + dstMin(index++));
-                Console.OUT.println("["+prefix+"]  allReduceTime: " + dstMax(index) + ":" + dstMin(index++));
-                Console.OUT.println("["+prefix+"]  reduceTime: " + dstMax(index) + ":" + dstMin(index++));
-                Console.OUT.println("["+prefix+"]  bcastTime: " + dstMax(index) + ":" + dstMin(index++));
-                Console.OUT.println("["+prefix+"]  calcTime: " + dstMax(index) + ":" + dstMin(index++));
-                
-                prefix = "d_q";
-                Console.OUT.println("["+prefix+"]  multTime: "  + dstMax(index) + ":" + dstMin(index++));
-                Console.OUT.println("["+prefix+"]  multComptTime: " + dstMax(index) + ":" + dstMin(index++));
-                Console.OUT.println("["+prefix+"]  allReduceTime: " + dstMax(index) + ":" + dstMin(index++));
-                Console.OUT.println("["+prefix+"]  reduceTime: " + dstMax(index) + ":" + dstMin(index++));
-                Console.OUT.println("["+prefix+"]  bcastTime: " + dstMax(index) + ":" + dstMin(index++));
-                Console.OUT.println("["+prefix+"]  calcTime: " + dstMax(index) + ":" + dstMin(index++));
-                
-                prefix = "Vp";
-                Console.OUT.println("["+prefix+"]  multTime: " + dstMax(index) + ":" + dstMin(index++));
-                Console.OUT.println("["+prefix+"]  multComptTime: " + dstMax(index) + ":" + dstMin(index++));
-                Console.OUT.println("["+prefix+"]  allReduceTime: " + dstMax(index) + ":" + dstMin(index++));
-                Console.OUT.println("["+prefix+"]  scattervTime: " + dstMax(index) + ":" + dstMin(index++));
-                Console.OUT.println("["+prefix+"]  gathervTime: " + dstMax(index) + ":" + dstMin(index++));                
-            }
+            team.allreduce(src, 0, dstMin, 0, size, Team.MIN);
+            val maxIndexLocal = team.indexOfMax(src(0), here.id as Int);
+            val maxIndexGlobal = team.indexOfMax(src(1), here.id as Int);
             
+            if (here.id == root.id){               
+                var prefix:String = "LinRegApp";
+                Console.OUT.println("["+prefix+"]  localCompTime:  indexOfMax("+maxIndexLocal+"):  max:" + dstMax(0) + "  min:" + dstMin(0));
+                Console.OUT.println("["+prefix+"]  globalCompTime: indexOfMax("+maxIndexGlobal+"):  max:" + dstMax(1) + "  min:" + dstMin(1));                             
+            }
         }    
     }
     
