@@ -418,8 +418,13 @@ distV().allReduceTime += Timer.milliTime();
     public def mult(vB:DupVector, mA:DistBlockMatrix(vB.M, this.M)) = DistDupVectorMult.comp(vB, mA, this, false);
     public def mult_local(mA:DistBlockMatrix(M), vB:DupVector(mA.N)) {
         distV().multTime -= Timer.milliTime();
+        distV().multTimeIt(distV().multTimeIndex) -= Timer.milliTime();        
+        
         val result = DistDupVectorMult.comp_local(mA, vB, this, false);
+        
         distV().multTime += Timer.milliTime();
+        distV().multTimeIt(distV().multTimeIndex++) += Timer.milliTime();
+        
         return result;
     }
 
@@ -827,7 +832,7 @@ distV().allReduceTime += Timer.milliTime();
         //Console.OUT.println("DistVector.RestoreTimeElementByElement["+(Timer.milliTime() - startTime)+"]");
     }
     
-    public def printTimes(prefix:String){
+    public def printTimes(prefix:String, printIterations:Boolean){
         val rootPlaces = distV().places;
         val root = here;
         finish ateach(Dist.makeUnique(rootPlaces)) {
@@ -837,18 +842,44 @@ distV().allReduceTime += Timer.milliTime();
             src(1) = distV().multComptTime;
             src(2) = distV().allReduceTime;
             src(3) = distV().scattervTime;
-            src(4) = distV().gathervTime;             
-            val dst = new Rail[Double](size);
+            src(4) = distV().gathervTime;     
+            
+            val dstMax = new Rail[Double](size);
+            val dstMin = new Rail[Double](size);
     
-            team.reduce(root, src, 0, dst, 0, size, Team.MAX);
+            team.allreduce(src, 0, dstMax, 0, size, Team.MAX);
+            team.allreduce(src, 0, dstMin, 0, size, Team.MIN);
+            
+            val maxIndexMultTime = team.indexOfMax(src(0), here.id as Int);            
     
             if (here.id == root.id){
-                Console.OUT.println("["+prefix+"]  multTime: " + dst(0));
-                Console.OUT.println("["+prefix+"]  multComptTime: " + dst(1));
-                Console.OUT.println("["+prefix+"]  allReduceTime: " + dst(2));
-                Console.OUT.println("["+prefix+"]  scattervTime: " + dst(3));
-                Console.OUT.println("["+prefix+"]  gathervTime: " + dst(4));
+                Console.OUT.println("["+prefix+"]  multTime: indexOfMax("+maxIndexMultTime+")  max: " + dstMax(0) + "  min: " + dstMin(0) );
+                //Console.OUT.println("["+prefix+"]  multComptTime: max: " + dstMax(1) + "  min: " + dstMin(1) );
+                //Console.OUT.println("["+prefix+"]  allReduceTime: max: " + dstMax(2) + "  min: " + dstMin(2) );
+                //Console.OUT.println("["+prefix+"]  scattervTime: max: " + dstMax(3) + "  min: " + dstMin(3) );
+                //Console.OUT.println("["+prefix+"]  gathervTime: max: " + dstMax(4) + "  min: " + dstMin(4) );
             }
+            
+            if (printIterations){
+            val debugItSize = 35;
+            var descMultTime:String = prefix+"; multTime; p"+here.id+";";
+            var descMultComptTime:String = prefix+"; multComptTime; p"+here.id+";";
+            var descAllReduceTime:String = prefix+"; allReduceTime; p"+here.id+";";
+            
+            for (i in 0..(debugItSize-1)){
+                descMultTime += distV().multTimeIt(i) + ";";
+                descMultComptTime += distV().multComptTimeIt(i) + ";";
+                descAllReduceTime += distV().allReduceTimeIt(i) + ";";
+            }
+            
+            //var str:String = descMultTime + "\n" + descMultComptTime + "\n" + descAllReduceTime;
+            
+            Console.OUT.println(descMultTime);
+            //Console.OUT.println(descMultComptTime);
+            //Console.OUT.println(descAllReduceTime);
+            }
+            
+            
         }    
     }
     
@@ -870,6 +901,13 @@ class DistVectorLocalState {
         this.segSize = segSize;
         this.offsets = offsets;
         this.places = places;
+        val debugItSize = 35;
+        multTimeIt = new Rail[Long](debugItSize);
+        multComptTimeIt = new Rail[Long](debugItSize);
+        allReduceTimeIt = new Rail[Long](debugItSize);
+        scattervTimeIt = new Rail[Long](debugItSize);
+        gathervTimeIt = new Rail[Long](debugItSize);
+        
     }
     
     public def clone():DistVectorLocalState{
@@ -881,5 +919,20 @@ class DistVectorLocalState {
     public var allReduceTime:Long;
     public var scattervTime:Long;
     public var gathervTime:Long;
+    
+    
+    public var multTimeIndex:Long;
+    public var multComptTimeIndex:Long;
+    public var allReduceTimeIndex:Long;
+    public var scattervTimeIndex:Long;
+    public var gathervTimeIndex:Long;
+    
+    public var multTimeIt:Rail[Long];
+    public var multComptTimeIt:Rail[Long];
+    public var allReduceTimeIt:Rail[Long];
+    public var scattervTimeIt:Rail[Long];
+    public var gathervTimeIt:Rail[Long];
+    
+    
     
 }

@@ -68,8 +68,12 @@ public class DistDupVectorMult  {
 
     public static def comp_local(mA:DistBlockMatrix, vB:DupVector(mA.N), vC:DistVector(mA.M), plus:Boolean):DistVector(vC) {
         vC.distV().multComptTime -= Timer.milliTime();
+        vC.distV().multComptTimeIt(vC.distV().multComptTimeIndex) -= Timer.milliTime();
+        
         BlockVectorMult.comp(mA.handleBS(), vB.local(), 0, vC.distV().vec, vC.getOffset(), plus);
+        
         vC.distV().multComptTime += Timer.milliTime();
+        vC.distV().multComptTimeIt(vC.distV().multComptTimeIndex++) += Timer.milliTime();
         return vC;
     }
     
@@ -108,14 +112,22 @@ public class DistDupVectorMult  {
         if (here.id() != rootpid || plus == false) vC.local().reset();
 
         vC.dupV().multComptTime -= Timer.milliTime();
+        vC.dupV().multComptTimeIt(vC.dupV().multComptTimeIndex) -= Timer.milliTime();
+        
         BlockVectorMult.comp(vB.distV().vec, offsetB, mA.handleBS(), vC.local(), 0, true);
+        
         vC.dupV().multComptTime += Timer.milliTime();
+        vC.dupV().multComptTimeIt(vC.dupV().multComptTimeIndex++) += Timer.milliTime();
         
         val src = vC.dupV().vec.d;
         val dst = vC.dupV().vec.d;
         vC.dupV().allReduceTime -= Timer.milliTime();
+        vC.dupV().allReduceTimeIt(vC.dupV().allReduceTimeIndex) -= Timer.milliTime();
+        
         vC.team.allreduce(src, 0, dst, 0, vC.M, Team.ADD);
+        
         vC.dupV().allReduceTime += Timer.milliTime();
+        vC.dupV().allReduceTimeIt(vC.dupV().allReduceTimeIndex++) += Timer.milliTime();
             
         return vC;
     }
