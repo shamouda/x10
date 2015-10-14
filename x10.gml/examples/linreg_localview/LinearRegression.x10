@@ -206,28 +206,73 @@ appTempDataPLH().localCompTime += Timer.milliTime();
     }
     
     public def printTimes(){
-        d_r.printTimes("d_r");
-        Vp.printTimes("Vp");
-        d_q.printTimes("d_q");
-        val prefix = "LinRegApp";
-    
         val rootPlaces = V.places();
         val team = new Team(rootPlaces);
         val root = here;
         finish ateach(Dist.makeUnique(rootPlaces)) {
-            val size = 2;
+            val size = 19;
             val src = new Rail[Double](size);
-            src(0) = appTempDataPLH().localCompTime ;
-            src(1) = appTempDataPLH().globalCompTime;
+            var index:Long = 0;
+            //application data ======================
+            src(index++) = appTempDataPLH().localCompTime ;
+            src(index++) = appTempDataPLH().globalCompTime;
+            //d_r data===============================
+            src(index++) = d_r.dupV().multTime ;
+            src(index++) = d_r.dupV().multComptTime;
+            src(index++) = d_r.dupV().allReduceTime;
+            src(index++) = d_r.dupV().reduceTime;
+            src(index++) = d_r.dupV().bcastTime;
+            src(index++) = d_r.dupV().calcTime;  
+            //d_q data===============================
+            src(index++) = d_q.dupV().multTime ;
+            src(index++) = d_q.dupV().multComptTime;
+            src(index++) = d_q.dupV().allReduceTime;
+            src(index++) = d_q.dupV().reduceTime;
+            src(index++) = d_q.dupV().bcastTime;
+            src(index++) = d_q.dupV().calcTime;              
+            //Vp data===============================
+            src(index++) = Vp.distV().multTime ;
+            src(index++) = Vp.distV().multComptTime;
+            src(index++) = Vp.distV().allReduceTime;
+            src(index++) = Vp.distV().scattervTime;
+            src(index++) = Vp.distV().gathervTime;        
+            
+            val dstMax = new Rail[Double](size);
+            val dstMin = new Rail[Double](size);
     
-            val dst = new Rail[Double](size);
+            team.allreduce(src, 0, dstMax, 0, size, Team.MAX);
+            team.allreduce(src, 0, dstMin, 0, size, Team.MAX);
     
-            team.reduce(root, src, 0, dst, 0, size, Team.MAX);
-    
-            if (here.id == root.id){
-                Console.OUT.println("["+prefix+"]  localCompTime: " + dst(0));
-                Console.OUT.println("["+prefix+"]  globalCompTime: " + dst(1));                
+            if (here.id == root.id){                
+                index = 0;
+                var prefix:String = "LinRegApp";
+                Console.OUT.println("["+prefix+"]  localCompTime: " + dstMax(index) + ":" + dstMin(index++));
+                Console.OUT.println("["+prefix+"]  globalCompTime: " + dstMax(index) + ":" + dstMin(index++));
+                
+                prefix = "d_r";
+                Console.OUT.println("["+prefix+"]  multTime: "  + dstMax(index) + ":" + dstMin(index++));
+                Console.OUT.println("["+prefix+"]  multComptTime: " + dstMax(index) + ":" + dstMin(index++));
+                Console.OUT.println("["+prefix+"]  allReduceTime: " + dstMax(index) + ":" + dstMin(index++));
+                Console.OUT.println("["+prefix+"]  reduceTime: " + dstMax(index) + ":" + dstMin(index++));
+                Console.OUT.println("["+prefix+"]  bcastTime: " + dstMax(index) + ":" + dstMin(index++));
+                Console.OUT.println("["+prefix+"]  calcTime: " + dstMax(index) + ":" + dstMin(index++));
+                
+                prefix = "d_q";
+                Console.OUT.println("["+prefix+"]  multTime: "  + dstMax(index) + ":" + dstMin(index++));
+                Console.OUT.println("["+prefix+"]  multComptTime: " + dstMax(index) + ":" + dstMin(index++));
+                Console.OUT.println("["+prefix+"]  allReduceTime: " + dstMax(index) + ":" + dstMin(index++));
+                Console.OUT.println("["+prefix+"]  reduceTime: " + dstMax(index) + ":" + dstMin(index++));
+                Console.OUT.println("["+prefix+"]  bcastTime: " + dstMax(index) + ":" + dstMin(index++));
+                Console.OUT.println("["+prefix+"]  calcTime: " + dstMax(index) + ":" + dstMin(index++));
+                
+                prefix = "Vp";
+                Console.OUT.println("["+prefix+"]  multTime: " + dstMax(index) + ":" + dstMin(index++));
+                Console.OUT.println("["+prefix+"]  multComptTime: " + dstMax(index) + ":" + dstMin(index++));
+                Console.OUT.println("["+prefix+"]  allReduceTime: " + dstMax(index) + ":" + dstMin(index++));
+                Console.OUT.println("["+prefix+"]  scattervTime: " + dstMax(index) + ":" + dstMin(index++));
+                Console.OUT.println("["+prefix+"]  gathervTime: " + dstMax(index) + ":" + dstMin(index++));                
             }
+            
         }    
     }
     
