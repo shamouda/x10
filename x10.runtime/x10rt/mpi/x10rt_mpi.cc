@@ -2939,7 +2939,7 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
     CollectivePostprocessEnv cpe; \
     do { LOCK_IF_MPI_IS_NOT_MULTITHREADED; \
         int mpiError = MPI_##name(__VA_ARGS__); \
-        if (!is_process_failure_error(mpiError) ) { \
+        if (MPI_SUCCESS != mpiError && !is_process_failure_error(mpiError)) { \
             fprintf(stderr, "[%s:%d] %s\n", \
                     __FILE__, __LINE__, "Error in MPI_" #name); \
             abort(); \
