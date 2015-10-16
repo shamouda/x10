@@ -49,7 +49,7 @@ public struct Team {
     private static val X10RT_COLL_ALLBLOCKINGCOLLECTIVES:Int = 2n;
     private static val X10RT_COLL_NONBLOCKINGBARRIER:Int = 3n;
     private static val X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES:Int = 4n;
-
+     
     public static FORCE_X10_COLLECTIVES = (System.getenv("X10RT_X10_FORCE_COLLECTIVES") != null);
     
     private val id:Int; // team ID
