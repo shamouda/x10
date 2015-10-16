@@ -59,14 +59,17 @@ public class RunPageRank {
             return;
         }
 
-        val mG = opts("m", 100000);
+        
         val nonzeroDensity = opts("d", 0.001f);
         val iterations = opts("i", 20n);
         val verify = opts("v");
         val print = opts("p");
         val skipPlaces = opts("s", 0n);
         val checkpointFreq = opts("checkpointFreq", -1n);
-
+        val placesCount = Place.numPlaces() - skipPlaces;
+        
+        val mG = opts("m", (20000*Math.sqrt(placesCount*5)) as Long );
+        
         Console.OUT.printf("G: rows/cols %d density: %.3f (non-zeros: %d) iterations: %d\n",
                             mG, nonzeroDensity, (nonzeroDensity*mG*mG) as Long, iterations);
 		if ((mG<=0) || iterations < 1n || nonzeroDensity <= 0.0 || skipPlaces < 0 || skipPlaces >= Place.numPlaces())
