@@ -971,6 +971,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
             "Block partitioning error: rowsPs["+rowPs+"]*colPs["+colPs+"] != newPg.size["+newPg.size()+"]";
         val oldPlaces = places();
         val oldGrid = getGrid();
+        val snapshotInfo = this.handleBS().snapshotDistInfo;
         val blks:PlaceLocalHandle[BlockSet];
         PlaceLocalHandle.destroy(oldPlaces, handleBS, (Place)=>true);
 
@@ -982,9 +983,9 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
         if (!useOldGrid){
             val rowBs:Long = oldGrid.numRowBlocks; 
             val colBs:Long = oldGrid.numColBlocks;
-            blks = PlaceLocalHandle.make[BlockSet](newPg, ()=>(BlockSet.make(M,N,rowBs,colBs,rowPs,colPs, newPg)));
+            blks = PlaceLocalHandle.make[BlockSet](newPg, ()=>(BlockSet.makeForRestore(M,N,rowBs,colBs,rowPs,colPs, newPg, snapshotInfo)));
         } else {
-            blks = PlaceLocalHandle.make[BlockSet](newPg, ()=>(BlockSet.make(oldGrid,rowPs,colPs, newPg)));
+            blks = PlaceLocalHandle.make[BlockSet](newPg, ()=>(BlockSet.makeForRestore(oldGrid,rowPs,colPs, newPg, snapshotInfo)));
         }
         gdist = new DistGrid(blks().getGrid(), rowPs, colPs);
         handleBS  = blks;        
