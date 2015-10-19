@@ -599,27 +599,30 @@ distV().allReduceTime += Timer.milliTime();
     /**
      * Remake the DistVector over a new PlaceGroup
      */
-    public def remake(segsz:Rail[Int], newPg:PlaceGroup){        
+    public def remake(segsz:Rail[Int], newPg:PlaceGroup, newTeam:Team){
         assert (segsz.size == newPg.size()) :
             "number of vector segments must be equal to number of places";
         val oldPlaces = distV().places;
-        PlaceLocalHandle.destroy(oldPlaces, distV, (Place)=>true);
+        val oldSnapshotSegSize = distV().snapshotSegSize;
+        val oldSnapshotOffsets = distV().snapshotOffsets;
         
+        PlaceLocalHandle.destroy(oldPlaces, distV, (Place)=>true);
         val offsets = RailUtils.scanExclusive(segsz, (x:Int, y:Int) => x+y, 0n);
         distV = PlaceLocalHandle.make[DistVectorLocalState](newPg,
-                ()=>new DistVectorLocalState(Vector.make(segsz(newPg.indexOf(here))),segsz,offsets, newPg) );           
-        team.delete();
-        team = new Team(newPg);
+                ()=>new DistVectorLocalState(Vector.make(segsz(newPg.indexOf(here))),segsz,offsets, newPg, 
+                    oldSnapshotSegSize, oldSnapshotOffsets) );           
+        //team.delete();  //FIXME: delete fails with ULFM when a process is failed
+        team = newTeam;
     }
     
     /**
      * Remake the DistVector over a new PlaceGroup
      */
-    public def remake(newPg:PlaceGroup){
+    public def remake(newPg:PlaceGroup, newTeam:Team){
         val m = M;        
         val segNum = newPg.size;
         val slst = new Rail[Int](segNum, (i:Long)=>Grid.compBlockSize(m, segNum, i as Int) as Int);
-        remake (slst, newPg);
+        remake (slst, newPg, newTeam);
     }
 
     /**
@@ -906,9 +909,25 @@ class DistVectorLocalState {
         multComptTimeIt = new Rail[Long](debugItSize);
         allReduceTimeIt = new Rail[Long](debugItSize);
         scattervTimeIt = new Rail[Long](debugItSize);
-        gathervTimeIt = new Rail[Long](debugItSize);
-        
+        gathervTimeIt = new Rail[Long](debugItSize);   
     }
+    
+    public def this(vec:Vector, segSize:Rail[Int], offsets:Rail[Int], places:PlaceGroup, snapshotSegSize:Rail[Int], snapshotOffsets:Rail[Int]){
+        this.vec = vec;
+        this.segSize = segSize;
+        this.offsets = offsets;
+        this.places = places;
+        val debugItSize = 35;
+        multTimeIt = new Rail[Long](debugItSize);
+        multComptTimeIt = new Rail[Long](debugItSize);
+        allReduceTimeIt = new Rail[Long](debugItSize);
+        scattervTimeIt = new Rail[Long](debugItSize);
+        gathervTimeIt = new Rail[Long](debugItSize);
+    
+        this.snapshotSegSize = snapshotSegSize;
+        this.snapshotOffsets = snapshotOffsets;
+    }
+    
     
     public def clone():DistVectorLocalState{
         return new DistVectorLocalState(vec.clone(), new Rail[Int](segSize), new Rail[Int](offsets), places );
