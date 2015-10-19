@@ -23,6 +23,7 @@ import x10.matrix.distblock.DistBlockMatrix;
 import x10.util.resilient.LocalViewResilientIterativeApp;
 import x10.util.resilient.LocalViewResilientExecutor;
 import x10.util.resilient.ResilientStoreForApp;
+import x10.util.Team;
 
 /**
  * Parallel Page Rank algorithm based on GML distributed block matrix.
@@ -156,9 +157,9 @@ public class PageRank implements LocalViewResilientIterativeApp {
         GP.copyTo(root, P.local());  // only root will have copy of GP in P.local()        
         if (here.id == root.id)
             P.local().cellAdd(teleport);
-        
+
         P.sync_local(root);
-        
+
         appTempDataPLH().iter++;
     }
 
@@ -173,16 +174,17 @@ public class PageRank implements LocalViewResilientIterativeApp {
 
     public def restore(newPlaces:PlaceGroup, store:ResilientStoreForApp, lastCheckpointIter:Long):void {
         val oldPlaces = G.places();
+        val newTeam = new Team(newPlaces);
         
         val newRowPs = newPlaces.size();
         val newColPs = 1;
         Console.OUT.println("Going to restore PageRank app, newRowPs["+newRowPs+"], newColPs["+newColPs+"] ...");
         G.remakeSparse(newRowPs, newColPs, nzd, newPlaces);
-        U.remake(G.getAggRowBs(), newPlaces);
-        P.remake(newPlaces);
+        U.remake(G.getAggRowBs(), newPlaces, newTeam);
+        P.remake(newPlaces, newTeam);
+
+        GP.remake(G.getAggRowBs(), newPlaces, newTeam);
         
-        GP.remake(G.getAggRowBs(), newPlaces);
-    
         store.restore_local(newPlaces);
         
         //TODO: make a snapshottable class for the app data
