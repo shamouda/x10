@@ -178,6 +178,7 @@ appTempDataPLH().localCompTime += Timer.milliTime();
      */
     public def restore(newPg:PlaceGroup, store:ResilientStoreForApp, lastCheckpointIter:Long) {
         val oldPlaces = V.places();
+        val newTeam = new Team(newPg);
         val newRowPs = newPg.size();
         val newColPs = 1;
         //remake all the distributed data structures
@@ -186,11 +187,11 @@ appTempDataPLH().localCompTime += Timer.milliTime();
         } else {
             V.remakeDense(newRowPs, newColPs, newPg);
         }
-        d_p.remake(newPg);
-        d_q.remake(newPg);
-        d_r.remake(newPg);
-        d_w.remake(newPg);        
-        Vp.remake(V.getAggRowBs(), newPg);
+        d_p.remake(newPg, newTeam);
+        d_q.remake(newPg, newTeam);
+        d_r.remake(newPg, newTeam);
+        d_w.remake(newPg, newTeam);        
+        Vp.remake(V.getAggRowBs(), newPg, newTeam);
         
         store.restore_local(newPg);
         
