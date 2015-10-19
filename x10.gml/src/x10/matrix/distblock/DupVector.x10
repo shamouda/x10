@@ -368,6 +368,48 @@ public class DupVector(M:Long) implements Snapshottable {
     	}
     }
     
+    //Test method for the allreduce performance
+    /*
+    public def allReduce(op:Int, iterations:Long): void {
+        val places = dupV().places;
+        finish for (place in places) at (place) async {
+        
+           for (i in 1..iterations){
+               val src = dupV().vec.d;
+               val dst = dupV().vec.d;
+           
+               dupV().allReduceTimeIt(dupV().allReduceTimeIndex) -= Timer.milliTime();           
+               dupV().allReduceTime -= Timer.milliTime(); 
+           
+               team.allreduce(src, 0, dst, 0, M, op);
+           
+               dupV().allReduceTime += Timer.milliTime();
+               dupV().allReduceTimeIt(dupV().allReduceTimeIndex++) += Timer.milliTime();
+           }
+        }
+    }
+    
+    public def allReduceRewrite(op:Int, iterations:Long): void {
+        val places = dupV().places;
+        finish for (place in places) at (place) async {
+    
+        for (i in 1..iterations){    
+                dupV().vec.initRandom();
+    
+                val src = dupV().vec.d;
+                val dst = dupV().vec.d;
+    
+                dupV().allReduceTimeIt(dupV().allReduceTimeIndex) -= Timer.milliTime();           
+                dupV().allReduceTime -= Timer.milliTime(); 
+    
+                team.allreduce(src, 0, dst, 0, M, op);
+    
+                dupV().allReduceTime += Timer.milliTime();
+                dupV().allReduceTimeIt(dupV().allReduceTimeIndex++) += Timer.milliTime();
+            }
+        } 
+    } 
+    */
     public def allReduceSum(): void {
         /* Timing */ val st = Timer.milliTime();        
         allReduce(Team.ADD);
@@ -507,12 +549,12 @@ public class DupVector(M:Long) implements Snapshottable {
     /**
      * Remake the DupVector over a new PlaceGroup
      */
-    public def remake(newPg:PlaceGroup){
+    public def remake(newPg:PlaceGroup, newTeam:Team){
         val places = dupV().places;
         PlaceLocalHandle.destroy(places, dupV, (Place)=>true);
         dupV = PlaceLocalHandle.make[DupVectorLocalState](newPg, ()=>new DupVectorLocalState(Vector.make(M), newPg)  );
-        team.delete();
-        team = new Team(newPg);
+        //team.delete(); //TODO: FIXME: delete fails in ULFM
+        team = newTeam;
     }
     
     /*
@@ -679,6 +721,8 @@ class DupVectorLocalState {
     public def clone(){
         return new DupVectorLocalState(vec.clone(), places);
     }
+    
+    public def toString() = vec.toString();
     
     public var multTime:Long;    
     public var multComptTime:Long;
