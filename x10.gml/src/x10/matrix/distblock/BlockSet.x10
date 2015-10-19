@@ -68,8 +68,29 @@ public class BlockSet  {
         rowCastPlaceMap=null;
         colCastPlaceMap=null;
         places = plcs;
+        snapshotDistInfo = new SnapshotDistributionInfo();
     }
 
+
+    public def this(g:Grid, map:DistMap, plcs:PlaceGroup, snapshotInfo:SnapshotDistributionInfo) {
+        grid=g; dmap = map;
+        blocklist = new ArrayList[MatrixBlock]();    
+        blockMap=null;
+        rowCastPlaceMap=null;
+        colCastPlaceMap=null;
+        places = plcs;
+        snapshotDistInfo = snapshotInfo;
+    }
+
+    public def this(g:Grid, map:DistMap, bl:ArrayList[MatrixBlock], plcs:PlaceGroup, snapshotInfo:SnapshotDistributionInfo) {
+        grid=g; dmap = map; blocklist = bl;
+        blockMap = null;
+        rowCastPlaceMap=null;
+        colCastPlaceMap=null;
+        places = plcs;
+        snapshotDistInfo = snapshotInfo;
+    }
+    
     /**
      * Creating block set for given matrix on all places, partition and distribution.
      * No memory allocation is performed.
@@ -105,6 +126,17 @@ public class BlockSet  {
         val dp = new DistGrid(gd, rowPs, colPs);
         return new BlockSet(gd, dp.dmap, places);
     }
+    
+    public static def makeForRestore(m:Long, n:Long, rowBs:Long, colBs:Long, rowPs:Long, colPs:Long, places:PlaceGroup, 
+            snapshotInfo:SnapshotDistributionInfo) {
+        //val gd = new Grid(m, n, rowBs, colBs); not balanced when considering distribution among rowPs and colPs
+        val gd = DistGrid.makeGrid(m, n, rowBs, colBs, rowPs, colPs);
+        assert (rowPs*colPs == places.size()) :
+              "number of distributions groups of blocks must equal to number of places";
+        val dp = new DistGrid(gd, rowPs, colPs);
+        return new BlockSet(gd, dp.dmap, places, snapshotInfo);
+    }
+    
 
     public static def make(gd:Grid, rowPs:Long, colPs:Long, places:PlaceGroup) {
         //val gd = new Grid(m, n, rowBs, colBs); not balanced when considering distribution among rowPs and colPs    
@@ -112,6 +144,14 @@ public class BlockSet  {
             "number of distributions groups of blocks must equal to number of places";
         val dp = new DistGrid(gd, rowPs, colPs);
         return new BlockSet(gd, dp.dmap, places);
+    }
+    
+    public static def makeForRestore(gd:Grid, rowPs:Long, colPs:Long, places:PlaceGroup, snapshotInfo:SnapshotDistributionInfo) {
+        //val gd = new Grid(m, n, rowBs, colBs); not balanced when considering distribution among rowPs and colPs    
+        assert (rowPs*colPs == places.size()) :
+            "number of distributions groups of blocks must equal to number of places";
+        val dp = new DistGrid(gd, rowPs, colPs);
+        return new BlockSet(gd, dp.dmap, places, snapshotInfo);
     }
     
     /**
