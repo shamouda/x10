@@ -63,6 +63,7 @@ public class PageRank implements LocalViewResilientIterativeApp {
     
     private var appTempDataPLH:PlaceLocalHandle[AppTempData];
     private val root:Place;
+    private var team:Team;
     
     public def this(
             g:DistBlockMatrix{self.M==self.N}, 
@@ -71,7 +72,8 @@ public class PageRank implements LocalViewResilientIterativeApp {
             it:Long,
             sparseDensity:Float,
             chkpntIter:Long,
-            places:PlaceGroup) {
+            places:PlaceGroup,
+            team:Team) {
         Debug.assure(DistGrid.isVertical(g.getGrid(), g.getMap()), 
                 "Input block matrix g does not have vertical distribution.");
         G = g;
@@ -79,22 +81,24 @@ public class PageRank implements LocalViewResilientIterativeApp {
         U = u as DistVector(G.N);
         iterations = it;
         
-        GP = DistVector.make(G.N, G.getAggRowBs(), places);//G must have vertical distribution
+        GP = DistVector.make(G.N, G.getAggRowBs(), places, team);//G must have vertical distribution
 
         chkpntIterations = chkpntIter;
         nzd = sparseDensity;
         root = here;
+        this.team = team;
     }
 
     public static def make(gN:Long, nzd:Float, it:Long, numRowBs:Long, numColBs:Long, chkpntIter:Long, places:PlaceGroup) {
         //---- Distribution---
         val numRowPs = places.size();
         val numColPs = 1;
+        val team = new Team(places);
         
         val g = DistBlockMatrix.makeSparse(gN, gN, numRowBs, numColBs, numRowPs, numColPs, nzd, places);
-        val p = DupVector.make(gN, places);
-        val u = DistVector.make(gN, g.getAggRowBs(), places);
-        return new PageRank(g, p, u, it, nzd, chkpntIter, places);
+        val p = DupVector.make(gN, places, team);
+        val u = DistVector.make(gN, g.getAggRowBs(), places, team);
+        return new PageRank(g, p, u, it, nzd, chkpntIter, places, team);
     } 
     
     public def init(nzd:Float):void {
@@ -146,7 +150,7 @@ public class PageRank implements LocalViewResilientIterativeApp {
         return appTempDataPLH().iter >= iterations;
     }
 
-    public def step_local():void{        
+    public def step_local():void {
         GP.mult_local(G, P);
         GP.scale_local(alpha);
     
