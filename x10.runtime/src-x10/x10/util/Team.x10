@@ -113,7 +113,7 @@ public struct Team {
                 while (Team.roles.size() < teamidcopy)
                     Team.roles.add(-1n); // I am not a member of this team id.  Insert a dummy value.
                 Team.roles(teamidcopy) = places.indexOf(here) as Int;
-            });
+            }, (Place)=>true);
         } else {
             this.id = Team.state.size() as Int; // id is determined by the number of pre-defined places
         }
@@ -132,7 +132,7 @@ public struct Team {
                 } else {
                     Team.state(teamidcopy) = null;
                 }
-            });
+            }, (Place)=>true);
         }
     }
 
