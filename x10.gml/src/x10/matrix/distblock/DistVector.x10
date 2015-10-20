@@ -55,44 +55,50 @@ public class DistVector(M:Long) implements Snapshottable {
         team = new Team(pg);
     }
     
+    public def this(m:Long, vs:PlaceLocalHandle[DistVectorLocalState], team:Team) {
+        property(m);
+        distV  = vs;        
+        this.team = team;
+    }
+    
     public def getOffset():Int{
          return distV().offsets(places().indexOf(here));
     }
     
     public def getSegSize():Rail[Int] = distV().segSize;
     
-    public static def make(m:Long, segNum:Long, pg:PlaceGroup):DistVector(m) {
+    public static def make(m:Long, segNum:Long, pg:PlaceGroup, team:Team):DistVector(m) {
         assert (segNum == pg.size()) :
             "number of vector segments must be equal to number of places";    
         val segsz = new Rail[Int](segNum, (i:Long)=>Grid.compBlockSize(m, segNum, i as Int) as Int);
         val offsets = RailUtils.scanExclusive(segsz, (x:Int, y:Int) => x+y, 0n);        
         val hdv = PlaceLocalHandle.make[DistVectorLocalState](pg,
                 ()=>new DistVectorLocalState(Vector.make(Grid.compBlockSize(m, segNum, pg.indexOf(here))),segsz,offsets, pg) );        
-        return new DistVector(m, hdv, pg) as DistVector(m);
+        return new DistVector(m, hdv, team) as DistVector(m);
     }
     
-    public static def make(m:Long, segNum:Long):DistVector(m) = make (m, segNum, Place.places()); 
+    public static def make(m:Long, segNum:Long):DistVector(m) = make (m, segNum, Place.places(), Team.WORLD); 
     
-    public static def make(m:Long, pg:PlaceGroup) = make (m, pg.size(), pg);
+    public static def make(m:Long, pg:PlaceGroup, team:Team) = make (m, pg.size(), pg, team);
     
-    public static def make(m:Long) = make (m, Place.places());
+    public static def make(m:Long) = make (m, Place.places(), Team.WORLD);
 
-    public static def make(m:Long, segsz:Rail[Int], pg:PlaceGroup):DistVector(m) {   
+    public static def make(m:Long, segsz:Rail[Int], pg:PlaceGroup, team:Team):DistVector(m) {   
         assert (segsz.size == pg.size()) :
             "number of vector segments must be equal to number of places";    
         val offsets = RailUtils.scanExclusive(segsz, (x:Int, y:Int) => x+y, 0n);
         val hdv = PlaceLocalHandle.make[DistVectorLocalState](pg,
             ()=>new DistVectorLocalState(Vector.make(segsz(pg.indexOf(here))),segsz,offsets, pg) );        
-        return new DistVector(m, hdv, pg) as DistVector(m);
+        return new DistVector(m, hdv, team) as DistVector(m);
     }
     
-    public static def make(m:Long, segsz:Rail[Int]):DistVector(m) = make (m, segsz, Place.places());
+    public static def make(m:Long, segsz:Rail[Int]):DistVector(m) = make (m, segsz, Place.places(), Team.WORLD);
 
-    public def alloc(m:Long, pg:PlaceGroup):DistVector(m) = make(m, pg);
-    public def alloc(pg:PlaceGroup) = alloc(M, pg);
+    public def alloc(m:Long, pg:PlaceGroup, team:Team):DistVector(m) = make(m, pg, team);
+    public def alloc(pg:PlaceGroup) = alloc(M, pg, new Team(pg));
     
-    public def alloc(m:Long):DistVector(m) = make(m, Place.places());
-    public def alloc() = alloc(M, Place.places());
+    public def alloc(m:Long):DistVector(m) = make(m, Place.places(), Team.WORLD);
+    public def alloc() = alloc(M, Place.places(), Team.WORLD);
     
     
     public def clone():DistVector(M) {

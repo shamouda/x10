@@ -46,6 +46,13 @@ public class DupVector(M:Long) implements Snapshottable {
         dupV  = vs;
         team = new Team(pg);
     }
+    
+    public def this(vs:PlaceLocalHandle[DupVectorLocalState], team:Team) {
+        val m = vs().vec.M;
+        property(m);
+        dupV  = vs;
+        this.team = team;
+    }
 
     public static def make(v:Vector, pg:PlaceGroup):DupVector(v.M){
         val hdl = PlaceLocalHandle.make[DupVectorLocalState](pg, () => new DupVectorLocalState(v, pg));
@@ -57,6 +64,11 @@ public class DupVector(M:Long) implements Snapshottable {
     public static def make(m:Long, pg:PlaceGroup) {
         val hdl = PlaceLocalHandle.make[DupVectorLocalState](pg, ()=> new DupVectorLocalState(Vector.make(m), pg) );
         return new DupVector(hdl, pg) as DupVector(m);
+    }
+    
+    public static def make(m:Long, pg:PlaceGroup, team:Team) {
+        val hdl = PlaceLocalHandle.make[DupVectorLocalState](pg, ()=> new DupVectorLocalState(Vector.make(m), pg) );
+        return new DupVector(hdl, team) as DupVector(m);
     }
     
     public static def make(m:Long) = make(m, Place.places());
@@ -295,10 +307,10 @@ public class DupVector(M:Long) implements Snapshottable {
     
     //FIXME: review the correctness of using places here
     public operator this % (that:DistBlockMatrix(M)) = 
-        DistDupVectorMult.comp(this, that, DistVector.make(that.N, that.getAggColBs(), dupV().places), true);
+        DistDupVectorMult.comp(this, that, DistVector.make(that.N, that.getAggColBs(), dupV().places, team), true);
     //FIXME: review the correctness of using places here
     public operator (that:DistBlockMatrix{self.N==this.M}) % this = 
-        DistDupVectorMult.comp(that , this, DistVector.make(that.M, that.getAggRowBs(), dupV().places), true);
+        DistDupVectorMult.comp(that , this, DistVector.make(that.M, that.getAggRowBs(), dupV().places, team), true);
 
 
     public def sync():void {
