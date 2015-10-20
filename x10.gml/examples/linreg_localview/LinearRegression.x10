@@ -61,25 +61,27 @@ public class LinearRegression implements LocalViewResilientIterativeApp {
     private val root:Place;
     
     private var appTempDataPLH:PlaceLocalHandle[AppTempData];
+    var team:Team;
     
-    public def this(v:DistBlockMatrix, y:DistVector(v.M), it:Long, chkpntIter:Long, sparseDensity:Float, places:PlaceGroup) {
+    public def this(v:DistBlockMatrix, y:DistVector(v.M), it:Long, chkpntIter:Long, sparseDensity:Float, places:PlaceGroup, team:Team) {
         maxIterations = it;
         this.V = v;
         this.y = y;
         
-        Vp = DistVector.make(V.M, V.getAggRowBs(), places);
+        Vp = DistVector.make(V.M, V.getAggRowBs(), places, team);
         
-        d_r  = DupVector.make(V.N, places);
-        d_p= DupVector.make(V.N, places);
+        d_r  = DupVector.make(V.N, places, team);
+        d_p= DupVector.make(V.N, places, team);
         
-        d_q= DupVector.make(V.N, places);
+        d_q= DupVector.make(V.N, places, team);
         
-        d_w = DupVector.make(V.N, places);      
+        d_w = DupVector.make(V.N, places, team);      
         
         this.checkpointFreq = chkpntIter;
         
         nzd = sparseDensity;
         root = here;
+        this.team = team;
     }
     
     public def isFinished_local() {
