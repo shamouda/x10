@@ -1849,10 +1849,19 @@ private:
             }
             delete[] ranks;
             MPI_Comm comm;
+#ifdef OPEN_MPI_ULFM
+            MPI_Comm shrunken;
+            OMPI_Comm_shrink(MPI_COMM_WORLD, &shrunken);
+            if (MPI_SUCCESS != MPI_Comm_create(shrunken, grp, &comm)) {
+                fprintf(stderr, "[%s:%d] %s\n", __FILE__, __LINE__, "Error in MPI_Comm_create");
+                abort();
+            }
+#else
             if (MPI_SUCCESS != MPI_Comm_create(MPI_COMM_WORLD, grp, &comm)) {
             	fprintf(stderr, "[%s:%d] %s\n", __FILE__, __LINE__, "Error in MPI_Comm_create");
             	abort();
             }
+#endif
             MPI_Group_free(&MPI_GROUP_WORLD);
             MPI_Group_free(&grp);
             UNLOCK_IF_MPI_IS_NOT_MULTITHREADED;
@@ -2274,7 +2283,7 @@ void send_team_new (x10rt_team teamc, x10rt_team *teamv, x10rt_place placec, x10
 
     x10rt_place home = x10rt_net_here();
 
-    CounterWithLock *counter = new_counter(x10rt_net_nhosts());
+    CounterWithLock *counter = new_counter(x10rt_net_nhosts()-x10rt_net_ndead());
     x10rt_remote_ptr counter_ = reinterpret_cast<x10rt_remote_ptr>(counter);
 
     x10rt_team t = teamv[0];
