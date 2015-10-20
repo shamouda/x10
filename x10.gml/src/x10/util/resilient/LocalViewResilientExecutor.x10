@@ -82,6 +82,7 @@ public class LocalViewResilientExecutor {
 
                         app.restore(newPG, store, lastCheckpointIter);
 
+                        placeTempData = PlaceLocalHandle.make[PlaceTempData](newPG, ()=>new PlaceTempData());                        
                         placeTempData().globalIter = lastCheckpointIter;
 
                         places = newPG;
