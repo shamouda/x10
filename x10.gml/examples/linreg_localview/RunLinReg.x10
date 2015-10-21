@@ -164,7 +164,7 @@ public class RunLinReg {
         val totalTime = Timer.milliTime() - startTime;
 		Console.OUT.printf("Parallel linear regression --- Total: %8d ms, parallel: %8d ms, sequential: %8d ms, communication: %8d ms\n",
 				totalTime, parLR.parCompT, parLR.seqCompT, parLR.commT);
-        parLR.printTimes();
+        //parLR.printTimes();
 
         if (print) {
             Console.OUT.println("Input sparse matrix X\n" + X);
