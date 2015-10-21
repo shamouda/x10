@@ -83,7 +83,7 @@ static void x10rt_net_coll_init(int *argc, char ** *argv, x10rt_msg_type *counte
 #define X10_NTHREADS "X10_NTHREADS"
 #define X10_NUM_IMMEDIATE_THREADS "X10_NUM_IMMEDIATE_THREADS"
 #define X10_RESILIENT_MODE "X10_RESILIENT_MODE"
-#define X10RT_MPI_PROBE_SLEEP_MILLISECONDS "X10RT_MPI_PROBE_SLEEP_MILLISECONDS"
+#define X10RT_MPI_PROBE_SLEEP_MICROSECONDS "X10RT_MPI_PROBE_SLEEP_MICROSECONDS"
 
 /* Generic utility funcs */
 template <class T> T* ChkAlloc(size_t len) {
@@ -1516,15 +1516,15 @@ x10rt_error x10rt_net_blocking_probe (void) {
 	// although CPU utilization will still show 100%, so thinks like the CPU automatically going into
 	// a low-power state when idle won't work.
 
-	int sleepMillis = -1;
-	char* sleepMillisEnv = getenv(X10RT_MPI_PROBE_SLEEP_MILLISECONDS);
-	if (sleepMillisEnv && atoi(sleepMillisEnv) > 0) {
-		sleepMillis = atoi(sleepMillisEnv);
+	int sleep_microseconds = -1;
+	char* sleepMicrosEnv = getenv(X10RT_MPI_PROBE_SLEEP_MICROSECONDS);
+	if (sleepMicrosEnv && atoi(sleepMicrosEnv) > 0) {
+		sleep_microseconds = atoi(sleepMicrosEnv);
 	}
 	int counter = 1000;
 	while (!x10rt_net_probe_ex(false) && counter--) {
-		if (sleepMillis > 0)
-			usleep(sleepMillis*1000);
+		if (sleep_microseconds > 0)
+			usleep(sleep_microseconds);
 		else
 			sched_yield();
 	}
@@ -3748,4 +3748,3 @@ void mpiErrorHandler(MPI_Comm * comm, int *errorCode, ...){
     return;
 }
 #endif
-
