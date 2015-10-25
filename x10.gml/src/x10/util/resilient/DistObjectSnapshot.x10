@@ -60,12 +60,18 @@ public abstract class DistObjectSnapshot {
      * Place0 implementation of ResilientStore
      */
     static class DistObjectSnapshotPlace0 extends DistObjectSnapshot {
-        val hm = at(Place.FIRST_PLACE) GlobalRef(new HashMap[Any,Any]());
+        val hm = PlaceLocalHandle.make[HashMap[Any,Any]](getPlace0PlaceGroup(), ()=>new x10.util.HashMap[Any,Any]());
         private def DEBUG(msg:String) { Console.OUT.println(msg); Console.OUT.flush(); }
 
+        private static def getPlace0PlaceGroup(){
+            val livePlaces = new x10.util.ArrayList[Place]();
+            livePlaces.add(Place.FIRST_PLACE);
+            return new SparsePlaceGroup(livePlaces.toRail());
+        }
+        
         public def save(key:Any, value:Any) {
             if (verbose>=1) DEBUG("save: key=" + key);
-            if (hm.home == here)
+            if (Place.FIRST_PLACE == here)
                 saveLocal(key, value);
             else
                 saveRemote(key, value);
@@ -73,7 +79,7 @@ public abstract class DistObjectSnapshot {
 
         public def load(key:Any) {
             if (verbose>=1) DEBUG("load: key=" + key);
-            if (hm.home == here)
+            if (Place.FIRST_PLACE == here)
                 return loadLocal(key);
             else
                 return loadRemote(key);
@@ -81,17 +87,17 @@ public abstract class DistObjectSnapshot {
 
         public def delete(key:Any) {
             if (verbose>=1) DEBUG("delete: key=" + key);
-            at(hm) atomic { hm().remove(key); }
+            at(Place.FIRST_PLACE) atomic { hm().remove(key); }
         }
 
         public def deleteAll() {
             if (verbose>=1) DEBUG("deleteAll");
-            at(hm) atomic { hm().clear(); }
+            at(Place.FIRST_PLACE) atomic { hm().clear(); }
         }
         
-        private def saveLocal(key:Any, value:Any){hm.home==here} {
+        private def saveLocal(key:Any, value:Any){
             if (localCopy.equals("at")) {
-                at(hm) atomic { hm().put(key,value); } // value is deep-copied by "at"
+                at(Place.FIRST_PLACE) atomic { hm().put(key,value); } // value is deep-copied by "at"
             } else if (localCopy.equals("deep")) {
                 val copiedValue = Runtime.deepCopy(value);
                 atomic { hm().put(key, copiedValue ); }
@@ -103,20 +109,19 @@ public abstract class DistObjectSnapshot {
             }
         }
         
-        private def saveRemote(key:Any, value:Any) {
+        private def saveRemote(key:Any, value:Any){
             if (remoteCopy.equals("at")) {
-                at(hm) atomic hm().put(key,value); // value is deep-copied by "at"
+                at(Place.FIRST_PLACE) atomic hm().put(key,value); // value is deep-copied by "at"
             } else if (remoteCopy.equals("dma")) {
-                val hmGR = at(hm.home) GlobalRef[HashMap[Any,Any]](hm());
-                (value as Snapshot).remoteCopyAndSave(key, hmGR);
+                (value as Snapshot).remoteCopyAndSave(key, hm, Place.FIRST_PLACE);
             } else {
                 throw new Exception("unknown remote copy mode");
             }
         }
         
-        public def loadLocal(key:Any){hm.home==here}:Any {
+        public def loadLocal(key:Any):Any {
             if (localCopy.equals("at")) {
-                val value = at(hm) {
+                val value = at(Place.FIRST_PLACE) {
                     var v:Any; atomic { v = hm().getOrThrow(key); } v
                 }; // value is deep-copied by "at"
                 return value;
@@ -135,13 +140,13 @@ public abstract class DistObjectSnapshot {
         
         public def loadRemote(key:Any):Any {
             if (remoteCopy.equals("at")) {
-                val value = at(hm) {
+                val value = at(Place.FIRST_PLACE) {
                     var v:Any; atomic { v = hm().getOrThrow(key); } v
                 };
                 return value;
             } else if (remoteCopy.equals("dma")) { // dma
                 val destPlace = here;
-                val gr = at(hm) {
+                val gr = at(Place.FIRST_PLACE) {
                     var v:Any;
                     atomic { v = hm().getOrThrow(key); }
                     (v as Snapshot).remoteClone(destPlace)
@@ -248,8 +253,7 @@ public abstract class DistObjectSnapshot {
             if (remoteCopy.equals("at")) {
                 at(Place(backupPlace)) atomic { hm().put(key, value); }
             } else if (remoteCopy.equals("dma")) {
-                val hmGR = at(Place(backupPlace)) GlobalRef[HashMap[Any,Any]](hm());
-                (value as Snapshot).remoteCopyAndSave(key, hmGR);
+                (value as Snapshot).remoteCopyAndSave(key, hm, Place(backupPlace));
             } else {
                 throw new Exception("unknown remote copy mode");
             }
