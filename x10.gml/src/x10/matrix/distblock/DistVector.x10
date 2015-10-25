@@ -870,7 +870,7 @@ distV().allReduceTime += Timer.milliTime();
             }
             
             if (printIterations){
-            val debugItSize = 35;
+            val debugItSize = 1000;
             var descMultTime:String = prefix+"; multTime; p"+here.id+";";
             var descMultComptTime:String = prefix+"; multComptTime; p"+here.id+";";
             var descAllReduceTime:String = prefix+"; allReduceTime; p"+here.id+";";
@@ -910,7 +910,7 @@ class DistVectorLocalState {
         this.segSize = segSize;
         this.offsets = offsets;
         this.places = places;
-        val debugItSize = 35;
+        val debugItSize = 1000;
         multTimeIt = new Rail[Long](debugItSize);
         multComptTimeIt = new Rail[Long](debugItSize);
         allReduceTimeIt = new Rail[Long](debugItSize);
@@ -923,7 +923,7 @@ class DistVectorLocalState {
         this.segSize = segSize;
         this.offsets = offsets;
         this.places = places;
-        val debugItSize = 35;
+        val debugItSize = 1000;
         multTimeIt = new Rail[Long](debugItSize);
         multComptTimeIt = new Rail[Long](debugItSize);
         allReduceTimeIt = new Rail[Long](debugItSize);

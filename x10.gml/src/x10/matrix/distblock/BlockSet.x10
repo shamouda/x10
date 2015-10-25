@@ -926,6 +926,11 @@ public class BlockSet  {
     public static def remoteMakeDenseBlockSet(blocksCount:Long, metaDataSize:Long, totalSize:Long, mGR:GlobalRail[Long], valGR:GlobalRail[ElemType]):BlockSet{
         val metaDataTarget = new Rail[Long](metaDataSize);
         val allValueTarget = new Rail[ElemType](totalSize);
+        val DEBUG_DATA_SIZE:Boolean = (System.getenv("X10_GML_DEBUG_DATA_SIZE") != null && System.getenv("X10_GML_DEBUG_DATA_SIZE").equals("1"));
+        
+        if (DEBUG_DATA_SIZE) 
+            Console.OUT.println("[BlockSetSnapshot] remoteCopyAndSave/remoteClone *blockSet* metaDataSize:" + metaDataSize + " totalSize:"+totalSize);
+        
         finish{
             Rail.asyncCopy[Long](mGR, 0, metaDataTarget, 0, metaDataSize);    
             Rail.asyncCopy[ElemType](valGR, 0, allValueTarget, 0, totalSize);
