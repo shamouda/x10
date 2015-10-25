@@ -16,6 +16,9 @@ import x10.matrix.distblock.BlockSet;
 import x10.matrix.ElemType;
 
 public class BlockSetSnapshotInfo(placeIndex:Long, isSparse:Boolean) implements Snapshot {
+    private static val DEBUG_DATA_SIZE:Boolean = (System.getenv("X10_GML_DEBUG_DATA_SIZE") != null 
+        && System.getenv("X10_GML_DEBUG_DATA_SIZE").equals("1"));
+
     private var blockSet:BlockSet;
     
     //**Variables for Flat BlockSet**//
@@ -66,7 +69,7 @@ public class BlockSetSnapshotInfo(placeIndex:Long, isSparse:Boolean) implements 
         return blockSet;
     }
 
-    public final def remoteCopyAndSave(key:Any, hm:GlobalRef[HashMap[Any,Any]]) {
+    public final def remoteCopyAndSave(key:Any, hm:PlaceLocalHandle[HashMap[Any,Any]], backupPlace:Place) {	
         val idx = placeIndex;
         val sparse = isSparse;
         val blkCnt = blocksCount;
@@ -79,10 +82,12 @@ public class BlockSetSnapshotInfo(placeIndex:Long, isSparse:Boolean) implements 
             val srcbufCnt_index = index.size;
             val srcbufCnt_meta = metadata.size;
             
-            at(hm) {
+            at(backupPlace) {
                 val dstbuf_value = new Rail[ElemType](srcbufCnt_value);
                 val dstbuf_index = new Rail[Long](srcbufCnt_index);
-                val dstbuf_meta = new Rail[Long](srcbufCnt_meta);
+                val dstbuf_meta = new Rail[Long](srcbufCnt_meta);                
+                if (DEBUG_DATA_SIZE) 
+                    Console.OUT.println("[BlockSetSnapshot] remoteCopyAndSave *sparse* srcbufCnt_value:" + srcbufCnt_value + " srcbufCnt_index:"+srcbufCnt_index + " srcbufCnt_meta:"+srcbufCnt_meta);
                 
                 finish {
                     Rail.asyncCopy[ElemType](srcbuf_value, 0, dstbuf_value, 0, srcbufCnt_value);
@@ -103,9 +108,12 @@ public class BlockSetSnapshotInfo(placeIndex:Long, isSparse:Boolean) implements 
             val srcbufCnt_value = value.size;
             val srcbufCnt_meta = metadata.size;
             
-            at(hm) {
+            at(backupPlace) {
                 val dstbuf_value = new Rail[ElemType](srcbufCnt_value);
                 val dstbuf_meta = new Rail[Long](srcbufCnt_meta);
+                
+                if (DEBUG_DATA_SIZE) 
+                    Console.OUT.println("[BlockSetSnapshot] remoteCopyAndSave *value!=null* srcbufCnt_value:" + srcbufCnt_value + " srcbufCnt_meta:"+srcbufCnt_meta);
                 
                 finish {
                     Rail.asyncCopy[ElemType](srcbuf_value, 0, dstbuf_value, 0, srcbufCnt_value);
@@ -128,7 +136,7 @@ public class BlockSetSnapshotInfo(placeIndex:Long, isSparse:Boolean) implements 
             blockSet.flattenValue(allValue);
             val valGR = new GlobalRail[ElemType](allValue);
             val mGR = new GlobalRail[Long](metaDataRail);
-            at(hm) {
+            at(backupPlace) {
                 val newBlockSet = BlockSet.remoteMakeDenseBlockSet(blocksCount, metaDataSize, totalSize, mGR, valGR);
                 val remoteBS = new BlockSetSnapshotInfo(idx, sparse);
                 remoteBS.blockSet = newBlockSet;
@@ -155,6 +163,9 @@ public class BlockSetSnapshotInfo(placeIndex:Long, isSparse:Boolean) implements 
                 val dstbuf_index = new Rail[Long](srcbufCnt_index);
                 val dstbuf_meta = new Rail[Long](srcbufCnt_meta);
                 
+                if (DEBUG_DATA_SIZE) 
+                    Console.OUT.println("[BlockSetSnapshot] remoteClone *sparse* srcbufCnt_value:" + srcbufCnt_value + " srcbufCnt_index:"+srcbufCnt_index + " srcbufCnt_meta:"+srcbufCnt_meta);
+                
                 finish {
                     Rail.asyncCopy[ElemType](srcbuf_value, 0, dstbuf_value, 0, srcbufCnt_value);
                     Rail.asyncCopy[Long](srcbuf_index, 0, dstbuf_index, 0, srcbufCnt_index);
@@ -180,6 +191,9 @@ public class BlockSetSnapshotInfo(placeIndex:Long, isSparse:Boolean) implements 
             val resultGR = at(targetPlace) {
                 val dstbuf_value = new Rail[ElemType](srcbufCnt_value);
                 val dstbuf_meta = new Rail[Long](srcbufCnt_meta);
+                
+                if (DEBUG_DATA_SIZE) 
+                    Console.OUT.println("[BlockSetSnapshot] remoteCopyAndSave *value!=null* srcbufCnt_value:" + srcbufCnt_value + " srcbufCnt_meta:"+srcbufCnt_meta);
                 
                 finish {
                     Rail.asyncCopy[ElemType](srcbuf_value, 0, dstbuf_value, 0, srcbufCnt_value);

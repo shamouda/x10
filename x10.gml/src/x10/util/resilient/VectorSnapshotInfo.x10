@@ -14,21 +14,26 @@ package x10.util.resilient;
 import x10.util.HashMap;
 import x10.matrix.ElemType;
 
-public class VectorSnapshotInfo(placeIndex:Long, data:Rail[ElemType]{self!=null}) implements Snapshot { 
+public class VectorSnapshotInfo(placeIndex:Long, data:Rail[ElemType]{self!=null}) implements Snapshot {
+    private static val DEBUG_DATA_SIZE:Boolean = (System.getenv("X10_GML_DEBUG_DATA_SIZE") != null 
+ 												&& System.getenv("X10_GML_DEBUG_DATA_SIZE").equals("1"));
+
     public def clone():Any {  
         return new VectorSnapshotInfo(placeIndex, new Rail[ElemType](data));
     }
-
-    public final def remoteCopyAndSave(key:Any, hm:GlobalRef[HashMap[Any,Any]]) {
+    
+    public final def remoteCopyAndSave(key:Any, hm:PlaceLocalHandle[HashMap[Any,Any]], backupPlace:Place) {
         val srcbuf = new GlobalRail[ElemType](data);
         val srcbufCnt = data.size;
         val idx = placeIndex;
-        at(hm) {
+        at(backupPlace) {
             val dstbuf = new Rail[ElemType](srcbufCnt);
+            if (DEBUG_DATA_SIZE) Console.OUT.println("[VectorSnapshot] remoteCopyAndSave asyncCopySize:" + srcbufCnt);
             finish Rail.asyncCopy[ElemType](srcbuf, 0, dstbuf, 0, srcbufCnt);
             atomic hm().put(key, new VectorSnapshotInfo(idx, dstbuf));
         }
     }
+    
 
     public final def remoteClone(targetPlace:Place):GlobalRef[Any]{self.home==targetPlace} {
         val srcbuf = new GlobalRail[ElemType](data);
@@ -36,6 +41,7 @@ public class VectorSnapshotInfo(placeIndex:Long, data:Rail[ElemType]{self!=null}
         val idx = placeIndex;
         val resultGR = at(targetPlace) {
             val dstbuf = new Rail[ElemType](srcbufCnt);
+            if (DEBUG_DATA_SIZE) Console.OUT.println("[VectorSnapshot] remoteClone asyncCopySize:" + srcbufCnt);
             finish Rail.asyncCopy[ElemType](srcbuf, 0, dstbuf, 0, srcbufCnt);
             val gr = new GlobalRef[Any](new VectorSnapshotInfo(idx, dstbuf));
             gr
