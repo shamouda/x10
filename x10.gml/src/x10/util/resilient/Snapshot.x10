@@ -13,11 +13,10 @@ package x10.util.resilient;
 import x10.util.HashMap;
 
 /**
- * A snapshot of an object, providing methods to copy to a remote place in a
- * variety of different ways.
+ * A snapshot of an object, providing methods to copy objects locally and remotely.
  */
 public interface Snapshot {
     public abstract def clone():Any;
-    public abstract def remoteCopyAndSave(key:Any, hm:GlobalRef[HashMap[Any,Any]]):void;
+    public abstract def remoteCopyAndSave(key:Any, hm:PlaceLocalHandle[HashMap[Any,Any]], backupPlace:Place):void;
     public abstract def remoteClone(targetPlace:Place):GlobalRef[Any]{self.home==targetPlace};
 }
