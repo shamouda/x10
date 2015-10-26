@@ -19,9 +19,9 @@ import x10.matrix.distblock.DistGrid;
 import x10.matrix.distblock.DistVector;
 import x10.matrix.distblock.DupVector;
 import x10.matrix.distblock.DistBlockMatrix;
-import x10.util.resilient.ResilientIterativeApp;
-import x10.util.resilient.ResilientExecutor;
-import x10.util.resilient.ResilientStoreForApp;
+import x10.util.resilient.iterative.ResilientIterativeApp;
+import x10.util.resilient.iterative.ResilientExecutor;
+import x10.util.resilient.iterative.ResilientStoreForApp;
 
 /**
  * Parallel Page Rank algorithm based on GML distributed block matrix.

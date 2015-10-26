@@ -15,7 +15,7 @@ import x10.util.Timer;
 
 import x10.matrix.Vector;
 import x10.matrix.util.Debug;
-import x10.matrix.util.PlaceGroupBuilder;
+import x10.util.resilient.iterative.PlaceGroupBuilder;
 import x10.matrix.util.VerifyTool;
 
 /**
