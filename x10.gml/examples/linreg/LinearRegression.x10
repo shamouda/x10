@@ -21,11 +21,11 @@ import x10.matrix.distblock.DupVector;
 import x10.matrix.distblock.DistVector;
 
 import x10.matrix.util.Debug;
-import x10.matrix.util.PlaceGroupBuilder;
+import x10.util.resilient.iterative.PlaceGroupBuilder;
 
-import x10.util.resilient.ResilientIterativeApp;
-import x10.util.resilient.ResilientExecutor;
-import x10.util.resilient.ResilientStoreForApp;
+import x10.util.resilient.iterative.ResilientIterativeApp;
+import x10.util.resilient.iterative.ResilientExecutor;
+import x10.util.resilient.iterative.ResilientStoreForApp;
 
 /**
  * Parallel linear regression based on GML distributed

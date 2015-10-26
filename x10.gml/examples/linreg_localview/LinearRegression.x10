@@ -19,11 +19,11 @@ import x10.matrix.distblock.DupVector;
 import x10.matrix.distblock.DistVector;
 
 import x10.matrix.util.Debug;
-import x10.matrix.util.PlaceGroupBuilder;
+import x10.util.resilient.iterative.PlaceGroupBuilder;
 
-import x10.util.resilient.LocalViewResilientIterativeApp;
-import x10.util.resilient.LocalViewResilientExecutor;
-import x10.util.resilient.ResilientStoreForApp;
+import x10.util.resilient.iterative.LocalViewResilientIterativeApp;
+import x10.util.resilient.iterative.LocalViewResilientExecutor;
+import x10.util.resilient.iterative.ResilientStoreForApp;
 
 import x10.util.Team;
 

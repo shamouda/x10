@@ -24,7 +24,7 @@ import x10.matrix.distblock.DistVector;
 import x10.matrix.regression.RegressionInputData;
 import x10.matrix.util.Debug;
 import x10.matrix.util.MathTool;
-import x10.matrix.util.PlaceGroupBuilder;
+import x10.util.resilient.iterative.PlaceGroupBuilder;
 
 import linreg.LinearRegression;
 import linreg.SeqLinearRegression;
