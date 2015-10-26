@@ -22,9 +22,9 @@ import x10.util.Timer;
 
 import x10.matrix.util.Debug;
 
-import x10.util.resilient.ResilientIterativeApp;
-import x10.util.resilient.ResilientExecutor;
-import x10.util.resilient.ResilientStoreForApp;
+import x10.util.resilient.iterative.ResilientIterativeApp;
+import x10.util.resilient.iterative.ResilientExecutor;
+import x10.util.resilient.iterative.ResilientStoreForApp;
 
 public class LogisticRegression implements ResilientIterativeApp {
     static val MAX_SPARSE_DENSITY = 0.1f;
