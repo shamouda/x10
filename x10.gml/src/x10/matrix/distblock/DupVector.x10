@@ -21,8 +21,8 @@ import x10.matrix.ElemType;
 
 import x10.matrix.util.Debug;
 
-import x10.util.resilient.DistObjectSnapshot;
-import x10.util.resilient.Snapshottable;
+import x10.util.resilient.iterative.DistObjectSnapshot;
+import x10.util.resilient.iterative.Snapshottable;
 import x10.util.resilient.VectorSnapshotInfo;
 
 import x10.util.Team;

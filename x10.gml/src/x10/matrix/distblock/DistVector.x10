@@ -27,8 +27,8 @@ import x10.matrix.util.MathTool;
 import x10.matrix.block.Grid;
 import x10.matrix.block.BlockMatrix;
 
-import x10.util.resilient.DistObjectSnapshot;
-import x10.util.resilient.Snapshottable;
+import x10.util.resilient.iterative.DistObjectSnapshot;
+import x10.util.resilient.iterative.Snapshottable;
 import x10.util.resilient.VectorSnapshotInfo;
 
 import x10.util.RailUtils;
