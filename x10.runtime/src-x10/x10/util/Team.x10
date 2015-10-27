@@ -1091,7 +1091,7 @@ public struct Team {
              */
             val sleepUntil = (condition:() => Boolean) => @NoInline {
                 if (!condition() && Team.state(teamidcopy).isValid) {
-                    var dummyAtCount:Long = 0;
+                    var count:Long = 0;
                     Runtime.increaseParallelism();
                     while (!condition() && Team.state(teamidcopy).isValid) {
                         // look for dead neighboring places
@@ -1110,10 +1110,10 @@ public struct Team {
                         else
                             System.threadSleep(0); // release the CPU to more productive pursuits
                         
-                        dummyAtCount++;
-                        if (x10.xrx.Runtime.RESILIENT_MODE > 0 && dummyAtCount == 1000) {
+                        count++;
+                        if (x10.xrx.Runtime.RESILIENT_MODE > 0 && count == 1000) {
                             x10.xrx.Runtime.x10rtProbe();
-                            dummyAtCount = 0;
+                            count = 0;
                         }
                     }
                     Runtime.decreaseParallelism(1n);
