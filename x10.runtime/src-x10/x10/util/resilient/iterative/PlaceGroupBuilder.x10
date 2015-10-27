@@ -75,4 +75,15 @@ public class PlaceGroupBuilder {
         var placeGroup:SparsePlaceGroup = new SparsePlaceGroup(livePlaces.toRail());
         return placeGroup;
     }
+    
+    public static def execludePlace(placeId:Long):PlaceGroup {
+        val livePlaces = new x10.util.ArrayList[Place]();
+        val allPlaces = Place.places();
+        for (var i:Long = 0; i < Place.numPlaces(); i++){
+            if (i != placeId)
+                livePlaces.add(Place(i));
+        }
+        var placeGroup:SparsePlaceGroup = new SparsePlaceGroup(livePlaces.toRail());
+        return placeGroup;
+    }
 }
