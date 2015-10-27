@@ -61,7 +61,7 @@ public class TestDistBlock extends x10Test {
         Console.OUT.println("DistBlockMatrix clone/add/sub/scaling tests");
 	
         var ret:Boolean = true;
-        val places = PlaceGroupBuilder.makeTestPlaceGroup(skipPlaces);
+        val places = PlaceGroupBuilder.execludeSparePlaces(skipPlaces);
 	
 	@Ifndef("MPI_COMMU") { // TODO Deadlocks!
 	    ret &= (testClone(places));

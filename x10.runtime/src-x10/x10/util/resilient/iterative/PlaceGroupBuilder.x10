@@ -65,7 +65,7 @@ public class PlaceGroupBuilder {
         return new SparsePlaceGroup(newPlaces.toRail());        
     }
 
-    public static def makeTestPlaceGroup(sparePlaces:Long):PlaceGroup {
+    public static def execludeSparePlaces(sparePlaces:Long):PlaceGroup {
         val livePlaces = new x10.util.ArrayList[Place]();
         val allPlaces = Place.places();
         val inPlacesCount = allPlaces.size() - sparePlaces;

@@ -34,7 +34,7 @@ public class TestDupVector extends x10Test {
         Console.OUT.println("DupVector clone/add/sub/scaling tests on "+
                             M + "-vectors");
         var ret:Boolean = true;
-        val places:PlaceGroup = Place.numPlaces() > 1? PlaceGroupBuilder.makeTestPlaceGroup(1) : Place.places();
+        val places:PlaceGroup = Place.numPlaces() > 1? PlaceGroupBuilder.execludeSparePlaces(1) : Place.places();
 	
 	@Ifndef("MPI_COMMU") { // TODO Deadlocks!
 	    ret &= (testClone(places));

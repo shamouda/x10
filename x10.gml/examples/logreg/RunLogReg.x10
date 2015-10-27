@@ -64,7 +64,7 @@ public class RunLogReg {
                 Console.OUT.println("Skipping "+skipPlaces+" places to reserve for failure.");
 
             val places = (skipPlaces==0n) ? Place.places() 
-                : PlaceGroupBuilder.makeTestPlaceGroup(skipPlaces);
+                : PlaceGroupBuilder.execludeSparePlaces(skipPlaces);
 
             val rowBlocks = opts("r", places.size());
             val colBlocks = opts("c", 1);

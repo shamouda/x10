@@ -85,7 +85,7 @@ public class RunLinReg {
             }
         }
         val places = (skipPlaces==0n) ? Place.places() 
-                                      : PlaceGroupBuilder.makeTestPlaceGroup(skipPlaces);
+                                      : PlaceGroupBuilder.execludeSparePlaces(skipPlaces);
         val team = new Team(places);
         
         val rowBlocks = opts("r", places.size());
