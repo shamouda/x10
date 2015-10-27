@@ -22,10 +22,12 @@ public class LocalViewResilientExecutor {
     private transient var places:PlaceGroup;
     private val itersPerCheckpoint:Long;
     private var isResilient:Boolean = false;
-    private val VERBOSE = false;
+    private val VERBOSE = (System.getenv("DEBUG_RESILIENT_EXECUTOR") != null 
+                        && System.getenv("DEBUG_RESILIENT_EXECUTOR").equals("1"));
     
     private transient var runTime:Long = 0;
     private transient var checkpointTime:Long = 0;
+    private transient var checkpointString:String = "";
     private transient var checkpointCount:Long = 0;
     private transient var restoreTime:Long = 0;
     private transient var restoreCount:Long = 0;
@@ -46,7 +48,7 @@ public class LocalViewResilientExecutor {
         this.itersPerCheckpoint = itersPerCheckpoint;
         if (itersPerCheckpoint > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0) {
             isResilient = true;
-            val hammerConfigFile = System.getenv("X10_GML_HAMMER_FILE");
+            val hammerConfigFile = System.getenv("X10_HAMMER_FILE");
             if (hammerConfigFile != null && !hammerConfigFile.equals("")){
                 hammer = PlaceHammer.make(hammerConfigFile);
             }
@@ -68,10 +70,17 @@ public class LocalViewResilientExecutor {
 
                 if (restoreRequired) {
                     if (lastCheckpointIter > -1) {
+                        if (VERBOSE) Console.OUT.println("restoring at iter " + lastCheckpointIter);
                         val startRestore = Timer.milliTime();
                         
                         val newPG = PlaceGroupBuilder.createRestorePlaceGroup(places);
-                        if (VERBOSE) Console.OUT.println("restoring at iter " + lastCheckpointIter);
+                        
+                        if (VERBOSE){
+                            var str:String = "";
+                            for (p in newPG)
+                                str += p.id + ",";
+                            Console.OUT.println("Restore places are: " + str);
+                        } 
 
                         if (isIterativeHammerActive()){
                             val tmpIter = placeTempData().globalIter;
@@ -86,7 +95,7 @@ public class LocalViewResilientExecutor {
                         places = newPG;
                         restoreRequired = false;
                         restoreJustDone = true;
-                        restoreTime += (Timer.milliTime() - startRestore);
+                        restoreTime += Timer.milliTime() - startRestore;
                         restoreCount++;
                     } else {
                         throw new UnsupportedOperationException("failure occurred at iter "
@@ -107,7 +116,9 @@ public class LocalViewResilientExecutor {
                         app.checkpoint(store);
                          
                         lastCheckpointIter = placeTempData().globalIter;
-                        checkpointTime += (Timer.milliTime() - startCheckpoint);
+                        val checkpointingTime = Timer.milliTime() - startCheckpoint;
+                        checkpointString += checkpointingTime + ",";
+                        checkpointTime += checkpointingTime;
                         checkpointCount++;            
                     } catch (ex:Exception) {
                         store.cancelSnapshot();
@@ -149,6 +160,7 @@ public class LocalViewResilientExecutor {
             hammer.stopTimerHammer();
         
         Console.OUT.println("ResilientExecutor completed:checkpointTime:"+checkpointTime+":restoreTime:"+restoreTime+":stepsTime:"+stepExecTime+":AllTime:"+runTime+":checkpointCount:"+checkpointCount+":restoreCount:"+restoreCount);
+        Console.OUT.println("DetailedCheckpointingTime["+checkpointString+"]");
     }
     
     private def processIterationException(ex:Exception) {

@@ -17,6 +17,8 @@ package x10.util.resilient.iterative;
 public class PlaceGroupBuilder {
 
     static val mode = getEnvLong("X10_PLACE_GROUP_RESTORE_MODE", RESTORE_MODE_SHRINK);
+    private static val VERBOSE = (System.getenv("DEBUG_RESILIENT_EXECUTOR") != null 
+                          && System.getenv("DEBUG_RESILIENT_EXECUTOR").equals("1"));
     
     static val RESTORE_MODE_SHRINK = 0;
     static val RESTORE_MODE_REPLACE_REDUNDANT = 1;
@@ -28,10 +30,20 @@ public class PlaceGroupBuilder {
     }
 
     public static def createRestorePlaceGroup(oldPlaceGroup:PlaceGroup):PlaceGroup {
+        if (VERBOSE){
+            var str:String = "";
+            for (p in oldPlaceGroup){
+                str += p.id + ",";
+            }
+            Console.OUT.println(">>> createRestorePlaceGroup: oldPlaceGroup is ["+str+"] ...");
+        }
         //RESTORE_MODE_SHRINK//
         if (mode == RESTORE_MODE_SHRINK) {
+            if (VERBOSE) Console.OUT.println("Shrinking oldPlaceGroup ...");
             return oldPlaceGroup.filterDeadPlaces();            
         }
+        
+        
         
         //RESTORE_MODE_REPLACE_REDUNDANT//
         var maxUsedPlaceId:Long = -1;
@@ -41,12 +53,14 @@ public class PlaceGroupBuilder {
             }
         }
         
+        if (VERBOSE) Console.OUT.println("Max used place id is: ["+maxUsedPlaceId+"] ...");
+        
         if (maxUsedPlaceId == Place.numPlaces()-1) {
             Console.OUT.println("[PlaceGroupBuilder Log] WARNING: No spare places available, forcing SHRINK mode ...");
             return oldPlaceGroup.filterDeadPlaces();
         }
         
-        var spareIndex:Long = maxUsedPlaceId;
+        var spareIndex:Long = maxUsedPlaceId+1;
         val newPlaces = new x10.util.ArrayList[Place]();        
         var deadCount:Long = 0;
         var allocated:Long = 0;
@@ -54,12 +68,15 @@ public class PlaceGroupBuilder {
             if (p.isDead()){
                 deadCount++;
                 if (spareIndex < Place.numPlaces()){
-                    newPlaces.add(Place.places()(spareIndex++));  
+                    if (VERBOSE) Console.OUT.println("adding place at spareIndex["+spareIndex+"] because p["+p.id+"] is dead ");
+                    newPlaces.add(Place(spareIndex++));  
                     allocated++;
                 }
             }
-            else
+            else{
+                if (VERBOSE) Console.OUT.println("adding place p["+p.id+"]");
                 newPlaces.add(p);
+            }
         }
         Console.OUT.println("[PlaceGroupBuilder Log] "+ deadCount +" Dead Place(s) Replaced by "+allocated+" Spare Places"); 
         return new SparsePlaceGroup(newPlaces.toRail());        
