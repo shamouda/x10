@@ -1092,6 +1092,10 @@ public struct Team {
             if (DEBUGINTERNALS) Runtime.println(here+":team"+teamid+" entered "+getCollName(collType)+" phase="+phase.get()+", root="+root);
             
             val teamidcopy = this.teamid; // needed to prevent serializing "this" in at() statements
+            
+            val dummyAtEnv = System.getenv("X10_TEAM_DUMMY_AT_COUNT");
+            val DUMMY_AT_COUNT =(dummyAtEnv!=null) ? Long.parseLong(dummyAtEnv) : 1000;            
+            
 
             /**
              * Block the current activity until condition is set to true by
@@ -1120,7 +1124,7 @@ public struct Team {
                             System.threadSleep(0); // release the CPU to more productive pursuits
                         
                         dummyAtCount++;
-                        if (x10.xrx.Runtime.RESILIENT_MODE > 0 && dummyAtCount == 1000) {
+                        if (x10.xrx.Runtime.RESILIENT_MODE > 0 && dummyAtCount == DUMMY_AT_COUNT) {
                             dummyAtCount = 0;
                             
                             if (FORCE_PROBE)
