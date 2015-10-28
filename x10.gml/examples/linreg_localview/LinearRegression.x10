@@ -166,7 +166,7 @@ appTempDataPLH().localCompTime += Timer.milliTime();
     
     public def checkpoint(resilientStore:ResilientStoreForApp) {    
         resilientStore.startNewSnapshot();
-        resilientStore.saveReadOnly(V);
+        //resilientStore.saveReadOnly(V);
         resilientStore.save(d_p);
         resilientStore.save(d_q);
         resilientStore.save(d_r);
@@ -204,6 +204,7 @@ appTempDataPLH().localCompTime += Timer.milliTime();
         finish ateach(Dist.makeUnique(newPg)) {
             appTempDataPLH().iter = lastCheckpointIter;
             appTempDataPLH().norm_r2 = lastCheckpointNorm;
+            V.initRandom_local();
         }
         Console.OUT.println("Restore succeeded. Restarting from iteration["+appTempDataPLH().iter+"] norm["+appTempDataPLH().norm_r2+"] ...");
     }
