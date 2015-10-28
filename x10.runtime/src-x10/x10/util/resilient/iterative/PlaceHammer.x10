@@ -143,6 +143,9 @@ public class PlaceHammer (configFile:String) {
                 }
                 else{
                     if (here.id == rec.placeId) {
+                        at (Place(0)) {
+                            Console.OUT.println("[Hammer Log] Time before killing is ["+Timer.milliTime()+"] ...");
+                        }
                         Console.OUT.println("[Hammer Log] Killing ["+here+"] ...");
                         System.killHere();
                     }

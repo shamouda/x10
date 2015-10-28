@@ -129,27 +129,34 @@ public class LocalViewResilientExecutor {
                     restoreJustDone = false;
                 }
                 
-                val startStep = Timer.milliTime();
-                finish ateach(Dist.makeUnique(places)) {                    
-                    var localIter:Long = 0;
-                    while ( !app.isFinished_local() && 
-                            (!isResilient || (isResilient && localIter < itersPerCheckpoint)) 
-                           ) {
-                        if (isIterativeHammerActive()){
-                            val tmpIter = placeTempData().globalIter;
-                            async hammer.checkKillStep_local(tmpIter);
-                        }
+                stepExecTime -= Timer.milliTime();
+                try{
+                    finish ateach(Dist.makeUnique(places)) {                    
+                        var localIter:Long = 0;
+                        while ( !app.isFinished_local() && 
+                                (!isResilient || (isResilient && localIter < itersPerCheckpoint)) 
+                               ) {
+                            if (isIterativeHammerActive()){
+                                val tmpIter = placeTempData().globalIter;
+                                async hammer.checkKillStep_local(tmpIter);
+                            }
                         
-                        app.step_local();
-                        if (VERBOSE) Console.OUT.println("["+here+"] step completed globalIter["+placeTempData().globalIter+"] ...");
-                        placeTempData().globalIter++;
-                        localIter++;
+                            app.step_local();
+                            if (VERBOSE) Console.OUT.println("["+here+"] step completed globalIter["+placeTempData().globalIter+"] ...");
+                            placeTempData().globalIter++;
+                            localIter++;
+                        }
                     }
+                    stepExecTime += Timer.milliTime();
+                } catch (ex:Exception) {
+                    Console.OUT.println("[Hammer Log] Time DPE discovered is ["+Timer.milliTime()+"] ...");
+                    stepExecTime += Timer.milliTime();
+                    throw ex;
                 }
-                stepExecTime += (Timer.milliTime() - startStep);
-                stepExecCount++;
+            
+                
             }
-            catch (iterEx:Exception) {                
+            catch (iterEx:Exception) {
                 processIterationException(iterEx);
                 restoreRequired = true;
             }
