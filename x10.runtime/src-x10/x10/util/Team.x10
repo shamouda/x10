@@ -21,7 +21,7 @@ import x10.compiler.Uncounted;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.concurrent.Lock;
 import x10.xrx.Runtime;
-
+import x10.compiler.Immediate;
 /**
  * A team is a collection of activities that work together by simultaneously 
  * doing 'collective operations', expressed as calls to methods in the Team struct.
@@ -30,10 +30,19 @@ import x10.xrx.Runtime;
  */
 public struct Team {
     private static struct DoubleIdx(value:Double, idx:Int) {}
-    private static val DEBUG:Boolean = false;
+    
+    private static val DEBUG:Boolean = (System.getenv("X10_TEAM_DEBUG") != null 
+            && System.getenv("X10_TEAM_DEBUG").equals("1"));
+    
     private static val DEBUGINTERNALS:Boolean = (System.getenv("X10_TEAM_DEBUG_INTERNALS") != null 
     		&& System.getenv("X10_TEAM_DEBUG_INTERNALS").equals("1"));
-
+    
+    private static val FORCE_PROBE:Boolean = (System.getenv("X10_TEAM_FORCE_PROBE") != null 
+            && System.getenv("X10_TEAM_FORCE_PROBE").equals("1"));
+    
+    private static val DUMMY_AT:Boolean = (System.getenv("X10_TEAM_DUMMY_AT") != null 
+            && System.getenv("X10_TEAM_DUMMY_AT").equals("1"));
+    
     /** A team that has one member at each place. */
     public static val WORLD = Team(0n, Place.places(), here.id());
     
@@ -1091,7 +1100,7 @@ public struct Team {
              */
             val sleepUntil = (condition:() => Boolean) => @NoInline {
                 if (!condition() && Team.state(teamidcopy).isValid) {
-                    var count:Long = 0;
+                    var dummyAtCount:Long = 0;
                     Runtime.increaseParallelism();
                     while (!condition() && Team.state(teamidcopy).isValid) {
                         // look for dead neighboring places
@@ -1110,10 +1119,34 @@ public struct Team {
                         else
                             System.threadSleep(0); // release the CPU to more productive pursuits
                         
-                        count++;
-                        if (x10.xrx.Runtime.RESILIENT_MODE > 0 && count == 1000) {
-                            x10.xrx.Runtime.x10rtProbe();
-                            count = 0;
+                        dummyAtCount++;
+                        if (x10.xrx.Runtime.RESILIENT_MODE > 0 && dummyAtCount == 1000) {
+                            dummyAtCount = 0;
+                            
+                            if (FORCE_PROBE)
+                                x10.xrx.Runtime.x10rtProbe();
+                            
+                            if (DUMMY_AT){
+                                try{
+                                    finish {
+                                        val parentId = Team.state(teamidcopy).local_parentIndex;
+                                        val child1Id = Team.state(teamidcopy).local_child1Index;
+                                        val child2Id = Team.state(teamidcopy).local_child2Index;
+                                        if (parentId != -1){
+                                            at(Team.state(teamidcopy).places(parentId)) @Immediate("ping_parent") async {}
+                                        }
+                                        if (child1Id != -1){
+                                            at(Team.state(teamidcopy).places(child1Id)) @Immediate("ping_child1") async {}
+                                        }
+                                        if (child2Id != -1) {
+                                            at(Team.state(teamidcopy).places(child2Id)) @Immediate("ping_child2") async {}
+                                        }
+                                    }
+                                }catch(dpe:Exception){
+                                    Console.OUT.println("Dummy At exception ["+dpe.getMessage()+"] ...");                                    
+                                    Team.state(teamidcopy).isValid = false;
+                                }
+                            }
                         }
                     }
                     Runtime.decreaseParallelism(1n);
