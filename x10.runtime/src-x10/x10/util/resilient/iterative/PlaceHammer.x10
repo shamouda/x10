@@ -14,6 +14,7 @@ import x10.util.ArrayList;
 import x10.io.FileReader;
 import x10.io.File;
 import x10.io.EOFException;
+import x10.util.Timer;
 
 /**
  * The hammer class kills places at certain times during the computation
