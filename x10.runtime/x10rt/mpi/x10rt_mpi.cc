@@ -85,6 +85,8 @@ static void x10rt_net_coll_init(int *argc, char ** *argv, x10rt_msg_type *counte
 #define X10_RESILIENT_MODE "X10_RESILIENT_MODE"
 #define X10RT_MPI_PROBE_SLEEP_MICROSECONDS "X10RT_MPI_PROBE_SLEEP_MICROSECONDS"
 
+#define X10RT_ULFM_USE_BARRIER_BEFORE_SHRINK "X10RT_ULFM_USE_BARRIER_BEFORE_SHRINK"
+
 /* Generic utility funcs */
 template <class T> T* ChkAlloc(size_t len) {
     if (0 == len) return NULL;
@@ -1851,11 +1853,34 @@ private:
             MPI_Comm comm;
 #ifdef OPEN_MPI_ULFM
             MPI_Comm shrunken;
+
+            int use_barrier = -1;
+            char* useBarrierEnv = getenv(X10RT_ULFM_USE_BARRIER_BEFORE_SHRINK);
+            if (useBarrierEnv && atoi(useBarrierEnv) > 0) {
+            	use_barrier = atoi(useBarrierEnv);
+            }
+            if (use_barrier == 1){
+            	X10RT_NET_DEBUG("started calling barrier ...\n", 1);
+            	int mpi_error = MPI_Barrier(MPI_COMM_WORLD);
+            	X10RT_NET_DEBUG("finished calling barrier ...\n", 1);
+            }
+
+            X10RT_NET_DEBUG("started calling shrink >>>> \n", 1);
             OMPI_Comm_shrink(MPI_COMM_WORLD, &shrunken);
+            X10RT_NET_DEBUG("finished calling shrink >>>> \n", 1);
+
+            MPI_Errhandler customErrorHandler;
+            MPI_Comm_create_errhandler(mpiErrorHandler, &customErrorHandler);
+            MPI_Comm_set_errhandler(shrunken, customErrorHandler);
+
+            X10RT_NET_DEBUG("started calling MPI_Comm_create .... \n", 1);
             if (MPI_SUCCESS != MPI_Comm_create(shrunken, grp, &comm)) {
                 fprintf(stderr, "[%s:%d] %s\n", __FILE__, __LINE__, "Error in MPI_Comm_create");
                 abort();
             }
+            X10RT_NET_DEBUG("finished calling MPI_Comm_create .... \n", 1);
+
+            MPI_Comm_set_errhandler(comm, customErrorHandler);
 #else
             if (MPI_SUCCESS != MPI_Comm_create(MPI_COMM_WORLD, grp, &comm)) {
             	fprintf(stderr, "[%s:%d] %s\n", __FILE__, __LINE__, "Error in MPI_Comm_create");
@@ -3717,6 +3742,7 @@ void mpiErrorHandler(MPI_Comm * comm, int *errorCode, ...){
 
     OMPI_Comm_failure_ack(*comm);
     OMPI_Comm_failure_get_acked(*comm, &failedGroup);
+
     int f_size;
     MPI_Group comm_group;
     int x = 0;
