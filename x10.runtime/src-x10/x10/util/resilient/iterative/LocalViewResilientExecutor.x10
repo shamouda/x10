@@ -41,6 +41,9 @@ public class LocalViewResilientExecutor {
     
     class PlaceTempData {
         var globalIter:Long = 0;
+        public def this(iter:Long){
+            globalIter = iter;
+        }
     }
     
     public def this(itersPerCheckpoint:Long, places:PlaceGroup) {
@@ -60,7 +63,7 @@ public class LocalViewResilientExecutor {
         val startRun = Timer.milliTime();
         
         val root = here;
-        placeTempData = PlaceLocalHandle.make[PlaceTempData](places, ()=>new PlaceTempData());
+        placeTempData = PlaceLocalHandle.make[PlaceTempData](places, ()=>new PlaceTempData(0));
         
         if (isTimerHammerActive())
             hammer.startTimerHammer();
@@ -89,8 +92,7 @@ public class LocalViewResilientExecutor {
 
                         app.restore(newPG, store, lastCheckpointIter);
 
-                        placeTempData = PlaceLocalHandle.make[PlaceTempData](newPG, ()=>new PlaceTempData());                        
-                        placeTempData().globalIter = lastCheckpointIter;
+                        placeTempData = PlaceLocalHandle.make[PlaceTempData](newPG, ()=>new PlaceTempData(lastCheckpointIter));
 
                         places = newPG;
                         restoreRequired = false;
