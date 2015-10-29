@@ -101,7 +101,8 @@ public class LinearRegression implements LocalViewResilientIterativeApp {
     public def step_local() {
         // Parallel computing
         if (appTempDataPLH().iter == 0) {
-
+            team.barrier();
+            
 appTempDataPLH().globalCompTime -= Timer.milliTime();
             d_r.mult_local(root, y, V);        
 appTempDataPLH().globalCompTime += Timer.milliTime();
@@ -119,8 +120,6 @@ appTempDataPLH().localCompTime -= Timer.milliTime();
 appTempDataPLH().localCompTime += Timer.milliTime();
         }
 
-
-        //d_p.sync_local(root);
         // 10: q=((t(V) %*% (V %*% p)) )
 
         //////Global view step:  d_q.mult(Vp.mult(V, d_p), V);
