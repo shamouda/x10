@@ -1175,6 +1175,6 @@ bool x10rt_lgl_allreduce (x10rt_team team, x10rt_place role,
     } else {
         x10rt_emu_reduce(team, role, 0, sbuf, dbuf, op, dtype, count, ch, arg, true);
         while (x10rt_emu_coll_probe());
-        return true; //TODO: should not always return true, but x10rt_emu_reduce is not practically used
+        return true; //TODO: should not always return true, but x10rt_emu_reduce is not used
     }
 }
