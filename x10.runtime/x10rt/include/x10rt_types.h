@@ -41,9 +41,6 @@ typedef uint32_t x10rt_endpoint;
  */
 typedef uint32_t x10rt_team;
 
-typedef void x10rt_completion_handler4 (void *arg, int placeDied);
-
-
 /** User callback to signal that non-blocking operations have completed.
  */
 typedef void x10rt_completion_handler (void *arg);
