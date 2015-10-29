@@ -1865,9 +1865,9 @@ private:
             	X10RT_NET_DEBUG("finished calling barrier ...\n", 1);
             }
 
-            X10RT_NET_DEBUG("started calling shrink >>>> \n", 1);
+            X10RT_NET_DEBUG("%s", "pre shrink >>>>");
             OMPI_Comm_shrink(MPI_COMM_WORLD, &shrunken);
-            X10RT_NET_DEBUG("finished calling shrink >>>> \n", 1);
+            X10RT_NET_DEBUG("%s", "pro shrink >>>>");
 
             MPI_Errhandler customErrorHandler;
             MPI_Comm_create_errhandler(mpiErrorHandler, &customErrorHandler);
@@ -2981,10 +2981,7 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
     coll_pdb.add_handler(cp);
 #define SAVED(var) \
      cpe.env.MPI_COLLECTIVE_NAME.var
-#define MPI_COLLECTIVE_POSTPROCESS_END { \
-    X10RT_NET_DEBUG("%s: %"PRIxPTR"_%"PRIxPTR,"end postprocess", SAVED(ch), SAVED(arg)); \
-    return true;
-}
+#define MPI_COLLECTIVE_POSTPROCESS_END X10RT_NET_DEBUG("%s: %"PRIxPTR"_%"PRIxPTR,"end postprocess", SAVED(ch), SAVED(arg));
 #elif defined(OPEN_MPI_ULFM)
 #define MPI_COLLECTIVE(name, iname, ...) \
     CollectivePostprocessEnv cpe; \
@@ -3007,7 +3004,7 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
     CONCAT(x10rt_net_handler_,MPI_COLLECTIVE_NAME)(cpe);
 #define SAVED(var) \
      cpe.env.MPI_COLLECTIVE_NAME.var
-#define MPI_COLLECTIVE_POSTPROCESS_END X10RT_NET_DEBUG("calling ULFM blocking collective completed, mpi_return_code is: ", cpe.mpiError);
+#define MPI_COLLECTIVE_POSTPROCESS_END X10RT_NET_DEBUG("calling ULFM blocking collective completed, mpi_return_code is: %d", cpe.mpiError);
 #else
 #define MPI_COLLECTIVE(name, iname, ...) \
     CollectivePostprocessEnv cpe; \
@@ -3240,9 +3237,9 @@ bool x10rt_net_allreduce (x10rt_team team, x10rt_place role,
     MPI_Comm comm = mpi_tdb.comm(team);
     void *buf = (sbuf == dbuf) ? ChkAlloc<void>(count * el) : dbuf;
 
-    X10RT_NET_DEBUG("started calling allreduce ...\n", 1);
+    X10RT_NET_DEBUG("%s", "pre allreduce");
     MPI_COLLECTIVE(Allreduce, Iallreduce, (void*)sbuf, buf, count, mpi_red_type(dtype), mpi_red_op_type(dtype, op), comm);
-    X10RT_NET_DEBUG("started calling allreduce ...\n", 1);
+    X10RT_NET_DEBUG("%s", "pro allreduce");
 
     MPI_COLLECTIVE_SAVE(team);
     MPI_COLLECTIVE_SAVE(role);
@@ -3254,7 +3251,6 @@ bool x10rt_net_allreduce (x10rt_team team, x10rt_place role,
     MPI_COLLECTIVE_SAVE(errch);
     MPI_COLLECTIVE_SAVE(ch);
     MPI_COLLECTIVE_SAVE(arg);
-
 
     MPI_COLLECTIVE_SAVE(el);
     MPI_COLLECTIVE_SAVE(buf);
@@ -3774,7 +3770,6 @@ void mpiErrorHandler(MPI_Comm * comm, int *errorCode, ...){
 
     OMPI_Comm_failure_ack(*comm);
     OMPI_Comm_failure_get_acked(*comm, &failedGroup);
-
     int f_size;
     MPI_Group comm_group;
     int x = 0;
