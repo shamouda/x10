@@ -89,7 +89,7 @@ public class LocalViewResilientExecutor {
                             val tmpIter = placeTempData().globalIter;
                             async hammer.checkKillRestore(tmpIter);
                         }
-
+                        store.updatePlaces(newPG);
                         app.restore(newPG, store, lastCheckpointIter);
 
                         placeTempData = PlaceLocalHandle.make[PlaceTempData](newPG, ()=>new PlaceTempData(lastCheckpointIter));
@@ -114,7 +114,7 @@ public class LocalViewResilientExecutor {
                         if (isIterativeHammerActive()) {
                             val tmpIter = placeTempData().globalIter;
                             async hammer.checkKillCheckpoint(tmpIter);
-                        }            
+                        }
                         app.checkpoint(store);
                          
                         lastCheckpointIter = placeTempData().globalIter;

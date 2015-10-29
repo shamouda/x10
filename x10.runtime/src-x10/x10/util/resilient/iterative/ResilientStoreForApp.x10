@@ -155,8 +155,7 @@ public class ResilientStoreForApp {
         }
     }
     
-    public def restore_local(newPlaces:PlaceGroup) {
-        this.places = newPlaces;
+    public def restore_local() {        
         val appSnapshot = getConsistentSnapshot();
         val appSnapshotMap = appSnapshot.map;
        
@@ -168,6 +167,11 @@ public class ResilientStoreForApp {
                 async key.snapshottable.restoreSnapshot_local(distObjectSnapshot);                
             }
         }
+    }
+    
+    
+    public def updatePlaces(newPlaces:PlaceGroup){
+        this.places = newPlaces;
     }
 }
 
