@@ -1947,6 +1947,7 @@ void x10rt_net_finalize(void) {
 struct CollectivePostprocessEnv {
     x10rt_completion_handler *ch;
     void *arg;
+    int mpiError;
     union {
         struct CollectivePostprocessEnvBarrier {
             x10rt_team team; x10rt_place role;
@@ -1979,6 +1980,7 @@ struct CollectivePostprocessEnv {
             x10rt_red_op_type op;
             x10rt_red_type dtype;
             size_t count;
+            x10rt_completion_handler *errch;
             x10rt_completion_handler *ch; void *arg;
             size_t el;
             void *buf;
@@ -2972,8 +2974,8 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
 #define MPI_COLLECTIVE(name, iname, ...) \
     CollectivePostprocessEnv cpe; \
     do { LOCK_IF_MPI_IS_NOT_MULTITHREADED; \
-        int mpiError = MPI_##name(__VA_ARGS__); \
-        if (MPI_SUCCESS != mpiError && !is_process_failure_error(mpiError)) { \
+        cpe.mpiError = MPI_##name(__VA_ARGS__); \
+        if (MPI_SUCCESS != cpe.mpiError && !is_process_failure_error(cpe.mpiError)) { \
             fprintf(stderr, "[%s:%d] %s\n", \
                     __FILE__, __LINE__, "Error in MPI_" #name); \
             abort(); \
@@ -2989,7 +2991,7 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
     CONCAT(x10rt_net_handler_,MPI_COLLECTIVE_NAME)(cpe);
 #define SAVED(var) \
      cpe.env.MPI_COLLECTIVE_NAME.var
-#define MPI_COLLECTIVE_POSTPROCESS_END
+#define MPI_COLLECTIVE_POSTPROCESS_END X10RT_NET_DEBUG("calling blocking collective completed", 1);
 #else
 #define MPI_COLLECTIVE(name, iname, ...) \
     CollectivePostprocessEnv cpe; \
@@ -3207,6 +3209,7 @@ void x10rt_net_allreduce (x10rt_team team, x10rt_place role,
                           x10rt_red_op_type op, 
                           x10rt_red_type dtype,
                           size_t count,
+                          x10rt_completion_handler *errch,
                           x10rt_completion_handler *ch, void *arg)
 {
 #define MPI_COLLECTIVE_NAME allreduce
@@ -3230,8 +3233,10 @@ void x10rt_net_allreduce (x10rt_team team, x10rt_place role,
     MPI_COLLECTIVE_SAVE(op);
     MPI_COLLECTIVE_SAVE(dtype);
     MPI_COLLECTIVE_SAVE(count);
+    MPI_COLLECTIVE_SAVE(errch);
     MPI_COLLECTIVE_SAVE(ch);
     MPI_COLLECTIVE_SAVE(arg);
+
 
     MPI_COLLECTIVE_SAVE(el);
     MPI_COLLECTIVE_SAVE(buf);
@@ -3244,7 +3249,14 @@ static void x10rt_net_handler_allreduce (struct CollectivePostprocessEnv cpe) {
 	memcpy(SAVED(dbuf), SAVED(buf), SAVED(count) * SAVED(el));
 	free(SAVED(buf));
     }
+#ifdef OPEN_MPI_ULFM
+    if (is_process_failure_error(cpe.mpiError))
+    	SAVED(errch)(SAVED(arg));
+    else
+    	SAVED(ch)(SAVED(arg));
+#else
     SAVED(ch)(SAVED(arg));
+#endif
     MPI_COLLECTIVE_POSTPROCESS_END
 #undef MPI_COLLECTIVE_NAME
 }

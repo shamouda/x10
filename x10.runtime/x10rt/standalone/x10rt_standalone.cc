@@ -1035,6 +1035,7 @@ void x10rt_net_allreduce (x10rt_team team, x10rt_place role,
                           x10rt_red_op_type op, 
                           x10rt_red_type dtype,
                           size_t count,
+                          x10rt_completion_handler *errch,
                           x10rt_completion_handler *ch, void *arg)
 {
     abort();

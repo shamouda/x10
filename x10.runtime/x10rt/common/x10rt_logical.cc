@@ -1165,11 +1165,12 @@ void x10rt_lgl_allreduce (x10rt_team team, x10rt_place role,
                           x10rt_red_op_type op, 
                           x10rt_red_type dtype,
                           size_t count,
+                          x10rt_completion_handler *errch,
                           x10rt_completion_handler *ch, void *arg)
 {
     ESCAPE_IF_ERR;
     if (has_collectives >= X10RT_COLL_ALLBLOCKINGCOLLECTIVES) {
-        x10rt_net_allreduce(team, role, sbuf, dbuf, op, dtype, count, ch, arg);
+        x10rt_net_allreduce(team, role, sbuf, dbuf, op, dtype, count, errch, ch, arg);
     } else {
         x10rt_emu_reduce(team, role, 0, sbuf, dbuf, op, dtype, count, ch, arg, true);
         while (x10rt_emu_coll_probe());

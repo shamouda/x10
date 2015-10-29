@@ -955,7 +955,7 @@ JNIEXPORT void JNICALL Java_x10_x10rt_TeamSupport_nativeAllReduceImpl(JNIEnv *en
     callbackArg->dstData = dstData;
 
     x10rt_allreduce(id, role, srcData, dstData, (x10rt_red_op_type)op, (x10rt_red_type)typecode,
-                    count, &postCopyCallback, callbackArg);
+                    count, &postCopyCallback, &postCopyCallback, callbackArg);
 }
 
 
@@ -1023,7 +1023,7 @@ static void indexOfImpl(JNIEnv *env, jint id, jint role,
     callbackArg->srcData = srcData;
     callbackArg->dstData = dstData;
 
-    x10rt_allreduce(id, role, srcData, dstData, op, X10RT_RED_TYPE_DBL_S32, 1, &minmaxCallback, callbackArg);
+    x10rt_allreduce(id, role, srcData, dstData, op, X10RT_RED_TYPE_DBL_S32, 1, &minmaxCallback, &minmaxCallback, callbackArg);
 }
 
 

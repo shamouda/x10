@@ -2199,7 +2199,7 @@ void x10rt_net_reduce (x10rt_team team, x10rt_place role,
 }
 
 void x10rt_net_allreduce (x10rt_team team, x10rt_place role, const void *sbuf, void *dbuf,
-		x10rt_red_op_type op, x10rt_red_type dtype, size_t count, x10rt_completion_handler *ch, void *arg)
+		x10rt_red_op_type op, x10rt_red_type dtype, size_t count, x10rt_completion_handler *errch, x10rt_completion_handler *ch, void *arg)
 {
 	// Issue the collective
 	x10rt_pami_team_callback *tcb = (x10rt_pami_team_callback *)x10rt_malloc(sizeof(x10rt_pami_team_callback));
