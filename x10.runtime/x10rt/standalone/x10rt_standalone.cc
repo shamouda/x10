@@ -1030,7 +1030,7 @@ void x10rt_net_reduce (x10rt_team team, x10rt_place role,
 	abort();
 }
 
-void x10rt_net_allreduce (x10rt_team team, x10rt_place role,
+bool x10rt_net_allreduce (x10rt_team team, x10rt_place role,
                           const void *sbuf, void *dbuf,
                           x10rt_red_op_type op, 
                           x10rt_red_type dtype,
