@@ -30,6 +30,7 @@ public class LocalViewResilientExecutor {
     private transient var checkpointString:String = "";
     private transient var checkpointCount:Long = 0;
     private transient var restoreTime:Long = 0;
+    private transient var appOnlyRestoreTime:Long = 0;
     private transient var restoreCount:Long = 0;
     private transient var stepExecTime:Long = 0;
     private transient var stepExecCount:Long = 0;
@@ -75,7 +76,7 @@ public class LocalViewResilientExecutor {
                 if (restoreRequired) {
                     if (lastCheckpointIter > -1) {
                         if (VERBOSE) Console.OUT.println("restoring at iter " + lastCheckpointIter);
-                        val startRestore = Timer.milliTime();
+                        restoreTime -= Timer.milliTime();
                         
                         val newPG = PlaceGroupBuilder.createRestorePlaceGroup(places);
                         
@@ -90,16 +91,23 @@ public class LocalViewResilientExecutor {
                             val tmpIter = placeTempData().globalIter;
                             async hammer.checkKillRestore(tmpIter);
                         }
+                        
+                        
+                        appOnlyRestoreTime -= Timer.milliTime();
                         store.updatePlaces(newPG);
                         app.restore(newPG, store, lastCheckpointIter);
-
+                        appOnlyRestoreTime += Timer.milliTime();
+                        
                         val lastIter = lastCheckpointIter;
+                        val place0LastIteration = placeTempData().place0DebuggingTotalIter;
+                        PlaceLocalHandle.destroy(places, placeTempData, (Place)=>true);
                         placeTempData = PlaceLocalHandle.make[PlaceTempData](newPG, ()=>new PlaceTempData(lastIter));
-
+                        placeTempData().place0DebuggingTotalIter = place0LastIteration;
+                        
                         places = newPG;
                         restoreRequired = false;
                         restoreJustDone = true;
-                        restoreTime += Timer.milliTime() - startRestore;
+                        restoreTime += Timer.milliTime();
                         restoreCount++;
                     } else {
                         throw new UnsupportedOperationException("failure occurred at iter "
@@ -172,7 +180,7 @@ public class LocalViewResilientExecutor {
         if (isTimerHammerActive())
             hammer.stopTimerHammer();
         
-        Console.OUT.println("ResilientExecutor completed:checkpointTime:"+checkpointTime+":restoreTime:"+restoreTime+":stepsTime:"+stepExecTime+":AllTime:"+runTime+":checkpointCount:"+checkpointCount+":restoreCount:"+restoreCount+":totalIterations:"+placeTempData().place0DebuggingTotalIter);
+        Console.OUT.println("ResilientExecutor completed:checkpointTime:"+checkpointTime+":restoreTime:"+restoreTime+":stepsTime:"+stepExecTime+":AllTime:"+runTime+":checkpointCount:"+checkpointCount+":restoreCount:"+restoreCount+":totalIterations:"+placeTempData().place0DebuggingTotalIter+":applicationOnlyRestoreTime:"+appOnlyRestoreTime);
         Console.OUT.println("DetailedCheckpointingTime["+checkpointString+"]");
         if (VERBOSE){
             var str:String = "";
