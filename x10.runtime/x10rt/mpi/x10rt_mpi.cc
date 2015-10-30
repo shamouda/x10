@@ -2963,6 +2963,7 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
 #if X10RT_NONBLOCKING_SUPPORTED
 #define MPI_COLLECTIVE(name, iname, ...) \
      CollectivePostprocess *cp = new CollectivePostprocess(); \
+     struct CollectivePostprocessEnv cpe = cp->env; \
      MPI_Request &req = cp->req; \
      LOCK_IF_MPI_IS_NOT_MULTITHREADED; \
      if (MPI_SUCCESS != MPI_NONBLOCKING_COLLECTIVE_NAME(iname)(__VA_ARGS__, &req)) { \
@@ -3230,9 +3231,9 @@ bool x10rt_net_allreduce (x10rt_team team, x10rt_place role,
     assert(!global_state.finalized);
 
     size_t el = x10rt_red_type_length(dtype);
-    //X10RT_NET_DEBUG("team=%d, role=%d, count=%zd, el=%zd", team, role, count, el);
-    //X10RT_NET_DEBUG("sbuf=%"PRIxPTR" dbuf=%"PRIxPTR, sbuf, dbuf);
-    //X10RT_NET_DEBUG("dtype=%d sizeof(dtype)=%d", dtype, el);
+    X10RT_NET_DEBUG("team=%d, role=%d, count=%zd, el=%zd", team, role, count, el);
+    X10RT_NET_DEBUG("sbuf=%"PRIxPTR" dbuf=%"PRIxPTR, sbuf, dbuf);
+    X10RT_NET_DEBUG("dtype=%d sizeof(dtype)=%d", dtype, el);
 
     MPI_Comm comm = mpi_tdb.comm(team);
     void *buf = (sbuf == dbuf) ? ChkAlloc<void>(count * el) : dbuf;
@@ -3801,3 +3802,4 @@ void mpiErrorHandler(MPI_Comm * comm, int *errorCode, ...){
     return;
 }
 #endif
+
