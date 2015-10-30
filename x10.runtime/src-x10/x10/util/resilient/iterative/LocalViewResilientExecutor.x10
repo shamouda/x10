@@ -92,7 +92,8 @@ public class LocalViewResilientExecutor {
                         store.updatePlaces(newPG);
                         app.restore(newPG, store, lastCheckpointIter);
 
-                        placeTempData = PlaceLocalHandle.make[PlaceTempData](newPG, ()=>new PlaceTempData(lastCheckpointIter));
+                        val lastIter = lastCheckpointIter;
+                        placeTempData = PlaceLocalHandle.make[PlaceTempData](newPG, ()=>new PlaceTempData(lastIter));
 
                         places = newPG;
                         restoreRequired = false;
@@ -170,6 +171,12 @@ public class LocalViewResilientExecutor {
         
         Console.OUT.println("ResilientExecutor completed:checkpointTime:"+checkpointTime+":restoreTime:"+restoreTime+":stepsTime:"+stepExecTime+":AllTime:"+runTime+":checkpointCount:"+checkpointCount+":restoreCount:"+restoreCount);
         Console.OUT.println("DetailedCheckpointingTime["+checkpointString+"]");
+        if (VERBOSE){
+            var str:String = "";
+            for (p in places)
+                str += p.id + ",";
+            Console.OUT.println("List of survived places are: " + str);
+        }
     }
     
     private def processIterationException(ex:Exception) {
