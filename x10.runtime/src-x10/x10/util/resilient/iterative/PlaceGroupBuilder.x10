@@ -103,19 +103,4 @@ public class PlaceGroupBuilder {
         var placeGroup:SparsePlaceGroup = new SparsePlaceGroup(livePlaces.toRail());
         return placeGroup;
     }
-    
-    //returns the places in pgNew that replaced dead places in pgOld
-    //assumes live places have not changed their order in the place group
-    public static def getReplacedPlaces(pgOld:PlaceGroup, pgNew:PlaceGroup):PlaceGroup {
-        if (pgOld.size() != pgNew.size())
-            throw new Exception("getReplacedPlaces requires the input groups to have same size: pgOld["+pgOld.size()+"] pgNew["+pgNew.size()+"]");
-    
-        val result = new x10.util.ArrayList[Place]();
-        for (i in 0..(pgNew.size()-1)){
-            if (pgOld(i).id != pgNew(i).id)
-                result.add(pgNew(i));
-        }        
-        var placeGroup:SparsePlaceGroup = new SparsePlaceGroup(result.toRail());
-        return placeGroup;
-    }
 }

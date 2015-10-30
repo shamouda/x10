@@ -41,6 +41,7 @@ public class LocalViewResilientExecutor {
     
     class PlaceTempData {
         var globalIter:Long = 0;
+        var place0DebuggingTotalIter:Long = 0;
         public def this(iter:Long){
             globalIter = iter;
         }
@@ -148,6 +149,8 @@ public class LocalViewResilientExecutor {
                             if (VERBOSE) Console.OUT.println("["+here+"] step completed globalIter["+placeTempData().globalIter+"] ...");
                             placeTempData().globalIter++;
                             localIter++;
+                            
+                            placeTempData().place0DebuggingTotalIter++;
                         }
                     }
                     stepExecTime += Timer.milliTime();
@@ -169,13 +172,13 @@ public class LocalViewResilientExecutor {
         if (isTimerHammerActive())
             hammer.stopTimerHammer();
         
-        Console.OUT.println("ResilientExecutor completed:checkpointTime:"+checkpointTime+":restoreTime:"+restoreTime+":stepsTime:"+stepExecTime+":AllTime:"+runTime+":checkpointCount:"+checkpointCount+":restoreCount:"+restoreCount);
+        Console.OUT.println("ResilientExecutor completed:checkpointTime:"+checkpointTime+":restoreTime:"+restoreTime+":stepsTime:"+stepExecTime+":AllTime:"+runTime+":checkpointCount:"+checkpointCount+":restoreCount:"+restoreCount+":totalIterations:"+placeTempData().place0DebuggingTotalIter);
         Console.OUT.println("DetailedCheckpointingTime["+checkpointString+"]");
         if (VERBOSE){
             var str:String = "";
             for (p in places)
                 str += p.id + ",";
-            Console.OUT.println("List of survived places are: " + str);
+            Console.OUT.println("List of final survived places are: " + str);
         }
     }
     
