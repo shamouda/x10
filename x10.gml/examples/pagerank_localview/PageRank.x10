@@ -189,7 +189,7 @@ public class PageRank implements LocalViewResilientIterativeApp {
 
         GP.remake(G.getAggRowBs(), newPlaces, newTeam);
         
-        store.restore_local(newPlaces);
+        store.restore_local();
         
         //TODO: make a snapshottable class for the app data
         PlaceLocalHandle.destroy(oldPlaces, appTempDataPLH, (Place)=>true);

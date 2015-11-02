@@ -194,7 +194,7 @@ appTempDataPLH().localCompTime += Timer.milliTime();
         d_w.remake(newPg, newTeam);        
         Vp.remake(V.getAggRowBs(), newPg, newTeam);
         
-        store.restore_local(newPg);
+        store.restore_local();
         
         //TODO: make a snapshottable class for the app data
         PlaceLocalHandle.destroy(oldPlaces, appTempDataPLH, (Place)=>true);
