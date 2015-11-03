@@ -155,8 +155,7 @@ public class PageRank implements LocalViewResilientIterativeApp {
         GP.scale_local(alpha);
     
         val dotResult = new Rail[Double](1);
-        U.dot_local(P, dotResult);
-        val teleport = dotResult(0) * (1-alpha);
+        val teleport = U.dot_local(P) * (1-alpha);
         
         GP.copyTo(root, P.local());  // only root will have copy of GP in P.local()        
         if (here.id == root.id)

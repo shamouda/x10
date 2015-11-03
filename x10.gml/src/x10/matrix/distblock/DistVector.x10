@@ -399,17 +399,18 @@ distV().scattervTime += Timer.milliTime();
     }
 
     
-    public def dot_local(v:DupVector(M), result:Rail[Double]) {
+    public def dot_local(v:DupVector(M)):ElemType {
         val offset=getOffset();
         val dist = distV().vec;
         val dup = v.local();
-        val src = new Rail[Double](1);
+        var myDot:ElemType = 0.0 as ElemType;
         val s = getSegSize()(distV().places.indexOf(here));
         for (i in 0..(s-1))
-            src(0) += dist(i) * dup(offset+i);
+            myDot += dist(i) * dup(offset+i);
 distV().allReduceTime -= Timer.milliTime();
-        team.allreduce(src, 0, result, 0, 1, Team.ADD);
+        val result = team.allreduce(myDot, Team.ADD);
 distV().allReduceTime += Timer.milliTime();
+        return result;
     }
 
     // Multiplication operations 

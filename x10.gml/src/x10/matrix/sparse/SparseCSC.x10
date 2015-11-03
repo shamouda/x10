@@ -39,7 +39,7 @@ public class SparseCSC extends Matrix {
 	/**
 	 * Compress 2-dimension array
 	 */
-	public val ccdata:Compress2D;
+	public val ccdata:Compress2D{self!=null};
 		
 	// Temporary memory space used for type conversion and
 	// data compression

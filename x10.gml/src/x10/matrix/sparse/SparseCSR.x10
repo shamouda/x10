@@ -30,7 +30,7 @@ public type SparseCSR(C:SparseCSR)=SparseCSR{self==C};
  * transposed in matrix multiply. 
  */
 public class SparseCSR extends Matrix {
-        public val crdata:Compress2D;
+        public val crdata:Compress2D{self!=null};
 
         // This temporary memory space is used for type conversion
         private var tmprow:Rail[ElemType];
