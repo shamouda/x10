@@ -39,6 +39,9 @@
 #include <x10rt_internal.h>
 #include <x10rt_cpp.h>
 #include <x10rt_ser.h>
+#include <sys/time.h>
+
+
 
 
 // ULFM flags and extra header file
@@ -3766,7 +3769,12 @@ const char *x10rt_net_error_msg (void) { return NULL; }
 
 #ifdef OPEN_MPI_ULFM
 void mpiErrorHandler(MPI_Comm * comm, int *errorCode, ...){
+    timeval time;
+    gettimeofday(&time, NULL);
+    long millis = (time.tv_sec * 1000) + (time.tv_usec / 1000);
 
+    printf("#############[%d] Time milli inside error handler:[%ld]  ########\n", x10rt_net_here() ,millis);
+    
     MPI_Group failedGroup;
 
     OMPI_Comm_failure_ack(*comm);

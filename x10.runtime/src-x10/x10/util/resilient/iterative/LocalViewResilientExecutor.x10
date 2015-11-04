@@ -15,6 +15,7 @@ package x10.util.resilient.iterative;
 import x10.util.Timer;
 import x10.util.Random;
 import x10.regionarray.Dist;
+import x10.util.ArrayList;
 
 public class LocalViewResilientExecutor {
     private var placeTempData:PlaceLocalHandle[PlaceTempData];
@@ -33,6 +34,8 @@ public class LocalViewResilientExecutor {
     private transient var appOnlyRestoreTime:Long = 0;
     private transient var restoreCount:Long = 0;
     private transient var stepExecTime:Long = 0;
+    private transient var failureDetectionTime:Long = 0;
+    private transient var applicationInitializationTime:Long = 0;
     private transient var stepExecCount:Long = 0;
     private var hammer:PlaceHammer = null;
     
@@ -43,6 +46,8 @@ public class LocalViewResilientExecutor {
     class PlaceTempData {
         var globalIter:Long = 0;
         var place0DebuggingTotalIter:Long = 0;
+        var place0TimePerIter:ArrayList[Long];      
+        var place0TimeBeforeStep:Long;
         public def this(iter:Long){
             globalIter = iter;
         }
@@ -62,11 +67,17 @@ public class LocalViewResilientExecutor {
     }
 
     public def run(app:LocalViewResilientIterativeApp) {
-        val startRun = Timer.milliTime();
+        run(app, Timer.milliTime());
+    }
+    
+    //the startRunTime parameter is added to allow the executor to consider 
+    //any initlization time done by the application before starting the executor  
+    public def run(app:LocalViewResilientIterativeApp, startRunTime:Long) {
+        applicationInitializationTime = Timer.milliTime() - startRunTime;
         
         val root = here;
         placeTempData = PlaceLocalHandle.make[PlaceTempData](places, ()=>new PlaceTempData(0));
-        
+        placeTempData().place0TimePerIter = new ArrayList[Long]();
         if (isTimerHammerActive())
             hammer.startTimerHammer();
         
@@ -75,7 +86,7 @@ public class LocalViewResilientExecutor {
 
                 if (restoreRequired) {
                     if (lastCheckpointIter > -1) {
-                        if (VERBOSE) Console.OUT.println("restoring at iter " + lastCheckpointIter);
+                        if (VERBOSE) Console.OUT.println("Restoring to iter " + lastCheckpointIter);
                         restoreTime -= Timer.milliTime();
                         
                         val newPG = PlaceGroupBuilder.createRestorePlaceGroup(places);
@@ -92,17 +103,23 @@ public class LocalViewResilientExecutor {
                             async hammer.checkKillRestore(tmpIter);
                         }
                         
-                        
                         appOnlyRestoreTime -= Timer.milliTime();
                         store.updatePlaces(newPG);
                         app.restore(newPG, store, lastCheckpointIter);
                         appOnlyRestoreTime += Timer.milliTime();
                         
+                        
                         val lastIter = lastCheckpointIter;
-                        val place0LastIteration = placeTempData().place0DebuggingTotalIter;
+                        //save place0 debugging data
+                        val tmpPlace0LastIteration = placeTempData().place0DebuggingTotalIter;
+                        val tmpPlace0TimePerIter = placeTempData().place0TimePerIter;
+                        
                         PlaceLocalHandle.destroy(places, placeTempData, (Place)=>true);
                         placeTempData = PlaceLocalHandle.make[PlaceTempData](newPG, ()=>new PlaceTempData(lastIter));
-                        placeTempData().place0DebuggingTotalIter = place0LastIteration;
+                        
+                        //restore place0 debugging data
+                        placeTempData().place0DebuggingTotalIter = tmpPlace0LastIteration;
+                        placeTempData().place0TimePerIter = tmpPlace0TimePerIter;
                         
                         places = newPG;
                         restoreRequired = false;
@@ -153,9 +170,15 @@ public class LocalViewResilientExecutor {
                                 async hammer.checkKillStep_local(tmpIter);
                             }
                         
+                            placeTempData().place0TimeBeforeStep = Timer.milliTime();
+                            
                             app.step_local();
-                            if (VERBOSE) Console.OUT.println("["+here+"] step completed globalIter["+placeTempData().globalIter+"] ...");
+                            
+                            if (here.id == 0)
+                                placeTempData().place0TimePerIter.add( (Timer.milliTime()-placeTempData().place0TimeBeforeStep) );
+                            
                             placeTempData().globalIter++;
+                            
                             localIter++;
                             
                             placeTempData().place0DebuggingTotalIter++;
@@ -165,6 +188,8 @@ public class LocalViewResilientExecutor {
                 } catch (ex:Exception) {
                     Console.OUT.println("[Hammer Log] Time DPE discovered is ["+Timer.milliTime()+"] ...");
                     stepExecTime += Timer.milliTime();
+                    failureDetectionTime = Timer.milliTime() - hammer.killPlaceTime;
+                    placeTempData().place0TimePerIter.add( (Timer.milliTime()-placeTempData().place0TimeBeforeStep) );
                     throw ex;
                 }
             
@@ -180,13 +205,18 @@ public class LocalViewResilientExecutor {
         if (isTimerHammerActive())
             hammer.stopTimerHammer();
         
-        Console.OUT.println("ResilientExecutor completed:checkpointTime:"+checkpointTime+":restoreTime:"+restoreTime+":stepsTime:"+stepExecTime+":AllTime:"+runTime+":checkpointCount:"+checkpointCount+":restoreCount:"+restoreCount+":totalIterations:"+placeTempData().place0DebuggingTotalIter+":applicationOnlyRestoreTime:"+appOnlyRestoreTime);
+        Console.OUT.println("ResilientExecutor completed:checkpointTime:"+checkpointTime+":restoreTime:"+restoreTime+":stepsTime:"+stepExecTime+":AllTime:"+runTime+":checkpointCount:"+checkpointCount+":restoreCount:"+restoreCount+":totalIterations:"+placeTempData().place0DebuggingTotalIter+":applicationOnlyRestoreTime:"+appOnlyRestoreTime+":failureDetectionTime:"+failureDetectionTime+":applicationInitializationTime:"+applicationInitializationTime);
         Console.OUT.println("DetailedCheckpointingTime["+checkpointString+"]");
         if (VERBOSE){
             var str:String = "";
             for (p in places)
                 str += p.id + ",";
             Console.OUT.println("List of final survived places are: " + str);
+            
+            var timePerIterStr:String = "";
+            for (x in placeTempData().place0TimePerIter)
+                timePerIterStr += x + ",";
+            Console.OUT.println("Place0 Time Per Iteration: " + timePerIterStr);            
         }
     }
     

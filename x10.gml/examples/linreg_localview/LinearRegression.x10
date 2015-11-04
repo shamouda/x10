@@ -88,11 +88,12 @@ public class LinearRegression implements LocalViewResilientIterativeApp {
         return appTempDataPLH().iter >= maxIterations;
     }
     
-    public def run() {
+    //startTime parameter added to account for the time taken by RunLinReg to initialize the input data
+    public def run(startTime:Long) {
         assert (V.isDistVertical()) : "dist block matrix must have vertical distribution";
         val places = V.places();
         appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());
-        new LocalViewResilientExecutor(checkpointFreq, places).run(this);
+        new LocalViewResilientExecutor(checkpointFreq, places).run(this, startTime);
         return d_w.local();
     }
     
@@ -191,7 +192,7 @@ appTempDataPLH().localCompTime += Timer.milliTime();
         d_p.remake(newPg, newTeam);
         d_q.remake(newPg, newTeam);
         d_r.remake(newPg, newTeam);
-        d_w.remake(newPg, newTeam);        
+        d_w.remake(newPg, newTeam);
         Vp.remake(V.getAggRowBs(), newPg, newTeam);
         
         store.restore_local();

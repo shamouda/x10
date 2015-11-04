@@ -42,12 +42,14 @@ import x10.util.Timer;
  *    before killing the specified place
  */
 public class PlaceHammer (configFile:String) {
-
     class HammerRecord (timeOrIter:Long, placeId:Long, iterKillType:String) { }
 
     private var mode:Long = -1; // 1- iterations, 2- time
     private var records:ArrayList[HammerRecord];
-
+    private val root = GlobalRef[PlaceHammer](this);
+    
+    public transient var killPlaceTime:Long = -1;
+    
     public static def make(configFile:String): PlaceHammer {
         val hammer = new PlaceHammer(configFile);
         hammer.init();
@@ -144,8 +146,9 @@ public class PlaceHammer (configFile:String) {
                 }
                 else{
                     if (here.id == rec.placeId) {
-                        at (Place(0)) {
-                            Console.OUT.println("[Hammer Log] Time before killing is ["+Timer.milliTime()+"] ...");
+                        at (root) {
+                            root().killPlaceTime = Timer.milliTime();
+                            Console.OUT.println("[Hammer Log] Time before killing is ["+root().killPlaceTime+"] ...");
                         }
                         Console.OUT.println("[Hammer Log] Killing ["+here+"] ...");
                         System.killHere();

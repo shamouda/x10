@@ -84,6 +84,9 @@ public class RunLinReg {
                 Console.OUT.println("Skipping "+skipPlaces+" places to reserve for failure.");
             }
         }
+        
+        val startTime = Timer.milliTime();
+        
         val places = (skipPlaces==0n) ? Place.places() 
                                       : PlaceGroupBuilder.execludeSparePlaces(skipPlaces);
         val team = new Team(places);
@@ -93,6 +96,7 @@ public class RunLinReg {
 
         val X:DistBlockMatrix;
         val y:DistVector(X.M);
+        
         if (inputFile.equals("")) {
             Console.OUT.printf("Linear regression with random examples X(%d,%d) blocks(%dx%d) ", mX, nX, rowBlocks, colBlocks);
             Console.OUT.printf("dist(%dx%d) nonzeroDensity:%g\n", places.size(), 1, nonzeroDensity);
@@ -159,11 +163,10 @@ public class RunLinReg {
         }
 
         Debug.flushln("Starting parallel linear regression");
-        val startTime = Timer.milliTime();
-        parLR.run();
-        val totalTime = Timer.milliTime() - startTime;
-		Console.OUT.printf("Parallel linear regression --- Total: %8d ms, parallel: %8d ms, sequential: %8d ms, communication: %8d ms\n",
-				totalTime, parLR.parCompT, parLR.seqCompT, parLR.commT);
+        parLR.run(startTime);
+        //val totalTime = Timer.milliTime() - startTime;
+		//Console.OUT.printf("Parallel linear regression --- Total: %8d ms, parallel: %8d ms, sequential: %8d ms, communication: %8d ms\n",
+		//		totalTime, parLR.parCompT, parLR.seqCompT, parLR.commT);
         //parLR.printTimes();
 
         if (print) {
