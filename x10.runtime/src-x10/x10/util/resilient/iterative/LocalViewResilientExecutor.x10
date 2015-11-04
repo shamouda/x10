@@ -201,7 +201,7 @@ public class LocalViewResilientExecutor {
             }
         }while(restoreRequired || !app.isFinished_local());
         
-        val runTime = (Timer.milliTime() - startRun);
+        val runTime = (Timer.milliTime() - startRunTime);
         if (isTimerHammerActive())
             hammer.stopTimerHammer();
         

@@ -150,6 +150,11 @@ public class DistVector(M:Long) implements Snapshottable {
         return this;
     }
     
+    public def initRandom_local(min:Long, max:Long):DistVector(this) {
+        distV().vec.initRandom(min, max);    
+        return this;
+    }
+    
     public def init(f:(Long)=>ElemType):DistVector(this) {
         val rootPlaces = distV().places;
         finish ateach(Dist.makeUnique(rootPlaces)) {
