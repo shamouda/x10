@@ -43,9 +43,6 @@ public struct Team {
     private static val DUMMY_AT:Boolean = (System.getenv("X10_TEAM_DUMMY_AT") != null 
             && System.getenv("X10_TEAM_DUMMY_AT").equals("1"));
     
-    private static val CALL_BARRIER_BEFORE_BLOCKING_COLLECTIVES:Boolean = (System.getenv("CALL_BARRIER_BEFORE_BLOCKING_COLLECTIVES") != null
-            && System.getenv("CALL_BARRIER_BEFORE_BLOCKING_COLLECTIVES").equals("1"));
-    
     /** A team that has one member at each place. */
     public static val WORLD = Team(0n, Place.places(), here.id());
     
@@ -708,10 +705,8 @@ public struct Team {
             finish nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
         } else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             if (DEBUG) Runtime.println(here + " entering pre-allreduce barrier on team "+id);
-            if (CALL_BARRIER_BEFORE_BLOCKING_COLLECTIVES)
-            	barrier();
+            barrier();
             if (DEBUG) Runtime.println(here + " entering native allreduce on team "+id);
-            
             val success = nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
             if (!success)
                 throw new DeadPlaceException("[Native] Team "+id+" contains at least one dead member");
@@ -1101,8 +1096,7 @@ public struct Team {
             val teamidcopy = this.teamid; // needed to prevent serializing "this" in at() statements
             
             val dummyAtEnv = System.getenv("X10_TEAM_DUMMY_AT_COUNT");
-            val DUMMY_AT_COUNT =(dummyAtEnv!=null) ? Long.parseLong(dummyAtEnv) : 1000;            
-            
+            val DUMMY_AT_COUNT =(dummyAtEnv!=null) ? Long.parseLong(dummyAtEnv) : 1000;
 
             /**
              * Block the current activity until condition is set to true by
@@ -1154,7 +1148,7 @@ public struct Team {
                                         }
                                     }
                                 }catch(dpe:Exception){
-                                    Console.OUT.println("Dummy At exception ["+dpe.getMessage()+"] ...");                                    
+                                    Console.OUT.println("Dummy At exception ["+dpe.getMessage()+"] ...");
                                     Team.state(teamidcopy).isValid = false;
                                 }
                             }
