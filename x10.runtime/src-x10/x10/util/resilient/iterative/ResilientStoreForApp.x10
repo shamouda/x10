@@ -144,6 +144,8 @@ public class ResilientStoreForApp {
     }
     
     public def restore() {
+        if (isLocalView)
+            return restore_local();
         val appSnapshot = getConsistentSnapshot();
         val iter = appSnapshot.map.keySet().iterator();
         finish{
@@ -155,7 +157,7 @@ public class ResilientStoreForApp {
         }
     }
     
-    public def restore_local() {        
+    private def restore_local() {        
         val appSnapshot = getConsistentSnapshot();
         val appSnapshotMap = appSnapshot.map;
        

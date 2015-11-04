@@ -60,6 +60,9 @@ public class LinearRegression implements LocalViewResilientIterativeApp {
     private val nzd:Float;
     private val root:Place;
     
+    //the default is to save the big matrix, unless this variable is set to 0
+    val saveDistBlockMatrix = System.getenv("GML_APP_SAVE_BIG_MATRIX"); 
+    
     private var appTempDataPLH:PlaceLocalHandle[AppTempData];
     var team:Team;
     
@@ -90,6 +93,8 @@ public class LinearRegression implements LocalViewResilientIterativeApp {
     
     //startTime parameter added to account for the time taken by RunLinReg to initialize the input data
     public def run(startTime:Long) {
+        if (startTime == 0)
+            startTime = Timer.milliTime();        
         assert (V.isDistVertical()) : "dist block matrix must have vertical distribution";
         val places = V.places();
         appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());
@@ -166,7 +171,8 @@ appTempDataPLH().localCompTime += Timer.milliTime();
     
     public def checkpoint(resilientStore:ResilientStoreForApp) {    
         resilientStore.startNewSnapshot();
-        //resilientStore.saveReadOnly(V);
+        if (saveDistBlockMatrix == null && saveDistBlockMatrix.equals("1"))
+            resilientStore.saveReadOnly(V);
         resilientStore.save(d_p);
         resilientStore.save(d_q);
         resilientStore.save(d_r);
@@ -195,7 +201,7 @@ appTempDataPLH().localCompTime += Timer.milliTime();
         d_w.remake(newPg, newTeam);
         Vp.remake(V.getAggRowBs(), newPg, newTeam);
         
-        store.restore_local();
+        store.restore();
         
         //TODO: make a snapshottable class for the app data
         PlaceLocalHandle.destroy(oldPlaces, appTempDataPLH, (Place)=>true);
@@ -204,7 +210,8 @@ appTempDataPLH().localCompTime += Timer.milliTime();
         finish ateach(Dist.makeUnique(newPg)) {
             appTempDataPLH().iter = lastCheckpointIter;
             appTempDataPLH().norm_r2 = lastCheckpointNorm;
-            V.initRandom_local();
+            if (saveDistBlockMatrix != null && saveDistBlockMatrix.equals("0"))
+                V.initRandom_local();
         }
         Console.OUT.println("Restore succeeded. Restarting from iteration["+appTempDataPLH().iter+"] norm["+appTempDataPLH().norm_r2+"] ...");
     }
