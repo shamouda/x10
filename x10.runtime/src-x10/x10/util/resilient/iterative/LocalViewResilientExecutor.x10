@@ -206,17 +206,17 @@ public class LocalViewResilientExecutor {
             hammer.stopTimerHammer();
         
         Console.OUT.println("ResilientExecutor completed:checkpointTime:"+checkpointTime+":restoreTime:"+restoreTime+":stepsTime:"+stepExecTime+":AllTime:"+runTime+":checkpointCount:"+checkpointCount+":restoreCount:"+restoreCount+":totalIterations:"+placeTempData().place0DebuggingTotalIter+":applicationOnlyRestoreTime:"+appOnlyRestoreTime+":failureDetectionTime:"+failureDetectionTime+":applicationInitializationTime:"+applicationInitializationTime);
-        Console.OUT.println("DetailedCheckpointingTime["+checkpointString+"]");
+        Console.OUT.println("DetailedCheckpointingTime:"+checkpointString);
+        var timePerIterStr:String = "";
+        for (x in placeTempData().place0TimePerIter)
+            timePerIterStr += x + ",";
+        Console.OUT.println("Place0TimePerIteration:" + timePerIterStr);
+        
         if (VERBOSE){
             var str:String = "";
             for (p in places)
                 str += p.id + ",";
-            Console.OUT.println("List of final survived places are: " + str);
-            
-            var timePerIterStr:String = "";
-            for (x in placeTempData().place0TimePerIter)
-                timePerIterStr += x + ",";
-            Console.OUT.println("Place0 Time Per Iteration: " + timePerIterStr);            
+            Console.OUT.println("List of final survived places are: " + str);            
         }
     }
     
