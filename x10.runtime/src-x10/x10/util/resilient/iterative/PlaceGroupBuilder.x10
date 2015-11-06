@@ -11,6 +11,8 @@
 
 package x10.util.resilient.iterative;
 
+import x10.util.ArrayList;
+
 /**
  * A utility class to test the use of arbitrary place groups in the GML library
  */
@@ -29,7 +31,7 @@ public class PlaceGroupBuilder {
         return v;
     }
 
-    public static def createRestorePlaceGroup(oldPlaceGroup:PlaceGroup):PlaceGroup {
+    public static def createRestorePlaceGroup(oldPlaceGroup:PlaceGroup):RestorePlaceGroup {
         if (VERBOSE){
             var str:String = "";
             for (p in oldPlaceGroup){
@@ -40,7 +42,7 @@ public class PlaceGroupBuilder {
         //RESTORE_MODE_SHRINK//
         if (mode == RESTORE_MODE_SHRINK) {
             if (VERBOSE) Console.OUT.println("Shrinking oldPlaceGroup ...");
-            return oldPlaceGroup.filterDeadPlaces();            
+            return new RestorePlaceGroup(oldPlaceGroup.filterDeadPlaces(), new ArrayList[Place]());            
         }
         
         
@@ -57,11 +59,12 @@ public class PlaceGroupBuilder {
         
         if (maxUsedPlaceId == Place.numPlaces()-1) {
             Console.OUT.println("[PlaceGroupBuilder Log] WARNING: No spare places available, forcing SHRINK mode ...");
-            return oldPlaceGroup.filterDeadPlaces();
+            return new RestorePlaceGroup(oldPlaceGroup.filterDeadPlaces(), new ArrayList[Place]());
         }
         
         var spareIndex:Long = maxUsedPlaceId+1;
-        val newPlaces = new x10.util.ArrayList[Place]();        
+        val group = new x10.util.ArrayList[Place]();
+        val addedSparePlaces = new x10.util.ArrayList[Place]();
         var deadCount:Long = 0;
         var allocated:Long = 0;
         for (p in oldPlaceGroup){
@@ -69,17 +72,19 @@ public class PlaceGroupBuilder {
                 deadCount++;
                 if (spareIndex < Place.numPlaces()){
                     if (VERBOSE) Console.OUT.println("adding place at spareIndex["+spareIndex+"] because p["+p.id+"] is dead ");
-                    newPlaces.add(Place(spareIndex++));  
+                    val spareP = Place(spareIndex++); 
+                    group.add(spareP);
+                    addedSparePlaces.add(spareP);
                     allocated++;
                 }
             }
             else{
                 if (VERBOSE) Console.OUT.println("adding place p["+p.id+"]");
-                newPlaces.add(p);
+                group.add(p);
             }
         }
         Console.OUT.println("[PlaceGroupBuilder Log] "+ deadCount +" Dead Place(s) Replaced by "+allocated+" Spare Places"); 
-        return new SparsePlaceGroup(newPlaces.toRail());        
+        return new RestorePlaceGroup(new SparsePlaceGroup(group.toRail()), addedSparePlaces);        
     }
 
     public static def execludeSparePlaces(sparePlaces:Long):PlaceGroup {
@@ -102,5 +107,14 @@ public class PlaceGroupBuilder {
         }
         var placeGroup:SparsePlaceGroup = new SparsePlaceGroup(livePlaces.toRail());
         return placeGroup;
+    }
+}
+
+class RestorePlaceGroup {
+    val newGroup:PlaceGroup;
+    val newAddedPlaces:ArrayList[Place];
+    public def this(g:PlaceGroup, n:ArrayList[Place]){
+        this.newGroup = g;
+        this.newAddedPlaces = n;
     }
 }

@@ -10,6 +10,8 @@
  */
 package x10.util.resilient.iterative;
 
+import x10.util.ArrayList;
+
 public interface LocalViewResilientIterativeApp {
     /** @return true if computation has finished. */
     public def isFinished_local():Boolean;
@@ -33,7 +35,8 @@ public interface LocalViewResilientIterativeApp {
      * @param newPlaces the set of places over which to restore
      * @param store a resilient store containing an application checkpoint
      * @param lastCheckpointIter the iteration number of the saved checkpoint
+     * @param list of added spare places for restore
      */
-    public def restore(newPlaces:PlaceGroup, store:ResilientStoreForApp, lastCheckpointIter:Long):void;
+    public def restore(newPlaces:PlaceGroup, store:ResilientStoreForApp, lastCheckpointIter:Long, newAddedPlaces:ArrayList[Place]):void;
     
 }

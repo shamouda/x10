@@ -145,19 +145,21 @@ public class ResilientStoreForApp {
     
     public def restore() {
         if (isLocalView)
-            return restore_local();
-        val appSnapshot = getConsistentSnapshot();
-        val iter = appSnapshot.map.keySet().iterator();
-        finish{
-            while (iter.hasNext()) {
-                val key = iter.next();
-                val distObjectSnapshot = appSnapshot.map.getOrElse(key, null);
-                async key.snapshottable.restoreSnapshot(distObjectSnapshot);
+            restore_local();
+        else{
+            val appSnapshot = getConsistentSnapshot();
+            val iter = appSnapshot.map.keySet().iterator();
+            finish{
+                while (iter.hasNext()) {
+                    val key = iter.next();
+                    val distObjectSnapshot = appSnapshot.map.getOrElse(key, null);
+                    async key.snapshottable.restoreSnapshot(distObjectSnapshot);
+                }
             }
         }
     }
     
-    private def restore_local() {        
+    private def restore_local() {
         val appSnapshot = getConsistentSnapshot();
         val appSnapshotMap = appSnapshot.map;
        

@@ -89,7 +89,8 @@ public class LocalViewResilientExecutor {
                         if (VERBOSE) Console.OUT.println("Restoring to iter " + lastCheckpointIter);
                         restoreTime -= Timer.milliTime();
                         
-                        val newPG = PlaceGroupBuilder.createRestorePlaceGroup(places);
+                        val restorePGResult = PlaceGroupBuilder.createRestorePlaceGroup(places);
+                        val newPG = restorePGResult.newGroup;
                         
                         if (VERBOSE){
                             var str:String = "";
@@ -105,7 +106,7 @@ public class LocalViewResilientExecutor {
                         
                         appOnlyRestoreTime -= Timer.milliTime();
                         store.updatePlaces(newPG);
-                        app.restore(newPG, store, lastCheckpointIter);
+                        app.restore(newPG, store, lastCheckpointIter, restorePGResult.newAddedPlaces);
                         appOnlyRestoreTime += Timer.milliTime();
                         
                         

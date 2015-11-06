@@ -62,7 +62,8 @@ public class ResilientExecutor {
                 if (restoreRequired) {
                     if (lastCheckpointIter > -1) {
                         val startRestore = Timer.milliTime();
-                        val newPG = PlaceGroupBuilder.createRestorePlaceGroup(places);
+                        val restorePGResult = PlaceGroupBuilder.createRestorePlaceGroup(places);
+                        val newPG = restorePGResult.newGroup;
                         Console.OUT.println("restoring at iter " + lastCheckpointIter);
 
                         if (isIterativeHammerActive()){
@@ -70,7 +71,7 @@ public class ResilientExecutor {
                             async hammer.checkKillRestore(tmpIter);
                         }
                         
-                        app.restore(newPG, store, lastCheckpointIter);
+                        app.restore(newPG, store, lastCheckpointIter, restorePGResult.newAddedPlaces);
                         
                         iter = lastCheckpointIter;
                         places = newPG;

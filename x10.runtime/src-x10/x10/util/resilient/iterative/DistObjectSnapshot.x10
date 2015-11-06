@@ -196,7 +196,9 @@ public abstract class DistObjectSnapshot {
             if (verbose>=1) DEBUG(key, "load called");
             /* First, try to load locally */
             try {
-                return loadLocal(key);
+                val r = loadLocal(key);
+                if (verbose>=1) DEBUG(key, "["+here+"] local restore succeeded");
+                return r;
             } catch (e:Exception) {
                 if (verbose>=1) DEBUG(key, "local restore failed with exception " + e);
                 /* falls through, check other places */
@@ -208,7 +210,9 @@ public abstract class DistObjectSnapshot {
                 if (backupPlace != here.id && !Place.isDead(backupPlace)) {
                     if (verbose>=1) DEBUG(key, "checking backup place " + backupPlace);
                     try {
-                        return loadRemote(key, backupPlace);
+                        val r = loadRemote(key, backupPlace);
+                        if (verbose>=1) DEBUG(key, "["+here+"] remote restore succeeded");
+                        return r;
                     } catch (e:Exception) {
                         if (verbose>=1) DEBUG(key, "failed with exception " + e);
                         /* falls through, try next place */
@@ -220,6 +224,7 @@ public abstract class DistObjectSnapshot {
             if (verbose>=1) DEBUG(key, "load throwing exception");
             throw new Exception("No data for key " + key);
         }
+        
         public def delete(key:Any) {
             finish for (pl in Place.places()) {
                 if (pl.isDead()) continue;
