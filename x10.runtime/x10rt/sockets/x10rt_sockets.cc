@@ -134,6 +134,19 @@ x10rt_error fatal_error(const char* message)
 		return fatal("(at place %u): %s\n", context.myPlaceId, message);
 }
 
+x10rt_error fatal_error_resilient(const char* message)
+{
+	char* resilientmode = getenv("X10_RESILIENT_MODE");
+	if (resilientmode && atoi(resilientmode) > 0)
+		return X10RT_ERR_OK;
+
+	if (errno)
+		return fatal("(at place %u): %s: %s\n", context.myPlaceId, message, strerror(errno));
+	else
+		return fatal("(at place %u): %s\n", context.myPlaceId, message);
+}
+
+
 /*
  * This method determines if we should use a specific port number, or ask the OS
  * for one.  It looks at the X10_FORCEPORTS environment variable, which can take two forms.
@@ -1216,9 +1229,9 @@ bool probe (bool onlyProcessAccept, bool block)
 				x10rt_msg_params mp;
 				mp.dest_place = context.myPlaceId;
 				if (nonBlockingRead(context.socketLinks[whichPlaceToHandle].fd, &mp.type, sizeof(x10rt_msg_type)) < (int)sizeof(x10rt_msg_type))
-					return fatal_error("reading x10rt_msg_params.type"), false;
+					return fatal_error_resilient("reading x10rt_msg_params.type"), false;
 				if (nonBlockingRead(context.socketLinks[whichPlaceToHandle].fd, &mp.len, sizeof(uint32_t)) < (int)sizeof(uint32_t))
-					return fatal_error("reading x10rt_msg_params.len"), false;
+					return fatal_error_resilient("reading x10rt_msg_params.len"), false;
 				#ifdef DEBUG_MESSAGING
 					fprintf(stderr, "X10rt.Sockets: place %u decoded a message of type %d from place %u\n", context.myPlaceId, (int)mp.type, whichPlaceToHandle);
 				#endif
