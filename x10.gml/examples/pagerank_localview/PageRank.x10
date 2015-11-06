@@ -24,6 +24,7 @@ import x10.util.resilient.iterative.LocalViewResilientIterativeApp;
 import x10.util.resilient.iterative.LocalViewResilientExecutor;
 import x10.util.resilient.iterative.ResilientStoreForApp;
 import x10.util.Team;
+import x10.util.ArrayList;
 
 /**
  * Parallel Page Rank algorithm based on GML distributed block matrix.
@@ -117,16 +118,17 @@ public class PageRank implements LocalViewResilientIterativeApp {
         }
     }
 
-    public def run():Vector(G.N) {
+    public def run(startTime:Long):Vector(G.N) {
+        val start = (startTime != 0)?startTime:Timer.milliTime();  
         assert (G.isDistVertical()) : "dist block matrix must have vertical distribution";
     
         val places = G.places();
         appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());
     
-        new LocalViewResilientExecutor(chkpntIterations, places).run(this);
+        new LocalViewResilientExecutor(chkpntIterations, places).run(this, start);
 
-        paraRunTime = P.getCalcTime() + GP.getCalcTime();
-        commTime = P.getCommTime() + GP.getCommTime();
+//        paraRunTime = P.getCalcTime() + GP.getCalcTime();
+//        commTime = P.getCommTime() + GP.getCommTime();
         
         return P.local();
     }
@@ -154,7 +156,6 @@ public class PageRank implements LocalViewResilientIterativeApp {
         GP.mult_local(G, P);
         GP.scale_local(alpha);
     
-        val dotResult = new Rail[Double](1);
         val teleport = U.dot_local(P) * (1-alpha);
         
         GP.copyTo(root, P.local());  // only root will have copy of GP in P.local()        
@@ -175,26 +176,26 @@ public class PageRank implements LocalViewResilientIterativeApp {
         store.commit();
     }
 
-    public def restore(newPlaces:PlaceGroup, store:ResilientStoreForApp, lastCheckpointIter:Long):void {
+    public def restore(newGroup:PlaceGroup, store:ResilientStoreForApp, lastCheckpointIter:Long, newAddedPlaces:ArrayList[Place]):void {
         val oldPlaces = G.places();
-        val newTeam = new Team(newPlaces);
+        val newTeam = new Team(newGroup);
         
-        val newRowPs = newPlaces.size();
+        val newRowPs = newGroup.size();
         val newColPs = 1;
         Console.OUT.println("Going to restore PageRank app, newRowPs["+newRowPs+"], newColPs["+newColPs+"] ...");
-        G.remakeSparse(newRowPs, newColPs, nzd, newPlaces);
-        U.remake(G.getAggRowBs(), newPlaces, newTeam);
-        P.remake(newPlaces, newTeam);
+        G.remakeSparse(newRowPs, newColPs, nzd, newGroup, newAddedPlaces);	
+        U.remake(G.getAggRowBs(), newGroup, newTeam);
+        P.remake(newGroup, newTeam);
 
-        GP.remake(G.getAggRowBs(), newPlaces, newTeam);
+        GP.remake(G.getAggRowBs(), newGroup, newTeam);
         
         store.restore();
         
         //TODO: make a snapshottable class for the app data
         PlaceLocalHandle.destroy(oldPlaces, appTempDataPLH, (Place)=>true);
-        appTempDataPLH = PlaceLocalHandle.make[AppTempData](newPlaces, ()=>new AppTempData());
+        appTempDataPLH = PlaceLocalHandle.make[AppTempData](newGroup, ()=>new AppTempData());
         //adjust the iteration number and the norm value
-        finish ateach(Dist.makeUnique(newPlaces)) {
+        finish ateach(Dist.makeUnique(newGroup)) {
             appTempDataPLH().iter = lastCheckpointIter;
         }
         
