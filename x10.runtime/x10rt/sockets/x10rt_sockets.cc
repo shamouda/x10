@@ -1026,21 +1026,21 @@ void x10rt_net_send_get (x10rt_msg_params *parameters, void *srcAddr, void *dstA
 	// Format: type, p.type, p.len, p.msg, bufferlen, srcAddr, dstAddr
 	enum MSGTYPE m = GET;
 	if (nonBlockingWrite(parameters->dest_place, &m, sizeof(m)) < (int)sizeof(m))
-		return (void)fatal_error("sending GET MSGTYPE");
+		return (void)fatal_error_resilient("sending GET MSGTYPE");
 	if (nonBlockingWrite(parameters->dest_place, &parameters->type, sizeof(parameters->type)) < (int)sizeof(parameters->type))
-		return (void)fatal_error("sending GET x10rt_msg_params.type");
+		return (void)fatal_error_resilient("sending GET x10rt_msg_params.type");
 	if (nonBlockingWrite(parameters->dest_place, &parameters->len, sizeof(parameters->len)) < (int)sizeof(parameters->len))
-		return (void)fatal_error("sending GET x10rt_msg_params.len");
+		return (void)fatal_error_resilient("sending GET x10rt_msg_params.len");
 	if (parameters->len > 0)
 		if (nonBlockingWrite(parameters->dest_place, parameters->msg, parameters->len) < (int)parameters->len)
-			return (void)fatal_error("sending GET x10rt_msg_params.msg");
+			return (void)fatal_error_resilient("sending GET x10rt_msg_params.msg");
 	if (nonBlockingWrite(parameters->dest_place, &bufferLen, sizeof(x10rt_copy_sz)) < (int)sizeof(x10rt_copy_sz))
-		return (void)fatal_error("sending GET bufferLen");
+		return (void)fatal_error_resilient("sending GET bufferLen");
 	if (bufferLen > 0) {
         if (nonBlockingWrite(parameters->dest_place, &srcAddr, sizeof(void*)) < (int)sizeof(void*))
-			return (void)fatal_error("sending GET srcAddr");
+			return (void)fatal_error_resilient("sending GET srcAddr");
 		if (nonBlockingWrite(parameters->dest_place, &dstAddr, sizeof(void*), COPY_PUT_GET_BUFFER) < (int)sizeof(void*))
-			return (void)fatal_error("sending GET dstAddr");
+			return (void)fatal_error_resilient("sending GET dstAddr");
     }
 	pthread_mutex_unlock(&context.writeLocks[parameters->dest_place]);
 }
@@ -1065,21 +1065,21 @@ void x10rt_net_send_put (x10rt_msg_params *parameters, void *srcAddr, void *dstA
 	// Format: type, p.type, p.len, p.msg, bufferlen, dstAddr, buffer contents
 	enum MSGTYPE m = PUT;
 	if (nonBlockingWrite(parameters->dest_place, &m, sizeof(m)) < (int)sizeof(m))
-		return (void)fatal_error("sending PUT MSGTYPE");
+		return (void)fatal_error_resilient("sending PUT MSGTYPE");
 	if (nonBlockingWrite(parameters->dest_place, &parameters->type, sizeof(parameters->type)) < (int)sizeof(parameters->type))
-		return (void)fatal_error("sending PUT x10rt_msg_params.type");
+		return (void)fatal_error_resilient("sending PUT x10rt_msg_params.type");
 	if (nonBlockingWrite(parameters->dest_place, &parameters->len, sizeof(parameters->len)) < (int)sizeof(parameters->len))
-		return (void)fatal_error("sending PUT x10rt_msg_params.len");
+		return (void)fatal_error_resilient("sending PUT x10rt_msg_params.len");
 	if (parameters->len > 0)
 		if (nonBlockingWrite(parameters->dest_place, parameters->msg, parameters->len) < (int)parameters->len)
-			return (void)fatal_error("sending PUT x10rt_msg_params.len");
+			return (void)fatal_error_resilient("sending PUT x10rt_msg_params.len");
 	if (nonBlockingWrite(parameters->dest_place, &bufferLen, sizeof(x10rt_copy_sz)) < (int)sizeof(x10rt_copy_sz))
-		return (void)fatal_error("sending PUT bufferLen");
+		return (void)fatal_error_resilient("sending PUT bufferLen");
     if (nonBlockingWrite(parameters->dest_place, &dstAddr, sizeof(void*)) < (int)sizeof(void*))
-        return (void)fatal_error("sending PUT dstAddr");
+        return (void)fatal_error_resilient("sending PUT dstAddr");
 	if (bufferLen > 0) {
 		if (nonBlockingWrite(parameters->dest_place, srcAddr, bufferLen, COPY_PUT_GET_BUFFER) < (int)bufferLen)
-			return (void)fatal_error("sending PUT buffer");
+			return (void)fatal_error_resilient("sending PUT buffer");
     }
 	pthread_mutex_unlock(&context.writeLocks[parameters->dest_place]);
 }
@@ -1250,7 +1250,7 @@ bool probe (bool onlyProcessAccept, bool block)
 						heapAllocated = true;
 					}
 					if (nonBlockingRead(context.socketLinks[whichPlaceToHandle].fd, mp.msg, mp.len) < (int)mp.len)
-						return fatal_error("reading x10rt_msg_params.msg"), false;
+						return fatal_error_resilient("reading x10rt_msg_params.msg"), false;
 				}
 				else
 					mp.msg = NULL;
@@ -1330,14 +1330,14 @@ bool probe (bool onlyProcessAccept, bool block)
 						// Format: type, p.type, p.len, p.msg, bufferlen, dstAddr, buffer
 						enum MSGTYPE m = GET_COMPLETED;
 						if (nonBlockingWrite(whichPlaceToHandle, &m, sizeof(m)) < (int)sizeof(m))
-							return fatal_error("sending GET_COMPLETED MSGTYPE"), false;
+							return fatal_error_resilient("sending GET_COMPLETED MSGTYPE"), false;
 						if (nonBlockingWrite(whichPlaceToHandle, &mp.type, sizeof(mp.type)) < (int)sizeof(mp.type))
-							return fatal_error("sending GET_COMPLETED x10rt_msg_params.type"), false;
+							return fatal_error_resilient("sending GET_COMPLETED x10rt_msg_params.type"), false;
 						if (nonBlockingWrite(whichPlaceToHandle, &mp.len, sizeof(mp.len)) < (int)sizeof(mp.len))
-							return fatal_error("sending GET_COMPLETED x10rt_msg_params.len"), false;
+							return fatal_error_resilient("sending GET_COMPLETED x10rt_msg_params.len"), false;
 						if (mp.len > 0)
 							if (nonBlockingWrite(whichPlaceToHandle, mp.msg, mp.len) < (int)mp.len)
-								return fatal_error("sending GET_COMPLETED x10rt_msg_params.msg"), false;
+								return fatal_error_resilient("sending GET_COMPLETED x10rt_msg_params.msg"), false;
 						if (nonBlockingWrite(whichPlaceToHandle, &dataLen, sizeof(x10rt_copy_sz)) < (int)sizeof(x10rt_copy_sz))
 							return fatal_error("sending GET_COMPLETED dataLen"), false;
 						if (dataLen > 0)
