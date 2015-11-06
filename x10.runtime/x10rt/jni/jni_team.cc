@@ -429,7 +429,7 @@ JNIEXPORT void JNICALL Java_x10_x10rt_TeamSupport_nativeScatterImpl(JNIEnv *env,
  * Method:    nativeBcastImpl
  * Signature: (IIILjava/lang/Object;ILjava/lang/Object;IIILx10/lang/FinishState;)V
  */
-JNIEXPORT void JNICALL Java_x10_x10rt_TeamSupport_nativeBcastImpl(JNIEnv *env, jclass klazz,
+JNIEXPORT jobject JNICALL Java_x10_x10rt_TeamSupport_nativeBcastImpl(JNIEnv *env, jclass klazz,
                                                                       jint id, jint role, jint root,
                                                                       jobject src, jint src_off,
                                                                       jobject dst, jint dst_off,
@@ -578,7 +578,7 @@ JNIEXPORT void JNICALL Java_x10_x10rt_TeamSupport_nativeBcastImpl(JNIEnv *env, j
     callbackArg->srcData = srcData;
     callbackArg->dstData = dstData;
 
-    x10rt_bcast(id, role, root, srcData, dstData, el, count, &postCopyCallback, callbackArg);
+    return (jobject)x10rt_bcast(id, role, root, srcData, dstData, el, count, &postCopyCallback, &postCopyCallback, callbackArg);
 }
 
 
