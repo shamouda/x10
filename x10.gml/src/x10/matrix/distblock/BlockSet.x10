@@ -41,7 +41,6 @@ public class BlockSet  {
     
     public val blocklist:ArrayList[MatrixBlock];
     
-    public val places:PlaceGroup;
     /**
      * This is used for fast access when distribution is DistGrid.
      */
@@ -52,42 +51,44 @@ public class BlockSet  {
 
     public var snapshotDistInfo:SnapshotDistributionInfo;
     
-    public def this(g:Grid, map:DistMap, plcs:PlaceGroup) {
+    public val placeIndex:Long;
+    
+    public def this(g:Grid, map:DistMap, placeIndex:Long) {
         grid=g; dmap = map;
         blocklist = new ArrayList[MatrixBlock]();    
         blockMap=null;
         rowCastPlaceMap=null;
         colCastPlaceMap=null;
-        places = plcs;
+        this.placeIndex = placeIndex;
         snapshotDistInfo = new SnapshotDistributionInfo();
     }
 
-    public def this(g:Grid, map:DistMap, bl:ArrayList[MatrixBlock], plcs:PlaceGroup) {
+    public def this(g:Grid, map:DistMap, bl:ArrayList[MatrixBlock], placeIndex:Long) {
         grid=g; dmap = map; blocklist = bl;
         blockMap = null;
         rowCastPlaceMap=null;
         colCastPlaceMap=null;
-        places = plcs;
+        this.placeIndex = placeIndex;
         snapshotDistInfo = new SnapshotDistributionInfo();
     }
 
 
-    public def this(g:Grid, map:DistMap, plcs:PlaceGroup, snapshotInfo:SnapshotDistributionInfo) {
+    public def this(g:Grid, map:DistMap, placeIndex:Long, snapshotInfo:SnapshotDistributionInfo) {
         grid=g; dmap = map;
         blocklist = new ArrayList[MatrixBlock]();    
         blockMap=null;
         rowCastPlaceMap=null;
         colCastPlaceMap=null;
-        places = plcs;
+        this.placeIndex = placeIndex;
         snapshotDistInfo = snapshotInfo;
     }
 
-    public def this(g:Grid, map:DistMap, bl:ArrayList[MatrixBlock], plcs:PlaceGroup, snapshotInfo:SnapshotDistributionInfo) {
+    public def this(g:Grid, map:DistMap, bl:ArrayList[MatrixBlock], placeIndex:Long, snapshotInfo:SnapshotDistributionInfo) {
         grid=g; dmap = map; blocklist = bl;
         blockMap = null;
         rowCastPlaceMap=null;
         colCastPlaceMap=null;
-        places = plcs;
+        this.placeIndex = placeIndex;
         snapshotDistInfo = snapshotInfo;
     }
     
@@ -102,7 +103,7 @@ public class BlockSet  {
      * @param  rowPs  number of group of blocks in row of grid distribution
      * @param  colPs  number of group of blocks in column of grid distribution
      */
-    public static def make(m:Long, n:Long, rowBs:Long, colBs:Long, rowPs:Long, colPs:Long) {
+    public static def make(m:Long, n:Long, rowBs:Long, colBs:Long, rowPs:Long, colPs:Long) { // non resilient version
         return make(m, n, rowBs, colBs, rowPs, colPs, Place.places());
     }
 
@@ -124,7 +125,7 @@ public class BlockSet  {
         assert (rowPs*colPs == places.size()) :
               "number of distributions groups of blocks must equal to number of places";
         val dp = new DistGrid(gd, rowPs, colPs);
-        return new BlockSet(gd, dp.dmap, places);
+        return new BlockSet(gd, dp.dmap, places.indexOf(here));
     }
     
     public static def makeForRestore(m:Long, n:Long, rowBs:Long, colBs:Long, rowPs:Long, colPs:Long, places:PlaceGroup, 
@@ -134,7 +135,7 @@ public class BlockSet  {
         assert (rowPs*colPs == places.size()) :
               "number of distributions groups of blocks must equal to number of places";
         val dp = new DistGrid(gd, rowPs, colPs);
-        return new BlockSet(gd, dp.dmap, places, snapshotInfo);
+        return new BlockSet(gd, dp.dmap, places.indexOf(here), snapshotInfo);
     }
     
 
@@ -143,7 +144,7 @@ public class BlockSet  {
         assert (rowPs*colPs == places.size()) :
             "number of distributions groups of blocks must equal to number of places";
         val dp = new DistGrid(gd, rowPs, colPs);
-        return new BlockSet(gd, dp.dmap, places);
+        return new BlockSet(gd, dp.dmap, places.indexOf(here));
     }
     
     public static def makeForRestore(gd:Grid, rowPs:Long, colPs:Long, places:PlaceGroup, snapshotInfo:SnapshotDistributionInfo) {
@@ -151,14 +152,13 @@ public class BlockSet  {
         assert (rowPs*colPs == places.size()) :
             "number of distributions groups of blocks must equal to number of places";
         val dp = new DistGrid(gd, rowPs, colPs);
-        return new BlockSet(gd, dp.dmap, places, snapshotInfo);
+        return new BlockSet(gd, dp.dmap, places.indexOf(here), snapshotInfo);
     }
     
     /**
      * Allocating dense blocks 
      */
-    public def allocDenseBlocks() : BlockSet {
-        val placeIndex = places.indexOf(here.id);
+    public def allocDenseBlocks() : BlockSet {        
         val itr = dmap.buildBlockIteratorAtPlace(placeIndex);
         while (itr.hasNext()) {
             val bid    = itr.next();
@@ -173,8 +173,7 @@ public class BlockSet  {
         return this;
     }
     
-    public def allocSparseBlocks(nzd:Float) : BlockSet {
-        val placeIndex = places.indexOf(here.id);
+    public def allocSparseBlocks(nzd:Float) : BlockSet {        
         val itr = dmap.buildBlockIteratorAtPlace(placeIndex);
         while (itr.hasNext()) {
             val bid    = itr.next();
@@ -206,15 +205,15 @@ public class BlockSet  {
         makeDense(g, d, Place.places());
     
     public static def makeDense(g:Grid, d:DistMap, places:PlaceGroup) =
-        new BlockSet(g,d,places).allocDenseBlocks();
+        new BlockSet(g,d,places.indexOf(here)).allocDenseBlocks();
     
     
     public static def makeSparse(g:Grid, d:DistMap, nzd:Float) =
-        makeSparse(g, d, nzd, Place.places());
+        makeSparse(g, d, nzd, Place.places()); //non resilient version
     
 
     public static def makeSparse(g:Grid, d:DistMap, nzd:Float, places:PlaceGroup) =
-        new BlockSet(g,d,places).allocSparseBlocks(nzd);
+        new BlockSet(g,d,places.indexOf(here)).allocSparseBlocks(nzd);
     
 
     /**
@@ -223,10 +222,10 @@ public class BlockSet  {
      * The front row blocks serves as temporary space to store column-wise cast of
      * the second operand matrix in SUMMA.
      */  
-    protected def makeFrontRowBlockSet(rowCnt:Long):BlockSet {
+    protected def makeFrontRowBlockSet(rowCnt:Long, places:PlaceGroup):BlockSet {
         //Fake row partitioning in all blocks
         val nbl:ArrayList[MatrixBlock] = allocFrontBlocks(rowCnt, (r:Long, c:Long)=>c);
-        val nbs = new BlockSet(grid, dmap, nbl, places);
+        val nbs = new BlockSet(grid, dmap, nbl, places.indexOf(here));
         nbs.colCastPlaceMap = CastPlaceMap.buildColCastMap(grid, dmap, places);
         nbs.rowCastPlaceMap = CastPlaceMap.buildRowCastMap(grid, dmap, places);
         return nbs;
@@ -237,19 +236,19 @@ public class BlockSet  {
      * each row block. The front column blocks serves temporary space to store row-wise cast of
      * the first operand matrix in SUMMA
      */   
-    protected def makeFrontColBlockSet(colCnt:Long):BlockSet {
+    protected def makeFrontColBlockSet(colCnt:Long, places:PlaceGroup):BlockSet {
         //Fake the column partitioning in all blocks
         val nbl:ArrayList[MatrixBlock] = allocFrontBlocks(colCnt, (r:Long, c:Long)=>r);
-        val nbs =  new BlockSet(grid, dmap, nbl, places);
+        val nbs =  new BlockSet(grid, dmap, nbl, places.indexOf(here));
         nbs.colCastPlaceMap = CastPlaceMap.buildColCastMap(grid, dmap, places);
         nbs.rowCastPlaceMap = CastPlaceMap.buildRowCastMap(grid, dmap, places);
         return nbs;
     }
 
-    protected def makeFrontColDenseBlockSet(colCnt:Long):BlockSet {
+    protected def makeFrontColDenseBlockSet(colCnt:Long, places:PlaceGroup):BlockSet {
         //Fake the column partitioning in all blocks
         val nbl:ArrayList[MatrixBlock] = allocFrontDenseBlocks(colCnt, (r:Long, c:Long)=>r);
-        val nbs =  new BlockSet(grid, dmap, nbl, places);
+        val nbs =  new BlockSet(grid, dmap, nbl, places.indexOf(here));
         nbs.colCastPlaceMap = CastPlaceMap.buildColCastMap(grid, dmap, places);
         nbs.rowCastPlaceMap = CastPlaceMap.buildRowCastMap(grid, dmap, places);
         return nbs;
@@ -410,7 +409,7 @@ public class BlockSet  {
         return find(rid, cid);
     }
     
-    public def findPlace(bid:Long) = dmap.findPlace(bid, places);
+    public def findPlace(bid:Long) = dmap.findPlace(bid, Place.places());
 
     public def findPlaceIndex(bid:Long) = dmap.findPlaceIndex(bid);
     
@@ -503,7 +502,7 @@ public class BlockSet  {
             val nmb = it.next().clone();
             bl.add(nmb);
         }
-        return new BlockSet(this.grid, this.dmap, bl, places);
+        return new BlockSet(this.grid, this.dmap, bl, placeIndex);
     }
 
     // The target block set must be dense blocks
@@ -897,7 +896,7 @@ public class BlockSet  {
             dstspa.finalizeRemoteCopyAtDest();
             offset += indexValueSize;
         }
-        val newBlockSet = new BlockSet(null, null, null);
+        val newBlockSet = new BlockSet(null, null, -1);
         newBlockSet.blocklist.addAll(blocksList);
         return newBlockSet;
     }
@@ -918,7 +917,7 @@ public class BlockSet  {
             dstspa.finalizeRemoteCopyAtDest();
             offset += indexValueSize;
         }
-        val newBlockSet = new BlockSet(null, null, null);
+        val newBlockSet = new BlockSet(null, null, -1);
         newBlockSet.blocklist.addAll(blocksList);
         return newBlockSet;
     }
@@ -943,7 +942,7 @@ public class BlockSet  {
             Rail.copy(allValueTarget, offset, blk.getData(), 0, dataSize);
             offset += dataSize;
         }
-        val newBlockSet = new BlockSet(null, null, null);
+        val newBlockSet = new BlockSet(null, null, -1);
         newBlockSet.blocklist.addAll(blocksList);
         return newBlockSet;
     }
@@ -957,13 +956,13 @@ public class BlockSet  {
             Rail.copy(value, offset, blk.getData(), 0, dataSize);
             offset += dataSize;
         }
-        val newBlockSet = new BlockSet(null, null, null);
+        val newBlockSet = new BlockSet(null, null, -1);
         newBlockSet.blocklist.addAll(blocksList);
         return newBlockSet;
     }
     
-    public def allocAndInitNonUniformSparseBlocks(f:(Long,Long)=>ElemType): BlockSet {        
-        val placeIndex = places.indexOf(here.id);
+    public def allocAndInitNonUniformSparseBlocks(f:(Long,Long)=>ElemType): BlockSet {       
+        
         val itr = dmap.buildBlockIteratorAtPlace(placeIndex);
         while (itr.hasNext()) {
             val bid    = itr.next();
