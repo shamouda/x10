@@ -157,15 +157,15 @@ public class PageRank implements ResilientIterativeApp {
         store.commit();
     }
 
-    public def restore(newPlaces:PlaceGroup, store:ResilientStoreForApp, lastCheckpointIter:Long):void {
-        val newRowPs = newPlaces.size();
+    public def restore(newGroup:PlaceGroup, store:ResilientStoreForApp, lastCheckpointIter:Long, newAddedPlaces:ArrayList[Place]):void {
+        val newRowPs = newGroup.size();
         val newColPs = 1;
         Console.OUT.println("Going to restore PageRank app, newRowPs["+newRowPs+"], newColPs["+newColPs+"] ...");
-        G.remakeSparse(newRowPs, newColPs, nzd, newPlaces);
-        U.remake(G.getAggRowBs(), newPlaces);
-        P.remake(newPlaces);
+        G.remakeSparse(newRowPs, newColPs, nzd, newGroup, newAddedPlaces);
+        U.remake(G.getAggRowBs(), newGroup);
+        P.remake(newGroup);
         
-        GP.remake(G.getAggRowBs(), newPlaces);
+        GP.remake(G.getAggRowBs(), newGroup);
     
         store.restore();
         

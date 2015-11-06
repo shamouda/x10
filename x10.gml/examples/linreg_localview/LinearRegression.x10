@@ -13,7 +13,7 @@ import x10.matrix.Vector;
 import x10.matrix.ElemType;
 import x10.regionarray.Dist;
 import x10.util.Timer;
-
+import x10.util.ArrayList;
 import x10.matrix.distblock.DistBlockMatrix;
 import x10.matrix.distblock.DupVector;
 import x10.matrix.distblock.DistVector;
@@ -93,12 +93,11 @@ public class LinearRegression implements LocalViewResilientIterativeApp {
     
     //startTime parameter added to account for the time taken by RunLinReg to initialize the input data
     public def run(startTime:Long) {
-        if (startTime == 0)
-            startTime = Timer.milliTime();        
+        val start = (startTime != 0)?startTime:Timer.milliTime();  
         assert (V.isDistVertical()) : "dist block matrix must have vertical distribution";
         val places = V.places();
         appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());
-        new LocalViewResilientExecutor(checkpointFreq, places).run(this, startTime);
+        new LocalViewResilientExecutor(checkpointFreq, places).run(this, start);
         return d_w.local();
     }
     
@@ -184,16 +183,16 @@ appTempDataPLH().localCompTime += Timer.milliTime();
     /**
      * Restore from the snapshot with new PlaceGroup
      */
-    public def restore(newPg:PlaceGroup, store:ResilientStoreForApp, lastCheckpointIter:Long) {
+    public def restore(newPg:PlaceGroup, store:ResilientStoreForApp, lastCheckpointIter:Long, newAddedPlaces:ArrayList[Place]) {
         val oldPlaces = V.places();
         val newTeam = new Team(newPg);
         val newRowPs = newPg.size();
         val newColPs = 1;
         //remake all the distributed data structures
         if (nzd < MAX_SPARSE_DENSITY) {
-            V.remakeSparse(newRowPs, newColPs, nzd, newPg);
+            V.remakeSparse(newRowPs, newColPs, nzd, newPg, newAddedPlaces);
         } else {
-            V.remakeDense(newRowPs, newColPs, newPg);
+            V.remakeDense(newRowPs, newColPs, newPg, newAddedPlaces);
         }
         d_p.remake(newPg, newTeam);
         d_q.remake(newPg, newTeam);

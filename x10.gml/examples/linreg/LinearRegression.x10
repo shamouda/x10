@@ -164,14 +164,14 @@ public class LinearRegression implements ResilientIterativeApp {
     /**
      * Restore from the snapshot with new PlaceGroup
      */
-    public def restore(newPg:PlaceGroup, store:ResilientStoreForApp, lastCheckpointIter:Long) {
+    public def restore(newPg:PlaceGroup, store:ResilientStoreForApp, lastCheckpointIter:Long, newAddedPlaces:ArrayList[Place]) {
         val newRowPs = newPg.size();
         val newColPs = 1;
         //remake all the distributed data structures
         if (nzd < MAX_SPARSE_DENSITY) {
-            V.remakeSparse(newRowPs, newColPs, nzd, newPg);
+            V.remakeSparse(newRowPs, newColPs, nzd, newPg, newAddedPlaces);
         } else {
-            V.remakeDense(newRowPs, newColPs, newPg);
+            V.remakeDense(newRowPs, newColPs, newPg, newAddedPlaces);
         }
         d_p.remake(newPg);
         Vp.remake(V.getAggRowBs(), newPg);
