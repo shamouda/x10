@@ -17,6 +17,7 @@ import x10.compiler.Inline;
 import x10.regionarray.Dist;
 import x10.util.Pair;
 import x10.util.StringBuilder;
+import x10.util.ArrayList;
 
 import x10.matrix.Matrix;
 import x10.matrix.util.Debug;
@@ -46,23 +47,26 @@ public class DistVector(M:Long) implements Snapshottable {
     transient var commTime:Long = 0;
     transient var calcTime:Long = 0;    
     private var team:Team;
+    private var places:PlaceGroup;
     
-    public def places() = distV().places;
+    public def places() = places;
 
     public def this(m:Long, vs:PlaceLocalHandle[DistVectorLocalState], pg:PlaceGroup) {
         property(m);
         distV  = vs;        
         team = new Team(pg);
+        places = pg;
     }
     
-    public def this(m:Long, vs:PlaceLocalHandle[DistVectorLocalState], team:Team) {
+    public def this(m:Long, vs:PlaceLocalHandle[DistVectorLocalState], pg:PlaceGroup, team:Team) {
         property(m);
         distV  = vs;        
         this.team = team;
+        places = pg;
     }
     
     public def getOffset():Int{
-         return distV().offsets(places().indexOf(here));
+         return distV().offsets(distV().placeIndex);
     }
     
     public def getSegSize():Rail[Int] = distV().segSize;
@@ -73,8 +77,8 @@ public class DistVector(M:Long) implements Snapshottable {
         val segsz = new Rail[Int](segNum, (i:Long)=>Grid.compBlockSize(m, segNum, i as Int) as Int);
         val offsets = RailUtils.scanExclusive(segsz, (x:Int, y:Int) => x+y, 0n);        
         val hdv = PlaceLocalHandle.make[DistVectorLocalState](pg,
-                ()=>new DistVectorLocalState(Vector.make(Grid.compBlockSize(m, segNum, pg.indexOf(here))),segsz,offsets, pg) );        
-        return new DistVector(m, hdv, team) as DistVector(m);
+                ()=>new DistVectorLocalState(Vector.make(Grid.compBlockSize(m, segNum, pg.indexOf(here))),segsz,offsets, pg.indexOf(here)) );        
+        return new DistVector(m, hdv, pg, team) as DistVector(m);
     }
     
     public static def make(m:Long, segNum:Long):DistVector(m) = make (m, segNum, Place.places(), Team.WORLD); 
@@ -88,8 +92,8 @@ public class DistVector(M:Long) implements Snapshottable {
             "number of vector segments must be equal to number of places";    
         val offsets = RailUtils.scanExclusive(segsz, (x:Int, y:Int) => x+y, 0n);
         val hdv = PlaceLocalHandle.make[DistVectorLocalState](pg,
-            ()=>new DistVectorLocalState(Vector.make(segsz(pg.indexOf(here))),segsz,offsets, pg) );        
-        return new DistVector(m, hdv, team) as DistVector(m);
+            ()=>new DistVectorLocalState(Vector.make(segsz(pg.indexOf(here))),segsz,offsets, pg.indexOf(here)) );        
+        return new DistVector(m, hdv, pg, team) as DistVector(m);
     }
     
     public static def make(m:Long, segsz:Rail[Int]):DistVector(m) = make (m, segsz, Place.places(), Team.WORLD);
@@ -102,30 +106,26 @@ public class DistVector(M:Long) implements Snapshottable {
     
     
     public def clone():DistVector(M) {
-        val places = distV().places;
         val dv = PlaceLocalHandle.make[DistVectorLocalState](places, 
                 ()=>distV().clone());    
-        return new DistVector(M, dv, distV().places) as DistVector(M);
+        return new DistVector(M, dv, places) as DistVector(M);
     }
     
     public def reset() {
-        val rootPlaces = distV().places;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
+        finish ateach(Dist.makeUnique(places)) {
             distV().vec.reset();
         }
     }
 
     public def init(dv:ElemType) : DistVector(this) {
-        val rootPlaces = distV().places;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
+        finish ateach(Dist.makeUnique(places)) {
             distV().vec.init(dv);
         }
         return this;
     }
     
     public def initRandom() : DistVector(this) {
-        val rootPlaces = distV().places;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
+        finish ateach(Dist.makeUnique(places)) {
             distV().vec.initRandom();
         }
         return this;
@@ -143,8 +143,7 @@ public class DistVector(M:Long) implements Snapshottable {
      * @param max upper bound of random values
      */ 
     public def initRandom(min:Long, max:Long):DistVector(this) {
-        val rootPlaces = distV().places;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
+        finish ateach(Dist.makeUnique(places)) {
             distV().vec.initRandom(min, max);
         }
         return this;
@@ -156,8 +155,7 @@ public class DistVector(M:Long) implements Snapshottable {
     }
     
     public def init(f:(Long)=>ElemType):DistVector(this) {
-        val rootPlaces = distV().places;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
+        finish ateach(Dist.makeUnique(places)) {
             distV().vec.init(f);
         }
         return this;
@@ -169,8 +167,7 @@ public class DistVector(M:Long) implements Snapshottable {
     }
     
     public def copyTo(dst:DistVector(M)):void {
-        val rootPlaces = distV().places;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
+        finish ateach(Dist.makeUnique(places)) {
             distV().vec.copyTo(dst.distV().vec);
         }
     }
@@ -178,8 +175,7 @@ public class DistVector(M:Long) implements Snapshottable {
     public def copyTo(vec:Vector(M)):void {
         val root = here;
         val gr = new GlobalRail[ElemType](vec.d);
-        val rootPlaces = distV().places;
-        finish for (place in rootPlaces) at (place) async {
+        finish for (place in places) at (place) async {
             val src = distV().vec.d;
             var dst:Rail[ElemType] = null;
             if (here.id == root.id){
@@ -206,8 +202,7 @@ distV().gathervTime += Timer.milliTime();
     public def copyFrom(vec:Vector(M)): void {
         val root = here;
         val gr = new GlobalRail[ElemType](vec.d);
-        val rootPlaces = distV().places;
-        finish for (place in rootPlaces) at (place) async {
+        finish for (place in places) at (place) async {
             var src:Rail[ElemType] = null;
             val dst = distV().vec.d;
             if (here.id == root.id){
@@ -260,7 +255,6 @@ distV().scattervTime += Timer.milliTime();
         val loc = find(x);
         val seg = loc.first as Int;
         val off = loc.second;
-        val places = distV().places;
         val dat = at(places(seg)) distV().vec(off);
         return dat;
     }
@@ -269,7 +263,6 @@ distV().scattervTime += Timer.milliTime();
         val loc = find(x);
         val seg = loc.first as Int;
         val off = loc.second;
-        val places = distV().places;
         at(places(seg)) distV().vec(off)=dv;
         return dv;
     }
@@ -278,8 +271,7 @@ distV().scattervTime += Timer.milliTime();
      * Scaling method. All copies are updated concurrently
      */
     public def scale(a:ElemType) {
-        val rootPlaces = distV().places;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
+        finish ateach(Dist.makeUnique(places)) {
             distV().vec.scale(a);
         }
         return this;
@@ -294,8 +286,7 @@ distV().scattervTime += Timer.milliTime();
      */
     public def cellAdd(that:DistVector(M))  {
         //assert (this.M==A.M&&this.N==A.N);
-        val rootPlaces = distV().places;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
+        finish ateach(Dist.makeUnique(places)) {
             val dst = distV().vec;
             val src = that.distV().vec as Vector(dst.M);
             dst.cellAdd(src);
@@ -304,8 +295,7 @@ distV().scattervTime += Timer.milliTime();
     }
 
     public def cellAdd(dv:ElemType)  {
-        val rootPlaces = distV().places;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
+        finish ateach(Dist.makeUnique(places)) {
             distV().vec.cellAdd(dv);
         }
         return this;
@@ -315,8 +305,7 @@ distV().scattervTime += Timer.milliTime();
      * Concurrently perform cellwise subtraction on all copies
      */
     public def cellSub(A:DistVector(M)) {
-        val rootPlaces = distV().places;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
+        finish ateach(Dist.makeUnique(places)) {
             val dst = distV().vec;
             val src = A.distV().vec as Vector(dst.M);
             dst.cellSub(src);
@@ -329,8 +318,7 @@ distV().scattervTime += Timer.milliTime();
      * Perform cell-wise subtraction  this = this - dv.
      */
     public def cellSub(dv:ElemType):DistVector(this) {
-        val rootPlaces = distV().places;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
+        finish ateach(Dist.makeUnique(places)) {
             distV().vec.cellSub(dv);
         }
         return this;
@@ -341,8 +329,7 @@ distV().scattervTime += Timer.milliTime();
      * the corresponding vector copies.
      */
     public def cellMult(A:DistVector(M)) {
-        val rootPlaces = distV().places;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
+        finish ateach(Dist.makeUnique(places)) {
             val dst = this.distV().vec;
             val src = A.distV().vec as Vector(dst.M);
             dst.cellMult(src);
@@ -355,8 +342,7 @@ distV().scattervTime += Timer.milliTime();
      * the corresponding vector copies.
      */    
     public def cellDiv(A:DistVector(M)) {
-        val rootPlaces = distV().places;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
+        finish ateach(Dist.makeUnique(places)) {
             val dst = this.distV().vec;
             val src = A.distV().vec as Vector(dst.M);
             dst.cellDiv(src);
@@ -385,7 +371,6 @@ distV().scattervTime += Timer.milliTime();
         val dot = finish(Reducible.SumReducer[Double]()) {
             var off:Long=0;
             val segSize = getSegSize();
-            val places = getPlaces();
             for (p in 0..(places.size()-1)) {
                 val offset = off;
                 val s = segSize(p);
@@ -409,7 +394,7 @@ distV().scattervTime += Timer.milliTime();
         val dist = distV().vec;
         val dup = v.local();
         var myDot:ElemType = 0.0 as ElemType;
-        val s = getSegSize()(distV().places.indexOf(here));
+        val s = getSegSize()(distV().placeIndex);
         for (i in 0..(s-1))
             myDot += dist(i) * dup(offset+i);
 distV().allReduceTime -= Timer.milliTime();
@@ -442,10 +427,10 @@ distV().allReduceTime += Timer.milliTime();
 
     //FIXME: review the correctness of using places here
     public operator this % (that:DistBlockMatrix(this.M)) = 
-         DistDupVectorMult.comp(this, that, DupVector.make(that.N, distV().places), false);
+         DistDupVectorMult.comp(this, that, DupVector.make(that.N, places), false);
     //FIXME: review the correctness of using places here
     public operator (that:DistBlockMatrix{self.N==this.M}) % this = 
-        DistDupVectorMult.comp(that, this, DupVector.make(that.M, distV().places), false);
+        DistDupVectorMult.comp(that, this, DupVector.make(that.M, places), false);
 
     /** Get the sum of all elements in this vector. */
     public def sum():ElemType = reduce((a:ElemType,b:ElemType)=>{a+b}, 0.0 as ElemType);
@@ -460,8 +445,7 @@ distV().allReduceTime += Timer.milliTime();
         
     public def equals(dv:DistVector(this.M)):Boolean {
         var ret:Boolean = true;   
-        val places = distV().places;
-        if (dv.getPlaces().equals(places)){
+        if (dv.places().equals(places)){
             for (var p:Long=0; p<places.size() &&ret; p++) {
                 val pindx = p;
                 ret &= at(places(pindx)) {
@@ -487,7 +471,6 @@ distV().allReduceTime += Timer.milliTime();
     
     public def equals(dval:ElemType):Boolean {
         var ret:Boolean = true;
-        val places = distV().places;
         for (var p:Long=0; p<places.size() &&ret; p++) {
             val pindx = p;
             ret &= at(places(pindx)) distV().vec.equals(dval);
@@ -503,8 +486,7 @@ distV().allReduceTime += Timer.milliTime();
      */
     public final @Inline def map(op:(x:ElemType)=>ElemType):DistVector(this) {
         val stt = Timer.milliTime();
-        val rootPlaces = distV().places;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
+        finish ateach(Dist.makeUnique(places)) {
             val d = distV().vec;
             d.map(op);
         }
@@ -522,8 +504,7 @@ distV().allReduceTime += Timer.milliTime();
     public final @Inline def map(a:DistVector(M), op:(x:ElemType)=>ElemType):DistVector(this) {
         assert(likeMe(a));
         val stt = Timer.milliTime();
-        val rootPlaces = distV().places;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
+        finish ateach(Dist.makeUnique(places)) {
             val d = distV().vec;
             val ad = a.distV().vec as Vector(d.M);
             d.map(ad, op);
@@ -545,8 +526,7 @@ distV().allReduceTime += Timer.milliTime();
     public final @Inline def map(a:DistVector(M), b:DistVector(M), op:(x:ElemType,y:ElemType)=>ElemType):DistVector(this) {
         assert(likeMe(a));
         val stt = Timer.milliTime();
-        val rootPlaces = distV().places;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
+        finish ateach(Dist.makeUnique(places)) {
             val d = distV().vec;
             val ad = a.distV().vec as Vector(d.M);
             val bd = b.distV().vec as Vector(d.M);
@@ -570,7 +550,6 @@ distV().allReduceTime += Timer.milliTime();
         val stt = Timer.milliTime();
         val reducer = new Reducer();
         val result = finish (reducer) {
-            val places = distV().places;
             ateach(Dist.makeUnique(places)) {
                 val d = distV().vec;
                 offer d.reduce(op, unit);
@@ -582,7 +561,6 @@ distV().allReduceTime += Timer.milliTime();
 
     public def getCalcTime() = calcTime;
     public def getCommTime() = commTime;
-    public def getPlaces() = distV().places;
     
     public def toString() :String {
         val output=new StringBuilder();
@@ -596,7 +574,6 @@ distV().allReduceTime += Timer.milliTime();
     public def allToString() {
         val output = new StringBuilder();
         output.add( "-------- Distributed vector :["+M+"] ---------\n");
-        val places = distV().places;
         for (p in places) {
             output.add("Segment vector at place " + p.id() +"\n");
             output.add(at (p) { distV().vec.toString()});
@@ -611,30 +588,47 @@ distV().allReduceTime += Timer.milliTime();
     /**
      * Remake the DistVector over a new PlaceGroup
      */
-    public def remake(segsz:Rail[Int], newPg:PlaceGroup, newTeam:Team){
+    public def remake(segsz:Rail[Int], newPg:PlaceGroup, newTeam:Team, addedPlaces:ArrayList[Place]){
         assert (segsz.size == newPg.size()) :
             "number of vector segments must be equal to number of places";
-        val oldPlaces = distV().places;
+        val oldPlaces = places;
         val oldSnapshotSegSize = distV().snapshotSegSize;
         val oldSnapshotOffsets = distV().snapshotOffsets;
         
-        PlaceLocalHandle.destroy(oldPlaces, distV, (Place)=>true);
-        val offsets = RailUtils.scanExclusive(segsz, (x:Int, y:Int) => x+y, 0n);
-        distV = PlaceLocalHandle.make[DistVectorLocalState](newPg,
-                ()=>new DistVectorLocalState(Vector.make(segsz(newPg.indexOf(here))),segsz,offsets, newPg, 
-                    oldSnapshotSegSize, oldSnapshotOffsets) );           
-        //team.delete();  //FIXME: delete fails with ULFM when a process is failed
+        var spareUsed:Boolean = false;
+        if (newPg.size() == oldPlaces.size() && addedPlaces.size() != 0){
+            spareUsed = true;
+        }
+        
+        if (!spareUsed){
+            PlaceLocalHandle.destroy(oldPlaces, distV, (Place)=>true);
+            val offsets = RailUtils.scanExclusive(segsz, (x:Int, y:Int) => x+y, 0n);
+            distV = PlaceLocalHandle.make[DistVectorLocalState](newPg,
+                ()=>new DistVectorLocalState(Vector.make(segsz(newPg.indexOf(here))),segsz,offsets, newPg.indexOf(here), 
+                    oldSnapshotSegSize, oldSnapshotOffsets) );
+        }
+        else {
+            for (sparePlace in addedPlaces){
+                Console.OUT.println("Adding place["+sparePlace+"] to DistVector PLH ...");
+                PlaceLocalHandle.addPlace[DistVectorLocalState](
+                    distV, sparePlace, ()=>new DistVectorLocalState(
+                    Vector.make(oldSnapshotSegSize(newPg.indexOf(here))),oldSnapshotSegSize,oldSnapshotOffsets, newPg.indexOf(here), 
+                    oldSnapshotSegSize, oldSnapshotOffsets)
+                );
+            }
+        }
         team = newTeam;
+        places = newPg;
     }
     
     /**
      * Remake the DistVector over a new PlaceGroup
      */
-    public def remake(newPg:PlaceGroup, newTeam:Team){
+    public def remake(newPg:PlaceGroup, newTeam:Team, addedPlaces:ArrayList[Place]){
         val m = M;        
         val segNum = newPg.size;
         val slst = new Rail[Int](segNum, (i:Long)=>Grid.compBlockSize(m, segNum, i as Int) as Int);
-        remake (slst, newPg, newTeam);
+        remake (slst, newPg, newTeam, addedPlaces);
     }
 
     /**
@@ -644,10 +638,8 @@ distV().allReduceTime += Timer.milliTime();
     public def makeSnapshot():DistObjectSnapshot {
         //val startTime = Timer.milliTime();
         val snapshot = DistObjectSnapshot.make();
-        val rootPlaces = distV().places;
-        finish ateach(pl in Dist.makeUnique(rootPlaces)){
-            val places = distV().places;
-            val i = places.indexOf(here);
+        finish ateach(pl in Dist.makeUnique(places)){
+            val i = distV().placeIndex;
             val data = distV().vec.d;
             //the segSize should only be saved only at place 0
             val distVecInfo = new VectorSnapshotInfo(i, data);
@@ -706,12 +698,10 @@ distV().allReduceTime += Timer.milliTime();
     
     private def restoreSnapshotSegmentBySegment(snapshot:DistObjectSnapshot) {
         //val startTime = Timer.milliTime();
-        val rootPlaces = distV().places;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
-            val places = distV().places;
+        finish ateach(Dist.makeUnique(places)) {
             //segments should be stored in places with the same order 
             //segment place index will remain the same
-            val segmentPlaceIndex = places.indexOf(here);
+            val segmentPlaceIndex =  distV().placeIndex;
             val storedSegment = snapshot.load(segmentPlaceIndex) as VectorSnapshotInfo;
             val srcRail = storedSegment.data;
             val dstRail = distV().vec.d;
@@ -722,16 +712,14 @@ distV().allReduceTime += Timer.milliTime();
     
     private def restoreSnapshotElementByElement(snapshot:DistObjectSnapshot) {
         //val startTime = Timer.milliTime();    
-        val rootPlaces = distV().places;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
-            val places = distV().places;
+        finish ateach(Dist.makeUnique(places)) {
             val newSegSize = distV().segSize;
             val snapshotSegSize = distV().snapshotSegSize;            
 
             val newSegmentsOffsets = distV().offsets;
             val oldSegmentsOffsets = distV().snapshotOffsets;
         
-            val segmentPlaceIndex = places.indexOf(here);
+            val segmentPlaceIndex = distV().placeIndex;
             val low = newSegmentsOffsets(segmentPlaceIndex);
             val high = low + newSegSize(segmentPlaceIndex);
             
@@ -774,8 +762,7 @@ distV().allReduceTime += Timer.milliTime();
     
     //val snapshot = DistObjectSnapshot.make();
     public def makeSnapshot_local(snapshot:DistObjectSnapshot):void {
-        val places = distV().places;
-        val i = places.indexOf(here);
+        val i = distV().placeIndex;
         val data = distV().vec.d;        
         val distVecInfo = new VectorSnapshotInfo(i, data);
         snapshot.save(i, distVecInfo);       
@@ -791,8 +778,7 @@ distV().allReduceTime += Timer.milliTime();
     }
     
     private def restoreSnapshotSegmentBySegment_local(snapshot:DistObjectSnapshot) {
-        val places = distV().places;
-        val segmentPlaceIndex = places.indexOf(here);
+        val segmentPlaceIndex = distV().placeIndex;
         val storedSegment = snapshot.load(segmentPlaceIndex) as VectorSnapshotInfo;
         val srcRail = storedSegment.data;
         val dstRail = distV().vec.d;
@@ -800,7 +786,6 @@ distV().allReduceTime += Timer.milliTime();
     }
     
     private def restoreSnapshotElementByElement_local(snapshot:DistObjectSnapshot) {
-        val places = distV().places;
         //val startTime = Timer.milliTime();
         val newSegSize = distV().segSize;
         val snapshotSegSize = distV().snapshotSegSize;            
@@ -808,7 +793,7 @@ distV().allReduceTime += Timer.milliTime();
         val newSegmentsOffsets = distV().offsets;
         val oldSegmentsOffsets = distV().snapshotOffsets;
         
-        val segmentPlaceIndex = places.indexOf(here);
+        val segmentPlaceIndex = distV().placeIndex;
         val low = newSegmentsOffsets(segmentPlaceIndex);
         val high = low + newSegSize(segmentPlaceIndex);
     
@@ -848,9 +833,8 @@ distV().allReduceTime += Timer.milliTime();
     }
     
     public def printTimes(prefix:String, printIterations:Boolean){
-        val rootPlaces = distV().places;
         val root = here;
-        finish ateach(Dist.makeUnique(rootPlaces)) {
+        finish ateach(Dist.makeUnique(places)) {
             val size = 5;
             val src = new Rail[Double](size);
             src(0) = distV().multTime ;
@@ -907,15 +891,15 @@ class DistVectorLocalState {
     public var offsets:Rail[Int];
     public var snapshotSegSize:Rail[Int];
     public var snapshotOffsets:Rail[Int];
+    public var placeIndex:Long;
     
-    /*The place group used for distribution*/
-    public var places:PlaceGroup;
     
-    public def this(vec:Vector, segSize:Rail[Int], offsets:Rail[Int], places:PlaceGroup){
+    
+    public def this(vec:Vector, segSize:Rail[Int], offsets:Rail[Int], placeIndex:Long){
         this.vec = vec;
         this.segSize = segSize;
         this.offsets = offsets;
-        this.places = places;
+        this.placeIndex = placeIndex;
         val debugItSize = 1000;
         multTimeIt = new Rail[Long](debugItSize);
         multComptTimeIt = new Rail[Long](debugItSize);
@@ -924,12 +908,12 @@ class DistVectorLocalState {
         gathervTimeIt = new Rail[Long](debugItSize);   
     }
     
-    public def this(vec:Vector, segSize:Rail[Int], offsets:Rail[Int], places:PlaceGroup, snapshotSegSize:Rail[Int], snapshotOffsets:Rail[Int]){
+    public def this(vec:Vector, segSize:Rail[Int], offsets:Rail[Int], placeIndex:Long, snapshotSegSize:Rail[Int], snapshotOffsets:Rail[Int]){
         this.vec = vec;
         this.segSize = segSize;
         this.offsets = offsets;
-        this.places = places;
         val debugItSize = 1000;
+        this.placeIndex = placeIndex;
         multTimeIt = new Rail[Long](debugItSize);
         multComptTimeIt = new Rail[Long](debugItSize);
         allReduceTimeIt = new Rail[Long](debugItSize);
@@ -942,7 +926,7 @@ class DistVectorLocalState {
     
     
     public def clone():DistVectorLocalState{
-        return new DistVectorLocalState(vec.clone(), new Rail[Int](segSize), new Rail[Int](offsets), places );
+        return new DistVectorLocalState(vec.clone(), new Rail[Int](segSize), new Rail[Int](offsets), placeIndex );
     }
     
     public var multTime:Long;
