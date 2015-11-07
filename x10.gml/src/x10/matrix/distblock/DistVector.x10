@@ -600,9 +600,9 @@ distV().allReduceTime += Timer.milliTime();
             spareUsed = true;
         }
         
+        val offsets = RailUtils.scanExclusive(segsz, (x:Int, y:Int) => x+y, 0n);
         if (!spareUsed){
             PlaceLocalHandle.destroy(oldPlaces, distV, (Place)=>true);
-            val offsets = RailUtils.scanExclusive(segsz, (x:Int, y:Int) => x+y, 0n);
             distV = PlaceLocalHandle.make[DistVectorLocalState](newPg,
                 ()=>new DistVectorLocalState(Vector.make(segsz(newPg.indexOf(here))),segsz,offsets, newPg.indexOf(here), 
                     oldSnapshotSegSize, oldSnapshotOffsets) );
@@ -612,7 +612,7 @@ distV().allReduceTime += Timer.milliTime();
                 Console.OUT.println("Adding place["+sparePlace+"] to DistVector PLH ...");
                 PlaceLocalHandle.addPlace[DistVectorLocalState](
                     distV, sparePlace, ()=>new DistVectorLocalState(
-                    Vector.make(oldSnapshotSegSize(newPg.indexOf(here))),oldSnapshotSegSize,oldSnapshotOffsets, newPg.indexOf(here), 
+                    Vector.make(segsz(newPg.indexOf(here))),segsz,offsets, newPg.indexOf(here), 
                     oldSnapshotSegSize, oldSnapshotOffsets)
                 );
             }
