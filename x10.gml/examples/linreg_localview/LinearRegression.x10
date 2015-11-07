@@ -194,11 +194,11 @@ appTempDataPLH().localCompTime += Timer.milliTime();
         } else {
             V.remakeDense(newRowPs, newColPs, newPg, newAddedPlaces);
         }
-        d_p.remake(newPg, newTeam);
-        d_q.remake(newPg, newTeam);
-        d_r.remake(newPg, newTeam);
-        d_w.remake(newPg, newTeam);
-        Vp.remake(V.getAggRowBs(), newPg, newTeam);
+        d_p.remake(newPg, newTeam, newAddedPlaces);
+        d_q.remake(newPg, newTeam, newAddedPlaces);
+        d_r.remake(newPg, newTeam, newAddedPlaces);
+        d_w.remake(newPg, newTeam, newAddedPlaces);
+        Vp.remake(V.getAggRowBs(), newPg, newTeam, newAddedPlaces);
         
         store.restore();
         
