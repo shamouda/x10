@@ -128,7 +128,6 @@ public class BlockSetSnapshotInfo(placeIndex:Long, isSparse:Boolean) implements 
                 atomic hm().put(key, remoteBS);
                }
         } else {
-              ///val copyBlockSet = blockSet;  no need to clone in save 
             val blocksCount = blockSet.blocklist.size();
             val metaDataRail = blockSet.getBlocksMetaData();
             val metaDataSize = metaDataRail.size;
@@ -211,14 +210,12 @@ public class BlockSetSnapshotInfo(placeIndex:Long, isSparse:Boolean) implements 
             };
             return resultGR;
         } else { // dense
-            // because many threads can be loading the same object from the resilient store
-            val copyBlockSet = blockSet.clone();
-            val blocksCount = copyBlockSet.blocklist.size();
-            val metaDataRail = copyBlockSet.getBlocksMetaData();
+            val blocksCount = blockSet.blocklist.size();
+            val metaDataRail = blockSet.getBlocksMetaData();
             val metaDataSize = metaDataRail.size;
-            val totalSize = copyBlockSet.getStorageSize();
+            val totalSize = blockSet.getStorageSize();
             val allValue = new Rail[ElemType](totalSize);
-            copyBlockSet.flattenValue(allValue);
+            blockSet.flattenValue(allValue);
             val valGR = new GlobalRail[ElemType](allValue);
             val mGR = new GlobalRail[Long](metaDataRail);
             val resultGR = at(targetPlace) {
