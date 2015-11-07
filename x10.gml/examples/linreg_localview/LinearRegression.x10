@@ -60,9 +60,6 @@ public class LinearRegression implements LocalViewResilientIterativeApp {
     private val nzd:Float;
     private val root:Place;
     
-    //the default is to save the big matrix, unless this variable is set to 0
-    val saveDistBlockMatrix = System.getenv("GML_APP_SAVE_BIG_MATRIX"); 
-    
     private var appTempDataPLH:PlaceLocalHandle[AppTempData];
     var team:Team;
     
@@ -170,8 +167,7 @@ appTempDataPLH().localCompTime += Timer.milliTime();
     
     public def checkpoint(resilientStore:ResilientStoreForApp) {    
         resilientStore.startNewSnapshot();
-        if (saveDistBlockMatrix == null && saveDistBlockMatrix.equals("1"))
-            resilientStore.saveReadOnly(V);
+        resilientStore.saveReadOnly(V);
         resilientStore.save(d_p);
         resilientStore.save(d_q);
         resilientStore.save(d_r);
@@ -209,8 +205,6 @@ appTempDataPLH().localCompTime += Timer.milliTime();
         finish ateach(Dist.makeUnique(newPg)) {
             appTempDataPLH().iter = lastCheckpointIter;
             appTempDataPLH().norm_r2 = lastCheckpointNorm;
-            if (saveDistBlockMatrix != null && saveDistBlockMatrix.equals("0"))
-                V.initRandom_local();
         }
         Console.OUT.println("Restore succeeded. Restarting from iteration["+appTempDataPLH().iter+"] norm["+appTempDataPLH().norm_r2+"] ...");
     }
