@@ -58,6 +58,7 @@
 #include <x10/io/InputStreamReader__InputStream.h>
 #include <x10/io/OutputStreamWriter.h>
 #include <x10/io/OutputStreamWriter__OutputStream.h>
+#include <signal.h>
 
 using namespace x10::lang;
 using namespace x10::io;
@@ -65,7 +66,15 @@ using namespace x10::io;
 
 void RuntimeNatives::exit(x10_int code) {
 	// exit now, using this exit code
-	::exit(code);
+	char* exit_mode = getenv("X10_EXIT_BY_SIGKILL");
+	if (exit_mode && atoi(exit_mode) == 1){
+		::printf("Killing place by calling kill() ...\n");
+		::kill(getpid(), SIGKILL);
+	}
+	else{
+		::printf("Killing place by calling exit() ...\n");
+		::exit(code);
+	}
 }
 
 x10_long RuntimeNatives::currentTimeMillis() {
