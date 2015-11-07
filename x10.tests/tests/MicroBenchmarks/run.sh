@@ -16,7 +16,6 @@ do
 
 echo "socket $I"
 X10_TEAM_DEBUG_INTERNALS=1 \
-X10_TEAM_COMMENT_EXCEPTION=1 \
 X10_NTHREADS=1 \
 X10_RESILIENT_MODE=1 \
 X10_NPLACES=$((NPL)) ./ResilientBarrierTest.sock $((K))
