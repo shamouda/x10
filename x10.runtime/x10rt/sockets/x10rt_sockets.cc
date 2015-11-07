@@ -267,14 +267,14 @@ bool flushPendingData()
 					context.socketLinks[context.pendingWrites->place].fd = -2;
 					pthread_mutex_unlock(&context.writeLocks[context.pendingWrites->place]);
 					pthread_mutex_destroy(&context.writeLocks[context.pendingWrites->place]);
-					fatal_error("Unable to flush data"); // TODO: remove this fatal error and return a proper return code
+					fatal_error_resilient("Unable to flush data"); // TODO: remove this fatal error and return a proper return code
 					return false;
 				}
 				if (rc == 0) {
 					context.socketLinks[context.pendingWrites->place].fd = -2;
 					pthread_mutex_unlock(&context.writeLocks[context.pendingWrites->place]);
 					pthread_mutex_destroy(&context.writeLocks[context.pendingWrites->place]);
-					fatal_error("Unable to flush data - socket closed"); // TODO: remove this fatal error and return a proper return code
+					fatal_error_resilient("Unable to flush data - socket closed"); // TODO: remove this fatal error and return a proper return code
 					return false;
 				}
 				src += rc;
