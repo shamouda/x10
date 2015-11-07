@@ -184,10 +184,10 @@ public class PageRank implements LocalViewResilientIterativeApp {
         val newColPs = 1;
         Console.OUT.println("Going to restore PageRank app, newRowPs["+newRowPs+"], newColPs["+newColPs+"] ...");
         G.remakeSparse(newRowPs, newColPs, nzd, newGroup, newAddedPlaces);	
-        U.remake(G.getAggRowBs(), newGroup, newTeam);
-        P.remake(newGroup, newTeam);
+        U.remake(G.getAggRowBs(), newGroup, newTeam, newAddedPlaces);
+        P.remake(newGroup, newTeam, newAddedPlaces);
 
-        GP.remake(G.getAggRowBs(), newGroup, newTeam);
+        GP.remake(G.getAggRowBs(), newGroup, newTeam, newAddedPlaces);
         
         store.restore();
         
