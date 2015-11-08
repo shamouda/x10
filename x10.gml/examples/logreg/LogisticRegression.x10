@@ -342,26 +342,26 @@ public class LogisticRegression implements ResilientIterativeApp {
         lastCheckpointDelta = delta;
     }
     
-    public def restore(newPlaces:PlaceGroup, store:ResilientStoreForApp, lastCheckpointIter:Long):void{        
-        val newRowPs = newPlaces.size();
+    public def restore(newGroup:PlaceGroup, store:ResilientStoreForApp, lastCheckpointIter:Long, newAddedPlaces:ArrayList[Place]):void{        
+        val newRowPs = newGroup.size();
         val newColPs = 1;
         Console.OUT.println("Going to restore LogisticRegression app, newRowPs["+newRowPs+"], newColPs["+newColPs+"] ...");
         
         // redistribute all matrices / vectors to new PlaceGroup
         if (nzd < MAX_SPARSE_DENSITY) {
-            X.remakeSparse(newRowPs, newColPs, nzd, newPlaces);
+            X.remakeSparse(newRowPs, newColPs, nzd, newGroup, newAddedPlaces);
         } else {
-            X.remakeDense(newRowPs, newColPs, newPlaces);
+            X.remakeDense(newRowPs, newColPs, newGroup, newAddedPlaces);
         }
         val rowBs = X.getAggRowBs();
-        y.remake(rowBs, newPlaces);
-        o.remake(rowBs, newPlaces);
-        onew.remake(rowBs, newPlaces);
+        y.remake(rowBs, newGroup);
+        o.remake(rowBs, newGroup);
+        onew.remake(rowBs, newGroup);
         
-        tmp_y.remake(rowBs, newPlaces);
-        logisticD.remake(rowBs, newPlaces);
-        logisticnew.remake(rowBs, newPlaces);
-        dup_w.remake(newPlaces);
+        tmp_y.remake(rowBs, newGroup);
+        logisticD.remake(rowBs, newGroup);
+        logisticnew.remake(rowBs, newGroup);
+        dup_w.remake(newGroup);
         
         store.restore();
         iter = lastCheckpointIter;
