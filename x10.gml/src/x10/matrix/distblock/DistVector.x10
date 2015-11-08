@@ -171,6 +171,11 @@ public class DistVector(M:Long) implements Snapshottable {
             distV().vec.copyTo(dst.distV().vec);
         }
     }
+    
+    public def copyTo_local(dst:DistVector(M)):void {
+        distV().vec.copyTo(dst.distV().vec);
+    }
+    
 
     public def copyTo(vec:Vector(M)):void {
         val root = here;
@@ -336,6 +341,14 @@ distV().scattervTime += Timer.milliTime();
         }
         return this;
     }
+    
+    public def cellMult_local(A:DistVector(M)){
+        val dst = this.distV().vec;
+        val src = A.distV().vec as Vector(dst.M);
+        dst.cellMult(src);
+        return this;
+    }
+    
 
     /**
      * Cellwise division. All copies are modified with
@@ -403,6 +416,19 @@ distV().allReduceTime += Timer.milliTime();
         return result;
     }
 
+    public def sum_local():ElemType {
+        val offset=getOffset();
+        val dist = distV().vec;
+        var mySum:ElemType = 0.0 as ElemType;
+        val s = getSegSize()(distV().placeIndex);
+        for (i in 0..(s-1))
+            mySum += dist(i);
+distV().allReduceTime -= Timer.milliTime();
+        val result = team.allreduce(mySum, Team.ADD);
+distV().allReduceTime += Timer.milliTime();
+        return result;
+    }
+    
     // Multiplication operations 
 
     public def mult(mA:DistBlockMatrix(M), vB:DupVector(mA.N), plus:Boolean):DistVector(this) =
@@ -494,6 +520,12 @@ distV().allReduceTime += Timer.milliTime();
         return this;
     }
 
+    public final @Inline def map_local(op:(x:ElemType)=>ElemType):DistVector(this) {
+        val d = distV().vec;
+        d.map(op);
+        return this;
+    }
+    
     /**
      * Apply the map function <code>op</code> to each element of <code>a</code>,
      * storing the result in the corresponding element of this vector.
@@ -536,6 +568,17 @@ distV().allReduceTime += Timer.milliTime();
         return this;
     }
 
+    public final @Inline def map_local(a:DistVector(M), b:DistVector(M), op:(x:ElemType,y:ElemType)=>ElemType):DistVector(this) {
+        assert(likeMe(a));
+        
+        val d = distV().vec;
+        val ad = a.distV().vec as Vector(d.M);
+        val bd = b.distV().vec as Vector(d.M);
+        d.map(ad, bd, op);
+        
+        return this;
+    }
+    
     /**
      * Combine the elements of this vector using the provided reducer function.
      * @param op a binary reducer function to combine elements of this vector
