@@ -181,7 +181,7 @@ public class LogisticRegression implements LocalViewResilientIterativeApp {
             alpha = w.dot_local(w);
             seqCompT += Timer.milliTime();
 
-            Debug.flushln("["+here+"] Done initialization. Starting converging iteration");
+            
         }
     
         seqCompT -= Timer.milliTime();
