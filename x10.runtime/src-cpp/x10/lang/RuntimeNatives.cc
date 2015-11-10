@@ -13,6 +13,7 @@
 
 #include <cstdlib>
 #include <cstdio>
+#include <unistd.h>
 
 #ifdef __bg__
 #ifndef DISABLE_CLOCK_GETTIME
