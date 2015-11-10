@@ -12,11 +12,10 @@ include scripts/build_common.mk
 default	: help 
 
 ## Managed backend must be built last
-all		: native_gml native_mpi_gml managed_gml
+all		: native_gml managed_gml
 
 ## short-cut keys
 native		: native_gml
-native_mpi	: native_mpi_gml
 managed		: managed_gml
 
 ## Source files
@@ -227,9 +226,6 @@ managed_gml		: $(lib_src)
 native_gml		: $(lib_src) 
 		@($(MAKE) clib target=native_gml src="$(lib_src)")
 
-native_mpi_gml	: $(lib_src)
-		@($(MAKE) clib target=$@ src="$(lib_src)" extra_opts='$(MPI_X10CXXFLAGS)')
-
 ### build basic non-dist lib, single place (sequential matrix lib)
 managed_seq_gml	: $(seq_src)
 		@($(MAKE) jlib target=$@ src="$(seq_src)")
@@ -336,7 +332,6 @@ help	::
 	@echo "1) Build full library for multi-place execution"
 	@echo "make managed    -- make library tar file for managed backend: lib/managed_gml.jar and managed_gml.properties"
 	@echo "make native     -- make library and jar files for native backend: lib/libnative_gml.so, lib/native_gml.jar and native_gml.properties"
-	@echo "make native_mpi -- make library and jar files for native backend running on MPI transport: lib/libnative_mpi_gml.so, lib/native_mpi_gml.jar, and native_mpi_gml.properties"
 	@echo "make all   -- make all above"
 	@echo ""
 	@echo "2) Build subset library for single place or sequential code"  
@@ -357,11 +352,6 @@ help	::
 	@echo "2) Build app for native backend, add following settings in x10c++ command line"
 	@echo "   \"-classpath \$$(gml_lib)/native_gml.jar\""
 	@echo "   \"-x10lib \$$(gml_path)/native_gml.properties\""
-	@echo ""
-	@echo "3) Build app for native backend for MPI transport, add following settings in x10c++ command line"
-	@echo "   \"-classpath \$$(gml_lib)/native_mpi_gml.jar\""
-	@echo "   \"-x10lib \$$(gml_path)/native_mpi_gml.properties\""
-	@echo ""
 	@echo "------------------- Run application --------------------"
 	@echo "1) Managed backend"
 	@echo "   Add classpath:\"-classpath \$$(build_path):\$$(gml_lib)/managed_gml.jar\""

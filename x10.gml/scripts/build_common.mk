@@ -34,7 +34,6 @@ include $(gml_scripts)/system_setting.mk
 
 #include $(gml_scripts)/build_managed.mk
 #include $(gml_scripts)/build_native.mk
-#include $(gml_scripts)/build_native_mpi.mk
 
 #Build default target for all runtime backend and runtime transports
 all	:
@@ -42,11 +41,11 @@ all	:
 
 ###
 clean	::
-		rm -rf $(build_path) $(target)_sock_$(GML_ELEM_TYPE) $(target)_pami_$(GML_ELEM_TYPE)
+		rm -rf $(build_path) $(target)_native_$(GML_ELEM_TYPE) $(target)_pami_$(GML_ELEM_TYPE)
 
 clean_all:: 
 		rm -rf $(build_path)
-		$(foreach f, $(target_list), rm -rf $(f)_mpi_* $(f)_sock_* $(f)_pami_* $(f)_bgp_*;)
+		$(foreach f, $(target_list), rm -rf $(f)_native_* $(f)_pami_* $(f)_bgp_*;)
 
 ###-----------------------------------------
 ##  build library
@@ -58,7 +57,7 @@ check_gml		:
 	else echo "Cannot find $(gml_inc). Apps compiling may fail. If so, rebuild your GML library"; fi)
 
 ####----------------------------------------------
-.PHONY		: lib all runall sock mpi java clean clean_all all_mpi all_sock all_pami all_java chk_gml_inc help
+.PHONY		: lib all runall native java clean clean_all all_native all_pami all_java chk_gml_inc help
 ####----------------------------------------------
 
 help ::

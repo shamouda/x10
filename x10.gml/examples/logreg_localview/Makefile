@@ -27,7 +27,7 @@ gml_path    = $(X10_HOME)/x10.gml
 X10_FLAG	= -d $(build_path) -report postcompile=2 -v -errors 5 -VERBOSE_CHECKS -O -NO_CHECKS
 
 # runtime settings
-runtime_list = mpi sock java
+runtime_list = native java
 numplaces = 9
 test_args = -m 1000 -n 10 --density 1.0 --iterations 30 --checkpointFreq 10 -s 1 --verify 
 
@@ -40,7 +40,6 @@ run:		run_java
 include $(gml_path)/scripts/build_common.mk
 include $(gml_path)/scripts/build_managed.mk
 include $(gml_path)/scripts/build_native.mk
-include $(gml_path)/scripts/build_native_mpi.mk
 include $(gml_path)/scripts/test_run.mk
 
 ###################################################

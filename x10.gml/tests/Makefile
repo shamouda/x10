@@ -15,10 +15,8 @@ sub_dirs 	= dense sparse block comm dist dup summa symtri vector distblock build
 default		: help
 ###-----------------------------------------------
 test_all	: $(sub_dirs)
-
-test_all_sock	: 
 		for dir in $(sub_dirs); do \
-		$(MAKE) -C $$dir runall_sock; \
+		$(MAKE) -C $$dir runall_native; \
 		done
 
 $(sub_dirs)	:

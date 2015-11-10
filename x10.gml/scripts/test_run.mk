@@ -41,11 +41,8 @@ run_java	: java
 		GML_ELEM_TYPE=$(GML_ELEM_TYPE) X10_NPLACES=$(numplaces) $(Xjvm) -classpath $(build_path):$(gml_lib)/managed_gml_$(GML_ELEM_TYPE).jar -libpath $(base_dir_elem)/lib $(target) $(test_args)
 #		$(Xjvm) -np $(numplaces) -classpath $(build_path):$(gml_lib)/managed_gml.jar -libpath $(build_path):$(gml_lib) $(target) $(test_args)
 
-run_mpi		: mpi
-			$(Srun) -n $(numplaces) ./$(target)_mpi_$(GML_ELEM_TYPE) $(test_args)
-
-run_sock	: sock
-			X10_NPLACES=$(numplaces) ./$(target)_sock_$(GML_ELEM_TYPE) $(test_args)
+run_native	: native
+			X10_NPLACES=$(numplaces) ./$(target)_native_$(GML_ELEM_TYPE) $(test_args)
 
 run_pami	: pami
 			MP_PROCS=$(numplaces) MP_EUILIB=ip ./$(target)_pami_$(GML_ELEM_TYPE) $(test_args)
@@ -66,11 +63,9 @@ run_elastic	: java
 runall_java :
 			$(foreach src, $(target_list), $(MAKE) target=$(src) run_java; )
 
-runall_mpi	:
-			$(foreach src, $(target_list), $(MAKE) target=$(src) run_mpi; )
 
-runall_sock	:
-			$(foreach src, $(target_list), $(MAKE) target=$(src) run_sock; )
+runall_native	:
+			$(foreach src, $(target_list), $(MAKE) target=$(src) run_native; )
 
 cleanall :
 			$(foreach src, $(target_list), $(MAKE) target=$(src) clean; )
@@ -83,16 +78,14 @@ runall		:
 ###----
 
 ################################################
-#.PHONY	: run_java run_mpi run_sock runalltrans runalltests
+#.PHONY	: run_java run_native runalltrans runalltests
 ###########################################
 
 help	::
 	@echo "-------------------------- launch test run -----------------------";
-	@echo " make run_mpi      : run $(target) test built for MPI transport";
-	@echo " make run_sock     : run $(target) test built for socket transport" ;
+	@echo " make run_native   : run $(target) test built for native backend" ;
 	@echo " make run_java     : run $(target) test built for managed backend";
-	@echo " make runall_mpi   : run all tests built for MPI transport";
-	@echo " make runall_sock  : run all tests built for socket transport";
+	@echo " make runall_native: run all tests built for native backend";
 	@echo " make runall_java  : run all tests built for managed backend";
 	@echo " make runall       : run all tests built for all backends: $(runtime_list)";
 	@echo "";
