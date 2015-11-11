@@ -48,7 +48,7 @@ public class SparseCSR extends Matrix {
          * @param n     Number of columns
          * @param cd     Compressed data
          */
-        public def this(m:Long, n:Long, cd:Compress2D):SparseCSR(m,n) {
+        public def this(m:Long, n:Long, cd:Compress2D{self!=null}):SparseCSR(m,n) {
                 super(m, n);
                 crdata = cd;
                 assert cd.size() == m;
@@ -63,7 +63,7 @@ public class SparseCSR extends Matrix {
          * @param n     Number of columns in the CSR sparse matrix
          * @param ca     The data storage of compressed array.
          */
-        public def this(m:Long, n:Long, ca:CompressArray):SparseCSR(m,n) {
+        public def this(m:Long, n:Long, ca:CompressArray{self!=null}):SparseCSR(m,n) {
                 super(m, n);
                 crdata = Compress2D.make(m, ca);
                 //sparsity = 1.0*countNonZero() /m/n;

@@ -35,7 +35,7 @@ public final class Compress1D {
 	 * @param count      number of entries
 	 * @param ca     The storage for the compressed data
 	 */
-	public def this(offset:Long, count:Long, ca:CompressArray) {
+	public def this(offset:Long, count:Long, ca:CompressArray{self!=null}) {
 		assert offset+count <= ca.count;
 		this.cArray = ca;
 		this.offset = offset;
