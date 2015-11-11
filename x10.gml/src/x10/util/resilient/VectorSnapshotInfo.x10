@@ -25,25 +25,25 @@ public class VectorSnapshotInfo(placeIndex:Long, data:Rail[ElemType]{self!=null}
     
     public final def remoteCopyAndSave(key:Any, hm:PlaceLocalHandle[HashMap[Any,Any]], backupPlace:Place) {
         val srcbuf = new GlobalRail[ElemType](data);
-        val srcbufCnt = data.size;
         val idx = placeIndex;
         at(backupPlace) {
-            val dstbuf = new Rail[ElemType](srcbufCnt);
-            if (DEBUG_DATA_SIZE) Console.OUT.println("[VectorSnapshot] remoteCopyAndSave asyncCopySize:" + srcbufCnt);
-            finish Rail.asyncCopy[ElemType](srcbuf, 0, dstbuf, 0, srcbufCnt);
-            atomic hm().put(key, new VectorSnapshotInfo(idx, dstbuf));
+            val dstbuf = Unsafe.allocRailUninitialized[ElemType](srcbuf.size);
+            if (DEBUG_DATA_SIZE) Console.OUT.println("[VectorSnapshot] remoteCopyAndSave asyncCopySize:" + srcbuf.size);
+            finish {
+                Rail.asyncCopy[ElemType](srcbuf, 0, dstbuf, 0, srcbuf.size);
+                atomic hm().put(key, new VectorSnapshotInfo(idx, dstbuf));
+            }
         }
     }
     
 
     public final def remoteClone(targetPlace:Place):GlobalRef[Any]{self.home==targetPlace} {
         val srcbuf = new GlobalRail[ElemType](data);
-        val srcbufCnt = data.size;
         val idx = placeIndex;
         val resultGR = at(targetPlace) {
-            val dstbuf = new Rail[ElemType](srcbufCnt);
-            if (DEBUG_DATA_SIZE) Console.OUT.println("[VectorSnapshot] remoteClone asyncCopySize:" + srcbufCnt);
-            finish Rail.asyncCopy[ElemType](srcbuf, 0, dstbuf, 0, srcbufCnt);
+            val dstbuf = Unsafe.allocRailUninitialized[ElemType](srcbuf.size);
+            if (DEBUG_DATA_SIZE) Console.OUT.println("[VectorSnapshot] remoteClone asyncCopySize:" + srcbuf.size);
+            finish Rail.asyncCopy[ElemType](srcbuf, 0, dstbuf, 0, srcbuf.size);
             val gr = new GlobalRef[Any](new VectorSnapshotInfo(idx, dstbuf));
             gr
         };

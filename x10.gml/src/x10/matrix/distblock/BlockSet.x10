@@ -870,16 +870,14 @@ public class BlockSet  {
         }
     }
     
-    public static def remoteMakeSparseBlockSet(blocksCount:Long, metaDataSize:Long, totalSize:Long, mGR:GlobalRail[Long], idxGR:GlobalRail[Long], valGR:GlobalRail[ElemType]):BlockSet{
-        val metaDataTarget = new Rail[Long](metaDataSize);
-        val allIndexTarget = new Rail[Long](totalSize);
-        val allValueTarget = new Rail[ElemType](totalSize);
+    public static def remoteMakeSparseBlockSet(blocksCount:Long, totalSize:Long, metadata:Rail[Long], idxGR:GlobalRail[Long], valGR:GlobalRail[ElemType]):BlockSet{
+        val allIndexTarget = Unsafe.allocRailUninitialized[Long](totalSize);
+        val allValueTarget = Unsafe.allocRailUninitialized[ElemType](totalSize);
         finish{
-            Rail.asyncCopy[Long](mGR, 0, metaDataTarget, 0, metaDataSize);
             Rail.asyncCopy[Long](idxGR, 0, allIndexTarget, 0, totalSize);
             Rail.asyncCopy[ElemType](valGR, 0, allValueTarget, 0, totalSize);
         }    
-        val blocksList = BlockSet.makeBlocksFromMetaData(metaDataTarget, blocksCount, true);                
+        val blocksList = BlockSet.makeBlocksFromMetaData(metadata, blocksCount, true);                
         var offset:Long = 0;
         for (var i:Long = 0; i < blocksCount; i++){        
             val blk = blocksList.get(i);
@@ -922,19 +920,17 @@ public class BlockSet  {
         return newBlockSet;
     }
    
-    public static def remoteMakeDenseBlockSet(blocksCount:Long, metaDataSize:Long, totalSize:Long, mGR:GlobalRail[Long], valGR:GlobalRail[ElemType]):BlockSet{
-        val metaDataTarget = new Rail[Long](metaDataSize);
-        val allValueTarget = new Rail[ElemType](totalSize);
+    public static def remoteMakeDenseBlockSet(blocksCount:Long, totalSize:Long, metadata:Rail[Long], valGR:GlobalRail[ElemType]):BlockSet{
+        val allValueTarget = Unsafe.allocRailUninitialized[ElemType](totalSize);
         val DEBUG_DATA_SIZE:Boolean = (System.getenv("X10_GML_DEBUG_DATA_SIZE") != null && System.getenv("X10_GML_DEBUG_DATA_SIZE").equals("1"));
         
         if (DEBUG_DATA_SIZE) 
-            Console.OUT.println("[BlockSetSnapshot] remoteCopyAndSave/remoteClone *blockSet* metaDataSize:" + metaDataSize + " totalSize:"+totalSize);
+            Console.OUT.println("[BlockSetSnapshot] remoteCopyAndSave/remoteClone *blockSet* metaDataSize:" + metadata.size + " totalSize:"+totalSize);
         
         finish{
-            Rail.asyncCopy[Long](mGR, 0, metaDataTarget, 0, metaDataSize);    
             Rail.asyncCopy[ElemType](valGR, 0, allValueTarget, 0, totalSize);
         }
-        val blocksList = BlockSet.makeBlocksFromMetaData(metaDataTarget, blocksCount, false);                
+        val blocksList = BlockSet.makeBlocksFromMetaData(metadata, blocksCount, false);                
         var offset:Long = 0;
         for (var i:Long = 0; i < blocksCount; i++) {
             val blk = blocksList.get(i);
