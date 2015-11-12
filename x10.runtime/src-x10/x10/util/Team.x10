@@ -1135,7 +1135,7 @@ public struct Team {
                             if (DEBUGINTERNALS && here.id == 0){
                                 Console.OUT.println("");
                                 if (Team.state(teamidcopy).local_parentIndex > -1){
-                                    Console.OUT.println("parent is dead:" + Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex).isDead());
+                                    Console.OUT.println("parent is dead:" + Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex).isDead());                                    
                                 }
                                 if (Team.state(teamidcopy).local_child1Index > -1){
                                     Console.OUT.println("child1 is ["+(Team.state(teamidcopy).local_child1Index)+"] dead:" + Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index).isDead());
@@ -1149,18 +1149,18 @@ public struct Team {
                             
                             if (DUMMY_AT){
                                 try{
-                                    finish {
+                                     finish {
                                         val parentId = Team.state(teamidcopy).local_parentIndex;
                                         val child1Id = Team.state(teamidcopy).local_child1Index;
                                         val child2Id = Team.state(teamidcopy).local_child2Index;
                                         if (parentId != -1){
-                                            at(Team.state(teamidcopy).places(parentId)) @Immediate("ping_parent") async {}
+                                            at(Team.state(teamidcopy).places(parentId)) async {}
                                         }
                                         if (child1Id != -1){
-                                            at(Team.state(teamidcopy).places(child1Id)) @Immediate("ping_child1") async {}
+                                            at(Team.state(teamidcopy).places(child1Id)) async {}
                                         }
                                         if (child2Id != -1) {
-                                            at(Team.state(teamidcopy).places(child2Id)) @Immediate("ping_child2") async {}
+                                            at(Team.state(teamidcopy).places(child2Id)) async {}
                                         }
                                     }
                                 }catch(dpe:Exception){
@@ -1436,7 +1436,7 @@ public struct Team {
             }
             
 	        try {
-    	        if (!Team.state(teamidcopy).isValid) // skip ahead if places have died, as the destination rails may not be set up
+    	            if (!Team.state(teamidcopy).isValid) // skip ahead if places have died, as the destination rails may not be set up
 	                throw new MultipleExceptions(new DeadPlaceException("Team "+teamidcopy+" contains at least one dead member"));
 
 	            // move data from parent to children
@@ -1602,7 +1602,10 @@ public struct Team {
 	        
 	        this.phase.set(PHASE_READY);
 	        
-	        if (!isValid) throw new DeadPlaceException("Team "+teamidcopy+" contains at least one dead member");
+	        if (!isValid) {
+	            Console.OUT.println("[**"+here+"**] going to throw a dead place exception");
+	            throw new DeadPlaceException("Team "+teamidcopy+" contains at least one dead member");
+	        }
 
             // completed successfully
             if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" leaving "+getCollName(collType));

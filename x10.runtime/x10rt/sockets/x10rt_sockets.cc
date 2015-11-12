@@ -33,6 +33,7 @@
 #include <pthread.h> // for locks on the sockets
 #include <poll.h> // for poll()
 #ifndef BSD
+#include <alloca.h> // for alloca()
 #endif
 #include <fcntl.h>
 
@@ -48,8 +49,8 @@ typedef void (*notifierCallback)(const x10rt_msg_params *, x10rt_copy_sz);
 enum MSGTYPE {STANDARD, PUT, GET, GET_COMPLETED};
 enum STATUS {UNKNOWN, PREINITIALIZED, RUNNING_LIBRARY, RUNNING, SHUTDOWN};
 #define COPY_PUT_GET_BUFFER false // if the network is full, and a message needs to be sent in chunks, should the put/get buffer arg be copied, or reused?
-#define DEBUG 1
-#define DEBUG_MESSAGING 1
+//#define DEBUG 1
+//#define DEBUG_MESSAGING 1
 
 struct x10SocketCallback
 {
@@ -138,7 +139,9 @@ x10rt_error fatal_error_resilient(const char* message, uint32_t deadPlace)
 	char* resilientmode = getenv("X10_RESILIENT_MODE");
 	if (resilientmode && atoi(resilientmode) > 0){
 		if (deadPlace != -1){
-			printf("here[%d] calling fatal_error_resilient  for place[%d] ...\n", x10rt_net_here(), deadPlace);
+		    #ifdef DEBUG
+			    printf("here[%d] calling fatal_error_resilient  for place[%d] ...\n", x10rt_net_here(), deadPlace);
+	        #endif
 		    close(context.socketLinks[deadPlace].fd);
 		    context.socketLinks[deadPlace].fd = -2;
 		    pthread_mutex_unlock(&context.writeLocks[deadPlace]);
@@ -153,8 +156,6 @@ x10rt_error fatal_error_resilient(const char* message, uint32_t deadPlace)
 	else
 		return fatal("(at place %u): %s\n", context.myPlaceId, message);
 }
-
-
 /*
  * This method determines if we should use a specific port number, or ask the OS
  * for one.  It looks at the X10_FORCEPORTS environment variable, which can take two forms.
@@ -253,18 +254,8 @@ int setSocketOptions(int socketFD) {
  */
 bool flushPendingData()
 {
-	#ifdef DEBUG_MESSAGING
-	if (context.myPlaceId == 3)
-	    fprintf(stderr, "X10rt.Sockets: place %u calling flushPendingData ----- 1\n", context.myPlaceId);
-	#endif
-
-	if (context.pendingWrites == NULL){
-    #ifdef DEBUG_MESSAGING
-	if (context.myPlaceId == 3)
-	    fprintf(stderr, "X10rt.Sockets: place %u calling flushPendingData ----- 2\n", context.myPlaceId);
-	#endif
+	if (context.pendingWrites == NULL)
 		return false;
-	}
 
 	bool ableToFlush = true;
 	bool dataRemains = false;
@@ -272,16 +263,9 @@ bool flushPendingData()
 	pthread_mutex_lock(&context.pendingWriteLock);
 	while (context.pendingWrites != NULL && ableToFlush)
 	{
-        #ifdef DEBUG_MESSAGING
-	    if (context.myPlaceId == 3)
-	        fprintf(stderr, "X10rt.Sockets: place %u calling flushPendingData  [[[%d]]]] ----- 3\n", context.myPlaceId, context.pendingWrites->place);
-	    #endif
-		if (pthread_mutex_trylock(&context.writeLocks[context.pendingWrites->place]) == 0)
+		int retval = pthread_mutex_trylock(&context.writeLocks[context.pendingWrites->place]);
+		if (retval == 0)
 		{
-		    #ifdef DEBUG_MESSAGING
-	        if (context.myPlaceId == 3)
-	            fprintf(stderr, "X10rt.Sockets: place %u calling flushPendingData ----- 4\n", context.myPlaceId);
-	        #endif
 			char * src = (char *) context.pendingWrites->data + (context.pendingWrites->size - context.pendingWrites->remainingToWrite);
 			while (context.pendingWrites->remainingToWrite > 0)
 			{
@@ -291,26 +275,18 @@ bool flushPendingData()
 					if (errno == EINTR) continue;
 					if (errno == EAGAIN) break;
 					context.socketLinks[context.pendingWrites->place].fd = -2;
-					pthread_mutex_unlock(&context.writeLocks[context.pendingWrites->place]);
-					pthread_mutex_destroy(&context.writeLocks[context.pendingWrites->place]);
-					pthread_mutex_unlock(&context.pendingWriteLock);
+					pthread_mutex_unlock(&context.pendingWriteLock);//release the lock before return, the write looks are released by fatal_error_resilient
 					fatal_error_resilient("Unable to flush data", context.pendingWrites->place); // TODO: remove this fatal error and return a proper return code
 					return false;
 				}
 				if (rc == 0) {
 					context.socketLinks[context.pendingWrites->place].fd = -2;
-					pthread_mutex_unlock(&context.writeLocks[context.pendingWrites->place]);
-					pthread_mutex_destroy(&context.writeLocks[context.pendingWrites->place]);
-					pthread_mutex_unlock(&context.pendingWriteLock);
+					pthread_mutex_unlock(&context.pendingWriteLock);//release the lock before return, the write looks are released by fatal_error_resilient
 					fatal_error_resilient("Unable to flush data - socket closed", context.pendingWrites->place); // TODO: remove this fatal error and return a proper return code
 					return false;
 				}
 				src += rc;
 				context.pendingWrites->remainingToWrite -= rc;
-				#ifdef DEBUG_MESSAGING
-				if (context.myPlaceId == 3)
-					fprintf(stderr, "X10rt.Sockets: place %u calling flushPendingData ----- 5\n", context.myPlaceId);
-	        	#endif
 			}
 			pthread_mutex_unlock(&context.writeLocks[context.pendingWrites->place]);
 
@@ -330,12 +306,16 @@ bool flushPendingData()
 				free(deleteme);
 			}
 			dataRemains = (context.pendingWrites != NULL);
-
-			#ifdef DEBUG_MESSAGING
-	        if (context.myPlaceId == 3)
-	            fprintf(stderr, "X10rt.Sockets: place %u calling flushPendingData ----- 3\n", context.myPlaceId);
-	        #endif
-
+		}
+		else if (retval == EINVAL)
+		{
+			// this means that the lock is invalid, because the place died.  Delete the pending data
+			if (context.pendingWrites->deleteBufferWhenComplete)
+				free(context.pendingWrites->data);
+			void* deleteme = context.pendingWrites;
+			context.pendingWrites = context.pendingWrites->next;
+			free(deleteme);
+			dataRemains = (context.pendingWrites != NULL);
 		}
 		else
 		{
@@ -1043,9 +1023,6 @@ void x10rt_net_send_msg (x10rt_msg_params *parameters)
         }
     }
 	pthread_mutex_unlock(&context.writeLocks[dp]);
-    #ifdef DEBUG_MESSAGING
-		fprintf(stderr, "X10rt.Sockets: place %u SENT SUCCESSFULLY a %d byte message of type %d to place %u\n", context.myPlaceId, parameters->len, (int)parameters->type, parameters->dest_place);
-	#endif
 }
 
 void x10rt_net_send_get (x10rt_msg_params *parameters, void *srcAddr, void *dstAddr, x10rt_copy_sz bufferLen)
@@ -1175,24 +1152,9 @@ bool probe (bool onlyProcessAccept, bool block)
 	    return false;
 	// we aquired the readLock
 	uint32_t whichPlaceToHandle = context.nextSocketToCheck;
-
-	#ifdef DEBUG_MESSAGING
-//	if (context.myPlaceId == 0)
-	    fprintf(stdout, "X10rt.Sockets: place %u STARTED probe -> whichPlaceToHandle[%d]\n", context.myPlaceId, whichPlaceToHandle);
-	#endif
-
 	int ret = poll(context.socketLinks, context.numPlaces+1, (context.noBlockWindow==0 && block && context.pendingWrites == NULL)?-1:(context.linkAtStartup?100:0));
-//    #ifdef DEBUG_MESSAGING
-//	if (context.myPlaceId == 0)
-//	    fprintf(stderr, "X10rt.Sockets: place %u STARTED probe -> whichPlaceToHandle[%d]  ^^^^ ret = %d \n", context.myPlaceId, whichPlaceToHandle, ret);
-//	#endif
 	if (ret > 0)
 	{ // There is at least one socket with something interesting to look at
-
-//		#ifdef DEBUG_MESSAGING
-//		if (context.myPlaceId == 0)
-//			fprintf(stderr, "X10rt.Sockets: place %u INSIDE probe -> whichPlaceToHandle[%d]  PATH-1 \n", context.myPlaceId, whichPlaceToHandle);
-//		#endif
 
 		// the listen port always gets priority
 		if ((context.socketLinks[context.myPlaceId].revents & POLLIN) || (context.socketLinks[context.myPlaceId].revents & POLLPRI))
@@ -1226,23 +1188,12 @@ bool probe (bool onlyProcessAccept, bool block)
 			else
 				context.nextSocketToCheck = whichPlaceToHandle+1;
 		}
-
-//		#ifdef DEBUG_MESSAGING
-//		if (context.myPlaceId == 0)
-//			fprintf(stderr, "X10rt.Sockets: place %u INSIDE probe -> whichPlaceToHandle[%d]  PATH-22222 \n", context.myPlaceId, whichPlaceToHandle);
-//		#endif
-
 		context.socketLinks[whichPlaceToHandle].events = 0; // disable any further polls on this socket
 		context.noBlockWindow++; // don't allow threads to block while a socket is not visible to poll
 		pthread_mutex_unlock(&context.readLock);
 
 		if ((context.socketLinks[whichPlaceToHandle].revents & POLLIN) || (context.socketLinks[whichPlaceToHandle].revents & POLLPRI))
 		{
-//			#ifdef DEBUG_MESSAGING
-//			    if (context.myPlaceId == 0)
-//				    fprintf(stderr, "X10rt.Sockets: place %u INSIDE probe -> whichPlaceToHandle[%d]  PATH-3333 \n", context.myPlaceId, whichPlaceToHandle);
-//			#endif
-
 			if (whichPlaceToHandle == context.myPlaceId) // special case.  This is an incoming connection request.
 			{
 				#ifdef DEBUG_MESSAGING
@@ -1295,9 +1246,8 @@ bool probe (bool onlyProcessAccept, bool block)
 
 				x10rt_msg_params mp;
 				mp.dest_place = context.myPlaceId;
-				if (nonBlockingRead(context.socketLinks[whichPlaceToHandle].fd, &mp.type, sizeof(x10rt_msg_type)) < (int)sizeof(x10rt_msg_type)){
+				if (nonBlockingRead(context.socketLinks[whichPlaceToHandle].fd, &mp.type, sizeof(x10rt_msg_type)) < (int)sizeof(x10rt_msg_type))
 					return fatal_error_resilient("reading x10rt_msg_params.type", whichPlaceToHandle), false;
-				}
 				if (nonBlockingRead(context.socketLinks[whichPlaceToHandle].fd, &mp.len, sizeof(uint32_t)) < (int)sizeof(uint32_t))
 					return fatal_error_resilient("reading x10rt_msg_params.len", whichPlaceToHandle), false;
 				#ifdef DEBUG_MESSAGING
@@ -1483,7 +1433,6 @@ bool probe (bool onlyProcessAccept, bool block)
 	}
 	else
 	{
-
 		pthread_mutex_unlock(&context.readLock);
 		bool dataRemains = flushPendingData();
 		return dataRemains && block;
