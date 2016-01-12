@@ -67,20 +67,18 @@ public class LocalViewResilientExecutor {
             val killIterStr = System.getenv("RESILIENT_EXECUTOR_KILL_ITER");
             val killPlaceStr = System.getenv("RESILIENT_EXECUTOR_KILL_PLACE");
             
-            if (killIterStr != null){
-            	KILL_ITERATION = Long.parseLong(killIterStr);
-            	KILL_PLACE_ID = Long.parseLong(killPlaceStr);
-            }
-            else{
-            	KILL_ITERATION = -1000;
-            	KILL_PLACE_ID = -1;
-            }
+            KILL_ITERATION = (killIterStr != null)?Long.parseLong(killIterStr):-1;
+            KILL_PLACE_ID = (killPlaceStr != null)?Long.parseLong(killPlaceStr):-1;
             
             /*val hammerConfigFile = System.getenv("X10_HAMMER_FILE");
             if (hammerConfigFile != null && !hammerConfigFile.equals("")){
                 hammer = PlaceHammer.make(hammerConfigFile);
             }
             */
+        }
+        else{
+            KILL_ITERATION = -1;
+            KILL_PLACE_ID = -1;
         }
         store = (isResilient)? new ApplicationSnapshotStore(true, places):null;
     }
