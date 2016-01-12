@@ -26,6 +26,9 @@ public class LocalViewResilientExecutor {
     private val VERBOSE = (System.getenv("DEBUG_RESILIENT_EXECUTOR") != null 
                         && System.getenv("DEBUG_RESILIENT_EXECUTOR").equals("1"));
     
+    private val:Long KILL_ITERATION; 
+    private val:Long KILL_PLACE_ID;
+    
     private transient var runTime:Long = 0;
     private transient var checkpointTime:Long = 0;
     private transient var checkpointString:String = "";
@@ -37,7 +40,7 @@ public class LocalViewResilientExecutor {
     private transient var failureDetectionTime:Long = 0;
     private transient var applicationInitializationTime:Long = 0;
     private transient var stepExecCount:Long = 0;
-    private var hammer:PlaceHammer = null;
+    //private var hammer:PlaceHammer = null;
     
     private transient var restoreRequired:Boolean = false;
     private transient var restoreJustDone:Boolean = false;
@@ -48,6 +51,8 @@ public class LocalViewResilientExecutor {
         var place0DebuggingTotalIter:Long = 0;
         var place0TimePerIter:ArrayList[Long];      
         var place0TimeBeforeStep:Long;
+        var place0KillPlaceTime:Long;
+    
         public def this(iter:Long){
             globalIter = iter;
         }
@@ -58,10 +63,24 @@ public class LocalViewResilientExecutor {
         this.itersPerCheckpoint = itersPerCheckpoint;
         if (itersPerCheckpoint > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0) {
             isResilient = true;
-            val hammerConfigFile = System.getenv("X10_HAMMER_FILE");
+            
+            val killIterStr = System.getenv("RESILIENT_EXECUTOR_KILL_ITER");
+            val killPlaceStr = System.getenv("RESILIENT_EXECUTOR_KILL_PLACE");
+            
+            if (killIterStr != null){
+            	KILL_ITERATION = Long.parseLong(killIterStr);
+            	KILL_PLACE_ID = Long.parseLong(killPlaceStr);
+            }
+            else{
+            	KILL_ITERATION = -1000;
+            	KILL_PLACE_ID = -1;
+            }
+            
+            /*val hammerConfigFile = System.getenv("X10_HAMMER_FILE");
             if (hammerConfigFile != null && !hammerConfigFile.equals("")){
                 hammer = PlaceHammer.make(hammerConfigFile);
             }
+            */
         }
         store = (isResilient)? new ApplicationSnapshotStore(true, places):null;
     }
@@ -78,9 +97,10 @@ public class LocalViewResilientExecutor {
         val root = here;
         placeTempData = PlaceLocalHandle.make[PlaceTempData](places, ()=>new PlaceTempData(0));
         placeTempData().place0TimePerIter = new ArrayList[Long]();
+        /*
         if (isTimerHammerActive())
             hammer.startTimerHammer();
-        
+        */
         do{
             try {
 
@@ -99,10 +119,10 @@ public class LocalViewResilientExecutor {
                             Console.OUT.println("Restore places are: " + str);
                         } 
 
-                        if (isIterativeHammerActive()){
+                        /*if (isIterativeHammerActive()){
                             val tmpIter = placeTempData().globalIter;
                             async hammer.checkKillRestore(tmpIter);
-                        }
+                        }*/
                         
                         appOnlyRestoreTime -= Timer.milliTime();
                         store.updatePlaces(newPG);
@@ -139,10 +159,12 @@ public class LocalViewResilientExecutor {
                     //take new checkpoint only if restore was not done in this iteration
                     if (VERBOSE) Console.OUT.println("checkpointing at iter " + placeTempData().globalIter);
                     try {
-                        if (isIterativeHammerActive()) {
+                    	
+                        /*if (isIterativeHammerActive()) {
                             val tmpIter = placeTempData().globalIter;
                             async hammer.checkKillCheckpoint(tmpIter);
                         }
+                        */
                         app.checkpoint(store);
                          
                         lastCheckpointIter = placeTempData().globalIter;
@@ -166,10 +188,25 @@ public class LocalViewResilientExecutor {
                         while ( !app.isFinished_local() && 
                                 (!isResilient || (isResilient && localIter < itersPerCheckpoint)) 
                                ) {
+                        	
+                        	
+                        	val tmpIter = placeTempData().globalIter;
+                        	
+                        	if (KILL_ITERATION == tmpIter && here.id == KILL_PLACE_ID){
+                        		at(Place(0)){
+                        			placeTempData().place0KillPlaceTime = Timer.milliTime();
+                                    Console.OUT.println("[Hammer Log] Time before killing is ["+placeTempData().place0KillPlaceTime+"] ...");
+                        		}
+                        		Console.OUT.println("[Hammer Log] Killing ["+here+"] ...");
+                        		System.killHere();
+                        	}
+                        	
+                        	/*
                             if (isIterativeHammerActive()){
                                 val tmpIter = placeTempData().globalIter;
                                 async hammer.checkKillStep_local(tmpIter);
                             }
+                            */
                         
                             placeTempData().place0TimeBeforeStep = Timer.milliTime();
                             
@@ -188,8 +225,8 @@ public class LocalViewResilientExecutor {
                     stepExecTime += Timer.milliTime();
                 } catch (ex:Exception) {
                     Console.OUT.println("[Hammer Log] Time DPE discovered is ["+Timer.milliTime()+"] ...");
-                    if (hammer != null)
-                        failureDetectionTime = Timer.milliTime() - hammer.killPlaceTime;
+                    if (KILL_ITERATION != -1)
+                        failureDetectionTime = Timer.milliTime() - placeTempData().place0KillPlaceTime;
                     else
                         failureDetectionTime = -1;
                     stepExecTime += Timer.milliTime() - failureDetectionTime;
@@ -206,9 +243,10 @@ public class LocalViewResilientExecutor {
         }while(restoreRequired || !app.isFinished_local());
         
         val runTime = (Timer.milliTime() - startRunTime);
+        /*
         if (isTimerHammerActive())
             hammer.stopTimerHammer();
-        
+        */
         Console.OUT.println("ResilientExecutor completed:checkpointTime:"+checkpointTime+":restoreTime:"+restoreTime+":stepsTime:"+stepExecTime+":AllTime:"+runTime+":checkpointCount:"+checkpointCount+":restoreCount:"+restoreCount+":totalIterations:"+placeTempData().place0DebuggingTotalIter+":applicationOnlyRestoreTime:"+appOnlyRestoreTime+":failureDetectionTime:"+failureDetectionTime+":applicationInitializationTime:"+applicationInitializationTime);
         Console.OUT.println("DetailedCheckpointingTime:"+checkpointString);
         var timePerIterStr:String = "";
@@ -247,8 +285,8 @@ public class LocalViewResilientExecutor {
         else
             throw ex;
     }
-    
+    /*
     private def isTimerHammerActive() = (hammer != null && hammer.isTimerHammer());
     private def isIterativeHammerActive() = (hammer != null && hammer.isIterativeHammer());
-    
+    */
 }
