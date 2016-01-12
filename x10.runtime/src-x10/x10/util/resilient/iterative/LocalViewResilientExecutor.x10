@@ -26,8 +26,8 @@ public class LocalViewResilientExecutor {
     private val VERBOSE = (System.getenv("DEBUG_RESILIENT_EXECUTOR") != null 
                         && System.getenv("DEBUG_RESILIENT_EXECUTOR").equals("1"));
     
-    private val:Long KILL_ITERATION; 
-    private val:Long KILL_PLACE_ID;
+    private val KILL_ITERATION:Long; 
+    private val KILL_PLACE_ID:Long;
     
     private transient var runTime:Long = 0;
     private transient var checkpointTime:Long = 0;
