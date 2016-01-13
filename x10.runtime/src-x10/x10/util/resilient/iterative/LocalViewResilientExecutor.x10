@@ -186,7 +186,7 @@ public class LocalViewResilientExecutor {
                 
                 stepExecTime -= Timer.milliTime();
                 try{
-                	Console.OUT.println("Starting a new round of steps, time consumed till now ["+(Timer.milliTime(startRunTime)-)+"]...");
+                	Console.OUT.println("Starting a new round of steps, time consumed till now ["+(Timer.milliTime()-startRunTime)+"]...");
                     finish ateach(Dist.makeUnique(places)) {
                     	
                     	if (restoreCount > 0)
