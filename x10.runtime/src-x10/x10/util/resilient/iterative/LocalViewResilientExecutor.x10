@@ -90,6 +90,8 @@ public class LocalViewResilientExecutor {
     //the startRunTime parameter is added to allow the executor to consider 
     //any initlization time done by the application before starting the executor  
     public def run(app:LocalViewResilientIterativeApp, startRunTime:Long) {
+    	Console.OUT.println("LocalViewResilientExecutor: Application start time ["+startRunTime+"] ...");
+		
         applicationInitializationTime = Timer.milliTime() - startRunTime;
         
         val root = here;
