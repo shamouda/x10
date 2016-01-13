@@ -133,8 +133,10 @@ public class LocalViewResilientExecutor {
                         val tmpPlace0LastIteration = placeTempData().place0DebuggingTotalIter;
                         val tmpPlace0TimePerIter = placeTempData().place0TimePerIter;
                         
+                        Console.OUT.println("LocalViewResilientExecutor: destroying PLH ...");
                         PlaceLocalHandle.destroy(places, placeTempData, (Place)=>true);
                         placeTempData = PlaceLocalHandle.make[PlaceTempData](newPG, ()=>new PlaceTempData(lastIter));
+                        Console.OUT.println("LocalViewResilientExecutor: PLH recreated successfully ...");
                         
                         //restore place0 debugging data
                         placeTempData().place0DebuggingTotalIter = tmpPlace0LastIteration;
@@ -145,6 +147,7 @@ public class LocalViewResilientExecutor {
                         restoreJustDone = true;
                         restoreTime += Timer.milliTime();
                         restoreCount++;
+                        Console.OUT.println("LocalViewResilientExecutor: All restore steps completed successfully ...");
                     } else {
                         throw new UnsupportedOperationException("failure occurred at iter "
                             + placeTempData().globalIter + " but no valid checkpoint exists!");
@@ -181,8 +184,10 @@ public class LocalViewResilientExecutor {
                 
                 stepExecTime -= Timer.milliTime();
                 try{
-                    finish ateach(Dist.makeUnique(places)) {                    
-                        var localIter:Long = 0;
+                	Console.OUT.println("Starting a new round of steps ...");
+                    finish ateach(Dist.makeUnique(places)) {
+                    	
+                    	var localIter:Long = 0;
                         while ( !app.isFinished_local() && 
                                 (!isResilient || (isResilient && localIter < itersPerCheckpoint)) 
                                ) {
@@ -220,6 +225,7 @@ public class LocalViewResilientExecutor {
                             placeTempData().place0DebuggingTotalIter++;
                         }
                     }
+                    Console.OUT.println("Steps round completed successfully ...");
                     stepExecTime += Timer.milliTime();
                 } catch (ex:Exception) {
                     Console.OUT.println("[Hammer Log] Time DPE discovered is ["+Timer.milliTime()+"] ...");
