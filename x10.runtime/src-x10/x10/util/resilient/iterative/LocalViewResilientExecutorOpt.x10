@@ -47,7 +47,7 @@ public class LocalViewResilientExecutor {
         ///checkpoint variables///
         var lastCheckpointIter:Long;
         val checkpointTimes:Rail[Long];
-        val checkpointLastIndex:Long = -1;
+        var checkpointLastIndex:Long = -1;
         var commitCount:Long = 0;
         val snapshots:Rail[DistObjectSnapshot];
         ///step time logging ////
@@ -67,7 +67,7 @@ public class LocalViewResilientExecutor {
             return snapshots(idx);
         }
 
-        /** Cancel the current snapshot, in case of failure during checkpoint. */
+        /** Cancel a snapshot, in case of failure during checkpoint. */
         public def cancelOtherSnapshot() {
         	val idx = (commitCount+1) % 2;
             snapshots(idx).deleteAll_local();
@@ -167,7 +167,7 @@ public class LocalViewResilientExecutor {
                 
                 finish ateach(Dist.makeUnique(places)) {
                     var localIter:Long = tmpGlobalIter;
-                    var localRestoreJustDone = tmpRestoreJustDone;
+                    var localRestoreJustDone:Boolean = tmpRestoreJustDone;
                     
                     while ( !app.isFinished_local() ) {
                     	var stepStartTime:Long = -1; // (-1) is used to differenciate between checkpoint exceptions and step exceptions
