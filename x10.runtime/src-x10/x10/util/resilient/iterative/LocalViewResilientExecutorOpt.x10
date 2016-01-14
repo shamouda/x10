@@ -17,7 +17,7 @@ import x10.util.Random;
 import x10.regionarray.Dist;
 import x10.util.ArrayList;
 
-public class LocalViewResilientExecutor {
+public class LocalViewResilientExecutorOpt {
     private var placeTempData:PlaceLocalHandle[PlaceTempData];
     private transient var places:PlaceGroup;
     private var team:Team;

@@ -14,7 +14,7 @@ package x10.util.resilient.iterative;
 import x10.util.ArrayList;
 import x10.util.Team;
 
-public interface LocalViewResilientIterativeApp {
+public interface LocalViewResilientIterativeAppOpt {
     /** @return true if computation has finished. */
     public def isFinished_local():Boolean;
     
@@ -24,12 +24,11 @@ public interface LocalViewResilientIterativeApp {
      */
     public def step_local():void;
     
-
     /**
      * Checkpoint the application state at all places.
      * @param store a resilient store containing an application checkpoint
      */
-    public def checkpoint(store:ApplicationSnapshotStore):void;
+    public def checkpoint_local(store:ApplicationSnapshotStore):void;
     
     /**
      * Restore the application state to the new place group, using the last
