@@ -200,7 +200,7 @@ public class LocalViewResilientExecutor {
                         	
                         	val tmpIter = placeTempData().globalIter;
                         	
-                        	if (KILL_ITERATION == tmpIter && here.id == KILL_PLACE_ID){
+                        	if (isResilient && KILL_ITERATION == tmpIter && here.id == KILL_PLACE_ID){
                         		at(Place(0)){
                         			placeTempData().place0KillPlaceTime = Timer.milliTime();
                                     Console.OUT.println("[Hammer Log] Time before killing is ["+placeTempData().place0KillPlaceTime+"] ...");

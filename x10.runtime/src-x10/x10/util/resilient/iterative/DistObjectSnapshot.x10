@@ -55,6 +55,7 @@ public abstract class DistObjectSnapshot {
     public abstract def load(key:Any):Any;
     public abstract def delete(key:Any):void;
     public abstract def deleteAll():void;
+    public abstract def deleteAll_local():void;
 
     /**
      * Place0 implementation of ResilientStore
@@ -93,6 +94,11 @@ public abstract class DistObjectSnapshot {
         public def deleteAll() {
             if (verbose>=1) DEBUG("deleteAll");
             at(Place.FIRST_PLACE) atomic { hm().clear(); }
+        }
+        
+        public def deleteAll_local() {
+        	if (verbose>=1) DEBUG("deleteAll_local");
+        	if (here.id == Place.FIRST_PLACE.id) atomic { hm().clear(); }
         }
         
         private def saveLocal(key:Any, value:Any){
@@ -236,6 +242,10 @@ public abstract class DistObjectSnapshot {
                 if (pl.isDead()) continue;
                 at(pl) async atomic { hm().clear(); }
             }
+        }
+        
+        public def deleteAll_local() {
+        	atomic { hm().clear(); }
         }
         
         private def saveLocal(key:Any, value:Any) {
