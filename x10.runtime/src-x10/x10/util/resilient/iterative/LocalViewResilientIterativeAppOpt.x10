@@ -28,7 +28,7 @@ public interface LocalViewResilientIterativeAppOpt {
      * Checkpoint the application state at all places.
      * @param store a resilient store containing an application checkpoint
      */
-    public def checkpoint_local(store:ApplicationSnapshotStore):void;
+    public def checkpoint_local(store:DistObjectSnapshot):void;
     
     /**
      * Restore the application state to the new place group, using the last

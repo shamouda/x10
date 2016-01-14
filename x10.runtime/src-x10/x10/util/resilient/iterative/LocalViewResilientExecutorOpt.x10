@@ -16,6 +16,8 @@ import x10.util.Timer;
 import x10.util.Random;
 import x10.regionarray.Dist;
 import x10.util.ArrayList;
+import x10.util.Team;
+import x10.util.GrowableRail;
 
 public class LocalViewResilientExecutorOpt {
     private var placeTempData:PlaceLocalHandle[PlaceTempData];
@@ -52,7 +54,7 @@ public class LocalViewResilientExecutorOpt {
         val snapshots:Rail[DistObjectSnapshot];
         ///step time logging ////
         val stepTimes:Rail[Long];
-        val stepLastIndex:Long = -1;
+        var stepLastIndex:Long = -1;
 
         public def this(checkpointLastIndex:Long, snapshots:Rail[DistObjectSnapshot]){
             stepTimes = new Rail[Long](1000); //TODO use ArrayList
@@ -61,6 +63,10 @@ public class LocalViewResilientExecutorOpt {
             this.snapshots = snapshots;
         }
     
+        private def getConsistentSnapshot():DistObjectSnapshot{
+            val idx = commitCount % 2;
+            return snapshots(idx);
+        }  
         
         public def getNextSnapshot():DistObjectSnapshot {
             val idx = (commitCount+1) % 2;
@@ -136,7 +142,8 @@ public class LocalViewResilientExecutorOpt {
                         
                         team = new Team(places);
                         //TODO: change restore to use DistObjectSnapshot class instead of ApplicationStore
-                        app.restore(newPG, team, store, lastCheckpointIter, addedPlaces);
+                        val store = placeTempData().getConsistentSnapshot();
+                        app.restore(newPG, team, store, placeTempData().lastCheckpointIter, addedPlaces);
                         appOnlyRestoreTime += Timer.milliTime();
                         
                         val lastIter = placeTempData().lastCheckpointIter;
@@ -145,7 +152,7 @@ public class LocalViewResilientExecutorOpt {
                         
                         for (sparePlace in addedPlaces){
                             Console.OUT.println("LocalViewResilientExecutor: Adding place["+sparePlace+"] ...");           
-                            PlaceLocalHandle.addPlace[PlaceTempData](placeTempData, sparePlace, ()=>new PlaceTempData(lastIter, tmpPlace0LastCheckpointIndex);
+                            PlaceLocalHandle.addPlace[PlaceTempData](placeTempData, sparePlace, ()=>new PlaceTempData(tmpPlace0LastCheckpointIndex, snapshots));
                         }
                         
                         places = newPG;
@@ -164,7 +171,7 @@ public class LocalViewResilientExecutorOpt {
                 //to be copied to all places
                 val tmpRestoreJustDone = restoreJustDone;
                 val tmpGlobalIter = globalIter;
-                
+                val placesCount = places.size();
                 finish ateach(Dist.makeUnique(places)) {
                     var localIter:Long = tmpGlobalIter;
                     var localRestoreJustDone:Boolean = tmpRestoreJustDone;
@@ -190,7 +197,7 @@ public class LocalViewResilientExecutorOpt {
                                 //take new checkpoint only if restore was not done in this iteration
                                 if (isResilient && (localIter % itersPerCheckpoint) == 0) {
                                     if (VERBOSE) Console.OUT.println("checkpointing at iter " + localIter);
-                                    checkpointProtocol_local(team, placeTempData(), root, places.size());
+                                    checkpointProtocol_local(app, team, placeTempData(), root, placesCount);
                                     placeTempData().lastCheckpointIter = localIter;
                                 }
                             } else {
@@ -201,7 +208,7 @@ public class LocalViewResilientExecutorOpt {
                         	
                             app.step_local();
                             
-                            placeTempData().stepsTime(++placeTempData().stepLastIndex) = Timer.milliTime()-stepStartTime;
+                            placeTempData().stepTimes(++placeTempData().stepLastIndex) = Timer.milliTime()-stepStartTime;
                             
                             if (here.id == 0)
                                 placeTempData().place0DebuggingTotalIter++;
@@ -210,10 +217,10 @@ public class LocalViewResilientExecutorOpt {
                             
                         } catch (ex:Exception) {
                         	if (stepStartTime != -1) { //step has started
-                        	    placeTempData().stepsTime(++placeTempData().stepLastIndex) = Timer.milliTime()-stepStartTime;
+                        	    placeTempData().stepTimes(++placeTempData().stepLastIndex) = Timer.milliTime()-stepStartTime;
                         	}
                             Console.OUT.println("[Hammer Log] Time DPE discovered is ["+Timer.milliTime()+"] ...");
-                            if (isResilient && containsDPE(iterEx)){
+                            if (isResilient && containsDPE(ex)){
                                 if (placeTempData().place0KillPlaceTime != -1)
                                     failureDetectionTime = Timer.milliTime() - placeTempData().place0KillPlaceTime;
                                 else
@@ -237,15 +244,10 @@ public class LocalViewResilientExecutorOpt {
         
         val runTime = (Timer.milliTime() - startRunTime);
         
-        var stepExecTiime:Long = -1;//TODO: fix this
-        Console.OUT.println("ResilientExecutor completed:checkpointTime:"+checkpointTime+":restoreTime:"+restoreTime+":stepsTime:"+stepExecTime+":AllTime:"+runTime+":checkpointCount:"+checkpointCount+":restoreCount:"+restoreCount+":totalIterations:"+placeTempData().place0DebuggingTotalIter+":applicationOnlyRestoreTime:"+appOnlyRestoreTime+":failureDetectionTime:"+failureDetectionTime+":applicationInitializationTime:"+applicationInitializationTime);
-        Console.OUT.println("DetailedCheckpointingTime:"+checkpointString);
-        /*
-        var timePerIterStr:String = "";
-        for (x in placeTempData().place0TimePerIter)
-            timePerIterStr += x + ",";
-        Console.OUT.println("Place0TimePerIteration:" + timePerIterStr);
-        */
+        //var stepExecTime:Long = -1;//TODO: fix this
+        //Console.OUT.println("ResilientExecutor completed:checkpointTime:"+checkpointTime+":restoreTime:"+restoreTime+":stepsTime:"+stepExecTime+":AllTime:"+runTime+":checkpointCount:"+checkpointCount+":restoreCount:"+restoreCount+":totalIterations:"+placeTempData().place0DebuggingTotalIter+":applicationOnlyRestoreTime:"+appOnlyRestoreTime+":failureDetectionTime:"+failureDetectionTime+":applicationInitializationTime:"+applicationInitializationTime);
+        //Console.OUT.println("DetailedCheckpointingTime:"+checkpointString);
+        
         if (VERBOSE){
             var str:String = "";
             for (p in places)
@@ -293,7 +295,7 @@ public class LocalViewResilientExecutorOpt {
     	return false;
     }
     
-    private def checkpointProtocol_local(team:Team, placeTmpData:PlaceTempData, root:Place, placesCount:Long){
+    private def checkpointProtocol_local(app:LocalViewResilientIterativeAppOpt, team:Team, placeTmpData:PlaceTempData, root:Place, placesCount:Long){
         val startCheckpoint = Timer.milliTime();
         var checkpointSucceeded:Boolean = false;
         val excs = new GrowableRail[CheckedThrowable]();
@@ -311,7 +313,7 @@ public class LocalViewResilientExecutorOpt {
         //phase-1: voting
         var totalVotes:Long = 0;
         try{
-            totalVotes = team.allReduce(vote, Team.ADD);
+            totalVotes = team.allreduce(vote, Team.ADD);
             //the semantics of Team.allReduce allows some places to succeed while others receive DPE
         }
         catch(vEx:Exception){
