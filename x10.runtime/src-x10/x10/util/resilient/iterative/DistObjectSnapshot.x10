@@ -56,6 +56,7 @@ public abstract class DistObjectSnapshot {
     public abstract def delete(key:Any):void;
     public abstract def deleteAll():void;
     public abstract def deleteAll_local():void;
+    public abstract def printKeys_local():void;
 
     /**
      * Place0 implementation of ResilientStore
@@ -162,6 +163,16 @@ public abstract class DistObjectSnapshot {
             } else {
                 throw new Exception("unknown remote copy mode");
             }
+        }
+        
+        public def printKeys_local(){
+        	if (here.id == Place.FIRST_PLACE.id) atomic {
+        	    val iter = hm().keySet().iterator();
+                while (iter.hasNext()) {
+                    val key = iter.next();
+                    Console.OUT.println("["+here+"] - key found ["+key+"] ...");
+                }
+        	}
         }
     }
     
@@ -311,6 +322,18 @@ public abstract class DistObjectSnapshot {
             } else {
                 throw new Exception("unknown remote copy mode");
             }
+        }
+        
+        public def printKeys_local(){
+        	atomic{
+        	    val iter = hm().keySet().iterator();
+        	    var str:String = "";
+                while (iter.hasNext()) {
+                    val key = iter.next();
+                    str += key + ",";
+                }
+                Console.OUT.println("["+here+"] - keys ["+str+"] ...");
+        	}
         }
     }
 }

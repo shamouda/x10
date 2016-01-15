@@ -77,25 +77,25 @@ public class LocalViewResilientExecutorOpt {
         
         public def getNextSnapshot():DistObjectSnapshot {
             val idx = (commitCount+1) % 2;
-            Console.OUT.println("["+here+"] Next (temp) Checkpoint Index ["+idx+"] ...");
+            if (VERBOSE) Console.OUT.println("["+here+"] Temp Checkpoint Index ["+idx+"] ...");
             return snapshots(idx);
         }
 
         /** Cancel a snapshot, in case of failure during checkpoint. */
         public def cancelOtherSnapshot() {
         	val idx = (commitCount+1) % 2;
-        	Console.OUT.println("["+here+"] Deleting Checkpoint At Index ["+idx+"] ...");
+        	if (VERBOSE) Console.OUT.println("["+here+"] Deleting Checkpoint At Index ["+idx+"] ...");
             snapshots(idx).deleteAll_local();
         }
         
         public def commit() {
             commitCount++; // switch to the new snapshot
-            Console.OUT.println("["+here+"] Committed, index now equals ["+commitCount+"] ...");
+            if (VERBOSE) Console.OUT.println("["+here+"] Committed count ["+commitCount+"] ...");
         }
         
         public def rollback(){
         	commitCount++; // switch to the new snapshot
-        	Console.OUT.println("["+here+"] Rollbacked, index now equals ["+commitCount+"] ...");
+        	if (VERBOSE) Console.OUT.println("["+here+"] Rollbacked count ["+commitCount+"] ...");
         }
     }
     
@@ -154,6 +154,7 @@ public class LocalViewResilientExecutorOpt {
                         
                         team = new Team(newPG);
                         val store = placeTempData().getConsistentSnapshot();
+                        
                         app.restore(newPG, team, store, placeTempData().lastCheckpointIter, addedPlaces);
                         appOnlyRestoreTime += Timer.milliTime();
                         
