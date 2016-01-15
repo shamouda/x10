@@ -101,10 +101,14 @@ public class LocalViewResilientExecutorOpt {
         if (itersPerCheckpoint > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0) {
             isResilient = true;
             
-            
-            
-            
-            
+            if (VERBOSE){
+            	Console.OUT.println("EXECUTOR_KILL_STEP="+KILL_STEP);
+            	Console.OUT.println("EXECUTOR_KILL_STEP_PLACE="+KILL_STEP_PLACE);
+            	Console.OUT.println("EXECUTOR_KILL_CHECKVOTING="+KILL_CHECKVOTING_INDEX);
+            	Console.OUT.println("EXECUTOR_KILL_CHECKVOTING_PLACE="+KILL_CHECKVOTING_PLACE);
+            	Console.OUT.println("EXECUTOR_KILL_CHECKCOMP="+KILL_CHECKCOMP_INDEX);
+            	Console.OUT.println("EXECUTOR_KILL_CHECKCOMP_PLACE="+KILL_CHECKCOMP_PLACE);
+            }
         }
     }
 
