@@ -25,20 +25,20 @@ public class LocalViewResilientExecutorOpt {
     private var team:Team;
     private val itersPerCheckpoint:Long;
     private var isResilient:Boolean = false;
+    // if step_local() are implicitly synchronized, no need for a step barrier inside the executor
+    private val implicitStepSynchronization:Boolean; 
     private val VERBOSE = (System.getenv("DEBUG_RESILIENT_EXECUTOR") != null 
                         && System.getenv("DEBUG_RESILIENT_EXECUTOR").equals("1"));
-    
     private val KILL_ITERATION:Long; 
     private val KILL_PLACE_ID:Long;
+    
     
     private transient var runTime:Long = 0;
     private transient var restoreTime:Long = 0;
     private transient var appOnlyRestoreTime:Long = 0;
     private transient var restoreCount:Long = 0;
-    //private transient var stepExecTime:Long = 0;
     private transient var failureDetectionTime:Long = 0;
     private transient var applicationInitializationTime:Long = 0;
-    private transient var stepExecCount:Long = 0;
     
     private transient var restoreRequired:Boolean = false;
     private transient var restoreJustDone:Boolean = false;
@@ -88,9 +88,10 @@ public class LocalViewResilientExecutorOpt {
         }
     }
     
-    public def this(itersPerCheckpoint:Long, places:PlaceGroup) {
+    public def this(itersPerCheckpoint:Long, places:PlaceGroup, implicitStepSynchronization:Boolean) {
         this.places = places;
         this.itersPerCheckpoint = itersPerCheckpoint;
+        this.implicitStepSynchronization = implicitStepSynchronization;
         if (itersPerCheckpoint > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0) {
             isResilient = true;
             val killIterStr = System.getenv("RESILIENT_EXECUTOR_KILL_ITER");
@@ -141,7 +142,6 @@ public class LocalViewResilientExecutorOpt {
                         appOnlyRestoreTime -= Timer.milliTime();
                         
                         team = new Team(places);
-                        //TODO: change restore to use DistObjectSnapshot class instead of ApplicationStore
                         val store = placeTempData().getConsistentSnapshot();
                         app.restore(newPG, team, store, placeTempData().lastCheckpointIter, addedPlaces);
                         appOnlyRestoreTime += Timer.milliTime();
@@ -189,8 +189,10 @@ public class LocalViewResilientExecutorOpt {
                         		System.killHere();
                         	}
                         	
-                        	//sync places & detect DPE
-                        	team.barrier();
+                        	if (!implicitStepSynchronization){
+                        	    //to sync places & also to detect DPE
+                        	    team.barrier();
+                        	}
                         	
                         	//checkpoint iteration?
                         	if (!localRestoreJustDone) {
@@ -205,18 +207,16 @@ public class LocalViewResilientExecutorOpt {
                             }
                         	
                         	stepStartTime = Timer.milliTime();
-                        	
                             app.step_local();
-                            
                             placeTempData().stepTimes(++placeTempData().stepLastIndex) = Timer.milliTime()-stepStartTime;
+                            
+                            localIter++;
                             
                             if (here.id == 0)
                                 placeTempData().place0DebuggingTotalIter++;
                             
-                            localIter++;
-                            
                         } catch (ex:Exception) {
-                        	if (stepStartTime != -1) { //step has started
+                        	if (stepStartTime != -1) { //failure happened during step, not during checkpoint
                         	    placeTempData().stepTimes(++placeTempData().stepLastIndex) = Timer.milliTime()-stepStartTime;
                         	}
                             Console.OUT.println("[Hammer Log] Time DPE discovered is ["+Timer.milliTime()+"] ...");
@@ -226,11 +226,9 @@ public class LocalViewResilientExecutorOpt {
                                 else
                                     failureDetectionTime = -1;
                             }
-                            
                             throw ex;
                         }//step catch block
                     }//while !isFinished
-                        
                 }//finish ateach    
             }
             catch (iterEx:Exception) {
@@ -295,9 +293,11 @@ public class LocalViewResilientExecutorOpt {
     	return false;
     }
     
+    //Two phase commit protocol for ensuring consistent checkpointing.
+    //Checkpointing will only occur in resilient mode
+    //Limitation: we only assume the voting allreduce call to fail only with DPE, no other exceptions may occur
     private def checkpointProtocol_local(app:LocalViewResilientIterativeAppOpt, team:Team, placeTmpData:PlaceTempData, root:Place, placesCount:Long){
         val startCheckpoint = Timer.milliTime();
-        var checkpointSucceeded:Boolean = false;
         val excs = new GrowableRail[CheckedThrowable]();
 
         val store = placeTmpData.getNextSnapshot();
@@ -314,14 +314,14 @@ public class LocalViewResilientExecutorOpt {
         var totalVotes:Long = 0;
         try{
             totalVotes = team.allreduce(vote, Team.ADD);
-            //the semantics of Team.allReduce allows some places to succeed while others receive DPE
+            //the semantics of Team.allReduce allows some places to succeed while others may receive DPE
         }
         catch(vEx:Exception){
         	excs.add(vEx);
         }
             
         var phase1Succeeded:Boolean = false;
-        if (totalVotes == placesCount){
+        if (totalVotes == placesCount){ // Limitation: this condition is assumed to be correct at each place in non-resilient mode
             placeTmpData.commit();
             phase1Succeeded = true;
             //other places might have noticed a DPE, and did not commit
@@ -329,23 +329,20 @@ public class LocalViewResilientExecutorOpt {
             
         //phase-2: completion
         var phase2Succeeded:Boolean = false;
-        if (isResilient){
-            try{
-                team.barrier();
-                phase2Succeeded = true;
-                //everyone is alive // they all at the same state (either committed or not)
-            }catch(cEx:Exception){
-            	excs.add(cEx);
-                if (phase1Succeeded){
-                    placeTmpData.rollback();
-            	}
+        try{
+        	//TODO: barrier can only useful for detecting DPE exceptions, but they can not detect places failing due to other reasons
+            team.barrier();
+            phase2Succeeded = true;
+            //everyone is alive // they all at the same state (either committed or not)
+        }catch(cEx:Exception){
+            //some places might have died, so rollback if you have committed
+            excs.add(cEx);
+            if (phase1Succeeded){
+                placeTmpData.rollback();
             }
         }
-        else  
-            phase2Succeeded = true; 
-            
         placeTmpData.cancelOtherSnapshot();
-            
+        
         placeTempData().checkpointTimes(++placeTempData().checkpointLastIndex) = Timer.milliTime() - startCheckpoint;
         
         if (excs.size() > 0){
