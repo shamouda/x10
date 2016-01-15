@@ -205,7 +205,7 @@ public class LocalViewResilientExecutorOpt {
                                 //take new checkpoint only if restore was not done in this iteration
                                 if (isResilient && (localIter % itersPerCheckpoint) == 0) {
                                     if (VERBOSE) Console.OUT.println("checkpointing at iter " + localIter);
-                                    checkpointProtocol_local(app, team, placeTempData(), root, placesCount);
+                                    checkpointProtocol_local(app, team, root, placesCount);
                                     placeTempData().lastCheckpointIter = localIter;
                                 }
                             } else {
@@ -302,11 +302,11 @@ public class LocalViewResilientExecutorOpt {
     //Two phase commit protocol for ensuring consistent checkpointing.
     //Checkpointing will only occur in resilient mode
     //Limitation: we only assume the voting allreduce call to fail only with DPE, no other exceptions may occur
-    private def checkpointProtocol_local(app:LocalViewResilientIterativeAppOpt, team:Team, placeTmpData:PlaceTempData, root:Place, placesCount:Long){
+    private def checkpointProtocol_local(app:LocalViewResilientIterativeAppOpt, team:Team, root:Place, placesCount:Long){
         val startCheckpoint = Timer.milliTime();
         val excs = new GrowableRail[CheckedThrowable]();
 
-        val store = placeTmpData.getNextSnapshot();
+        val store = placeTempData().getNextSnapshot();
         var vote:Long = 1;
         try{
             //change store to use DistObjSnapsot
@@ -316,10 +316,10 @@ public class LocalViewResilientExecutorOpt {
             excs.add(ex);
         }
 
-        if (KILL_CHECKVOTING_INDEX == (placeTmpData.checkpointLastIndex+1) && here.id == KILL_CHECKVOTING_PLACE){
+        if (KILL_CHECKVOTING_INDEX == (placeTempData().checkpointLastIndex+1) && here.id == KILL_CHECKVOTING_PLACE){
     		at(Place(0)){
-    			placeTempData.place0KillPlaceTime = Timer.milliTime();
-                Console.OUT.println("[Hammer Log] Time before killing is ["+placeTmpData.place0KillPlaceTime+"] ...");
+    			placeTempData().place0KillPlaceTime = Timer.milliTime();
+                Console.OUT.println("[Hammer Log] Time before killing is ["+placeTempData().place0KillPlaceTime+"] ...");
     		}
     		Console.OUT.println("[Hammer Log] Killing ["+here+"] ...");
     		System.killHere();
@@ -336,15 +336,15 @@ public class LocalViewResilientExecutorOpt {
             
         var phase1Succeeded:Boolean = false;
         if (totalVotes == placesCount){ // Limitation: this condition is assumed to be correct at each place in non-resilient mode
-            placeTmpData.commit();
+            placeTempData().commit();
             phase1Succeeded = true;
             //other places might have noticed a DPE, and did not commit
         }
         
-        if (KILL_CHECKCOMP_INDEX == (placeTmpData.checkpointLastIndex+1) && here.id == KILL_CHECKCOMP_PLACE){
+        if (KILL_CHECKCOMP_INDEX == (placeTempData().checkpointLastIndex+1) && here.id == KILL_CHECKCOMP_PLACE){
     		at(Place(0)){
-    			placeTempData.place0KillPlaceTime = Timer.milliTime();
-                Console.OUT.println("[Hammer Log] Time before killing is ["+placeTmpData.place0KillPlaceTime+"] ...");
+    			placeTempData().place0KillPlaceTime = Timer.milliTime();
+                Console.OUT.println("[Hammer Log] Time before killing is ["+placeTempData().place0KillPlaceTime+"] ...");
     		}
     		Console.OUT.println("[Hammer Log] Killing ["+here+"] ...");
     		System.killHere();
@@ -361,12 +361,12 @@ public class LocalViewResilientExecutorOpt {
             //some places might have died, so rollback if you have committed
             excs.add(cEx);
             if (phase1Succeeded){
-                placeTmpData.rollback();
+                placeTempData().rollback();
             }
         }
-        placeTmpData.cancelOtherSnapshot();
+        placeTempData().cancelOtherSnapshot();
         
-        placeTmpData.checkpointTimes(++placeTmpData.checkpointLastIndex) = Timer.milliTime() - startCheckpoint;
+        placeTempData().checkpointTimes(++placeTempData().checkpointLastIndex) = Timer.milliTime() - startCheckpoint;
         
         if (excs.size() > 0){
         	throw new MultipleExceptions(excs);
