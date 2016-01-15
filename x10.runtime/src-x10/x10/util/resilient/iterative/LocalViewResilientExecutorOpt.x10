@@ -26,6 +26,8 @@ import x10.util.GrowableRail;
  * use local view restore within the same fan-out of the steps and checkpoint
  * investigate team hanging with sockets again
  * when a palce dies, store.rebackup_local()
+ * 
+ * bug: when we delete the data in the store, the spare places are not deleted!!!
  * */
 public class LocalViewResilientExecutorOpt {
     private var placeTempData:PlaceLocalHandle[PlaceTempData];
@@ -61,7 +63,7 @@ public class LocalViewResilientExecutorOpt {
         var place0DebuggingTotalIter:Long = 0;
         var place0KillPlaceTime:Long = -1;
         ///checkpoint variables///
-        var lastCheckpointIter:Long;
+        var lastCheckpointIter:Long = -1;
         val checkpointTimes:Rail[Long];
         var checkpointLastIndex:Long = -1;
         var commitCount:Long = 0;
@@ -70,11 +72,13 @@ public class LocalViewResilientExecutorOpt {
         val stepTimes:Rail[Long];
         var stepLastIndex:Long = -1;
 
-        public def this(checkpointLastIndex:Long, snapshots:Rail[DistObjectSnapshot]){
+        public def this(checkpointLastIndex:Long, snapshots:Rail[DistObjectSnapshot], lastCheckpointIter:Long, commitCount:Long){
             stepTimes = new Rail[Long](1000); //TODO use ArrayList
             checkpointTimes = new Rail[Long](100); // TODO: use ArrayList
             this.checkpointLastIndex = checkpointLastIndex; 
             this.snapshots = snapshots;
+            this.lastCheckpointIter = lastCheckpointIter;
+            this.commitCount = commitCount;
         }
     
         private def getConsistentSnapshot():DistObjectSnapshot{
@@ -101,8 +105,9 @@ public class LocalViewResilientExecutorOpt {
             if (VERBOSE) Console.OUT.println("["+here+"] Committed count ["+commitCount+"] ...");
         }
         
+        //must be called after a commit
         public def rollback(){
-        	commitCount++; // switch to the new snapshot
+        	commitCount--; // switch to the new snapshot
         	if (VERBOSE) Console.OUT.println("["+here+"] Rollbacked count ["+commitCount+"] ...");
         }
     }
@@ -135,8 +140,8 @@ public class LocalViewResilientExecutorOpt {
     	Console.OUT.println("LocalViewResilientExecutor: Application start time ["+startRunTime+"] ...");
         applicationInitializationTime = Timer.milliTime() - startRunTime;
         val root = here;
-        val snapshots = (isResilient)?new Rail[DistObjectSnapshot](2, DistObjectSnapshot.make()):null;
-        placeTempData = PlaceLocalHandle.make[PlaceTempData](places, ()=>new PlaceTempData(-1, snapshots));
+        val snapshots = (isResilient)?new Rail[DistObjectSnapshot](2, (i:Long)=>DistObjectSnapshot.make()):null;
+        placeTempData = PlaceLocalHandle.make[PlaceTempData](places, ()=>new PlaceTempData(-1, snapshots, -1, 0));
         team = new Team(places);
         var globalIter:Long = 0;
         
@@ -167,12 +172,13 @@ public class LocalViewResilientExecutorOpt {
                         appOnlyRestoreTime += Timer.milliTime();
                         
                         val lastIter = placeTempData().lastCheckpointIter;
-                        //save place0 debugging data
+                        //save place0 data to initialize the new added places
                         val tmpPlace0LastCheckpointIndex = placeTempData().checkpointLastIndex;
-                        
+                        val tmpPlace0LastCheckpointIter = placeTempData().lastCheckpointIter;
+                        val tmpPlace0CommitCount = placeTempData().commitCount;
                         for (sparePlace in addedPlaces){
                             Console.OUT.println("LocalViewResilientExecutor: Adding place["+sparePlace+"] ...");           
-                            PlaceLocalHandle.addPlace[PlaceTempData](placeTempData, sparePlace, ()=>new PlaceTempData(tmpPlace0LastCheckpointIndex, snapshots));
+                            PlaceLocalHandle.addPlace[PlaceTempData](placeTempData, sparePlace, ()=>new PlaceTempData(tmpPlace0LastCheckpointIndex, snapshots,tmpPlace0LastCheckpointIter,tmpPlace0CommitCount));
                         }
                         
                         places = newPG;
@@ -392,7 +398,7 @@ public class LocalViewResilientExecutorOpt {
                 placeTempData().rollback();
             }
         }
-        //placeTempData().cancelOtherSnapshot();
+        placeTempData().cancelOtherSnapshot();
         
         placeTempData().checkpointTimes(++placeTempData().checkpointLastIndex) = Timer.milliTime() - startCheckpoint;
         
