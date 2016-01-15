@@ -241,7 +241,7 @@ public class LocalViewResilientExecutorOpt {
             		restoreRequired = true;
             		
             		Console.OUT.println("[Hammer Log] Time DPE discovered is ["+Timer.milliTime()+"] ...");
-                    if (isResilient && containsDPE(ex)){
+                    if (isResilient && containsDPE(iterEx)){
                         if (placeTempData().place0KillPlaceTime != -1)
                             failureDetectionTime = Timer.milliTime() - placeTempData().place0KillPlaceTime;
                         else
