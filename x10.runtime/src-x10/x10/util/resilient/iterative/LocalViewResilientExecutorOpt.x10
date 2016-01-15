@@ -182,13 +182,15 @@ public class LocalViewResilientExecutorOpt {
                 
                 //to be copied to all places
                 val tmpRestoreJustDone = restoreJustDone;
+                val tmpRestoreRequired = restoreRequired;
                 val tmpGlobalIter = globalIter;
                 val placesCount = places.size();
                 finish ateach(Dist.makeUnique(places)) {
                     var localIter:Long = tmpGlobalIter;
                     var localRestoreJustDone:Boolean = tmpRestoreJustDone;
+                    var localRestoreRequired:Boolean = tmpRestoreRequired;
                     
-                    while ( !app.isFinished_local() ) {
+                    while ( !app.isFinished_local() /*|| localRestoreRequired*/) {
                     	var stepStartTime:Long = -1; // (-1) is used to differenciate between checkpoint exceptions and step exceptions
                         try{
                         	// kill iteration?
@@ -201,6 +203,15 @@ public class LocalViewResilientExecutorOpt {
                         		System.killHere();
                         	}
                         	
+                        	//validate is restore required
+                        	/*
+                        	if (localRestoreRequired){
+                        		restore_local(app, team, root, placesCount);
+                        		localRestoreRequired = false;
+                        		localRestoreJustDone = true;
+                        	}
+                        	*/
+                        	
                         	if (!implicitStepSynchronization){
                         	    //to sync places & also to detect DPE
                         	    team.barrier();
@@ -210,7 +221,7 @@ public class LocalViewResilientExecutorOpt {
                         	if (!localRestoreJustDone) {
                                 //take new checkpoint only if restore was not done in this iteration
                                 if (isResilient && (localIter % itersPerCheckpoint) == 0) {
-                                    if (VERBOSE) Console.OUT.println("checkpointing at iter " + localIter);
+                                    if (VERBOSE) Console.OUT.println("["+here+"] checkpointing at iter " + localIter);
                                     checkpointProtocol_local(app, team, root, placesCount);
                                     placeTempData().lastCheckpointIter = localIter;
                                 }
@@ -237,6 +248,7 @@ public class LocalViewResilientExecutorOpt {
                 }//finish ateach    
             }
             catch (iterEx:Exception) {
+            	iterEx.printStackTrace();
             	//exception from finish_ateach  or from restore
             	if (isResilient && containsDPE(iterEx)){
             		restoreRequired = true;

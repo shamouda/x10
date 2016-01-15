@@ -30,6 +30,10 @@ public interface LocalViewResilientIterativeAppOpt {
      */
     public def checkpoint_local(store:DistObjectSnapshot):void;
     
+    public def remake(newPlaces:PlaceGroup, newTeam:Team, newAddedPlaces:ArrayList[Place]):void;
+    
+    public def restore_local(store:DistObjectSnapshot, lastCheckpointIter:Long):void;
+    
     /**
      * Restore the application state to the new place group, using the last
      * consistent checkpoint from the resilient store.
