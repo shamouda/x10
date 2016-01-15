@@ -27,12 +27,18 @@ public class LocalViewResilientExecutorOpt {
     private var isResilient:Boolean = false;
     // if step_local() are implicitly synchronized, no need for a step barrier inside the executor
     private val implicitStepSynchronization:Boolean; 
-    private val VERBOSE = (System.getenv("DEBUG_RESILIENT_EXECUTOR") != null 
-                        && System.getenv("DEBUG_RESILIENT_EXECUTOR").equals("1"));
-    private val KILL_ITERATION:Long; 
-    private val KILL_PLACE_ID:Long;
+    private val VERBOSE = (System.getenv("EXECUTOR_DEBUG") != null 
+                        && System.getenv("EXECUTOR_DEBUG").equals("1"));
     
-    
+    //parameters for killing places at different times
+    private val KILL_STEP = (System.getenv("EXECUTOR_KILL_STEP") != null)?Long.parseLong(System.getenv("EXECUTOR_KILL_STEP")):-1;
+    private val KILL_STEP_PLACE = (System.getenv("EXECUTOR_KILL_STEP_PLACE") != null)?Long.parseLong(System.getenv("EXECUTOR_KILL_STEP_PLACE")):-1;
+    // index of the checkpoint first checkpoint (0), second checkpoint (1), ...etc
+    private val KILL_CHECKVOTING_INDEX = (System.getenv("EXECUTOR_KILL_CHECKVOTING") != null)?Long.parseLong(System.getenv("EXECUTOR_KILL_CHECKVOTING")):-1;
+    private val KILL_CHECKVOTING_PLACE = (System.getenv("EXECUTOR_KILL_CHECKVOTING_PLACE") != null)?Long.parseLong(System.getenv("EXECUTOR_KILL_CHECKVOTING_PLACE")):-1;   
+    private val KILL_CHECKCOMP_INDEX = (System.getenv("EXECUTOR_KILL_CHECKCOMP") != null)?Long.parseLong(System.getenv("EXECUTOR_KILL_CHECKCOMP")):-1;
+    private val KILL_CHECKCOMP_PLACE = (System.getenv("EXECUTOR_KILL_CHECKCOMP_PLACE") != null)?Long.parseLong(System.getenv("EXECUTOR_KILL_CHECKCOMP_PLACE")):-1; 
+
     private transient var runTime:Long = 0;
     private transient var restoreTime:Long = 0;
     private transient var appOnlyRestoreTime:Long = 0;
@@ -94,16 +100,12 @@ public class LocalViewResilientExecutorOpt {
         this.implicitStepSynchronization = implicitStepSynchronization;
         if (itersPerCheckpoint > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0) {
             isResilient = true;
-            val killIterStr = System.getenv("RESILIENT_EXECUTOR_KILL_ITER");
-            val killPlaceStr = System.getenv("RESILIENT_EXECUTOR_KILL_PLACE");
-            KILL_ITERATION = (killIterStr != null)?Long.parseLong(killIterStr):-1;
-            KILL_PLACE_ID = (killPlaceStr != null)?Long.parseLong(killPlaceStr):-1;  
+            
+            
+            
+            
+            
         }
-        else{
-            KILL_ITERATION = -1;
-            KILL_PLACE_ID = -1;
-        }
-        
     }
 
     public def run(app:LocalViewResilientIterativeAppOpt) {
@@ -141,7 +143,7 @@ public class LocalViewResilientExecutorOpt {
                         } 
                         appOnlyRestoreTime -= Timer.milliTime();
                         
-                        team = new Team(places);
+                        team = new Team(newPG);
                         val store = placeTempData().getConsistentSnapshot();
                         app.restore(newPG, team, store, placeTempData().lastCheckpointIter, addedPlaces);
                         appOnlyRestoreTime += Timer.milliTime();
@@ -180,7 +182,7 @@ public class LocalViewResilientExecutorOpt {
                     	var stepStartTime:Long = -1; // (-1) is used to differenciate between checkpoint exceptions and step exceptions
                         try{
                         	// kill iteration?
-                        	if (isResilient && KILL_ITERATION == localIter && here.id == KILL_PLACE_ID){
+                        	if (isResilient && KILL_STEP == localIter && here.id == KILL_STEP_PLACE){
                         		at(Place(0)){
                         			placeTempData().place0KillPlaceTime = Timer.milliTime();
                                     Console.OUT.println("[Hammer Log] Time before killing is ["+placeTempData().place0KillPlaceTime+"] ...");
@@ -309,7 +311,15 @@ public class LocalViewResilientExecutorOpt {
             vote = 0;
             excs.add(ex);
         }
-            
+
+        if (KILL_CHECKVOTING_INDEX == (placeTmpData.checkpointLastIndex+1) && here.id == KILL_CHECKVOTING_PLACE){
+    		at(Place(0)){
+    			placeTempData.place0KillPlaceTime = Timer.milliTime();
+                Console.OUT.println("[Hammer Log] Time before killing is ["+placeTmpData.place0KillPlaceTime+"] ...");
+    		}
+    		Console.OUT.println("[Hammer Log] Killing ["+here+"] ...");
+    		System.killHere();
+    	}
         //phase-1: voting
         var totalVotes:Long = 0;
         try{
@@ -326,7 +336,16 @@ public class LocalViewResilientExecutorOpt {
             phase1Succeeded = true;
             //other places might have noticed a DPE, and did not commit
         }
-            
+        
+        if (KILL_CHECKCOMP_INDEX == (placeTmpData.checkpointLastIndex+1) && here.id == KILL_CHECKCOMP_PLACE){
+    		at(Place(0)){
+    			placeTempData.place0KillPlaceTime = Timer.milliTime();
+                Console.OUT.println("[Hammer Log] Time before killing is ["+placeTmpData.place0KillPlaceTime+"] ...");
+    		}
+    		Console.OUT.println("[Hammer Log] Killing ["+here+"] ...");
+    		System.killHere();
+    	}
+        
         //phase-2: completion
         var phase2Succeeded:Boolean = false;
         try{
@@ -343,7 +362,7 @@ public class LocalViewResilientExecutorOpt {
         }
         placeTmpData.cancelOtherSnapshot();
         
-        placeTempData().checkpointTimes(++placeTempData().checkpointLastIndex) = Timer.milliTime() - startCheckpoint;
+        placeTmpData.checkpointTimes(++placeTmpData.checkpointLastIndex) = Timer.milliTime() - startCheckpoint;
         
         if (excs.size() > 0){
         	throw new MultipleExceptions(excs);
