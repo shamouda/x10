@@ -19,6 +19,14 @@ import x10.util.ArrayList;
 import x10.util.Team;
 import x10.util.GrowableRail;
 
+
+/*
+ * TODO:
+ * maximum retry for restore failures
+ * use local view restore within the same fan-out of the steps and checkpoint
+ * investigate team hanging with sockets again
+ * when a palce dies, store.rebackup_local()
+ * */
 public class LocalViewResilientExecutorOpt {
     private var placeTempData:PlaceLocalHandle[PlaceTempData];
     private transient var places:PlaceGroup;
@@ -384,7 +392,7 @@ public class LocalViewResilientExecutorOpt {
                 placeTempData().rollback();
             }
         }
-        placeTempData().cancelOtherSnapshot();
+        //placeTempData().cancelOtherSnapshot();
         
         placeTempData().checkpointTimes(++placeTempData().checkpointLastIndex) = Timer.milliTime() - startCheckpoint;
         
