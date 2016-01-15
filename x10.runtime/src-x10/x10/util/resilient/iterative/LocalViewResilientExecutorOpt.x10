@@ -71,26 +71,31 @@ public class LocalViewResilientExecutorOpt {
     
         private def getConsistentSnapshot():DistObjectSnapshot{
             val idx = commitCount % 2;
+            Console.OUT.println("["+here+"] Consistent Checkpoint Index ["+idx+"] ...");
             return snapshots(idx);
         }  
         
         public def getNextSnapshot():DistObjectSnapshot {
             val idx = (commitCount+1) % 2;
+            Console.OUT.println("["+here+"] Next (temp) Checkpoint Index ["+idx+"] ...");
             return snapshots(idx);
         }
 
         /** Cancel a snapshot, in case of failure during checkpoint. */
         public def cancelOtherSnapshot() {
         	val idx = (commitCount+1) % 2;
+        	Console.OUT.println("["+here+"] Deleting Checkpoint At Index ["+idx+"] ...");
             snapshots(idx).deleteAll_local();
         }
         
         public def commit() {
             commitCount++; // switch to the new snapshot
+            Console.OUT.println("["+here+"] Committed, index now equals ["+commitCount+"] ...");
         }
         
         public def rollback(){
         	commitCount++; // switch to the new snapshot
+        	Console.OUT.println("["+here+"] Rollbacked, index now equals ["+commitCount+"] ...");
         }
     }
     
@@ -225,13 +230,6 @@ public class LocalViewResilientExecutorOpt {
                         	if (stepStartTime != -1) { //failure happened during step, not during checkpoint
                         	    placeTempData().stepTimes(++placeTempData().stepLastIndex) = Timer.milliTime()-stepStartTime;
                         	}
-                            Console.OUT.println("[Hammer Log] Time DPE discovered is ["+Timer.milliTime()+"] ...");
-                            if (isResilient && containsDPE(ex)){
-                                if (placeTempData().place0KillPlaceTime != -1)
-                                    failureDetectionTime = Timer.milliTime() - placeTempData().place0KillPlaceTime;
-                                else
-                                    failureDetectionTime = -1;
-                            }
                             throw ex;
                         }//step catch block
                     }//while !isFinished
@@ -239,8 +237,17 @@ public class LocalViewResilientExecutorOpt {
             }
             catch (iterEx:Exception) {
             	//exception from finish_ateach  or from restore
-            	if (isResilient && containsDPE(iterEx))
+            	if (isResilient && containsDPE(iterEx)){
             		restoreRequired = true;
+            		
+            		Console.OUT.println("[Hammer Log] Time DPE discovered is ["+Timer.milliTime()+"] ...");
+                    if (isResilient && containsDPE(ex)){
+                        if (placeTempData().place0KillPlaceTime != -1)
+                            failureDetectionTime = Timer.milliTime() - placeTempData().place0KillPlaceTime;
+                        else
+                            failureDetectionTime = -1;
+                    }
+            	}
             	else
             		throw iterEx;
             }
@@ -367,6 +374,10 @@ public class LocalViewResilientExecutorOpt {
         placeTempData().cancelOtherSnapshot();
         
         placeTempData().checkpointTimes(++placeTempData().checkpointLastIndex) = Timer.milliTime() - startCheckpoint;
+        
+        
+        placeTempData().getConsistentSnapshot();
+        
         
         if (excs.size() > 0){
         	throw new MultipleExceptions(excs);
