@@ -375,7 +375,7 @@ public class LocalViewResilientExecutorOpt {
         }
         else{
         	if (VERBOSE)
-        		Console.OUT.println("["+here+"] total votes "+totalVotes+" less than expected " + placesCount)
+        		Console.OUT.println("["+here+"] total votes "+totalVotes+" less than expected " + placesCount);
         }
         
         if (KILL_CHECKCOMP_INDEX == (placeTempData().checkpointLastIndex+1) && here.id == KILL_CHECKCOMP_PLACE){
