@@ -174,11 +174,10 @@ public class LocalViewResilientExecutorOpt {
                         val lastIter = placeTempData().lastCheckpointIter;
                         //save place0 data to initialize the new added places
                         val tmpPlace0LastCheckpointIndex = placeTempData().checkpointLastIndex;
-                        val tmpPlace0LastCheckpointIter = placeTempData().lastCheckpointIter;
                         val tmpPlace0CommitCount = placeTempData().commitCount;
                         for (sparePlace in addedPlaces){
                             Console.OUT.println("LocalViewResilientExecutor: Adding place["+sparePlace+"] ...");           
-                            PlaceLocalHandle.addPlace[PlaceTempData](placeTempData, sparePlace, ()=>new PlaceTempData(tmpPlace0LastCheckpointIndex, snapshots,tmpPlace0LastCheckpointIter,tmpPlace0CommitCount));
+                            PlaceLocalHandle.addPlace[PlaceTempData](placeTempData, sparePlace, ()=>new PlaceTempData(tmpPlace0LastCheckpointIndex, snapshots,lastIter,tmpPlace0CommitCount));
                         }
                         
                         places = newPG;
@@ -355,7 +354,7 @@ public class LocalViewResilientExecutorOpt {
     			placeTempData().place0KillPlaceTime = Timer.milliTime();
                 Console.OUT.println("[Hammer Log] Time before killing is ["+placeTempData().place0KillPlaceTime+"] ...");
     		}
-    		Console.OUT.println("[Hammer Log] Killing ["+here+"] ...");
+    		Console.OUT.println("[Hammer Log] Killing ["+here+"] before checkpoint voting phase ...");
     		System.killHere();
     	}
         //phase-1: voting
@@ -374,37 +373,43 @@ public class LocalViewResilientExecutorOpt {
             phase1Succeeded = true;
             //other places might have noticed a DPE, and did not commit
         }
+        else{
+        	if (VERBOSE)
+        		Console.OUT.println("["+here+"] total votes "+totalVotes+" less than expected " + placesCount)
+        }
         
         if (KILL_CHECKCOMP_INDEX == (placeTempData().checkpointLastIndex+1) && here.id == KILL_CHECKCOMP_PLACE){
     		at(Place(0)){
     			placeTempData().place0KillPlaceTime = Timer.milliTime();
                 Console.OUT.println("[Hammer Log] Time before killing is ["+placeTempData().place0KillPlaceTime+"] ...");
     		}
-    		Console.OUT.println("[Hammer Log] Killing ["+here+"] ...");
+    		Console.OUT.println("[Hammer Log] Killing ["+here+"] before checkpoint completion phase ...");
     		System.killHere();
     	}
         
         //phase-2: completion
         var phase2Succeeded:Boolean = false;
         try{
-        	//TODO: barrier can only useful for detecting DPE exceptions, but they can not detect places failing due to other reasons
+        	//TODO: barrier can only be useful for detecting DPE exceptions, 
+        	//but they can not detect places failing due to other reasons
             team.barrier();
+            if (VERBOSE) Console.OUT.println("["+here+"] checkpoint barrier succeeded, everything seems OK ...");
+            
             phase2Succeeded = true;
             //everyone is alive // they all at the same state (either committed or not)
         }catch(cEx:Exception){
+        	if (VERBOSE) Console.OUT.println("["+here+"] checkpoint barrier failed, "+(phase1Succeeded?"we will need to rollback":" but no need to rollback")+" ...");
             //some places might have died, so rollback if you have committed
             excs.add(cEx);
             if (phase1Succeeded){
                 placeTempData().rollback();
             }
         }
+        
+        //TODO: fix bug, spare places are not cleared
         placeTempData().cancelOtherSnapshot();
         
         placeTempData().checkpointTimes(++placeTempData().checkpointLastIndex) = Timer.milliTime() - startCheckpoint;
-        
-        
-        placeTempData().getConsistentSnapshot();
-        
         
         if (excs.size() > 0){
         	throw new MultipleExceptions(excs);
