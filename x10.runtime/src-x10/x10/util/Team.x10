@@ -222,18 +222,6 @@ public struct Team {
     //@Native("java", "x10.x10rt.TeamSupport.nativeAgree(id, role, root, ...);")
     @Native("c++", "x10rt_agree(#id, #role, #src->raw, #dst->raw, ::x10aux::failed_coll_handler, ::x10aux::coll_handler, ::x10aux::coll_enter())")
     private static def nativeAgree (id:Int, role:Int, src:Rail[Int], dst:Rail[Int]) :Boolean = false;
-    
-    
-    /** @deprecated use {@link barrier() instead} */
-    public def nativeBarrier () : void {
-        finish nativeBarrier(id, (id==0n?here.id() as Int:Team.roles(id)));
-    }
-
-    private static def nativeBarrier (id:Int, role:Int) : void {
-        @Native("java", "x10.x10rt.TeamSupport.nativeBarrier(id, role);")
-        @Native("c++", "x10rt_barrier(id, role, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
-    }
-    
 
     /** Blocks until all members have received their part of root's array.
      * Each member receives a contiguous and distinct portion of the src array.
