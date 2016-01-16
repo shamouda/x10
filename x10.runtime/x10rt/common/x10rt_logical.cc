@@ -917,6 +917,11 @@ x10rt_error x10rt_lgl_unblock_probe (void)
 	return x10rt_net_unblock_probe();
 }
 
+bool x10rt_lgl_agreement_support(void)
+{
+	return x10rt_net_agreement_support();
+}
+
 void x10rt_lgl_finalize (void)
 {
     if (g.error_code==X10RT_ERR_OK && getenv("X10RT_RXTX")) {

@@ -1624,6 +1624,14 @@ static bool x10rt_net_probe_ex (bool network_only) {
     return pendingMsgs;
 }
 
+bool x10rt_net_agreement_support (void) {
+#ifndef OPEN_MPI_ULFM
+    return false;
+#else
+    return true;
+#endif
+}
+
 x10rt_coll_type x10rt_net_coll_support () {
 #ifndef OPEN_MPI_ULFM
     if (global_state.report_nonblocking_coll)

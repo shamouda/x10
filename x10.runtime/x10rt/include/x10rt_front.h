@@ -584,6 +584,11 @@ X10RT_C x10rt_error x10rt_blocking_probe (void);
  */
 X10RT_C x10rt_error x10rt_unblock_probe (void);
 
+/**
+ * Check to see if the underlying transport supports a resilient agreement algorithm
+ */
+X10RT_C bool x10rt_agreement_support (void);
+
 /** \} */
 
 

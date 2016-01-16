@@ -141,6 +141,12 @@ X10RT_C x10rt_error x10rt_net_blocking_probe (void);
  */
 X10RT_C x10rt_error x10rt_net_unblock_probe (void);
 
+/**
+ * Check if the transport supports resilient agreement. \see #x10rt_lgl_agreement_support
+ */
+X10RT_C bool x10rt_net_agreement_support (void);
+
+
 /** \see #x10rt_lgl_remote_op
  * \param place As in #x10rt_lgl_remote_op
  * \param remote_addr As in #x10rt_lgl_remote_op

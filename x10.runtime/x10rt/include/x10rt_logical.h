@@ -326,6 +326,11 @@ X10RT_C x10rt_error x10rt_lgl_blocking_probe (void);
  */
 X10RT_C x10rt_error x10rt_lgl_unblock_probe (void);
 
+/**
+ * Check if resilient agreement is supported by the network \see #x10rt_agreement_support
+ */
+X10RT_C bool x10rt_lgl_agreement_support (void);
+
 /** Clean up the logical layer.  Called by #x10rt_finalize.
  */
 X10RT_C void x10rt_lgl_finalize (void); 

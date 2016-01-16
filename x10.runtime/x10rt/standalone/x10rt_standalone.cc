@@ -896,6 +896,11 @@ bool x10rt_net_blocking_probe_support(void)
 	return false;
 }
 
+bool x10rt_net_agreement_support (void)
+{
+    return false;
+}
+
 x10rt_error x10rt_net_blocking_probe (void)
 {
 	// TODO: make this blocking.  For now, just call probe.

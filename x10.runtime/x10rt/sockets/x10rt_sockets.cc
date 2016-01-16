@@ -1096,6 +1096,11 @@ bool x10rt_net_blocking_probe_support(void)
 	return true;
 }
 
+bool x10rt_net_agreement_support (void)
+{
+    return false;
+}
+
 x10rt_error x10rt_net_blocking_probe ()
 {
     CHECK_ERR_AND_RETURN;

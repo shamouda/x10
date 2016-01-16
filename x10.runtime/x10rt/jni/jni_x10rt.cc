@@ -200,7 +200,6 @@ JNIEXPORT jboolean JNICALL Java_x10_x10rt_X10RT_x10rt_1blocking_1probe_1support(
     return x10rt_blocking_probe_support();
 }
 
-
 /*
  * Class:     x10_x10rt_X10RT
  * Method:    x10rt_blocking_probe
@@ -233,6 +232,14 @@ JNIEXPORT jint JNICALL Java_x10_x10rt_X10RT_x10rt_1unblock_1probe(JNIEnv *, jcla
     return X10RT_ERR_OK;
 }
 
+/*
+ * Class:     x10_x10rt_X10RT
+ * Method:    x10rt_agreement_support
+ * Signature: ()Z
+ */
+JNIEXPORT jboolean JNICALL Java_x10_x10rt_X10RT_x10rt_1agreement_1support(JNIEnv *, jclass) {
+    return x10rt_agreement_support();
+}
 
 /*
  * Following functions are optionally called by JVM to determine

@@ -1247,6 +1247,11 @@ x10rt_error x10rt_net_unblock_probe (void)
 	return X10RT_ERR_OK;
 }
 
+bool x10rt_net_agreement_support (void)
+{
+    return false;
+}
+
 /** Shut down the network layer.  \see #x10rt_lgl_finalize
  */
 void x10rt_net_finalize()

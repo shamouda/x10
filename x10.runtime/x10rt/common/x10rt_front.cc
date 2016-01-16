@@ -167,6 +167,9 @@ x10rt_error x10rt_blocking_probe (void)
 x10rt_error x10rt_unblock_probe (void)
 { return x10rt_lgl_unblock_probe(); }
 
+bool x10rt_agreement_support (void)
+{ return x10rt_lgl_agreement_support(); }
+
 void x10rt_finalize (void)
 { x10rt_lgl_finalize(); }
 

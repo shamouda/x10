@@ -196,6 +196,38 @@ public struct Team {
         @Native("java", "x10.x10rt.TeamSupport.nativeBarrier(id, role);")
         @Native("c++", "x10rt_barrier(id, role, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
     }
+    
+    
+    /** Either agree on a flag or throw a DPE at all team places */
+    public def agree (flag:Int) : Int {
+    	val src = new Rail[Int](1, flag);
+        val dst = new Rail[Int](1, flag);
+        
+        if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
+            finish nativeAgree(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
+        else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
+            barrier();
+            int success = nativeAgree(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
+            if (!success)
+                throw new DeadPlaceException("[Native] Team "+id+" contains at least one dead member");
+        }
+        else{
+        	throw new UnsupportedOperationException("Emulated agreement not supported");
+            //state(id).collective_impl[Int](LocalTeamState.COLL_AGREE,   state(id).places(0), src, 0, dst, 0, 1, 0n, null, null);
+        }   
+        return dst(0);
+    }
+    
+    /** @deprecated use {@link barrier() instead} */
+    public def nativeBarrier () : void {
+        finish nativeBarrier(id, (id==0n?here.id() as Int:Team.roles(id)));
+    }
+
+    private static def nativeBarrier (id:Int, role:Int) : void {
+        @Native("java", "x10.x10rt.TeamSupport.nativeBarrier(id, role);")
+        @Native("c++", "x10rt_barrier(id, role, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
+    }
+    
 
     /** Blocks until all members have received their part of root's array.
      * Each member receives a contiguous and distinct portion of the src array.
