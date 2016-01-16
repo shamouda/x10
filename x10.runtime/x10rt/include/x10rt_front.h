@@ -951,6 +951,26 @@ X10RT_C bool x10rt_allreduce (x10rt_team team, x10rt_place role,
                               x10rt_completion_handler *errch,
                               x10rt_completion_handler *ch, void *arg);
 
+
+/** Resilient agreement algorithm
+ *
+ * \param team Team that identifies the members who are participating in this operation
+ *
+ * \param role Our role in the team
+ *
+ * \param sbuf The data that is offered by each member
+ *
+ * \param dbuf The array into which the computed result will be received for this member
+ *
+ * \param ch Will be called when the operation is complete
+ *
+ * \param arg User pointer that is passed to the completion handler
+ */
+X10RT_C bool x10rt_agree (x10rt_team team, x10rt_place role,
+                             const int *sbuf, int *dbuf,
+                             x10rt_completion_handler *errch,
+                             x10rt_completion_handler *ch, void *arg);
+
 /** Sets arg to 1.
  * \param arg Assumed to be an int*
  */

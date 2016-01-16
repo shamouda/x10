@@ -1050,4 +1050,12 @@ bool x10rt_net_allreduce (x10rt_team team, x10rt_place role,
     abort();
 }
 
+bool x10rt_net_agree (x10rt_team team, x10rt_place role,
+                             const int *sbuf, int *dbuf,
+                             x10rt_completion_handler *errch,
+                             x10rt_completion_handler *ch, void *arg)
+{
+    abort();
+}
+
 const char *x10rt_net_error_msg (void) { return NULL; }

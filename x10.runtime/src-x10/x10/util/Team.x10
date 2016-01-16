@@ -213,10 +213,16 @@ public struct Team {
         }
         else{
         	throw new UnsupportedOperationException("Emulated agreement not supported");
-            //state(id).collective_impl[Int](LocalTeamState.COLL_AGREE,   state(id).places(0), src, 0, dst, 0, 1, 0n, null, null);
+            //state(id).collective_impl[Int](LocalTeamState.COLL_AGREE, state(id).places(0), src, 0, dst, 0, 1, 0n, null, null);
         }   
         return dst(0);
     }
+    
+    //TODO: support Java
+    //@Native("java", "x10.x10rt.TeamSupport.nativeAgree(id, role, root, ...);")
+    @Native("c++", "x10rt_agree(#id, #role, #src->raw, #dst->raw, ::x10aux::failed_coll_handler, ::x10aux::coll_handler, ::x10aux::coll_enter())")
+    private static def nativeAgree (id:Int, role:Int, src:Rail[Int], dst:Rail[Int]) :Boolean = false;
+    
     
     /** @deprecated use {@link barrier() instead} */
     public def nativeBarrier () : void {

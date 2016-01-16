@@ -1111,6 +1111,19 @@ bool x10rt_lgl_scatterv (x10rt_team team, x10rt_place role,
     }
 }
 
+bool x10rt_lgl_agree (x10rt_team team, x10rt_place role,
+                             const int *sbuf, int *dbuf,
+                             x10rt_completion_handler *errch,
+                             x10rt_completion_handler *ch, void *arg)
+{
+    ESCAPE_IF_ERR_BOOL;
+    if (x10rt_lgl_agreement_support()) {
+        return x10rt_net_agree(team, role, sbuf, dbuf, errch, ch, arg);
+    } else {
+        return false;
+    }
+}
+
 void x10rt_lgl_gather (x10rt_team team, x10rt_place role,
 					  x10rt_place root, const void *sbuf,
 					  void *dbuf, size_t el, size_t count,

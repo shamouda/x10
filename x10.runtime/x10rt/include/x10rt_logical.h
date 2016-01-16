@@ -526,6 +526,19 @@ X10RT_C bool x10rt_lgl_allreduce (x10rt_team team, x10rt_place role,
                                   x10rt_completion_handler *errch,
                                   x10rt_completion_handler *ch, void *arg);
 
+/** \see #x10rt_agree
+ * \param team As in #x10rt_allreduce
+ * \param role As in #x10rt_allreduce
+ * \param sbuf As in #x10rt_allreduce
+ * \param dbuf As in #x10rt_allreduce
+ * \param ch As in #x10rt_allreduce
+ * \param arg As in #x10rt_allreduce
+ */
+X10RT_C bool x10rt_lgl_agree (x10rt_team team, x10rt_place role,
+                             const int *sbuf, int *dbuf,
+                             x10rt_completion_handler *errch,
+                             x10rt_completion_handler *ch, void *arg);
+
 #endif
 
 // vim: tabstop=4:shiftwidth=4:expandtab:textwidth=100

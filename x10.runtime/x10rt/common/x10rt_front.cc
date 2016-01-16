@@ -281,6 +281,13 @@ bool x10rt_allreduce (x10rt_team team, x10rt_place role,
     return x10rt_lgl_allreduce(team, role, sbuf, dbuf, op, dtype, count, errch, ch, arg);
 }
 
+bool x10rt_agree (x10rt_team team, x10rt_place role,
+                             const int *sbuf, int *dbuf,
+                             x10rt_completion_handler *errch,
+                             x10rt_completion_handler *ch, void *arg)
+{
+	return x10rt_lgl_agree(team, role, sbuf, dbuf, errch, ch, arg);
+}
 
 void x10rt_one_setter (void *arg)
 { *((int*)arg) = 1; }

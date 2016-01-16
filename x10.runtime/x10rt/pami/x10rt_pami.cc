@@ -2254,3 +2254,12 @@ bool x10rt_net_allreduce (x10rt_team team, x10rt_place role, const void *sbuf, v
 	if (status != PAMI_SUCCESS) error("Unable to post an allreduce on team %u", team);
 	return true; //PAMI is not resilient
 }
+
+bool x10rt_net_agree (x10rt_team team, x10rt_place role,
+                             const int *sbuf, int *dbuf,
+                             x10rt_completion_handler *errch,
+                             x10rt_completion_handler *ch, void *arg)
+{
+	fatal_error("x10rt_net_agree not implemented");
+	return false;
+}
