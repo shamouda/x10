@@ -3164,8 +3164,8 @@ static void x10rt_net_handler_bcast (struct CollectivePostprocessEnv cpe) {
 }
 
 static void x10rt_net_handler_agree(CollectivePostprocessEnv) {
-    X10RT_NET_DEBUG("pp: team=%d, role=%d", SAVED(team), SAVED(role));
-    X10RT_NET_DEBUG("pp: sbuf=%"PRIxPTR" dbuf=%"PRIxPTR, SAVED(sbuf), SAVED(dbuf));
+//    X10RT_NET_DEBUG("pp: team=%d, role=%d", SAVED(team), SAVED(role));
+//    X10RT_NET_DEBUG("pp: sbuf=%"PRIxPTR" dbuf=%"PRIxPTR, SAVED(sbuf), SAVED(dbuf));
     SAVED(dbuf)[0] = SAVED(sbuf)[0];
 
 #ifdef OPEN_MPI_ULFM
@@ -3646,8 +3646,8 @@ bool x10rt_net_agree (x10rt_team team, x10rt_place role, const int *sbuf, int *d
     assert(global_state.init);
     assert(!global_state.finalized);
 
-    X10RT_NET_DEBUG("team=%d, role=%d", team, role);
-    X10RT_NET_DEBUG("sbuf=%"PRIxPTR" dbuf=%"PRIxPTR, sbuf, dbuf);
+//    X10RT_NET_DEBUG("team=%d, role=%d", team, role);
+//    X10RT_NET_DEBUG("sbuf=%"PRIxPTR" dbuf=%"PRIxPTR, sbuf, dbuf);
     MPI_Comm comm = mpi_tdb.comm(team);
 
     X10RT_NET_DEBUG("%s", "pre agree");
