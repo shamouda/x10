@@ -3007,7 +3007,7 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
 #define MPI_AGREEMENT_COLLECTIVE(...) \
     CollectivePostprocessEnv cpe; \
     do { LOCK_IF_MPI_IS_NOT_MULTITHREADED; \
-        cpe.mpiError = MPIX_Comm_agree(__VA_ARGS__); \
+        cpe.mpiError = OMPI_Comm_agree(__VA_ARGS__); \
         if (MPI_SUCCESS != cpe.mpiError && !is_process_failure_error(cpe.mpiError)) { \
             fprintf(stderr, "[%s:%d] %s\n", \
                     __FILE__, __LINE__, "Error in MPI_" #name); \
