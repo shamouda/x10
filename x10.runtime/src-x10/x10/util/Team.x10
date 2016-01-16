@@ -207,7 +207,7 @@ public struct Team {
             finish nativeAgree(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             barrier();
-            int success = nativeAgree(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
+            val success = nativeAgree(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
             if (!success)
                 throw new DeadPlaceException("[Native] Team "+id+" contains at least one dead member");
         }

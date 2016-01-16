@@ -410,7 +410,7 @@ public class X10RT {
       return state.compareTo(State.RUNNING) >= 0;
     }
 
-    public static int agreementSupport() {
+    public static boolean agreementSupport() {
         assert isBooted();
         /* FIXME: check whether we need special cases for single place and null javaSockets
         if (forceSinglePlace || javaSockets != null)
