@@ -202,17 +202,14 @@ public struct Team {
     public def agree (flag:Int) : Int {
     	val src = new Rail[Int](1, flag);
         val dst = new Rail[Int](1, flag);
-        if (Runtime.x10rtAgreementSupport()){
-        	if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
-        		finish nativeAgree(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
-        	else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
+        if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
+            finish nativeAgree(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
+        else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
         		barrier();
         		val success = nativeAgree(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
         		if (!success)
         			throw new DeadPlaceException("[Native] Team "+id+" contains at least one dead member");
-        	}
-        }
-        else{
+        } else {
         	throw new UnsupportedOperationException("Emulated agreement not supported");
             //state(id).collective_impl[Int](LocalTeamState.COLL_AGREE, state(id).places(0), src, 0, dst, 0, 1, 0n, null, null);
         }   

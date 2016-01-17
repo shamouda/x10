@@ -116,7 +116,7 @@ public class LocalViewResilientExecutorOpt {
         this.implicitStepSynchronization = implicitStepSynchronization;
         if (itersPerCheckpoint > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0) {
             isResilient = true;
-            if (!Runtime.x10rtAgreementSupport()){
+            if (!x10.xrx.Runtime.x10rtAgreementSupport()){
             	throw new UnsupportedOperationException("This executor requires an agreement algorithm from the transport layer ...");
         	}
             if (VERBOSE){
