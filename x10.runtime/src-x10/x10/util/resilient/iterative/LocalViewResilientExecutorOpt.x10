@@ -303,10 +303,14 @@ public class LocalViewResilientExecutorOpt {
         Console.OUT.println("Failure Detection:"+failureDetectionTime);
         Console.OUT.println("Restore: "+restoreTime);
         Console.OUT.println("StepsTotal:" + placeTempData().railSum(placeTempData().placeMaxStep));
+        Console.OUT.println("=============================");
+        Console.OUT.println("RunTime:" + runTime);
+        
         
         Console.OUT.println("CheckpointCount:"+placeTempData().placeMaxCheckpoint.size);
         Console.OUT.println("RestoreCount:"+restoreCount);
         Console.OUT.println("StepCount:"+placeTempData().placeMaxStep.size);
+        
         
         
         if (VERBOSE){
