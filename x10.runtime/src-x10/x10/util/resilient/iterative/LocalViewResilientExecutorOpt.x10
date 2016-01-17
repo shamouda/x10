@@ -120,6 +120,13 @@ public class LocalViewResilientExecutorOpt {
             	str += x + ",";
             return str;
         }
+        
+        public def railSum(r:Rail[Long]):Long {
+            var sum:Long = 0;
+            for (x in r)
+            	sum += x;
+            return sum;
+        }
     }
     
     public def this(itersPerCheckpoint:Long, places:PlaceGroup, implicitStepSynchronization:Boolean) {
@@ -295,8 +302,7 @@ public class LocalViewResilientExecutorOpt {
         Console.OUT.println("Checkpoints:" + placeTempData().railToString(placeTempData().placeMaxCheckpoint));
         Console.OUT.println("Failure Detection:"+failureDetectionTime);
         Console.OUT.println("Restore: "+restoreTime);
-        Console.OUT.println("Steps:" + placeTempData().railToString(placeTempData().placeMaxStep));
-        
+        Console.OUT.println("StepsTotal:" + placeTempData().railSum(placeTempData().placeMaxStep));
         
         Console.OUT.println("CheckpointCount:"+placeTempData().placeMaxCheckpoint.size);
         Console.OUT.println("RestoreCount:"+restoreCount);
@@ -304,6 +310,8 @@ public class LocalViewResilientExecutorOpt {
         
         
         if (VERBOSE){
+        	Console.OUT.println("Steps:" + placeTempData().railToString(placeTempData().placeMaxStep));
+            
             var str:String = "";
             for (p in places)
                 str += p.id + ",";
@@ -425,7 +433,7 @@ public class LocalViewResilientExecutorOpt {
 /*Test commands:
 ==> Kill place during a step:
 
-EXECUTOR_KILL_STEP=5 \
+EXECUTOR_KILL_STEP=15 \
 EXECUTOR_KILL_STEP_PLACE=3 \
 X10_RESILIENT_STORE_VERBOSE=1 \
 X10_TEAM_DEBUG_INTERNALS=0 \
@@ -434,7 +442,7 @@ EXECUTOR_DEBUG=1 \
 X10_RESILIENT_MODE=1 \
 mpirun -np 9 -am ft-enable-mpi \
 --mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
-bin/lulesh2.0 -e 1 -k 3 -s 10 -i 10 -p
+bin/lulesh2.0 -e 1 -k 10 -s 10 -i 50 -p
 
 
 ==> Kill place before checkpoint voting:
