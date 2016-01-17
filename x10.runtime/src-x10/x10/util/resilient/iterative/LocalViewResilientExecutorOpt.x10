@@ -442,11 +442,42 @@ EXECUTOR_KILL_STEP_PLACE=3 \
 X10_RESILIENT_STORE_VERBOSE=1 \
 X10_TEAM_DEBUG_INTERNALS=0 \
 X10_PLACE_GROUP_RESTORE_MODE=1 \
+EXECUTOR_DEBUG=0 \
+X10_RESILIENT_MODE=1 \
+mpirun -np 9 -am ft-enable-mpi \
+--mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
+bin/lulesh2.0 -e 1 -k 10 -s 10 -i 50 -p
+
+
+
+==> new
+Initialization:61
+Checkpoints:61,49,44,50,65,
+Failure Detection:70
+Restore: 189
+StepsTotal:4177
+==> old
+
+RESILIENT_EXECUTOR_KILL_ITER=15 \
+RESILIENT_EXECUTOR_KILL_PLACE=3 \
+X10_RESILIENT_STORE_VERBOSE=1 \
+X10_TEAM_DEBUG_INTERNALS=0 \
+X10_PLACE_GROUP_RESTORE_MODE=1 \
 EXECUTOR_DEBUG=1 \
 X10_RESILIENT_MODE=1 \
 mpirun -np 9 -am ft-enable-mpi \
 --mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
 bin/lulesh2.0 -e 1 -k 10 -s 10 -i 50 -p
+
+
+Initialization:74
+Checkpoints:64,53,35,23,14,
+Failure Detection:80
+Restore: 250
+StepsTotal:3374
+
+
+
 
 
 ==> Kill place before checkpoint voting:
