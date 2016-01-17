@@ -156,7 +156,7 @@ public final class Runtime {
 
     @Native("c++", "x10rt_agreement_support()")
     @Native("java", "x10.x10rt.X10RT.agreementSupport()")
-    protected static native def x10rtAgreementSupport():Boolean;
+    public static native def x10rtAgreementSupport():Boolean;
     
     /**
      * Return a deep copy of the object graph rooted at o.
