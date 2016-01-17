@@ -46,9 +46,7 @@ public class LocalViewResilientExecutorOpt {
     // index of the checkpoint first checkpoint (0), second checkpoint (1), ...etc
     private val KILL_CHECKVOTING_INDEX = (System.getenv("EXECUTOR_KILL_CHECKVOTING") != null)?Long.parseLong(System.getenv("EXECUTOR_KILL_CHECKVOTING")):-1;
     private val KILL_CHECKVOTING_PLACE = (System.getenv("EXECUTOR_KILL_CHECKVOTING_PLACE") != null)?Long.parseLong(System.getenv("EXECUTOR_KILL_CHECKVOTING_PLACE")):-1;   
-    private val KILL_CHECKCOMP_INDEX = (System.getenv("EXECUTOR_KILL_CHECKCOMP") != null)?Long.parseLong(System.getenv("EXECUTOR_KILL_CHECKCOMP")):-1;
-    private val KILL_CHECKCOMP_PLACE = (System.getenv("EXECUTOR_KILL_CHECKCOMP_PLACE") != null)?Long.parseLong(System.getenv("EXECUTOR_KILL_CHECKCOMP_PLACE")):-1; 
-
+    
     private transient var runTime:Long = 0;
     private transient var restoreTime:Long = 0;
     private transient var appOnlyRestoreTime:Long = 0;
@@ -118,14 +116,14 @@ public class LocalViewResilientExecutorOpt {
         this.implicitStepSynchronization = implicitStepSynchronization;
         if (itersPerCheckpoint > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0) {
             isResilient = true;
-            
+            if (!Runtime.x10rtAgreementSupport()){
+            	throw new UnsupportedOperationException("This executor requires an agreement algorithm from the transport layer ...");
+        	}
             if (VERBOSE){
             	Console.OUT.println("EXECUTOR_KILL_STEP="+KILL_STEP);
             	Console.OUT.println("EXECUTOR_KILL_STEP_PLACE="+KILL_STEP_PLACE);
             	Console.OUT.println("EXECUTOR_KILL_CHECKVOTING="+KILL_CHECKVOTING_INDEX);
             	Console.OUT.println("EXECUTOR_KILL_CHECKVOTING_PLACE="+KILL_CHECKVOTING_PLACE);
-            	Console.OUT.println("EXECUTOR_KILL_CHECKCOMP="+KILL_CHECKCOMP_INDEX);
-            	Console.OUT.println("EXECUTOR_KILL_CHECKCOMP_PLACE="+KILL_CHECKCOMP_PLACE);
             }
         }
     }
@@ -332,9 +330,7 @@ public class LocalViewResilientExecutorOpt {
     	return false;
     }
     
-    //Two phase commit protocol for ensuring consistent checkpointing.
     //Checkpointing will only occur in resilient mode
-    //Limitation: we only assume the voting allreduce call to fail only with DPE, no other exceptions may occur
     private def checkpointProtocol_local(app:LocalViewResilientIterativeAppOpt, team:Team, root:Place, placesCount:Long){
         val startCheckpoint = Timer.milliTime();
         val excs = new GrowableRail[CheckedThrowable]();
@@ -348,7 +344,7 @@ public class LocalViewResilientExecutorOpt {
             vote = 0;
             excs.add(ex);
         }
-
+        
         if (KILL_CHECKVOTING_INDEX == (placeTempData().checkpointLastIndex+1) && here.id == KILL_CHECKVOTING_PLACE){
     		at(Place(0)){
     			placeTempData().place0KillPlaceTime = Timer.milliTime();
@@ -357,57 +353,17 @@ public class LocalViewResilientExecutorOpt {
     		Console.OUT.println("[Hammer Log] Killing ["+here+"] before checkpoint voting phase ...");
     		System.killHere();
     	}
-        //phase-1: voting
-        var totalVotes:Long = 0;
         try{
-            totalVotes = team.allreduce(vote, Team.ADD);
-            //the semantics of Team.allReduce allows some places to succeed while others may receive DPE
+        	val success = team.agree(vote);
+        	if (success) {
+        		placeTempData().commit();
+        		//TODO: fix bug, spare places are not cleared
+                placeTempData().cancelOtherSnapshot();
+        	}
         }
-        catch(vEx:Exception){
-        	excs.add(vEx);
+        catch(agrex:Exception){
+        	excs.add(agrex);
         }
-            
-        var phase1Succeeded:Boolean = false;
-        if (totalVotes == placesCount){ // Limitation: this condition is assumed to be correct at each place in non-resilient mode
-            placeTempData().commit();
-            phase1Succeeded = true;
-            //other places might have noticed a DPE, and did not commit
-        }
-        else{
-        	if (VERBOSE)
-        		Console.OUT.println("["+here+"] total votes "+totalVotes+" less than expected " + placesCount);
-        }
-        
-        if (KILL_CHECKCOMP_INDEX == (placeTempData().checkpointLastIndex+1) && here.id == KILL_CHECKCOMP_PLACE){
-    		at(Place(0)){
-    			placeTempData().place0KillPlaceTime = Timer.milliTime();
-                Console.OUT.println("[Hammer Log] Time before killing is ["+placeTempData().place0KillPlaceTime+"] ...");
-    		}
-    		Console.OUT.println("[Hammer Log] Killing ["+here+"] before checkpoint completion phase ...");
-    		System.killHere();
-    	}
-        
-        //phase-2: completion
-        var phase2Succeeded:Boolean = false;
-        try{
-        	//TODO: barrier can only be useful for detecting DPE exceptions, 
-        	//but they can not detect places failing due to other reasons
-            team.barrier();
-            if (VERBOSE) Console.OUT.println("["+here+"] checkpoint barrier succeeded, everything seems OK ...");
-            
-            phase2Succeeded = true;
-            //everyone is alive // they all at the same state (either committed or not)
-        }catch(cEx:Exception){
-        	if (VERBOSE) Console.OUT.println("["+here+"] checkpoint barrier failed, "+(phase1Succeeded?"we will need to rollback":" but no need to rollback")+" ...");
-            //some places might have died, so rollback if you have committed
-            excs.add(cEx);
-            if (phase1Succeeded){
-                placeTempData().rollback();
-            }
-        }
-        
-        //TODO: fix bug, spare places are not cleared
-        placeTempData().cancelOtherSnapshot();
         
         placeTempData().checkpointTimes(++placeTempData().checkpointLastIndex) = Timer.milliTime() - startCheckpoint;
         
@@ -445,22 +401,6 @@ EXECUTOR_DEBUG=1 \
 X10_NPLACES=9 \
 X10_RESILIENT_MODE=1 \
 bin/lulesh2.0 -e 1 -k 3 -s 10 -i 10 -p
-
-
-==> Kill place before completion:
-
-EXECUTOR_KILL_CHECKCOMP=2 \
-EXECUTOR_KILL_CHECKCOMP_PLACE=3 \
-X10_RESILIENT_STORE_VERBOSE=0 \
-X10_TEAM_DEBUG_INTERNALS=0 \
-X10_PLACE_GROUP_RESTORE_MODE=1 \
-EXECUTOR_DEBUG=1 \
-X10_NPLACES=9 \
-X10_RESILIENT_MODE=1 \
-bin/lulesh2.0 -e 1 -k 3 -s 10 -i 10 -p
-
-
-
 */
 
 

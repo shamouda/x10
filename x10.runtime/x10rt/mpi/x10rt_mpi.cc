@@ -2053,7 +2053,7 @@ struct CollectivePostprocessEnv {
             int el;
             int mpiError;
         } reduce;
-        struct CollectivePostprocessEnvReduce {
+        struct CollectivePostprocessEnvAgree {
             x10rt_team team; x10rt_place role;
             const void *sbuf; void *dbuf;
             x10rt_completion_handler *errch;
@@ -3004,17 +3004,6 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
         } \
         UNLOCK_IF_MPI_IS_NOT_MULTITHREADED; \
     } while(0)
-#define MPI_AGREEMENT_COLLECTIVE(...) \
-    CollectivePostprocessEnv cpe; \
-    do { LOCK_IF_MPI_IS_NOT_MULTITHREADED; \
-        cpe.mpiError = OMPI_Comm_agree(__VA_ARGS__); \
-        if (MPI_SUCCESS != cpe.mpiError && !is_process_failure_error(cpe.mpiError)) { \
-            fprintf(stderr, "[%s:%d] %s\n", \
-                    __FILE__, __LINE__, "Error in MPI_" #name); \
-            abort(); \
-        } \
-        UNLOCK_IF_MPI_IS_NOT_MULTITHREADED; \
-    } while(0)
 #define MPI_COLLECTIVE_SAVE(var) \
      cpe.env.MPI_COLLECTIVE_NAME.var = var;
 #define MPI_COLLECTIVE_POSTPROCESS \
@@ -3026,6 +3015,17 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
 #define SAVED(var) \
      cpe.env.MPI_COLLECTIVE_NAME.var
 #define MPI_COLLECTIVE_POSTPROCESS_END X10RT_NET_DEBUG("calling ULFM blocking collective completed, mpi_return_code is: %d", cpe.mpiError);
+#define MPI_AGREEMENT_COLLECTIVE(name, iname, ...) \
+    CollectivePostprocessEnv cpe; \
+    do { LOCK_IF_MPI_IS_NOT_MULTITHREADED; \
+        cpe.mpiError = OMPI_Comm_agree(__VA_ARGS__); \
+        if (MPI_SUCCESS != cpe.mpiError && !is_process_failure_error(cpe.mpiError)) { \
+            fprintf(stderr, "[%s:%d] %s\n", \
+                    __FILE__, __LINE__, "Error in MPI_" #name); \
+            abort(); \
+        } \
+        UNLOCK_IF_MPI_IS_NOT_MULTITHREADED; \
+    } while(0)
 #else
 #define MPI_COLLECTIVE(name, iname, ...) \
     CollectivePostprocessEnv cpe; \
@@ -3151,23 +3151,6 @@ static void x10rt_net_handler_bcast (struct CollectivePostprocessEnv cpe) {
 	memcpy(SAVED(dbuf), SAVED(buf), SAVED(count) * SAVED(el));
 	free(SAVED(buf));
     }
-#ifdef OPEN_MPI_ULFM
-    if (is_process_failure_error(cpe.mpiError))
-    	SAVED(errch)(SAVED(arg));
-    else
-    	SAVED(ch)(SAVED(arg));
-#else
-    SAVED(ch)(SAVED(arg));
-#endif
-    MPI_COLLECTIVE_POSTPROCESS_END
-#undef MPI_COLLECTIVE_NAME
-}
-
-static void x10rt_net_handler_agree(CollectivePostprocessEnv) {
-//    X10RT_NET_DEBUG("pp: team=%d, role=%d", SAVED(team), SAVED(role));
-//    X10RT_NET_DEBUG("pp: sbuf=%"PRIxPTR" dbuf=%"PRIxPTR, SAVED(sbuf), SAVED(dbuf));
-    SAVED(dbuf)[0] = SAVED(sbuf)[0];
-
 #ifdef OPEN_MPI_ULFM
     if (is_process_failure_error(cpe.mpiError))
     	SAVED(errch)(SAVED(arg));
@@ -3645,13 +3628,10 @@ bool x10rt_net_agree (x10rt_team team, x10rt_place role, const int *sbuf, int *d
 #define MPI_COLLECTIVE_NAME agree
     assert(global_state.init);
     assert(!global_state.finalized);
-
-//    X10RT_NET_DEBUG("team=%d, role=%d", team, role);
-//    X10RT_NET_DEBUG("sbuf=%"PRIxPTR" dbuf=%"PRIxPTR, sbuf, dbuf);
     MPI_Comm comm = mpi_tdb.comm(team);
-
+    dbuf[0] = sbuf[0];
     X10RT_NET_DEBUG("%s", "pre agree");
-    MPI_AGREEMENT_COLLECTIVE(comm, sbuf);
+    MPI_AGREEMENT_COLLECTIVE("agree", "igree", comm, dbuf);
     X10RT_NET_DEBUG("%s", "pro agree");
 
     MPI_COLLECTIVE_SAVE(team);
@@ -3670,6 +3650,16 @@ bool x10rt_net_agree (x10rt_team team, x10rt_place role, const int *sbuf, int *d
 #endif
 }
 
+static void x10rt_net_handler_agree(CollectivePostprocessEnv cpe) {
+#ifdef OPEN_MPI_ULFM
+    if (is_process_failure_error(cpe.mpiError))
+    	SAVED(errch)(SAVED(arg));
+    else
+    	SAVED(ch)(SAVED(arg));
+    MPI_COLLECTIVE_POSTPROCESS_END
+#undef MPI_COLLECTIVE_NAME
+#endif
+}
 
 static int sizeof_dtype(x10rt_red_type dtype)
 {
