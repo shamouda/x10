@@ -361,9 +361,15 @@ public class LocalViewResilientExecutorOpt {
         		//TODO: fix bug, spare places are not cleared
                 placeTempData().cancelOtherSnapshot();
         	}
+        	else{
+        		if (here.id == 0)
+        		    Console.OUT.println("##########  Failed to checkpoint  #######   ");
+        	}
         }
         catch(agrex:Exception){
         	excs.add(agrex);
+        	if (here.id == 0)
+    		    Console.OUT.println("##########  Failed to checkpoint  #######   ");
         }
         
         placeTempData().checkpointTimes(++placeTempData().checkpointLastIndex) = Timer.milliTime() - startCheckpoint;
@@ -386,8 +392,9 @@ X10_RESILIENT_STORE_VERBOSE=1 \
 X10_TEAM_DEBUG_INTERNALS=0 \
 X10_PLACE_GROUP_RESTORE_MODE=1 \
 EXECUTOR_DEBUG=1 \
-X10_NPLACES=9 \
 X10_RESILIENT_MODE=1 \
+mpirun -np 9 -am ft-enable-mpi \
+--mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
 bin/lulesh2.0 -e 1 -k 3 -s 10 -i 10 -p
 
 
@@ -395,13 +402,17 @@ bin/lulesh2.0 -e 1 -k 3 -s 10 -i 10 -p
 
 EXECUTOR_KILL_CHECKVOTING=1 \
 EXECUTOR_KILL_CHECKVOTING_PLACE=3 \
-X10_RESILIENT_STORE_VERBOSE=0 \
+EXECUTOR_KILL_STEP=5 \
+EXECUTOR_KILL_STEP_PLACE=3 \
+X10_RESILIENT_STORE_VERBOSE=1 \
 X10_TEAM_DEBUG_INTERNALS=0 \
 X10_PLACE_GROUP_RESTORE_MODE=1 \
 EXECUTOR_DEBUG=1 \
-X10_NPLACES=9 \
 X10_RESILIENT_MODE=1 \
+mpirun -np 9 -am ft-enable-mpi \
+--mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
 bin/lulesh2.0 -e 1 -k 3 -s 10 -i 10 -p
+
 */
 
 
