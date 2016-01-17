@@ -168,7 +168,7 @@ public class LocalViewResilientExecutor {
                     restoreJustDone = false;
                 }
                 
-                stepExecTime -= Timer.milliTime();
+                var startRoundTime:Long = Timer.milliTime();
                 try{
                 	Console.OUT.println("Starting a new round of steps, time consumed till now ["+(Timer.milliTime()-startRunTime)+"]...");
                     finish ateach(Dist.makeUnique(places)) {
@@ -215,7 +215,7 @@ public class LocalViewResilientExecutor {
                         }
                     }
                     Console.OUT.println("Steps round completed successfully ...");
-                    stepExecTime += Timer.milliTime();
+                    stepExecTime += Timer.milliTime()-startRoundTime;
                 } catch (ex:Exception) {
                     Console.OUT.println("[Hammer Log] Time DPE discovered is ["+Timer.milliTime()+"] ...");
                     if (KILL_STEP != -1)
