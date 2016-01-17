@@ -353,9 +353,10 @@ public class LocalViewResilientExecutorOpt {
     		Console.OUT.println("[Hammer Log] Killing ["+here+"] before checkpoint voting phase ...");
     		System.killHere();
     	}
+        
         try{
         	val success = team.agree(vote);
-        	if (success) {
+        	if (success == 1N) {
         		placeTempData().commit();
         		//TODO: fix bug, spare places are not cleared
                 placeTempData().cancelOtherSnapshot();
