@@ -336,12 +336,12 @@ public class LocalViewResilientExecutorOpt {
         val excs = new GrowableRail[CheckedThrowable]();
 
         val store = placeTempData().getNextSnapshot();
-        var vote:Long = 1;
+        var vote:Int = 1N;
         try{
             //change store to use DistObjSnapsot
             app.checkpoint_local(store);
         }catch(ex:Exception){
-            vote = 0;
+            vote = 0N;
             excs.add(ex);
         }
         
