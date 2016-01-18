@@ -229,7 +229,7 @@ public class LocalViewResilientExecutorOpt {
                         try{
                         	/**Local Restore Operation**/
                         	if (localRestoreRequired){
-                        		checkpointRestoreProtocol_local(CHECKPOINT_OPERATION, app, team, root, placesCount, -1);
+                        		checkpointRestoreProtocol_local(CHECKPOINT_OPERATION, app, team, root, placesCount);
                         		localRestoreRequired = false;
                         		localRestoreJustDone = true;
                         	}
@@ -239,7 +239,7 @@ public class LocalViewResilientExecutorOpt {
                                 //take new checkpoint only if restore was not done in this iteration
                                 if (isResilient && (localIter % itersPerCheckpoint) == 0) {
                                     if (VERBOSE) Console.OUT.println("["+here+"] checkpointing at iter " + localIter);
-                                    checkpointRestoreProtocol_local(CHECKPOINT_OPERATION, app, team, root, placesCount, -1);
+                                    checkpointRestoreProtocol_local(CHECKPOINT_OPERATION, app, team, root, placesCount);
                                     placeTempData().lastCheckpointIter = localIter;
                                 }
                             } else {
@@ -297,8 +297,8 @@ public class LocalViewResilientExecutorOpt {
         Console.OUT.println("Initialization:" + applicationInitializationTime);
         Console.OUT.println("Checkpoints:" + placeTempData().railToString(placeTempData().placeMaxCheckpoint));
         Console.OUT.println("Failure Detection:"+failureDetectionTime);
-        Console.OUT.println("Remake:"+remakeTime)
-        Console.OUT.println("Restore: "+restoreTime);
+        Console.OUT.println("Remake:"+remakeTime);
+        Console.OUT.println("RestoresTotal:" + placeTempData().railSum(placeTempData().placeMaxRestore));
         Console.OUT.println("StepsTotal:" + placeTempData().railSum(placeTempData().placeMaxStep));
         Console.OUT.println("=============================");
         Console.OUT.println("RunTime:" + runTime);
@@ -312,7 +312,9 @@ public class LocalViewResilientExecutorOpt {
         
         if (VERBOSE){
         	Console.OUT.println("Steps:" + placeTempData().railToString(placeTempData().placeMaxStep));
-            
+        	Console.OUT.println("Restores:" + placeTempData().railToString(placeTempData().placeMaxRestore));
+        	
+        	
             var str:String = "";
             for (p in places)
                 str += p.id + ",";
@@ -407,9 +409,9 @@ public class LocalViewResilientExecutorOpt {
         }
         
         var killFlag:Boolean = false;
-        if ((op == CHECKPOINT_OPERATION && KILL_CHECKVOTING_INDEX   == (placeTempData().checkpointTimes.size()) && 
+        if ((operation == CHECKPOINT_OPERATION && KILL_CHECKVOTING_INDEX   == placeTempData().checkpointTimes.size() && 
             here.id == KILL_CHECKVOTING_PLACE) || 
-            (op == RESTORE_OPERATION    && KILL_RESTOREVOTING_INDEX == (placeTempData().restoreTimes.size())    && 
+            (operation == RESTORE_OPERATION    && KILL_RESTOREVOTING_INDEX == placeTempData().restoreTimes.size()    && 
         	here.id == KILL_RESTOREVOTING_PLACE))
         	killFlag = true;
         
