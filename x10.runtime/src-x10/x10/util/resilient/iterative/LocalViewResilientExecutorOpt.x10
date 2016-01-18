@@ -246,7 +246,7 @@ public class LocalViewResilientExecutorOpt {
                             }
                         	
                         	if (isResilient && KILL_STEP == localIter && here.id == KILL_STEP_PLACE){
-                        		executorKillHere();
+                        		executorKillHere("step_local()");
                         	}
 
                         	stepStartTime = Timer.milliTime();
@@ -401,7 +401,7 @@ public class LocalViewResilientExecutorOpt {
                here.id == KILL_CHECKVOTING_PLACE) || 
                (operation == RESTORE_OPERATION    && KILL_RESTOREVOTING_INDEX == placeTempData().restoreTimes.size() && 
          	   here.id == KILL_RESTOREVOTING_PLACE)) {
-            executorKillHere();
+            executorKillHere(op);
         }
         
         try{
@@ -438,12 +438,12 @@ public class LocalViewResilientExecutorOpt {
         }
     }
     
-    private def executorKillHere() {
+    private def executorKillHere(op:String) {
     	at(Place(0)){
 			placeTempData().place0KillPlaceTime = Timer.milliTime();
             Console.OUT.println("[Hammer Log] Time before killing is ["+placeTempData().place0KillPlaceTime+"] ...");
 		}
-		Console.OUT.println("[Hammer Log] Killing ["+here+"] before "+op+" voting phase ...");
+		Console.OUT.println("[Hammer Log] Killing ["+here+"] before "+op+" ...");
 		System.killHere();
     }
 }
