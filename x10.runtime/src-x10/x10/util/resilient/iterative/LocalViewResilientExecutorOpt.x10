@@ -229,7 +229,7 @@ public class LocalViewResilientExecutorOpt {
                         try{
                         	/**Local Restore Operation**/
                         	if (localRestoreRequired){
-                        		checkpointRestoreProtocol_local(CHECKPOINT_OPERATION, app, team, root, placesCount);
+                        		checkpointRestoreProtocol_local(RESTORE_OPERATION, app, team, root, placesCount);
                         		localRestoreRequired = false;
                         		localRestoreJustDone = true;
                         	}
