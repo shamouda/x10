@@ -1387,8 +1387,10 @@ public struct Team {
 	                    }
 	                } else {
 	                	val pId = here.id;
-	                    at (places(myLinks.parentIndex)) @Uncounted async { 
+	                    at (places(myLinks.parentIndex)) @Uncounted async {
+	                    	Console.OUT.println("<default else>>> Place("+pId+") calling  waitForParentToReceive from " + here );
 	                        waitForParentToReceive(pId);
+	                        Console.OUT.println("(default else))) Place("+pId+") calling  incrementParentPhase from " + here );
 	                        incrementParentPhase();
 	                    }
 	                }
@@ -1512,7 +1514,7 @@ public struct Team {
 	                //   locks up the worker thread.
 	                val freeChild1 = () => @NoInline {
 	                    if (!Team.state(teamidcopy).phase.compareAndSet(PHASE_SCATTER, PHASE_DONE))
-	                        Runtime.println("ERROR root setting the first child "+here+":team"+teamidcopy+" to PHASE_DONE");
+	                        Runtime.println("ERROR root setting the first child "+here+":team"+teamidcopy+" to PHASE_DONE   child.isValid="+Team.state(teamidcopy).isValid);
 	                    else if (DEBUGINTERNALS) Runtime.println("set the first child "+here+":team"+teamidcopy+" to PHASE_DONE");
 	                };
 	                Runtime.runUncountedAsync(places(local_child1Index), freeChild1, null);
@@ -1520,7 +1522,7 @@ public struct Team {
 	                    // NOTE: can't use the same closure because runUncountedAsync deallocates it
 	                    val freeChild2 = () => @NoInline {
 	                        if (!Team.state(teamidcopy).phase.compareAndSet(PHASE_SCATTER, PHASE_DONE))
-	                            Runtime.println("ERROR root setting the second child "+here+":team"+teamidcopy+" to PHASE_DONE");
+	                            Runtime.println("ERROR root setting the second child "+here+":team"+teamidcopy+" to PHASE_DONE   child.isValid="+Team.state(teamidcopy).isValid);
 	                        else if (DEBUGINTERNALS) Runtime.println("set the second child "+here+":team"+teamidcopy+" to PHASE_DONE");
 	                    };
 	                    Runtime.runUncountedAsync(places(local_child2Index), freeChild2, null);
@@ -1542,7 +1544,8 @@ public struct Team {
 	                    @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.parentIndex)) async {
 		                    Team.state(teamidcopy).isValid = false;
 		                }
-		            } catch (me:MultipleExceptions){}
+	                    if (DEBUGINTERNALS) Runtime.println(here+" notifying parent of an invalid team SUCCEEDED ...");          
+		            } catch (me:MultipleExceptions){me.printStackTrace();}
 	            } else if (DEBUGINTERNALS) Runtime.println(here+" has no parent to notify of an invalid team");
 	            if (myLinks.child1Index != -1 && !places(myLinks.child1Index).isDead()) {
 	                try {
@@ -1550,7 +1553,8 @@ public struct Team {
 	                    @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.child1Index)) async {
 		                    Team.state(teamidcopy).isValid = false;
 		                }
-		            } catch (me:MultipleExceptions){}
+	                    if (DEBUGINTERNALS) Runtime.println(here+" notifying child1 of an invalid team SUCCEEDED ...");
+		            } catch (me:MultipleExceptions){me.printStackTrace();}
 	            } else if (DEBUGINTERNALS) Runtime.println(here+" has no child1 to notify of an invalid team");
 	            if (myLinks.child2Index != -1 && !places(myLinks.child2Index).isDead()) {
 	                try {
@@ -1558,7 +1562,8 @@ public struct Team {
 	                    @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.child2Index)) async {
 	                        Team.state(teamidcopy).isValid = false;
 	                    }
-	                } catch (me:MultipleExceptions){}
+	                    if (DEBUGINTERNALS) Runtime.println(here+" notifying child2 of an invalid team SUCCEEDED ...");
+	                } catch (me:MultipleExceptions){me.printStackTrace();}
 	            } else if (DEBUGINTERNALS) Runtime.println(here+" has no child2 to notify of an invalid team");
 	        }
 	        
