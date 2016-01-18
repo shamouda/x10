@@ -1290,12 +1290,12 @@ public struct Team {
 	                    local_temp_buff = src;
 	                this.phase.set(PHASE_DONE); // the root node has no parent, and can skip its own state ahead
 	            } else {
-	                val waitForParentToReceive = () => @NoInline {
+	                val waitForParentToReceive = (childPlaceId:Long) => @NoInline {
 	                    if (DEBUGINTERNALS) Runtime.println(here+" waiting for parent phase "+Team.state(teamidcopy).phase.get());
 	                     sleepUntil(() => {val state = Team.state(teamidcopy).phase.get();
 	                                       (state >= PHASE_GATHER1 && state < PHASE_SCATTER)
 	                                      });
-	                    if (DEBUGINTERNALS) Runtime.println(here+" parent ready to receive phase "+Team.state(teamidcopy).phase.get());
+	                    if (DEBUGINTERNALS) Runtime.println("P"+childPlaceId+ "->"+here+" parent ready to receive phase "+Team.state(teamidcopy).phase.get());
 	                };
 	
 	                val incrementParentPhase = () => @NoInline {
@@ -1312,8 +1312,9 @@ public struct Team {
 	                    if (collType == COLL_ALLTOALL) {
 	                        val sourceIndex = myIndex;
 	                        val totalData = count*(myLinks.totalChildren+1);
+	                        val pId = here.id;
 	                        at (places(myLinks.parentIndex)) @Uncounted async {
-	                            waitForParentToReceive();
+	                            waitForParentToReceive(pId);
 								if (DEBUGINTERNALS) Runtime.println(here+ " alltoall gathering from offset "+(dst_off+(count*sourceIndex))+" to local_dst_off "+(Team.state(teamidcopy).local_dst_off+(count*sourceIndex))+" size " + totalData);
 	                            // copy my data, plus all the data filled in by my children, to my parent
 	                            Rail.uncountedCopy(gr, dst_off+(count*sourceIndex), Team.state(teamidcopy).local_dst as Rail[T], Team.state(teamidcopy).local_dst_off+(count*sourceIndex), totalData, incrementParentPhase);
@@ -1321,8 +1322,9 @@ public struct Team {
 	                    } else if (collType == COLL_REDUCE || collType == COLL_ALLREDUCE) {
 	                        // copy reduced data to parent
 	                        val sourceIndex = places.indexOf(here);
+	                        val pId = here.id;
 	                        at (places(myLinks.parentIndex)) @Uncounted async {
-	                            waitForParentToReceive();
+	                            waitForParentToReceive(pId);
 	                            var target:Rail[T];
 	                            var off:Long;
 	                            if (sourceIndex == Team.state(teamidcopy).local_child2Index) {
@@ -1341,8 +1343,9 @@ public struct Team {
 	                        }
 	                    } else if (collType == COLL_INDEXOFMAX) {
 	                        val childVal:DoubleIdx = dst(0) as DoubleIdx;
+	                        val pId = here.id;
 	                        at (places(myLinks.parentIndex)) @Uncounted async {
-	                            waitForParentToReceive();
+	                            waitForParentToReceive(pId);
 	                            sleepUntil(() => Team.state(teamidcopy).dstLock.tryLock());
 	                            val ldi:Rail[DoubleIdx] = (Team.state(teamidcopy).local_dst as Rail[DoubleIdx]);
 	                            if (DEBUGINTERNALS) Runtime.println(here+" IndexOfMax: parent="+ldi(0).value+" child="+childVal.value);
@@ -1357,8 +1360,9 @@ public struct Team {
 	                        }
 	                    } else if (collType == COLL_INDEXOFMIN) {
 	                        val childVal:DoubleIdx = dst(0) as DoubleIdx;
+	                        val pId = here.id;
 	                        at (places(myLinks.parentIndex)) @Uncounted async {
-	                            waitForParentToReceive();
+	                            waitForParentToReceive(pId);
 	                            sleepUntil(() => Team.state(teamidcopy).dstLock.tryLock());
 	                            val ldi:Rail[DoubleIdx] = (Team.state(teamidcopy).local_dst as Rail[DoubleIdx]);
 	                            if (childVal.value < ldi(0).value)
@@ -1370,8 +1374,9 @@ public struct Team {
 	                        val notNullTmp = local_temp_buff as Rail[T]{self!=null};
 	                        val childOffset = local_offset;
 	                        val childTotalData = local_counts_sum;
+	                        val pId = here.id;
 	                        at (places(myLinks.parentIndex)) @Uncounted async {
-	                            waitForParentToReceive();
+	                            waitForParentToReceive(pId);
 	                            val rootDstOffset = (Team.state(teamidcopy).local_parentIndex == -1) ? Team.state(teamidcopy).local_dst_off: 0;
 	                            val parentOffset = (Team.state(teamidcopy).local_parentIndex == -1) ? 0:Team.state(teamidcopy).local_offset;
 	                            val myOffset = childOffset - parentOffset + rootDstOffset;
@@ -1381,8 +1386,9 @@ public struct Team {
 	                        }
 	                    }
 	                } else {
+	                	val pId = here.id;
 	                    at (places(myLinks.parentIndex)) @Uncounted async { 
-	                        waitForParentToReceive();
+	                        waitForParentToReceive(pId);
 	                        incrementParentPhase();
 	                    }
 	                }
