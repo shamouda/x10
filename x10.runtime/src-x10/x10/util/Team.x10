@@ -1541,7 +1541,8 @@ public struct Team {
                 if (myLinks.parentIndex != -1 && !places(myLinks.parentIndex).isDead()) {
 	                try {
 	                    if (DEBUGINTERNALS) Runtime.println(here+" notifying parent of an invalid team");
-	                    @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.parentIndex)) async {
+	                    val p1 = places(myLinks.parentIndex);
+	                    @Pragma(Pragma.FINISH_ASYNC) finish at (p1) async {
 		                    Team.state(teamidcopy).isValid = false;
 		                }
 	                    if (DEBUGINTERNALS) Runtime.println(here+" notifying parent of an invalid team SUCCEEDED ...");          
@@ -1550,7 +1551,8 @@ public struct Team {
 	            if (myLinks.child1Index != -1 && !places(myLinks.child1Index).isDead()) {
 	                try {
 	                    if (DEBUGINTERNALS) Runtime.println(here+" notifying child1 of an invalid team");
-	                    @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.child1Index)) async {
+	                    val p2 = places(myLinks.child1Index);
+	                    @Pragma(Pragma.FINISH_ASYNC) finish at (p2) async {
 		                    Team.state(teamidcopy).isValid = false;
 		                }
 	                    if (DEBUGINTERNALS) Runtime.println(here+" notifying child1 of an invalid team SUCCEEDED ...");
@@ -1559,7 +1561,8 @@ public struct Team {
 	            if (myLinks.child2Index != -1 && !places(myLinks.child2Index).isDead()) {
 	                try {
 	                    if (DEBUGINTERNALS) Runtime.println(here+" notifying child2 of an invalid team");
-	                    @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.child2Index)) async {
+	                    val p3 = places(myLinks.child2Index);
+	                    @Pragma(Pragma.FINISH_ASYNC) finish at (p3) async {
 	                        Team.state(teamidcopy).isValid = false;
 	                    }
 	                    if (DEBUGINTERNALS) Runtime.println(here+" notifying child2 of an invalid team SUCCEEDED ...");
