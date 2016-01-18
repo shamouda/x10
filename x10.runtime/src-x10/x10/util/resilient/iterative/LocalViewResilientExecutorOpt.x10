@@ -395,6 +395,8 @@ public class LocalViewResilientExecutorOpt {
         }catch(ex:Exception){
             vote = 0N;
             excs.add(ex);
+            Console.OUT.println("["+here+"]  EXCEPTION MESSAGE while "+op+" = " + ex.getMessage());
+            ex.printStackTrace();
         }
         
         if ((operation == CHECKPOINT_OPERATION && KILL_CHECKVOTING_INDEX == placeTempData().checkpointTimes.size() && 
