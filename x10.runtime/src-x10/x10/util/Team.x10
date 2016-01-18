@@ -1151,8 +1151,8 @@ public struct Team {
             sleepUntil(() => this.phase.compareAndSet(PHASE_READY, PHASE_INIT));
             
             // don't do anything if this team was previously set to invalid
-            if (!Team.state(this.teamid).isValid)
-                throw new DeadPlaceException("Team "+this.teamid+" contains at least one dead member");
+            //if (!Team.state(this.teamid).isValid)
+            //    throw new DeadPlaceException("Team "+this.teamid+" contains at least one dead member");
             
             // figure out our links in the tree structure
             val myLinks:TreeStructure;
