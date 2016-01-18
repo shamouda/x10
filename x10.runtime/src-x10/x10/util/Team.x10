@@ -1291,7 +1291,7 @@ public struct Team {
 	                this.phase.set(PHASE_DONE); // the root node has no parent, and can skip its own state ahead
 	            } else {
 	                val waitForParentToReceive = (childPlaceId:Long) => @NoInline {
-	                    if (DEBUGINTERNALS) Runtime.println(here+" waiting for parent phase "+Team.state(teamidcopy).phase.get());
+	                    if (DEBUGINTERNALS) Runtime.println("Place("+childPlaceId+ ")=>>"+here+" waiting for parent phase "+Team.state(teamidcopy).phase.get());
 	                     sleepUntil(() => {val state = Team.state(teamidcopy).phase.get();
 	                                       (state >= PHASE_GATHER1 && state < PHASE_SCATTER)
 	                                      });
