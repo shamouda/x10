@@ -50,9 +50,7 @@ public class LocalViewResilientExecutorOpt {
     private val KILL_RESTOREVOTING_PLACE = (System.getenv("EXECUTOR_KILL_RESTOREVOTING_PLACE") != null)?Long.parseLong(System.getenv("EXECUTOR_KILL_RESTOREVOTING_PLACE")):-1;   
     
     private transient var runTime:Long = 0;
-    private transient var restoreTime:Long = 0;
     private transient var remakeTime:Long = 0;
-    private transient var restoreCount:Long = 0;
     private transient var failureDetectionTime:Long = 0;
     private transient var applicationInitializationTime:Long = 0;
     
@@ -153,6 +151,8 @@ public class LocalViewResilientExecutorOpt {
             	Console.OUT.println("EXECUTOR_KILL_STEP_PLACE="+KILL_STEP_PLACE);
             	Console.OUT.println("EXECUTOR_KILL_CHECKVOTING="+KILL_CHECKVOTING_INDEX);
             	Console.OUT.println("EXECUTOR_KILL_CHECKVOTING_PLACE="+KILL_CHECKVOTING_PLACE);
+            	Console.OUT.println("EXECUTOR_KILL_RESTOREVOTING_INDEX"+KILL_RESTOREVOTING_INDEX);
+            	Console.OUT.println("EXECUTOR_KILL_RESTOREVOTING_PLACE"+KILL_RESTOREVOTING_PLACE);
             }
         }
     }
@@ -205,7 +205,6 @@ public class LocalViewResilientExecutorOpt {
                         ///////////////////////////////////////////////////////////
                         places = newPG;
                         globalIter = lastCheckIter;
-                        
                         remakeRequired = false;
                         restoreRequired = true;
                         remakeTime += Timer.milliTime();
@@ -247,12 +246,7 @@ public class LocalViewResilientExecutorOpt {
                             }
                         	
                         	if (isResilient && KILL_STEP == localIter && here.id == KILL_STEP_PLACE){
-                        		at(Place(0)){
-                        			placeTempData().place0KillPlaceTime = Timer.milliTime();
-                                    Console.OUT.println("[Hammer Log] Time before killing is ["+placeTempData().place0KillPlaceTime+"] ...");
-                        		}
-                        		Console.OUT.println("[Hammer Log] Killing ["+here+"] ...");
-                        		System.killHere();
+                        		executorKillHere();
                         	}
 
                         	stepStartTime = Timer.milliTime();
@@ -276,13 +270,10 @@ public class LocalViewResilientExecutorOpt {
             	//exception from finish_ateach  or from restore
             	if (isResilient && containsDPE(iterEx)){
             		remakeRequired = true;
-            		
             		Console.OUT.println("[Hammer Log] Time DPE discovered is ["+Timer.milliTime()+"] ...");
-                    if (isResilient && containsDPE(iterEx)){
-                        if (placeTempData().place0KillPlaceTime != -1)
-                            failureDetectionTime = Timer.milliTime() - placeTempData().place0KillPlaceTime;
-                        else
-                            failureDetectionTime = -1;
+                    if (isResilient && containsDPE(iterEx) && placeTempData().place0KillPlaceTime != -1){
+                        failureDetectionTime += Timer.milliTime() - placeTempData().place0KillPlaceTime;
+                        //FIXME: currently we are only able to detect failure detection time only when we kill places
                     }
             	}
             	else
@@ -305,10 +296,8 @@ public class LocalViewResilientExecutorOpt {
         
         
         Console.OUT.println("CheckpointCount:"+placeTempData().placeMaxCheckpoint.size);
-        Console.OUT.println("RestoreCount:"+restoreCount);
+        Console.OUT.println("RestoreCount:"+placeTempData().placeMaxRestore.size);
         Console.OUT.println("StepCount:"+placeTempData().placeMaxStep.size);
-        
-        
         
         if (VERBOSE){
         	Console.OUT.println("Steps:" + placeTempData().railToString(placeTempData().placeMaxStep));
@@ -408,24 +397,19 @@ public class LocalViewResilientExecutorOpt {
             excs.add(ex);
         }
         
-        var killFlag:Boolean = false;
-        if ((operation == CHECKPOINT_OPERATION && KILL_CHECKVOTING_INDEX   == placeTempData().checkpointTimes.size() && 
-            here.id == KILL_CHECKVOTING_PLACE) || 
-            (operation == RESTORE_OPERATION    && KILL_RESTOREVOTING_INDEX == placeTempData().restoreTimes.size()    && 
-        	here.id == KILL_RESTOREVOTING_PLACE))
-        	killFlag = true;
-        
-        if (killFlag) {
-    		at(Place(0)){
-    			placeTempData().place0KillPlaceTime = Timer.milliTime();
-                Console.OUT.println("[Hammer Log] Time before killing is ["+placeTempData().place0KillPlaceTime+"] ...");
-    		}
-    		Console.OUT.println("[Hammer Log] Killing ["+here+"] before "+op+" voting phase ...");
-    		System.killHere();
-    	}
+        if ((operation == CHECKPOINT_OPERATION && KILL_CHECKVOTING_INDEX == placeTempData().checkpointTimes.size() && 
+               here.id == KILL_CHECKVOTING_PLACE) || 
+               (operation == RESTORE_OPERATION    && KILL_RESTOREVOTING_INDEX == placeTempData().restoreTimes.size() && 
+         	   here.id == KILL_RESTOREVOTING_PLACE)) {
+            executorKillHere();
+        }
         
         try{
         	val success = team.agree(vote);
+        	//if (VERBOSE)
+        	{
+        		Console.OUT.println("["+here+"]  myvote {"+vote+"}  result {"+success+"} ...");
+        	}
         	if (success == 1N) {
         		if (VERBOSE) Console.OUT.println("Agreement succeeded in operation ["+op+"]");
         		if (operation == CHECKPOINT_OPERATION){
@@ -436,7 +420,7 @@ public class LocalViewResilientExecutorOpt {
         	}
         	else{
         		//Failure due to a reason other than place failure, will need to abort.
-        		throw new Exception("[Fatal Error] Agreement failed in operation ["+op+"]");
+        		throw new Exception("[Fatal Error] Agreement failed in operation ["+op+"]   success = ["+success+"]");
         	}
         }
         catch(agrex:Exception){
@@ -452,6 +436,15 @@ public class LocalViewResilientExecutorOpt {
         if (excs.size() > 0){
         	throw new MultipleExceptions(excs);
         }
+    }
+    
+    private def executorKillHere() {
+    	at(Place(0)){
+			placeTempData().place0KillPlaceTime = Timer.milliTime();
+            Console.OUT.println("[Hammer Log] Time before killing is ["+placeTempData().place0KillPlaceTime+"] ...");
+		}
+		Console.OUT.println("[Hammer Log] Killing ["+here+"] before "+op+" voting phase ...");
+		System.killHere();
     }
 }
 
@@ -471,25 +464,20 @@ mpirun -np 9 -am ft-enable-mpi \
 bin/lulesh2.0 -e 1 -k 10 -s 10 -i 50 -p
 
 
-
-==> new
-Initialization:61
-Checkpoints:61,49,44,50,65,
-Failure Detection:70
-Restore: 189
-StepsTotal:4177
-==> old
-Initialization:74
-Checkpoints:64,53,35,23,14,
-Failure Detection:80
-Restore: 250
-StepsTotal:3374
-
+EXECUTOR_KILL_STEP=15 \
+EXECUTOR_KILL_STEP_PLACE=3 \
+EXECUTOR_KILL_RESTOREVOTING=0 \
+EXECUTOR_KILL_RESTOREVOTING_PLACE=7 \
+X10_RESILIENT_STORE_VERBOSE=0 \
+X10_TEAM_DEBUG_INTERNALS=0 \
+X10_PLACE_GROUP_RESTORE_MODE=1 \
+EXECUTOR_DEBUG=0 \
+X10_RESILIENT_MODE=1 \
+mpirun -np 10 -am ft-enable-mpi \
+--mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
+bin/lulesh2.0 -e 2 -k 10 -s 10 -i 50 -p
 
 
-======
-Raijin:
-OLD  1)
 
 
 
