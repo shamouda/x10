@@ -1295,7 +1295,7 @@ public struct Team {
 	                     sleepUntil(() => {val state = Team.state(teamidcopy).phase.get();
 	                                       (state >= PHASE_GATHER1 && state < PHASE_SCATTER)
 	                                      });
-	                    if (DEBUGINTERNALS) Runtime.println("P"+childPlaceId+ "->"+here+" parent ready to receive phase "+Team.state(teamidcopy).phase.get());
+	                    if (DEBUGINTERNALS) Runtime.println("Place("+childPlaceId+ ")->"+here+" parent ready to receive phase "+Team.state(teamidcopy).phase.get());
 	                };
 	
 	                val incrementParentPhase = () => @NoInline {
