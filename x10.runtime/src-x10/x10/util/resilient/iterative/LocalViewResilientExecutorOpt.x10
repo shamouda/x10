@@ -46,16 +46,21 @@ public class LocalViewResilientExecutorOpt {
     // index of the checkpoint first checkpoint (0), second checkpoint (1), ...etc
     private val KILL_CHECKVOTING_INDEX = (System.getenv("EXECUTOR_KILL_CHECKVOTING") != null)?Long.parseLong(System.getenv("EXECUTOR_KILL_CHECKVOTING")):-1;
     private val KILL_CHECKVOTING_PLACE = (System.getenv("EXECUTOR_KILL_CHECKVOTING_PLACE") != null)?Long.parseLong(System.getenv("EXECUTOR_KILL_CHECKVOTING_PLACE")):-1;   
+    private val KILL_RESTOREVOTING_INDEX = (System.getenv("EXECUTOR_KILL_RESTOREVOTING") != null)?Long.parseLong(System.getenv("EXECUTOR_KILL_RESTOREVOTING")):-1;
+    private val KILL_RESTOREVOTING_PLACE = (System.getenv("EXECUTOR_KILL_RESTOREVOTING_PLACE") != null)?Long.parseLong(System.getenv("EXECUTOR_KILL_RESTOREVOTING_PLACE")):-1;   
     
     private transient var runTime:Long = 0;
     private transient var restoreTime:Long = 0;
-    private transient var appOnlyRestoreTime:Long = 0;
+    private transient var remakeTime:Long = 0;
     private transient var restoreCount:Long = 0;
     private transient var failureDetectionTime:Long = 0;
     private transient var applicationInitializationTime:Long = 0;
     
     private transient var restoreRequired:Boolean = false;
-    private transient var restoreJustDone:Boolean = false;
+    private transient var remakeRequired:Boolean = false;
+    
+    private val CHECKPOINT_OPERATION = 1;
+    private val RESTORE_OPERATION = 2;
     
     class PlaceTempData {
         //used by place hammer
@@ -66,13 +71,17 @@ public class LocalViewResilientExecutorOpt {
         val snapshots:Rail[DistObjectSnapshot];
         
         val checkpointTimes:ArrayList[Long];
+        val restoreTimes:ArrayList[Long];
         val stepTimes:ArrayList[Long];
         var placeMaxCheckpoint:Rail[Long];
+        var placeMaxRestore:Rail[Long];
         var placeMaxStep:Rail[Long];
         
-        public def this(snapshots:Rail[DistObjectSnapshot], checkTimes:ArrayList[Long], stepTimes:ArrayList[Long], lastCheckpointIter:Long, commitCount:Long){
+        public def this(snapshots:Rail[DistObjectSnapshot], checkTimes:ArrayList[Long], restoreTimes:ArrayList[Long],
+        		stepTimes:ArrayList[Long], lastCheckpointIter:Long, commitCount:Long){
             this.checkpointTimes = checkTimes;
             this.stepTimes = stepTimes;
+            this.restoreTimes = restoreTimes;
             this.snapshots = snapshots;
             this.lastCheckpointIter = lastCheckpointIter;
             this.commitCount = commitCount;
@@ -80,6 +89,7 @@ public class LocalViewResilientExecutorOpt {
     
         public def this(snapshots:Rail[DistObjectSnapshot]){
             this.checkpointTimes = new ArrayList[Long]();
+            this.restoreTimes = new ArrayList[Long]();
             this.stepTimes = new ArrayList[Long]();
             this.snapshots = snapshots;
         }
@@ -164,12 +174,11 @@ public class LocalViewResilientExecutorOpt {
         
         do{
             try {
-            	restoreJustDone = false;
-                if (restoreRequired) {
+            	/*** Starting a Restore Operation *****/
+                if (remakeRequired) {
                     if (placeTempData().lastCheckpointIter > -1) {
                         if (VERBOSE) Console.OUT.println("Restoring to iter " + placeTempData().lastCheckpointIter);
-                        restoreTime -= Timer.milliTime();
-                        
+                        remakeTime -= Timer.milliTime();
                         val restorePGResult = PlaceGroupBuilder.createRestorePlaceGroup(places);
                         val newPG = restorePGResult.newGroup;
                         val addedPlaces = restorePGResult.newAddedPlaces;
@@ -180,51 +189,63 @@ public class LocalViewResilientExecutorOpt {
                                 str += p.id + ",";
                             Console.OUT.println("Restore places are: " + str);
                         } 
-                        appOnlyRestoreTime -= Timer.milliTime();
-                        
                         team = new Team(newPG);
-                        val store = placeTempData().getConsistentSnapshot();
-                        
-                        app.restore(newPG, team, store, placeTempData().lastCheckpointIter, addedPlaces);
-                        appOnlyRestoreTime += Timer.milliTime();
-                        
-                        val lastIter = placeTempData().lastCheckpointIter;
-                        //save place0 data to initialize the new added places
+                        app.remake(newPG, team, addedPlaces);
+                        ///////////////////////////////////////////////////////////
+                        //Initialize the new places with the same info at place 0//
+                        val lastCheckIter = placeTempData().lastCheckpointIter;
                         val tmpPlace0CheckpointTimes = placeTempData().checkpointTimes;
+                        val tmpPlace0RestoreTimes = placeTempData().restoreTimes;
                         val tmpPlace0StepTimes = placeTempData().stepTimes;
                         val tmpPlace0CommitCount = placeTempData().commitCount;
                         for (sparePlace in addedPlaces){
                             Console.OUT.println("LocalViewResilientExecutor: Adding place["+sparePlace+"] ...");           
-                            PlaceLocalHandle.addPlace[PlaceTempData](placeTempData, sparePlace, ()=>new PlaceTempData(snapshots,tmpPlace0CheckpointTimes, tmpPlace0StepTimes, lastIter,tmpPlace0CommitCount));
+                            PlaceLocalHandle.addPlace[PlaceTempData](placeTempData, sparePlace, ()=>new PlaceTempData(snapshots,tmpPlace0CheckpointTimes, tmpPlace0RestoreTimes, tmpPlace0StepTimes, lastCheckIter,tmpPlace0CommitCount));
                         }
-                        
+                        ///////////////////////////////////////////////////////////
                         places = newPG;
-                        globalIter = lastIter;
+                        globalIter = lastCheckIter;
                         
-                        restoreRequired = false;
-                        restoreJustDone = true;
-                        restoreTime += Timer.milliTime();
-                        restoreCount++;
-                        Console.OUT.println("LocalViewResilientExecutor: All restore steps completed successfully ...");
+                        remakeRequired = false;
+                        restoreRequired = true;
+                        remakeTime += Timer.milliTime();
+                        Console.OUT.println("LocalViewResilientExecutor: All remake steps completed successfully ...");
                     } else {
                         throw new UnsupportedOperationException("process failure occurred but no valid checkpoint exists!");
                     }
                 }
                 
                 //to be copied to all places
-                val tmpRestoreJustDone = restoreJustDone;
                 val tmpRestoreRequired = restoreRequired;
                 val tmpGlobalIter = globalIter;
                 val placesCount = places.size();
                 finish ateach(Dist.makeUnique(places)) {
                     var localIter:Long = tmpGlobalIter;
-                    var localRestoreJustDone:Boolean = tmpRestoreJustDone;
+                    var localRestoreJustDone:Boolean = false;
                     var localRestoreRequired:Boolean = tmpRestoreRequired;
                     
-                    while ( !app.isFinished_local() /*|| localRestoreRequired*/) {
+                    while ( !app.isFinished_local() || localRestoreRequired) {
                     	var stepStartTime:Long = -1; // (-1) is used to differenciate between checkpoint exceptions and step exceptions
                         try{
-                        	// kill iteration?
+                        	/**Local Restore Operation**/
+                        	if (localRestoreRequired){
+                        		checkpointRestoreProtocol_local(CHECKPOINT_OPERATION, app, team, root, placesCount, -1);
+                        		localRestoreRequired = false;
+                        		localRestoreJustDone = true;
+                        	}
+                        	
+                        	/**Local Checkpointing Operation**/
+                        	if (!localRestoreJustDone) {
+                                //take new checkpoint only if restore was not done in this iteration
+                                if (isResilient && (localIter % itersPerCheckpoint) == 0) {
+                                    if (VERBOSE) Console.OUT.println("["+here+"] checkpointing at iter " + localIter);
+                                    checkpointRestoreProtocol_local(CHECKPOINT_OPERATION, app, team, root, placesCount, -1);
+                                    placeTempData().lastCheckpointIter = localIter;
+                                }
+                            } else {
+                            	localRestoreJustDone = false;
+                            }
+                        	
                         	if (isResilient && KILL_STEP == localIter && here.id == KILL_STEP_PLACE){
                         		at(Place(0)){
                         			placeTempData().place0KillPlaceTime = Timer.milliTime();
@@ -233,37 +254,12 @@ public class LocalViewResilientExecutorOpt {
                         		Console.OUT.println("[Hammer Log] Killing ["+here+"] ...");
                         		System.killHere();
                         	}
-                        	
-                        	
+
+                        	stepStartTime = Timer.milliTime();
                         	if (!implicitStepSynchronization){
                         	    //to sync places & also to detect DPE
                         	    team.barrier();
                         	}
-                        	
-                        	
-                        	//validate is restore required
-                        	/*
-                        	if (localRestoreRequired){
-                        		restore_local(app, team, root, placesCount);
-                        		localRestoreRequired = false;
-                        		localRestoreJustDone = true;
-                        	}
-                        	*/
-                        	
-                        	
-                        	//checkpoint iteration?
-                        	if (!localRestoreJustDone) {
-                                //take new checkpoint only if restore was not done in this iteration
-                                if (isResilient && (localIter % itersPerCheckpoint) == 0) {
-                                    if (VERBOSE) Console.OUT.println("["+here+"] checkpointing at iter " + localIter);
-                                    checkpointProtocol_local(app, team, root, placesCount);
-                                    placeTempData().lastCheckpointIter = localIter;
-                                }
-                            } else {
-                            	localRestoreJustDone = false;
-                            }
-                        	
-                        	stepStartTime = Timer.milliTime();
                             app.step_local();
                             placeTempData().stepTimes.add(Timer.milliTime()-stepStartTime);
                             
@@ -279,7 +275,7 @@ public class LocalViewResilientExecutorOpt {
             	iterEx.printStackTrace();
             	//exception from finish_ateach  or from restore
             	if (isResilient && containsDPE(iterEx)){
-            		restoreRequired = true;
+            		remakeRequired = true;
             		
             		Console.OUT.println("[Hammer Log] Time DPE discovered is ["+Timer.milliTime()+"] ...");
                     if (isResilient && containsDPE(iterEx)){
@@ -292,7 +288,7 @@ public class LocalViewResilientExecutorOpt {
             	else
             		throw iterEx;
             }
-        }while(restoreRequired || !app.isFinished_local());
+        }while(remakeRequired || !app.isFinished_local());
         
         val runTime = (Timer.milliTime() - startRunTime);
         
@@ -301,6 +297,7 @@ public class LocalViewResilientExecutorOpt {
         Console.OUT.println("Initialization:" + applicationInitializationTime);
         Console.OUT.println("Checkpoints:" + placeTempData().railToString(placeTempData().placeMaxCheckpoint));
         Console.OUT.println("Failure Detection:"+failureDetectionTime);
+        Console.OUT.println("Remake:"+remakeTime)
         Console.OUT.println("Restore: "+restoreTime);
         Console.OUT.println("StepsTotal:" + placeTempData().railSum(placeTempData().placeMaxStep));
         Console.OUT.println("=============================");
@@ -339,6 +336,13 @@ public class LocalViewResilientExecutorOpt {
     		val src2 = placeTempData().stepTimes.toRail();
     		val dst2 = placeTempData().placeMaxStep;
     	    team.allreduce(src2, 0, dst2, 0, stpCount, Team.MAX);
+    	    
+    	    ////// restore times ////////
+    	    val restCount = placeTempData().restoreTimes.size();
+    	    placeTempData().placeMaxRestore = new Rail[Long](restCount);
+    	    val src3 = placeTempData().restoreTimes.toRail();
+    	    val dst3 = placeTempData().placeMaxRestore;
+    	    team.allreduce(src3, 0, dst3, 0, restCount, Team.MAX);
         }
     }
     
@@ -382,56 +386,72 @@ public class LocalViewResilientExecutorOpt {
     }
     
     //Checkpointing will only occur in resilient mode
-    private def checkpointProtocol_local(app:LocalViewResilientIterativeAppOpt, team:Team, root:Place, placesCount:Long){
-        val startCheckpoint = Timer.milliTime();
+    /**
+     * lastCheckpointIter    needed only for restore
+     * */
+    private def checkpointRestoreProtocol_local(operation:Long, app:LocalViewResilientIterativeAppOpt, team:Team, root:Place, placesCount:Long){
+    	val op:String = (operation==CHECKPOINT_OPERATION)?"Checkpoint":"Restore";
+    
+        val startOperation = Timer.milliTime();
         val excs = new GrowableRail[CheckedThrowable]();
 
-        val store = placeTempData().getNextSnapshot();
         var vote:Int = 1N;
         try{
-            //change store to use DistObjSnapsot
-            app.checkpoint_local(store);
+            if (operation == CHECKPOINT_OPERATION)
+                app.checkpoint_local(placeTempData().getNextSnapshot());
+            else
+            	app.restore_local(placeTempData().getConsistentSnapshot(), placeTempData().lastCheckpointIter);
         }catch(ex:Exception){
             vote = 0N;
             excs.add(ex);
         }
         
-        if (KILL_CHECKVOTING_INDEX == (placeTempData().checkpointTimes.size()) && here.id == KILL_CHECKVOTING_PLACE){
+        var killFlag:Boolean = false;
+        if ((op == CHECKPOINT_OPERATION && KILL_CHECKVOTING_INDEX   == (placeTempData().checkpointTimes.size()) && 
+            here.id == KILL_CHECKVOTING_PLACE) || 
+            (op == RESTORE_OPERATION    && KILL_RESTOREVOTING_INDEX == (placeTempData().restoreTimes.size())    && 
+        	here.id == KILL_RESTOREVOTING_PLACE))
+        	killFlag = true;
+        
+        if (killFlag) {
     		at(Place(0)){
     			placeTempData().place0KillPlaceTime = Timer.milliTime();
                 Console.OUT.println("[Hammer Log] Time before killing is ["+placeTempData().place0KillPlaceTime+"] ...");
     		}
-    		Console.OUT.println("[Hammer Log] Killing ["+here+"] before checkpoint voting phase ...");
+    		Console.OUT.println("[Hammer Log] Killing ["+here+"] before "+op+" voting phase ...");
     		System.killHere();
     	}
         
         try{
         	val success = team.agree(vote);
         	if (success == 1N) {
-        		placeTempData().commit();
-        		//TODO: fix bug, spare places are not cleared
-                placeTempData().cancelOtherSnapshot();
+        		if (VERBOSE) Console.OUT.println("Agreement succeeded in operation ["+op+"]");
+        		if (operation == CHECKPOINT_OPERATION){
+        		    placeTempData().commit();
+        		    //TODO: fix bug, spare places are not cleared
+                    placeTempData().cancelOtherSnapshot();
+        		}
         	}
         	else{
-        		if (here.id == 0)
-        		    Console.OUT.println("##########  Failed to checkpoint  #######   ");
+        		//Failure due to a reason other than place failure, will need to abort.
+        		throw new Exception("[Fatal Error] Agreement failed in operation ["+op+"]");
         	}
         }
         catch(agrex:Exception){
         	excs.add(agrex);
-        	if (here.id == 0)
-    		    Console.OUT.println("##########  Failed to checkpoint  #######   ");
         }
         
-        placeTempData().checkpointTimes.add(Timer.milliTime() - startCheckpoint);
+        if (operation == CHECKPOINT_OPERATION)
+            placeTempData().checkpointTimes.add(Timer.milliTime() - startOperation);
+        else if (operation == RESTORE_OPERATION)
+        	placeTempData().restoreTimes.add(Timer.milliTime() - startOperation);
         
+        	
         if (excs.size() > 0){
         	throw new MultipleExceptions(excs);
         }
     }
 }
-
-
 
 
 /*Test commands:
@@ -457,24 +477,19 @@ Failure Detection:70
 Restore: 189
 StepsTotal:4177
 ==> old
-
-RESILIENT_EXECUTOR_KILL_ITER=15 \
-RESILIENT_EXECUTOR_KILL_PLACE=3 \
-X10_RESILIENT_STORE_VERBOSE=1 \
-X10_TEAM_DEBUG_INTERNALS=0 \
-X10_PLACE_GROUP_RESTORE_MODE=1 \
-EXECUTOR_DEBUG=1 \
-X10_RESILIENT_MODE=1 \
-mpirun -np 9 -am ft-enable-mpi \
---mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
-bin/lulesh2.0 -e 1 -k 10 -s 10 -i 50 -p
-
-
 Initialization:74
 Checkpoints:64,53,35,23,14,
 Failure Detection:80
 Restore: 250
 StepsTotal:3374
+
+
+
+======
+Raijin:
+OLD  1)
+
+
 
 
 
