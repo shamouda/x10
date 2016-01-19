@@ -290,9 +290,9 @@ public abstract class DistObjectSnapshot {
         
         private def saveRemote(key:Any, value:Any, backupPlace:Long) {
             if (remoteCopy.equals("at")) {
-                at(Place(backupPlace)) atomic { hm().put(key, value); }
+                at(places(backupPlace)) atomic { hm().put(key, value); }
             } else if (remoteCopy.equals("dma")) {
-                (value as Snapshot).remoteCopyAndSave(key, hm, Place(backupPlace));
+                (value as Snapshot).remoteCopyAndSave(key, hm, places(backupPlace));
             } else {
                 throw new Exception("unknown remote copy mode");
             }
@@ -319,13 +319,13 @@ public abstract class DistObjectSnapshot {
         
         public def loadRemote(key:Any, backupPlace:Long):Any {
             if (remoteCopy.equals("at")) {
-                val value = at(Place(backupPlace)) {
+                val value = at(places(backupPlace)) {
                     var v:Any; atomic { v = hm().getOrThrow(key); } v
                 };
                 return value;
             } else if (remoteCopy.equals("dma")) {
                 val destPlace = here;
-                val gr = at(Place(backupPlace)) {
+                val gr = at(places(backupPlace)) {
                     var v:Any;
                     atomic { v = hm().getOrThrow(key); }
                     (v as Snapshot).remoteClone(destPlace)
