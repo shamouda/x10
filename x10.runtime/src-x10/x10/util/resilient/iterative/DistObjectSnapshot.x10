@@ -194,10 +194,11 @@ public abstract class DistObjectSnapshot {
      */
     static class DoubleInMemoryStore extends DistObjectSnapshot {
     	val places:PlaceGroup;
-        val hm = PlaceLocalHandle.make[HashMap[Any,Any]](places, ()=>new x10.util.HashMap[Any,Any]());
+        val hm:PlaceLocalHandle;
         private def DEBUG(key:Any, msg:String) { Console.OUT.println("At " + here + ": key=" + key + ": " + msg); }
         public def this(places:PlaceGroup){
         	this.places = places;
+        	hm = PlaceLocalHandle.make[HashMap[Any,Any]](places, ()=>new x10.util.HashMap[Any,Any]());
         }
         public def save(key:Any, value:Any) {
             if (verbose>=1) DEBUG(key, "save called");
