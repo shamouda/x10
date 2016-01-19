@@ -22,12 +22,10 @@ import x10.util.GrowableRail;
 
 /*
  * TODO:
- * maximum retry for restore failures
- * use local view restore within the same fan-out of the steps and checkpoint
- * investigate team hanging with sockets again
- * when a palce dies, store.rebackup_local()
- * 
- * bug: when we delete the data in the store, the spare places are not deleted!!!
+ * -> maximum retry for restore failures
+ * -> investigate team hanging when the place dying is a leaf place
+ * -> support more than 1 place failure.  when a palce dies, store.rebackup()
+ * -> no need to notify place death for collectives
  * */
 public class LocalViewResilientExecutorOpt {
     private var placeTempData:PlaceLocalHandle[PlaceTempData];
@@ -167,7 +165,7 @@ public class LocalViewResilientExecutorOpt {
     	Console.OUT.println("LocalViewResilientExecutor: Application start time ["+startRunTime+"] ...");
         applicationInitializationTime = Timer.milliTime() - startRunTime;
         val root = here;
-        val snapshots = (isResilient)?new Rail[DistObjectSnapshot](2, (i:Long)=>DistObjectSnapshot.make()):null;
+        val snapshots = (isResilient)?new Rail[DistObjectSnapshot](2, (i:Long)=>DistObjectSnapshot.make(places)):null;
         placeTempData = PlaceLocalHandle.make[PlaceTempData](places, ()=>new PlaceTempData(snapshots));
         team = new Team(places);
         var globalIter:Long = 0;
@@ -455,9 +453,9 @@ public class LocalViewResilientExecutorOpt {
 ==> Kill place during a step:
 
 EXECUTOR_KILL_STEP=15 \
-EXECUTOR_KILL_STEP_PLACE=3 \
+EXECUTOR_KILL_STEP_PLACE=1 \
 X10_RESILIENT_STORE_VERBOSE=1 \
-X10_TEAM_DEBUG_INTERNALS=0 \
+X10_TEAM_DEBUG_INTERNALS=1 \
 X10_PLACE_GROUP_RESTORE_MODE=1 \
 EXECUTOR_DEBUG=0 \
 X10_RESILIENT_MODE=1 \
@@ -465,15 +463,16 @@ mpirun -np 9 -am ft-enable-mpi \
 --mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
 bin/lulesh2.0 -e 1 -k 10 -s 10 -i 50 -p
 
-
+X10_RESILIENT_VERBOSE=0 \
+X10RT_MPI_DEBUG_PRINT=0 \
 EXECUTOR_KILL_STEP=15 \
-EXECUTOR_KILL_STEP_PLACE=3 \
+EXECUTOR_KILL_STEP_PLACE=1 \
 EXECUTOR_KILL_RESTOREVOTING=0 \
-EXECUTOR_KILL_RESTOREVOTING_PLACE=7 \
+EXECUTOR_KILL_RESTOREVOTING_PLACE=4 \
 X10_RESILIENT_STORE_VERBOSE=0 \
-X10_TEAM_DEBUG_INTERNALS=0 \
+X10_TEAM_DEBUG_INTERNALS=1 \
 X10_PLACE_GROUP_RESTORE_MODE=1 \
-EXECUTOR_DEBUG=0 \
+EXECUTOR_DEBUG=1 \
 X10_RESILIENT_MODE=1 \
 mpirun -np 10 -am ft-enable-mpi \
 --mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \

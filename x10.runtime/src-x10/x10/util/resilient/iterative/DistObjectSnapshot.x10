@@ -45,7 +45,15 @@ public abstract class DistObjectSnapshot {
 
     public static def make():DistObjectSnapshot {
         switch (mode) {
-            case 0N: return new DoubleInMemoryStore(); // Distributed mode is the default
+            case 0N: return new DoubleInMemoryStore(Place.places()); // Distributed mode is the default
+            case 1N: return new DistObjectSnapshotPlace0();
+            default: throw new Exception("unknown mode");
+        }
+    }
+    
+    public static def make(places:PlaceGroup):DistObjectSnapshot {
+        switch (mode) {
+            case 0N: return new DoubleInMemoryStore(places); // Distributed mode is the default
             case 1N: return new DistObjectSnapshotPlace0();
             default: throw new Exception("unknown mode");
         }
@@ -185,21 +193,25 @@ public abstract class DistObjectSnapshot {
      *       Racing between multiple places are not also considered.
      */
     static class DoubleInMemoryStore extends DistObjectSnapshot {
-        val hm = PlaceLocalHandle.make[HashMap[Any,Any]](Place.places(), ()=>new x10.util.HashMap[Any,Any]());
+    	val places:PlaceGroup;
+        val hm = PlaceLocalHandle.make[HashMap[Any,Any]](places, ()=>new x10.util.HashMap[Any,Any]());
         private def DEBUG(key:Any, msg:String) { Console.OUT.println("At " + here + ": key=" + key + ": " + msg); }
+        public def this(places:PlaceGroup){
+        	this.places = places;
+        }
         public def save(key:Any, value:Any) {
             if (verbose>=1) DEBUG(key, "save called");
             /* Store the copy of value locally */
             saveLocal(key, value);
             if (verbose>=1) DEBUG(key, "backed up locally");
             /* Backup the value in another place */
-            var backupPlace:Long = Math.abs(key.hashCode()) % Place.numPlaces();
+            var backupPlace:Long = Math.abs(key.hashCode()) % places.size();
             var trial:Long;
-            for (trial = 0L; trial < Place.numPlaces(); trial++) {
+            for (trial = 0L; trial < places.size(); trial++) {
                 if (backupPlace != here.id && !Place.isDead(backupPlace)) break; // found appropriate place
-                backupPlace = (backupPlace+1) % Place.numPlaces();
+                backupPlace = (backupPlace+1) % places.size();
             }
-            if (trial == Place.numPlaces()) {
+            if (trial == places.size()) {
                 /* no backup place available */
                 if (verbose>=1) DEBUG(key, "no backup place available");
             } else {
@@ -221,9 +233,9 @@ public abstract class DistObjectSnapshot {
                 /* falls through, check other places */
             }
             /* Try to load from another place */
-            var backupPlace:Long = Math.abs(key.hashCode()) % Place.numPlaces();
+            var backupPlace:Long = Math.abs(key.hashCode()) % places.size();
             var trial:Long;
-            for (trial = 0L; trial < Place.numPlaces(); trial++) {
+            for (trial = 0L; trial < places.size(); trial++) {
                 if (backupPlace != here.id && !Place.isDead(backupPlace)) {
                     if (verbose>=1) DEBUG(key, "checking backup place " + backupPlace);
                     try {
@@ -235,7 +247,7 @@ public abstract class DistObjectSnapshot {
                         /* falls through, try next place */
                     }
                 }
-                backupPlace = (backupPlace+1) % Place.numPlaces();
+                backupPlace = (backupPlace+1) % places.size();
             }
             if (verbose>=1) DEBUG(key, "no backup found, ERROR");
             if (verbose>=1) DEBUG(key, "load throwing exception");
@@ -243,13 +255,13 @@ public abstract class DistObjectSnapshot {
         }
         
         public def delete(key:Any) {
-            finish for (pl in Place.places()) {
+            finish for (pl in places) {
                 if (pl.isDead()) continue;
                 at(pl) async atomic { hm().remove(key); }
             }
         }
         public def deleteAll() {
-            finish for (pl in Place.places()) {
+            finish for (pl in places) {
                 if (pl.isDead()) continue;
                 at(pl) async atomic { hm().clear(); }
             }
