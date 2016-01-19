@@ -194,7 +194,7 @@ public abstract class DistObjectSnapshot {
      */
     static class DoubleInMemoryStore extends DistObjectSnapshot {
     	val places:PlaceGroup;
-        val hm:PlaceLocalHandle;
+        val hm:PlaceLocalHandle[HashMap[Any,Any]];
         private def DEBUG(key:Any, msg:String) { Console.OUT.println("At " + here + ": key=" + key + ": " + msg); }
         public def this(places:PlaceGroup){
         	this.places = places;
