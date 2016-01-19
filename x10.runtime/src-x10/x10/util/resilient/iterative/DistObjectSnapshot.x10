@@ -198,7 +198,10 @@ public abstract class DistObjectSnapshot {
         private def DEBUG(key:Any, msg:String) { Console.OUT.println("At " + here + ": key=" + key + ": " + msg); }
         public def this(places:PlaceGroup){
         	this.places = places;
-        	hm = PlaceLocalHandle.make[HashMap[Any,Any]](places, ()=>new x10.util.HashMap[Any,Any]());
+        	//a pointer exists at each place
+        	/*FIXME: Currently, when a spare place replaces a failed place, it will be only used to local checkpoints, 
+        	it will not serve as a backup place*/
+        	hm = PlaceLocalHandle.make[HashMap[Any,Any]](Place.places(), ()=>new x10.util.HashMap[Any,Any]());
         }
         public def save(key:Any, value:Any) {
             if (verbose>=1) DEBUG(key, "save called");

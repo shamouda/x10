@@ -28,6 +28,8 @@ import x10.xrx.Runtime;
  * All methods are blocking operations and must be called by each member of the
  * team before the collective operation can progress.
  */
+//TODO: killing place from the leaves of the tree makes it hang
+//Sometimes just hang when we report to paret   (finish at)   hangs at the end
 public struct Team {
     private static struct DoubleIdx(value:Double, idx:Int) {}
     private static val DEBUG:Boolean = false;
@@ -1388,9 +1390,9 @@ public struct Team {
 	                } else {
 	                	val pId = here.id;
 	                    at (places(myLinks.parentIndex)) @Uncounted async {
-	                    	Console.OUT.println("<default else>>> Place("+pId+") calling  waitForParentToReceive from " + here );
+	                    	//if (DEBUGINTERNALS) Console.OUT.println("<default else>>> Place("+pId+") calling  waitForParentToReceive from " + here );
 	                        waitForParentToReceive(pId);
-	                        Console.OUT.println("(default else))) Place("+pId+") calling  incrementParentPhase from " + here );
+	                        //if (DEBUGINTERNALS) Console.OUT.println("(default else))) Place("+pId+") calling  incrementParentPhase from " + here );
 	                        incrementParentPhase();
 	                    }
 	                }
