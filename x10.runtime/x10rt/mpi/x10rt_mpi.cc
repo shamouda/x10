@@ -3645,7 +3645,6 @@ bool x10rt_net_agree (x10rt_team team, x10rt_place role, const int *sbuf, int *d
 
     return MPI_SUCCESS == SAVED(mpiError);
 #else
-	fatal_error("x10rt_net_agree not supported");
 	return false;
 #endif
 }
