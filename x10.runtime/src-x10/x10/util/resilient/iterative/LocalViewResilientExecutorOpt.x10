@@ -406,10 +406,6 @@ public class LocalViewResilientExecutorOpt {
         
         try{
         	val success = team.agree(vote);
-        	//if (VERBOSE)
-        	{
-        		Console.OUT.println("["+here+"]  myvote {"+vote+"}  result {"+success+"} ...");
-        	}
         	if (success == 1N) {
         		if (VERBOSE) Console.OUT.println("Agreement succeeded in operation ["+op+"]");
         		if (operation == CHECKPOINT_OPERATION){
