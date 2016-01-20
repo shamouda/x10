@@ -1590,7 +1590,7 @@ public struct Team {
 	        if (!isValid) throw new DeadPlaceException("Team "+teamidcopy+" contains at least one dead member");
 
             // completed successfully
-            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" leaving "+getCollName(collType));
+            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" leaving "+getCollName(collType) + "---> phaseIs: "+ this.phase);
         }
     }
 }
