@@ -76,6 +76,9 @@ static void x10rt_net_coll_init(int *argc, char ** *argv, x10rt_msg_type *counte
 #define X10RT_MAX_OUTSTANDING_SENDS     (256)
 #define X10RT_DATATYPE_TBL_SIZE         (256)
 
+#define X10RT_MPI_DEBUG_PROBE_PLACE "X10RT_MPI_DEBUG_PROBE_PLACE"
+#define X10RT_MPI_DEBUG_SEND_RECV_PLACE "X10RT_MPI_DEBUG_SEND_RECV_PLACE"
+
 #define X10RT_MPI_DEBUG_PRINT "X10RT_MPI_DEBUG_PRINT"
 #define X10RT_MPI_FORCE_COLLECTIVES "X10RT_MPI_FORCE_COLLECTIVES"
 #define X10RT_MPI_THREAD_SERIALIZED "X10RT_MPI_THREAD_SERIALIZED"
@@ -756,6 +759,10 @@ void x10rt_net_send_msg(x10rt_msg_params * p) {
         return;
 #endif
 
+    if (getenv(X10RT_MPI_DEBUG_SEND_RECV_PLACE) && atoi(getenv(X10RT_MPI_DEBUG_SEND_RECV_PLACE)) == x10rt_net_here()){
+         printf("sending message from place [%d] ...\n", x10rt_net_here() );
+    }
+
     x10rt_lgl_stats.msg.messages_sent++ ;
     x10rt_lgl_stats.msg.bytes_sent += p->len;
 
@@ -799,6 +806,11 @@ static void send_completion(x10rt_req_queue * q,
 
 static void recv_completion(int ix, int bytes,
         x10rt_req_queue * q, x10rt_req * req) {
+
+	if (getenv(X10RT_MPI_DEBUG_SEND_RECV_PLACE) && atoi(getenv(X10RT_MPI_DEBUG_SEND_RECV_PLACE)) == x10rt_net_here()){
+	    printf("received message here place [%d] ...\n", x10rt_net_here() );
+	}
+
     assert(ix>0);
     amSendCb cb = global_state.amCbTbl[ix];
     assert(cb != NULL);
@@ -1546,7 +1558,10 @@ static bool x10rt_net_probe_ex (bool network_only) {
     assert(!global_state.finalized);
 
     get_lock(&global_state.lock);
-
+    
+    if (getenv(X10RT_MPI_DEBUG_PROBE_PLACE) && atoi(getenv(X10RT_MPI_DEBUG_PROBE_PLACE)) == x10rt_net_here()){
+    	printf("Probing started at place [%d] ...\n", x10rt_net_here() );
+    }
     do {
         arrived = 0;
         int mpi_error = MPI_Iprobe(MPI_ANY_SOURCE,
