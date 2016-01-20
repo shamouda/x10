@@ -1144,7 +1144,7 @@ public struct Team {
                             System.threadSleep(0); // release the CPU to more productive pursuits
                         count++;
                         if (x10.xrx.Runtime.RESILIENT_MODE > 0 && count == 10000) {
-                        	Console.OUT.println(here+"inside sleep until ["+tag+"] ...");
+                        	if (DEBUGINTERNALS) Console.OUT.println(here+"inside sleep until ["+tag+"] ...");
                             count = 0;
                         }
                     }
@@ -1547,8 +1547,7 @@ public struct Team {
                 if (myLinks.parentIndex != -1 && !places(myLinks.parentIndex).isDead()) {
 	                try {
 	                    if (DEBUGINTERNALS) Runtime.println(here+" notifying parent of an invalid team");
-	                    val p1 = places(myLinks.parentIndex);
-	                    @Pragma(Pragma.FINISH_ASYNC) finish at (p1) async {
+	                    @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.parentIndex)) async {
 		                    Team.state(teamidcopy).isValid = false;
 		                }
 	                    if (DEBUGINTERNALS) Runtime.println(here+" notifying parent of an invalid team SUCCEEDED ...");          
@@ -1557,8 +1556,7 @@ public struct Team {
 	            if (myLinks.child1Index != -1 && !places(myLinks.child1Index).isDead()) {
 	                try {
 	                    if (DEBUGINTERNALS) Runtime.println(here+" notifying child1 of an invalid team");
-	                    val p2 = places(myLinks.child1Index);
-	                    @Pragma(Pragma.FINISH_ASYNC) finish at (p2) async {
+	                    @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.child1Index)) async {
 		                    Team.state(teamidcopy).isValid = false;
 		                }
 	                    if (DEBUGINTERNALS) Runtime.println(here+" notifying child1 of an invalid team SUCCEEDED ...");
@@ -1567,8 +1565,7 @@ public struct Team {
 	            if (myLinks.child2Index != -1 && !places(myLinks.child2Index).isDead()) {
 	                try {
 	                    if (DEBUGINTERNALS) Runtime.println(here+" notifying child2 of an invalid team");
-	                    val p3 = places(myLinks.child2Index);
-	                    @Pragma(Pragma.FINISH_ASYNC) finish at (p3) async {
+	                    @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.child2Index)) async {
 	                        Team.state(teamidcopy).isValid = false;
 	                    }
 	                    if (DEBUGINTERNALS) Runtime.println(here+" notifying child2 of an invalid team SUCCEEDED ...");
@@ -1590,7 +1587,7 @@ public struct Team {
 	        if (!isValid) throw new DeadPlaceException("Team "+teamidcopy+" contains at least one dead member");
 
             // completed successfully
-            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" leaving "+getCollName(collType) + "---> phaseIs: "+ this.phase);
+            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" leaving "+getCollName(collType));
         }
     }
 }

@@ -200,6 +200,7 @@ JNIEXPORT jboolean JNICALL Java_x10_x10rt_X10RT_x10rt_1blocking_1probe_1support(
     return x10rt_blocking_probe_support();
 }
 
+
 /*
  * Class:     x10_x10rt_X10RT
  * Method:    x10rt_blocking_probe

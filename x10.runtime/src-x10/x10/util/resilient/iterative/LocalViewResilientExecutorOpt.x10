@@ -92,7 +92,7 @@ public class LocalViewResilientExecutorOpt {
         
         private def getConsistentSnapshot():DistObjectSnapshot{
             val idx = commitCount % 2;
-            Console.OUT.println("["+here+"] Consistent Checkpoint Index ["+idx+"] ...");
+            if (VERBOSE) Console.OUT.println("["+here+"] Consistent Checkpoint Index ["+idx+"] ...");
             return snapshots(idx);
         }  
         
@@ -448,31 +448,58 @@ public class LocalViewResilientExecutorOpt {
 /*Test commands:
 ==> Kill place during a step:
 
-EXECUTOR_KILL_STEP=15 \
-EXECUTOR_KILL_STEP_PLACE=1 \
-X10_RESILIENT_STORE_VERBOSE=0 \
-X10_TEAM_DEBUG_INTERNALS=0 \
-X10_PLACE_GROUP_RESTORE_MODE=1 \
-EXECUTOR_DEBUG=0 \
-X10_RESILIENT_MODE=1 \
-mpirun -np 9 -am ft-enable-mpi \
---mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
-bin/lulesh2.0 -e 1 -k 10 -s 10 -i 50 -p
 
-X10_RESILIENT_VERBOSE=0 \
+
+X10_EXIT_BY_SIGKILL=1 \
 X10RT_MPI_DEBUG_PRINT=0 \
+X10_RESILIENT_VERBOSE=0 \
 EXECUTOR_KILL_STEP=15 \
-EXECUTOR_KILL_STEP_PLACE=1 \
-EXECUTOR_KILL_RESTOREVOTING=0 \
-EXECUTOR_KILL_RESTOREVOTING_PLACE=4 \
+EXECUTOR_KILL_STEP_PLACE=7 \
 X10_RESILIENT_STORE_VERBOSE=0 \
 X10_TEAM_DEBUG_INTERNALS=1 \
 X10_PLACE_GROUP_RESTORE_MODE=1 \
 EXECUTOR_DEBUG=1 \
 X10_RESILIENT_MODE=1 \
+X10_ASYMMETRIC_IMMEDIATE_THREAD=true \
+mpirun -np 9 -am ft-enable-mpi \
+--mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
+--mca orte_base_help_aggregate 0 \
+bin/lulesh2.0 -e 1 -k 10 -s 10 -i 50 -p
+
+X10RT_MPI_PROBE_SLEEP_MICROSECONDS=10000 \
+X10RT_MPI_DEBUG_PROBE_PLACE=80 \
+X10RT_MPI_DEBUG_SEND_RECV_PLACE=8 \
+X10_RESILIENT_VERBOSE=0 \
+X10RT_MPI_DEBUG_PRINT=0 \
+EXECUTOR_KILL_STEP=15 \
+EXECUTOR_KILL_STEP_PLACE=2 \
+EXECUTOR_KILL_RESTOREVOTING=0 \
+EXECUTOR_KILL_RESTOREVOTING_PLACE=6 \
+X10_RESILIENT_STORE_VERBOSE=1 \
+X10_TEAM_DEBUG_INTERNALS=1 \
+X10_PLACE_GROUP_RESTORE_MODE=1 \
+X10_ASYMMETRIC_IMMEDIATE_THREAD=true \
+X10_NUM_IMMEDIATE_THREADS=2 \
+EXECUTOR_DEBUG=1 \
+X10_RESILIENT_MODE=1 \
 mpirun -np 10 -am ft-enable-mpi \
 --mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
 bin/lulesh2.0 -e 2 -k 10 -s 10 -i 50 -p
+
+
+
+
+X10_EXIT_BY_SIGKILL=1 \
+EXECUTOR_KILL_STEP=15 \
+EXECUTOR_KILL_STEP_PLACE=7 \
+X10_PLACE_GROUP_RESTORE_MODE=1 \
+X10_RESILIENT_MODE=1 \
+X10_ASYMMETRIC_IMMEDIATE_THREAD=true \
+mpirun -np 9 -am ft-enable-mpi \
+--mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
+--mca orte_base_help_aggregate 0 \
+bin/lulesh2.0 -e 1 -k 10 -s 10 -i 50 -p
+
 
 
 
