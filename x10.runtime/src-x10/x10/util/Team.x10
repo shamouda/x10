@@ -1118,7 +1118,7 @@ public struct Team {
              * another activity, giving preference to activities running
              * locally on another worker thread.
              */
-            val sleepUntil = (condition:() => Boolean) => @NoInline {
+            val sleepUntil = (condition:() => Boolean, tag:String) => @NoInline {
                 if (!condition() && Team.state(teamidcopy).isValid) {
                     var count:Long = 0;
                     Runtime.increaseParallelism();
@@ -1139,8 +1139,8 @@ public struct Team {
                         else
                             System.threadSleep(0); // release the CPU to more productive pursuits
                         count++;
-                        if (x10.xrx.Runtime.RESILIENT_MODE > 0 && count == 1000) {
-                            x10.xrx.Runtime.x10rtProbe();
+                        if (x10.xrx.Runtime.RESILIENT_MODE > 0 && count == 10000) {
+                        	Console.OUT.println(here+"inside sleep until ["+tag+"] ...");
                             count = 0;
                         }
                     }
@@ -1150,7 +1150,7 @@ public struct Team {
 
             // block if some other collective is in progress.
             // note that local indexes are not yet set up, so we won't check for dead places in this call
-            sleepUntil(() => this.phase.compareAndSet(PHASE_READY, PHASE_INIT));
+            sleepUntil(() => this.phase.compareAndSet(PHASE_READY, PHASE_INIT), "ready to initi");
             
             // don't do anything if this team was previously set to invalid
             //if (!Team.state(this.teamid).isValid)
@@ -1263,7 +1263,7 @@ public struct Team {
             try { // try/catch for DeadPlaceExceptions associated with the 'at' statements
 	            // wait for phase updates from children
 	            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" waiting for children phase "+Team.state(teamidcopy).phase.get());
-	            sleepUntil(() => this.phase.get() == PHASE_SCATTER);
+	            sleepUntil(() => this.phase.get() == PHASE_SCATTER , "phase==scatter");
 	            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" released by children phase "+Team.state(teamidcopy).phase.get());
 	
 	            if (collType == COLL_REDUCE || collType == COLL_ALLREDUCE) {
@@ -1296,7 +1296,7 @@ public struct Team {
 	                    if (DEBUGINTERNALS) Runtime.println("Place("+childPlaceId+ ")=>>"+here+" waiting for parent phase "+Team.state(teamidcopy).phase.get());
 	                     sleepUntil(() => {val state = Team.state(teamidcopy).phase.get();
 	                                       (state >= PHASE_GATHER1 && state < PHASE_SCATTER)
-	                                      });
+	                                      }, "scatter > phase >= gath1");
 	                    if (DEBUGINTERNALS) Runtime.println("Place("+childPlaceId+ ")->"+here+" parent ready to receive phase "+Team.state(teamidcopy).phase.get());
 	                };
 	
@@ -1348,7 +1348,7 @@ public struct Team {
 	                        val pId = here.id;
 	                        at (places(myLinks.parentIndex)) @Uncounted async {
 	                            waitForParentToReceive(pId);
-	                            sleepUntil(() => Team.state(teamidcopy).dstLock.tryLock());
+	                            sleepUntil(() => Team.state(teamidcopy).dstLock.tryLock(), "tryLock");
 	                            val ldi:Rail[DoubleIdx] = (Team.state(teamidcopy).local_dst as Rail[DoubleIdx]);
 	                            if (DEBUGINTERNALS) Runtime.println(here+" IndexOfMax: parent="+ldi(0).value+" child="+childVal.value);
 	                            
@@ -1365,7 +1365,7 @@ public struct Team {
 	                        val pId = here.id;
 	                        at (places(myLinks.parentIndex)) @Uncounted async {
 	                            waitForParentToReceive(pId);
-	                            sleepUntil(() => Team.state(teamidcopy).dstLock.tryLock());
+	                            sleepUntil(() => Team.state(teamidcopy).dstLock.tryLock(), "tryLock");
 	                            val ldi:Rail[DoubleIdx] = (Team.state(teamidcopy).local_dst as Rail[DoubleIdx]);
 	                            if (childVal.value < ldi(0).value)
 	                                ldi(0) = childVal;
@@ -1398,7 +1398,7 @@ public struct Team {
 	                }
 	                
 	                if (DEBUGINTERNALS) Runtime.println(here+ " waiting for parent "+places(myLinks.parentIndex)+":team"+teamidcopy+" to release us from phase "+phase.get());
-	                sleepUntil(() => this.phase.get() == PHASE_DONE);
+	                sleepUntil(() => this.phase.get() == PHASE_DONE, "phase==done");
 	                if (DEBUGINTERNALS) Runtime.println(here+ " released by parent");
 	            }
             } catch (me:MultipleExceptions) {
@@ -1524,7 +1524,7 @@ public struct Team {
 	                    // NOTE: can't use the same closure because runUncountedAsync deallocates it
 	                    val freeChild2 = () => @NoInline {
 	                        if (!Team.state(teamidcopy).phase.compareAndSet(PHASE_SCATTER, PHASE_DONE))
-	                            Runtime.println("ERROR root setting the second child "+here+":team"+teamidcopy+" to PHASE_DONE   child.isValid="+Team.state(teamidcopy).isValid);
+	                            Runtime.println("ERROR root setting the second child "+here+":team"+teamidcopy+" to PHASE_DONE   child.isValid="+Team.state(teamidcopy).isValid + " -> currentPhace="+(Team.state(teamidcopy).phase));
 	                        else if (DEBUGINTERNALS) Runtime.println("set the second child "+here+":team"+teamidcopy+" to PHASE_DONE");
 	                    };
 	                    Runtime.runUncountedAsync(places(local_child2Index), freeChild2, null);
