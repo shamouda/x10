@@ -62,6 +62,10 @@ public class LocalViewResilientExecutorOpt {
     private val RESTORE_OPERATION = 2;
     
     class PlaceTempData {
+    	
+    	private val VERBOSE_EXECUTOR_PLACE_LOCAL = (System.getenv("EXECUTOR_PLACE_LOCAL") != null 
+                && System.getenv("EXECUTOR_PLACE_LOCAL").equals("1"));
+    	
         //used by place hammer
         var place0KillPlaceTime:Long = -1;
         
@@ -112,32 +116,32 @@ public class LocalViewResilientExecutorOpt {
         
         private def getConsistentSnapshot():DistObjectSnapshot{
             val idx = commitCount % 2;
-            if (VERBOSE) Console.OUT.println("["+here+"] Consistent Checkpoint Index ["+idx+"] ...");
+            if (VERBOSE_EXECUTOR_PLACE_LOCAL) Console.OUT.println("["+here+"] Consistent Checkpoint Index ["+idx+"] ...");
             return snapshots(idx);
         }  
         
         public def getNextSnapshot():DistObjectSnapshot {
             val idx = (commitCount+1) % 2;
-            if (VERBOSE) Console.OUT.println("["+here+"] Temp Checkpoint Index ["+idx+"] ...");
+            if (VERBOSE_EXECUTOR_PLACE_LOCAL) Console.OUT.println("["+here+"] Temp Checkpoint Index ["+idx+"] ...");
             return snapshots(idx);
         }
 
         /** Cancel a snapshot, in case of failure during checkpoint. */
         public def cancelOtherSnapshot() {
         	val idx = (commitCount+1) % 2;
-        	if (VERBOSE) Console.OUT.println("["+here+"] Deleting Checkpoint At Index ["+idx+"] ...");
+        	if (VERBOSE_EXECUTOR_PLACE_LOCAL) Console.OUT.println("["+here+"] Deleting Checkpoint At Index ["+idx+"] ...");
             snapshots(idx).deleteAll_local();
         }
         
         public def commit() {
             commitCount++; // switch to the new snapshot
-            if (VERBOSE) Console.OUT.println("["+here+"] Committed count ["+commitCount+"] ...");
+            if (VERBOSE_EXECUTOR_PLACE_LOCAL) Console.OUT.println("["+here+"] Committed count ["+commitCount+"] ...");
         }
         
         //must be called after a commit
         public def rollback(){
         	commitCount--; // switch to the new snapshot
-        	if (VERBOSE) Console.OUT.println("["+here+"] Rollbacked count ["+commitCount+"] ...");
+        	if (VERBOSE_EXECUTOR_PLACE_LOCAL) Console.OUT.println("["+here+"] Rollbacked count ["+commitCount+"] ...");
         }
     }
     
@@ -474,6 +478,7 @@ public class LocalViewResilientExecutorOpt {
                 app.checkpoint_local(placeTempData().getNextSnapshot());
             else
             	app.restore_local(placeTempData().getConsistentSnapshot(), placeTempData().lastCheckpointIter);
+            if (VERBOSE) Console.OUT.println(here+" Succeeded in operation ["+op+"_local]");
         }catch(ex:Exception){
             vote = 0N;
             excs.add(ex);
@@ -498,7 +503,7 @@ public class LocalViewResilientExecutorOpt {
         try{
         	val success = team.agree(vote);
         	if (success == 1N) {
-        		if (VERBOSE) Console.OUT.println("Agreement succeeded in operation ["+op+"]");
+        		if (VERBOSE) Console.OUT.println(here+" Agreement succeeded in operation ["+op+"]");
         		if (operation == CHECKPOINT_OPERATION){
         		    placeTempData().commit();
                     placeTempData().cancelOtherSnapshot();
@@ -580,6 +585,10 @@ mpirun -np 8 -am ft-enable-mpi \
 bin/lulesh2.0 -s 10 -i 50 -p
 
 
+mpirun -np 64 -am ft-enable-mpi \
+--mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
+--mca orte_base_help_aggregate 0 \
+bin/lulesh2.0 -s 10 -i 50 -p
 
 
 

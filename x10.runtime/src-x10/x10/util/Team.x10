@@ -209,7 +209,9 @@ public struct Team {
     public def barrierIgnoreExceptions () : void {
     	try{
     		barrier();
-    	}catch(ex:Exception){}
+    	}catch(ex:Exception){
+    		if ( DEBUGINTERNALS || DEBUG_ENTER_EXIT) Console.OUT.println(here+" Ignoring barrier exception: " + ex.getMessage());
+    	}
     }
     /** Either agree on a flag or throw a DPE at all team places */
     public def agree (flag:Int) : Int {
