@@ -60,6 +60,12 @@
     } \
 }while(false)
 
+#define X10RT_NET_DEBUG_AGREE(fmt, ...) do { \
+    if(coll_state.is_enabled_debug_agree) { \
+        fprintf(stderr, "[%s:%d:%s] (%"PRIu32") " fmt "\n", __FILE__, __LINE__, __func__, static_cast<uint32_t>((global_state.init && !global_state.finalized)? x10rt_net_here() : -1), __VA_ARGS__); \
+    } \
+}while(false)
+
 #define X10RT_NET_DEBUGV(fmt, var) do { \
     if(coll_state.is_enabled_debug_print) { \
         fprintf(stderr, "[%s:%d:%s] (%"PRIu32") " #var " = %"fmt "\n", __FILE__, __LINE__, __func__, static_cast<uint32_t>((global_state.init && !global_state.finalized)? x10rt_net_here() : -1), (var)); \
@@ -77,6 +83,7 @@ static void x10rt_net_coll_init(int *argc, char ** *argv, x10rt_msg_type *counte
 #define X10RT_DATATYPE_TBL_SIZE         (256)
 
 #define X10RT_MPI_DEBUG_PRINT "X10RT_MPI_DEBUG_PRINT"
+#define X10RT_MPI_DEBUG_AGREE "X10RT_MPI_DEBUG_AGREE"
 #define X10RT_MPI_FORCE_COLLECTIVES "X10RT_MPI_FORCE_COLLECTIVES"
 #define X10RT_MPI_THREAD_SERIALIZED "X10RT_MPI_THREAD_SERIALIZED"
 #define X10_STATIC_THREADS "X10_STATIC_THREADS"
@@ -470,6 +477,7 @@ struct CollState {
     int TEAM_BLOCKING_FINISHED_ID;
     int TEAM_CALLBACK_ID;
     int is_enabled_debug_print;
+    int is_enabled_debug_agree;
 
     MPI_Datatype * datatypeTbl;
 
@@ -491,6 +499,7 @@ struct CollState {
             UNLOCK_IF_MPI_IS_NOT_MULTITHREADED;
         }
         is_enabled_debug_print = checkBoolEnvVar(getenv(X10RT_MPI_DEBUG_PRINT));
+        is_enabled_debug_agree = checkBoolEnvVar(getenv(X10RT_MPI_DEBUG_AGREE));
     }
 
     //NOTE: This must be called with global_state.lock held
@@ -1860,11 +1869,15 @@ private:
 #ifdef OPEN_MPI_ULFM
             //shrink MPI_COMM_WORLD to remove dead ranks before calling MPI_Comm_create
             MPI_Comm shrunken;
-            OMPI_Comm_shrink(MPI_COMM_WORLD, &shrunken);
-            
-            MPI_Errhandler customErrorHandler;
-            MPI_Comm_create_errhandler(mpiErrorHandler, &customErrorHandler);
-            MPI_Comm_set_errhandler(shrunken, customErrorHandler);
+            char* resilientmode = getenv(X10_RESILIENT_MODE);
+            if (resilientmode && atoi(resilientmode) > 0){
+                OMPI_Comm_shrink(MPI_COMM_WORLD, &shrunken);
+                MPI_Errhandler customErrorHandler;
+                MPI_Comm_create_errhandler(mpiErrorHandler, &customErrorHandler);
+                MPI_Comm_set_errhandler(shrunken, customErrorHandler);
+            }
+            else
+            	shrunken = MPI_COMM_WORLD;
 
             if (MPI_SUCCESS != MPI_Comm_create(shrunken, grp, &comm)) {
                 fprintf(stderr, "[%s:%d] %s\n", __FILE__, __LINE__, "Error in MPI_Comm_create");
@@ -3630,9 +3643,9 @@ bool x10rt_net_agree (x10rt_team team, x10rt_place role, const int *sbuf, int *d
     assert(!global_state.finalized);
     MPI_Comm comm = mpi_tdb.comm(team);
     dbuf[0] = sbuf[0];
-    X10RT_NET_DEBUG("%s", "pre agree");
+    X10RT_NET_DEBUG_AGREE("%s", "pre agree");
     MPI_AGREEMENT_COLLECTIVE("agree", "igree", comm, dbuf);
-    X10RT_NET_DEBUG("%s", "pro agree");
+    X10RT_NET_DEBUG_AGREE("%s", "pro agree");
 
     MPI_COLLECTIVE_SAVE(team);
     MPI_COLLECTIVE_SAVE(role);
