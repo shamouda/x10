@@ -570,9 +570,11 @@ x10rt_error x10rt_net_init(int *argc, char ** *argv, x10rt_msg_type *counter) {
             abort();
         }
 #ifdef OPEN_MPI_ULFM
-        MPI_Errhandler customErrorHandler;
-        MPI_Comm_create_errhandler(mpiErrorHandler, &customErrorHandler);
-        MPI_Comm_set_errhandler(MPI_COMM_WORLD, customErrorHandler);
+        if (resilientmode && atoi(resilientmode) > 0) {
+            MPI_Errhandler customErrorHandler;
+            MPI_Comm_create_errhandler(mpiErrorHandler, &customErrorHandler);
+            MPI_Comm_set_errhandler(MPI_COMM_WORLD, customErrorHandler);
+        }
 #endif
 
         MPI_Comm_rank(MPI_COMM_WORLD, &global_state.rank);
@@ -1870,9 +1872,9 @@ private:
             //shrink MPI_COMM_WORLD to remove dead ranks before calling MPI_Comm_create
             MPI_Comm shrunken;
             char* resilientmode = getenv(X10_RESILIENT_MODE);
+            MPI_Errhandler customErrorHandler;
             if (resilientmode && atoi(resilientmode) > 0){
                 OMPI_Comm_shrink(MPI_COMM_WORLD, &shrunken);
-                MPI_Errhandler customErrorHandler;
                 MPI_Comm_create_errhandler(mpiErrorHandler, &customErrorHandler);
                 MPI_Comm_set_errhandler(shrunken, customErrorHandler);
             }
@@ -1883,7 +1885,9 @@ private:
                 fprintf(stderr, "[%s:%d] %s\n", __FILE__, __LINE__, "Error in MPI_Comm_create");
                 abort();
             }
-            MPI_Comm_set_errhandler(comm, customErrorHandler);
+            if (resilientmode && atoi(resilientmode) > 0){
+                MPI_Comm_set_errhandler(comm, customErrorHandler);
+            }
 #else
             if (MPI_SUCCESS != MPI_Comm_create(MPI_COMM_WORLD, grp, &comm)) {
             	fprintf(stderr, "[%s:%d] %s\n", __FILE__, __LINE__, "Error in MPI_Comm_create");
