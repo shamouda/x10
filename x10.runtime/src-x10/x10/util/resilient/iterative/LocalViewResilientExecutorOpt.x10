@@ -102,7 +102,7 @@ public class LocalViewResilientExecutorOpt {
     
         public def this(snapshots:Rail[DistObjectSnapshot]){
             this.checkpointTimes = new ArrayList[Long]();
-            this.checkpointAgreementTimes = new ArrayListp[Long]();
+            this.checkpointAgreementTimes = new ArrayList[Long]();
             this.restoreTimes = new ArrayList[Long]();
             this.restoreAgreementTimes = new ArrayList[Long]();
             this.stepTimes = new ArrayList[Long]();
@@ -367,7 +367,7 @@ public class LocalViewResilientExecutorOpt {
     		val dst1max = placeTempData().placeMaxCheckpoint;
     		val dst1min = placeTempData().placeMinCheckpoint;
     	    team.allreduce(placeTempData().checkpointTimes.toRail(), 0, dst1max, 0, chkCount, Team.MAX);
-    	    team.allreduce(placeTempData().checkpointTimes.toRail(), 0, dst1mix, 0, chkCount, Team.MIN);
+    	    team.allreduce(placeTempData().checkpointTimes.toRail(), 0, dst1min, 0, chkCount, Team.MIN);
     	    
     	    
     	    ////// step times ////////
@@ -395,7 +395,7 @@ public class LocalViewResilientExecutorOpt {
     		val dst4max = placeTempData().placeMaxCheckpointAgreement;
     		val dst4min = placeTempData().placeMinCheckpointAgreement;
     	    team.allreduce(placeTempData().checkpointAgreementTimes.toRail(), 0, dst4max, 0, chkAgreeCount, Team.MAX);
-    	    team.allreduce(placeTempData().checkpointAgreementTimes.toRail(), 0, dst4mix, 0, chkAgreeCount, Team.MIN);
+    	    team.allreduce(placeTempData().checkpointAgreementTimes.toRail(), 0, dst4min, 0, chkAgreeCount, Team.MIN);
     	    
     	    
     	    ////// restore agreement times ////////
@@ -405,7 +405,7 @@ public class LocalViewResilientExecutorOpt {
     		val dst5max = placeTempData().placeMaxRestoreAgreement;
     		val dst5min = placeTempData().placeMinRestoreAgreement;
     	    team.allreduce(placeTempData().restoreAgreementTimes.toRail(), 0, dst5max, 0, restAgreeCount, Team.MAX);
-    	    team.allreduce(placeTempData().restoreAgreementTimes.toRail(), 0, dst5mix, 0, restAgreeCount, Team.MIN);
+    	    team.allreduce(placeTempData().restoreAgreementTimes.toRail(), 0, dst5min, 0, restAgreeCount, Team.MIN);
     	    
         }
     }
@@ -523,22 +523,22 @@ public class LocalViewResilientExecutorOpt {
 		System.killHere();
     }
     
-    public def railToString(r:Rail[Long]):String {
+    public def railToString[T](r:Rail[T]):String {
     	var str:String = "";
         for (x in r)
         	str += x + ",";
         return str;
     }
     
-    public def railSum(r:Rail[Long]):Long {
-        var sum:Long = 0;
+    public def railSum[T](r:Rail[T]):T {
+        var sum:T = 0;
         for (x in r)
         	sum += x;
         return sum;
     }
     
-    public def avergaMaxMinRails(max:Rail[Long], min:Rail[Long]):Rail[Double] {
-        val result = new Rail[Long](max.size);
+    public def avergaMaxMinRails[T](max:Rail[T], min:Rail[T]):Rail[Double] {
+        val result = new Rail[Double](max.size);
         for (i in 0..(max.size-1)){
         	result(i) = (max(i) + min(i))/2.0;
         	result(i) = ((result(i)*100) as Long)/100.0;  //two decimal points only
