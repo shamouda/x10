@@ -39,6 +39,10 @@ public struct Team {
     private static val DEBUG_ENTER_EXIT:Boolean = (System.getenv("X10_TEAM_DEBUG_ENTER_EXIT") != null 
     		&& System.getenv("X10_TEAM_DEBUG_ENTER_EXIT").equals("1"));
     
+    private static val DEBUG_SLEEP_UNTILL:Boolean = (System.getenv("X10_TEAM_DEBUG_SLEEP_UNTILL") != null 
+    		&& System.getenv("X10_TEAM_DEBUG_SLEEP_UNTILL").equals("1"));
+    
+    
     /** A team that has one member at each place. */
     public static val WORLD = Team(0n, Place.places(), here.id());
     
@@ -1147,7 +1151,7 @@ public struct Team {
                             System.threadSleep(0); // release the CPU to more productive pursuits
                         count++;
                         if (x10.xrx.Runtime.RESILIENT_MODE > 0 && count == 10000) {
-                        	if (DEBUGINTERNALS) Console.OUT.println(here+"inside sleep until ["+tag+"] ...");
+                        	if (DEBUGINTERNALS || DEBUG_SLEEP_UNTILL) Console.OUT.println(here+"inside sleep until ["+tag+"] ...");
                             count = 0;
                         }
                     }
