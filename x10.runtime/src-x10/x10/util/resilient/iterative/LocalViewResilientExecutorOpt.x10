@@ -327,17 +327,17 @@ public class LocalViewResilientExecutorOpt {
         Console.OUT.println("=========Totals by averaging Min/Max statistics============");
         Console.OUT.println("Initialization:"      + applicationInitializationTime);
         Console.OUT.println();
-        Console.OUT.println("Steps:"               + railSum(averageSteps));
+        Console.OUT.println("Steps:"               + railSum(averageSteps, 0.0));
         Console.OUT.println();
         Console.OUT.println("CheckpointData:"      + railToString(averageCheckpoint));
         Console.OUT.println("CheckpointAgreement:" + railToString(averageCheckpointAgreement)  
-             + "   ---TotalCheckpointing:"+ (railSum(averageCheckpoint)+railSum(averageCheckpointAgreement) ) );
+             + "   ---TotalCheckpointing:"+ (railSum(averageCheckpoint,0.0)+railSum(averageCheckpointAgreement,0.0) ) );
         Console.OUT.println();
         Console.OUT.println("Failure Detection:"   + failureDetectionTime);
         Console.OUT.println("Remake:"              + remakeTime);
-        Console.OUT.println("RestoreData:"         + railSum(averageRestore));
-        Console.OUT.println("RestoreAgreement:"    + railSum(averageRestoreAgreement) 
-             + "   ---TotalRecovery:" + (failureDetectionTime + remakeTime + railSum(averageRestore) + railSum(averageRestoreAgreement) ));
+        Console.OUT.println("RestoreData:"         + railSum(averageRestore, 0.0));
+        Console.OUT.println("RestoreAgreement:"    + railSum(averageRestoreAgreement, 0.0) 
+             + "   ---TotalRecovery:" + (failureDetectionTime + remakeTime + railSum(averageRestore, 0.0) + railSum(averageRestoreAgreement, 0.0) ));
         Console.OUT.println("=============================");
         Console.OUT.println("Actual RunTime:" + runTime);
         
@@ -530,8 +530,8 @@ public class LocalViewResilientExecutorOpt {
         return str;
     }
     
-    public def railSum[T](r:Rail[T]):T {
-        var sum:T = 0;
+    public def railSum[T](r:Rail[T], init:T):T {
+        var sum:T = init;
         for (x in r)
         	sum += x;
         return sum;
@@ -540,7 +540,7 @@ public class LocalViewResilientExecutorOpt {
     public def avergaMaxMinRails[T](max:Rail[T], min:Rail[T]):Rail[Double] {
         val result = new Rail[Double](max.size);
         for (i in 0..(max.size-1)){
-        	result(i) = (max(i) + min(i))/2.0;
+        	result(i) = (max(i) as Double + min(i) as Double)/2.0;
         	result(i) = ((result(i)*100) as Long)/100.0;  //two decimal points only
         }
         return result;
