@@ -36,6 +36,9 @@ public struct Team {
     private static val DEBUGINTERNALS:Boolean = (System.getenv("X10_TEAM_DEBUG_INTERNALS") != null 
     		&& System.getenv("X10_TEAM_DEBUG_INTERNALS").equals("1"));
 
+    private static val DEBUG_ENTER_EXIT:Boolean = (System.getenv("X10_TEAM_DEBUG_ENTER_EXIT") != null 
+    		&& System.getenv("X10_TEAM_DEBUG_ENTER_EXIT").equals("1"));
+    
     /** A team that has one member at each place. */
     public static val WORLD = Team(0n, Place.places(), here.id());
     
@@ -1113,7 +1116,7 @@ public struct Team {
          * for specific collectives.
          */
         private def collective_impl[T](collType:Int, root:Place, src:Rail[T], src_off:Long, dst:Rail[T], dst_off:Long, count:Long, operation:Int, offsets:Rail[Int], counts:Rail[Int]):void {
-            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamid+" entered "+getCollName(collType)+" phase="+phase.get()+", root="+root);
+            if (DEBUGINTERNALS || DEBUG_ENTER_EXIT) Runtime.println(here+":team"+teamid+" entered "+getCollName(collType)+" phase="+phase.get()+", root="+root);
             
             val teamidcopy = this.teamid; // needed to prevent serializing "this" in at() statements
 
@@ -1584,10 +1587,13 @@ public struct Team {
             
 	        this.phase.set(PHASE_READY);
 	        
-	        if (!isValid) throw new DeadPlaceException("Team "+teamidcopy+" contains at least one dead member");
+	        if (!isValid) {
+	        	if (DEBUGINTERNALS || DEBUG_ENTER_EXIT) Runtime.println(here+":team"+teamidcopy+" leaving "+getCollName(collType) + " with DPE");
+	        	throw new DeadPlaceException("Team "+teamidcopy+" contains at least one dead member");
+	        }
 
             // completed successfully
-            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" leaving "+getCollName(collType));
+            if (DEBUGINTERNALS || DEBUG_ENTER_EXIT) Runtime.println(here+":team"+teamidcopy+" leaving "+getCollName(collType));
         }
     }
 }
