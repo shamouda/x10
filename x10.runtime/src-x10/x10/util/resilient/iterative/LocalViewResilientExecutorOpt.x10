@@ -13,12 +13,13 @@
 package x10.util.resilient.iterative;
 
 import x10.util.Timer;
+
 import x10.util.Random;
 import x10.regionarray.Dist;
 import x10.util.ArrayList;
 import x10.util.Team;
 import x10.util.GrowableRail;
-
+import x10.util.RailUtils;
 
 /*
  * TODO:
@@ -327,17 +328,17 @@ public class LocalViewResilientExecutorOpt {
         Console.OUT.println("=========Totals by averaging Min/Max statistics============");
         Console.OUT.println("Initialization:"      + applicationInitializationTime);
         Console.OUT.println();
-        Console.OUT.println("Steps:"               + railSum(averageSteps, 0.0));
+        Console.OUT.println("Steps:"               + railSum(averageSteps));
         Console.OUT.println();
         Console.OUT.println("CheckpointData:"      + railToString(averageCheckpoint));
         Console.OUT.println("CheckpointAgreement:" + railToString(averageCheckpointAgreement)  
-             + "   ---TotalCheckpointing:"+ (railSum(averageCheckpoint,0.0)+railSum(averageCheckpointAgreement,0.0) ) );
+             + "   ---TotalCheckpointing:"+ (railSum(averageCheckpoint)+railSum(averageCheckpointAgreement) ) );
         Console.OUT.println();
         Console.OUT.println("Failure Detection:"   + failureDetectionTime);
         Console.OUT.println("Remake:"              + remakeTime);
-        Console.OUT.println("RestoreData:"         + railSum(averageRestore, 0.0));
-        Console.OUT.println("RestoreAgreement:"    + railSum(averageRestoreAgreement, 0.0) 
-             + "   ---TotalRecovery:" + (failureDetectionTime + remakeTime + railSum(averageRestore, 0.0) + railSum(averageRestoreAgreement, 0.0) ));
+        Console.OUT.println("RestoreData:"         + railSum(averageRestore));
+        Console.OUT.println("RestoreAgreement:"    + railSum(averageRestoreAgreement) 
+             + "   ---TotalRecovery:" + (failureDetectionTime + remakeTime + railSum(averageRestore) + railSum(averageRestoreAgreement) ));
         Console.OUT.println("=============================");
         Console.OUT.println("Actual RunTime:" + runTime);
         
@@ -530,11 +531,8 @@ public class LocalViewResilientExecutorOpt {
         return str;
     }
     
-    public def railSum[T](r:Rail[T], init:T):T {
-        var sum:T = init;
-        for (x in r)
-        	sum += x;
-        return sum;
+    public def railSum(r:Rail[Double]):Double {
+    	return RailUtils.reduce(r, (x:Double, y:Double) => x+y, 0.0);
     }
     
     public def avergaMaxMinRails[T](max:Rail[T], min:Rail[T]):Rail[Double] {
