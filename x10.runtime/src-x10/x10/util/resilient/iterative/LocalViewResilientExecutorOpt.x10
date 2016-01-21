@@ -305,6 +305,8 @@ public class LocalViewResilientExecutorOpt {
         
         
         Console.OUT.println("=========Detailed Statistics============");
+        Console.OUT.println("Steps-place0:" + railToString(placeTempData().stepTimes.toRail()));
+        
         Console.OUT.println("Steps-avg:" + railToString(averageSteps));
     	Console.OUT.println("Steps-min:" + railToString(placeTempData().placeMinStep));
     	Console.OUT.println("Steps-max:" + railToString(placeTempData().placeMaxStep));
@@ -328,7 +330,8 @@ public class LocalViewResilientExecutorOpt {
         Console.OUT.println("=========Totals by averaging Min/Max statistics============");
         Console.OUT.println("Initialization:"      + applicationInitializationTime);
         Console.OUT.println();
-        Console.OUT.println("Steps:"               + railSum(averageSteps));
+        Console.OUT.println("Steps:"               + railSum(averageSteps)
+             + "   ---AverageSingleStep:" + (railSum(averageSteps)/averageSteps.size) );
         Console.OUT.println();
         Console.OUT.println("CheckpointData:"      + railToString(averageCheckpoint));
         Console.OUT.println("CheckpointAgreement:" + railToString(averageCheckpointAgreement)  
@@ -341,7 +344,13 @@ public class LocalViewResilientExecutorOpt {
              + "   ---TotalRecovery:" + (failureDetectionTime + remakeTime + railSum(averageRestore) + railSum(averageRestoreAgreement) ));
         Console.OUT.println("=============================");
         Console.OUT.println("Actual RunTime:" + runTime);
-        
+        val calcTotal = applicationInitializationTime + 
+            railSum(averageSteps) + 
+            (railSum(averageCheckpoint)+railSum(averageCheckpointAgreement) ) + 
+            (failureDetectionTime + remakeTime + railSum(averageRestore) + railSum(averageRestoreAgreement) );
+            
+        Console.OUT.println("Calculated RunTime based on Averages:" + calcTotal 
+            + "   ---Difference:" + (runTime-calcTotal));
         
         Console.OUT.println("=========Counts============");
         Console.OUT.println("StepCount:"+averageSteps.size);
@@ -369,7 +378,6 @@ public class LocalViewResilientExecutorOpt {
     		val dst1min = placeTempData().placeMinCheckpoint;
     	    team.allreduce(placeTempData().checkpointTimes.toRail(), 0, dst1max, 0, chkCount, Team.MAX);
     	    team.allreduce(placeTempData().checkpointTimes.toRail(), 0, dst1min, 0, chkCount, Team.MIN);
-    	    
     	    
     	    ////// step times ////////
     	    val stpCount = placeTempData().stepTimes.size();
@@ -550,7 +558,8 @@ public class LocalViewResilientExecutorOpt {
 /*Test commands:
 ==> Kill place during a step:
 
-simple test:
+simple test  spare-restore:
+===========================
 X10_EXIT_BY_SIGKILL=1 \
 EXECUTOR_KILL_STEP=15 \
 EXECUTOR_KILL_STEP_PLACE=7 \
@@ -560,7 +569,15 @@ X10_ASYMMETRIC_IMMEDIATE_THREAD=true \
 mpirun -np 9 -am ft-enable-mpi \
 --mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
 --mca orte_base_help_aggregate 0 \
-bin/lulesh2.0 -e 1 -k 10 -s 10 -i 50 -p
+bin/lulesh2.0 -e 1 -k 100 -s 10 -i 50 -p
+
+
+simple test  non resilient:
+===========================
+mpirun -np 8 -am ft-enable-mpi \
+--mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
+--mca orte_base_help_aggregate 0 \
+bin/lulesh2.0 -s 10 -i 50 -p
 
 
 
@@ -582,6 +599,7 @@ mpirun -np 9 -am ft-enable-mpi \
 --mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
 --mca orte_base_help_aggregate 0 \
 bin/lulesh2.0 -e 1 -k 10 -s 10 -i 50 -p
+
 
 X10RT_MPI_PROBE_SLEEP_MICROSECONDS=10000 \
 X10RT_MPI_DEBUG_PROBE_PLACE=80 \
@@ -618,14 +636,6 @@ mpirun -np 9 -am ft-enable-mpi \
 bin/lulesh2.0 -e 1 -k 10 -s 10 -i 50 -p
 
 
-
-
-
-
-
-
-
-
 ==> Kill place before checkpoint voting:
 
 EXECUTOR_KILL_CHECKVOTING=1 \
@@ -641,53 +651,4 @@ mpirun -np 9 -am ft-enable-mpi \
 --mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
 bin/lulesh2.0 -e 1 -k 3 -s 10 -i 10 -p
 
-*/
-
-
-
-/*
-./configure --prefix=/short/v29/ssh659/packages/ulfmopt-1.1 \
---enable-mpi-ext=ftmpi --with-ft=mpi \
---disable-io-romio --enable-contrib-no-build=vt \
---with-platform=optimized \
---with-openib=/usr \
---disable-ipv6 --enable-shared --disable-static \
---disable-dependency-tracking --enable-openib-connectx-xrc \
---enable-openib-rdmacm --enable-openib-dynamic-sl \
---enable-btl-openib-malloc-alignment --without-cuda \
---with-valgrind --without-alps --without-lsf --without-pmi \
---without-slurm --with-tm=/opt/adv-pbs/default --without-sge \
---without-loadleveler --without-mx --without-ugni \
---without-cma --with-knem=/opt/knem-1.1.90mlnx2 \
---with-fca=/opt/mellanox.2.0/fca --without-pvfs2 \
---without-portals4 \
---with-pic --with-gnu-ld \
-CC=gcc CXX=g++ F77=gfortran FC=gfortran
-*/
-
-
-
-
-
-
-
-
-/*
-./configure --prefix=/short/v29/ssh659/packages/ulfmopt-1.1 \
---enable-mpi-ext=ftmpi --with-ft=mpi \
---disable-io-romio --enable-contrib-no-build=vt \
---with-platform=optimized \
---with-openib=/usr \
---disable-ipv6 --enable-shared --disable-static \
---disable-dependency-tracking --enable-openib-connectx-xrc \
---enable-openib-rdmacm --enable-openib-dynamic-sl \
---enable-btl-openib-malloc-alignment --without-cuda \
---with-valgrind --without-alps --without-lsf --without-pmi \
---without-slurm --with-tm=/opt/adv-pbs/default --without-sge \
---without-loadleveler --without-mx --without-ugni \
---without-cma --with-knem=/opt/knem-1.1.90mlnx2 \
---without-pvfs2 \
---without-portals4 \
---with-pic --with-gnu-ld \
-CC=gcc CXX=g++ F77=gfortran FC=gfortran
 */
