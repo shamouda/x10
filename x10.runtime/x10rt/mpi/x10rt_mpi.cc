@@ -1874,17 +1874,21 @@ private:
             char* resilientmode = getenv(X10_RESILIENT_MODE);
             MPI_Errhandler customErrorHandler;
             if (resilientmode && atoi(resilientmode) > 0){
+            	X10RT_NET_DEBUG("%s", "pre shrink");
                 OMPI_Comm_shrink(MPI_COMM_WORLD, &shrunken);
+                X10RT_NET_DEBUG("%s", "pro shrink");
                 MPI_Comm_create_errhandler(mpiErrorHandler, &customErrorHandler);
                 MPI_Comm_set_errhandler(shrunken, customErrorHandler);
             }
             else
             	shrunken = MPI_COMM_WORLD;
 
+            X10RT_NET_DEBUG("%s", "pre comm_create");
             if (MPI_SUCCESS != MPI_Comm_create(shrunken, grp, &comm)) {
                 fprintf(stderr, "[%s:%d] %s\n", __FILE__, __LINE__, "Error in MPI_Comm_create");
                 abort();
             }
+            X10RT_NET_DEBUG("%s", "pro comm_create");
             if (resilientmode && atoi(resilientmode) > 0){
                 MPI_Comm_set_errhandler(comm, customErrorHandler);
             }
