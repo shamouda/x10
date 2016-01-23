@@ -1152,7 +1152,7 @@ public struct Team {
                         else
                             System.threadSleep(0); // release the CPU to more productive pursuits
                         count++;
-                        if (x10.xrx.Runtime.RESILIENT_MODE > 0 && count == 10000) {
+                        if (x10.xrx.Runtime.RESILIENT_MODE > 0 && count == 100000) {
                         	if (DEBUGINTERNALS || DEBUG_SLEEP_UNTILL) Console.OUT.println(here+"inside sleep until ["+tag+"] ...");
                             count = 0;
                         }
