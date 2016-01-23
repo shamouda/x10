@@ -24,7 +24,6 @@ import x10.util.RailUtils;
 /*
  * TODO:
  * -> maximum retry for restore failures
- * -> investigate team hanging when the place dying is a leaf place
  * -> support more than 1 place failure.  when a palce dies, store.rebackup()
  * -> no need to notify place death for collectives
  * */
@@ -501,6 +500,7 @@ public class LocalViewResilientExecutorOpt {
         
         val startAgree = Timer.milliTime();
         try{
+        	if (VERBOSE) Console.OUT.println(here+" Starting agree call in operation ["+op+"]");
         	val success = team.agree(vote);
         	if (success == 1N) {
         		if (VERBOSE) Console.OUT.println(here+" Agreement succeeded in operation ["+op+"]");
