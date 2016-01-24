@@ -535,11 +535,6 @@ x10rt_error x10rt_net_init(int *argc, char ** *argv, x10rt_msg_type *counter) {
 
     global_state.Init();
 
-    // default to 1 immediate thread if we're in resilient mode
-    char* resilientmode = getenv(X10_RESILIENT_MODE);
-    if (resilientmode && atoi(resilientmode) > 0)
-    	setenv(X10_NUM_IMMEDIATE_THREADS, "1", 0);
-
     // special case: if using static threads, and the thread count is exactly 1 we don't need multi-thread MPI
     char* sthreads = getenv(X10_STATIC_THREADS);
     char* nthreads = getenv(X10_NTHREADS);
