@@ -565,6 +565,7 @@ x10rt_error x10rt_net_init(int *argc, char ** *argv, x10rt_msg_type *counter) {
             abort();
         }
 #ifdef OPEN_MPI_ULFM
+        char* resilientmode = getenv(X10_RESILIENT_MODE);
         if (resilientmode && atoi(resilientmode) > 0) {
             MPI_Errhandler customErrorHandler;
             MPI_Comm_create_errhandler(mpiErrorHandler, &customErrorHandler);
