@@ -3157,7 +3157,11 @@ bool x10rt_net_bcast (x10rt_team team, x10rt_place role,
 
     MPI_COLLECTIVE_POSTPROCESS
 
+#ifdef OPEN_MPI_ULFM
     return MPI_SUCCESS == SAVED(mpiError);
+#else
+    return true;
+#endif
 }
 
 static void x10rt_net_handler_bcast (struct CollectivePostprocessEnv cpe) {
@@ -3306,7 +3310,11 @@ bool x10rt_net_allreduce (x10rt_team team, x10rt_place role,
 
     MPI_COLLECTIVE_POSTPROCESS
 
+#ifdef OPEN_MPI_ULFM
     return MPI_SUCCESS == SAVED(mpiError);
+#else
+    return true;
+#endif
 }
 
 static void x10rt_net_handler_allreduce (struct CollectivePostprocessEnv cpe) {
@@ -3367,7 +3375,11 @@ bool x10rt_net_scatterv (x10rt_team team, x10rt_place role, x10rt_place root, co
 
     MPI_COLLECTIVE_POSTPROCESS
 
+#ifdef OPEN_MPI_ULFM
     return MPI_SUCCESS == SAVED(mpiError);
+#else
+    return true;
+#endif
 }
 
 static void x10rt_net_handler_scatterv (struct CollectivePostprocessEnv cpe) {
@@ -3473,7 +3485,11 @@ bool x10rt_net_gatherv (x10rt_team team, x10rt_place role, x10rt_place root, con
 
     MPI_COLLECTIVE_POSTPROCESS
 
+#ifdef OPEN_MPI_ULFM
     return MPI_SUCCESS == SAVED(mpiError);
+#else
+    return true;
+#endif
 }
 
 static void x10rt_net_handler_gatherv (struct CollectivePostprocessEnv cpe) {
