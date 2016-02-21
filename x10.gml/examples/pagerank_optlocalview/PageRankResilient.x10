@@ -127,9 +127,6 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
         appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());
     
         new LocalViewResilientExecutorOpt(chkpntIterations, places, true).run(this, start);
-
-//        paraRunTime = P.getCalcTime() + GP.getCalcTime();
-//        commTime = P.getCommTime() + GP.getCommTime();
         
         return P.local();
     }
@@ -167,7 +164,6 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
 
         appTempDataPLH().iter++;
     }
-
     
     public def checkpoint_local(store:DistObjectSnapshot):void {
     	//Read only data will be saved only in the first checkpoint
@@ -178,14 +174,6 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
     	    }
     	    P.makeSnapshot_local(store);
     	}
-    }
-    
-    public def checkpoint(store:ApplicationSnapshotStore):void {
-        store.startNewSnapshot();
-        store.saveReadOnly(G);
-        store.saveReadOnly(U);
-        store.save(P);
-        store.commit();
     }
 
     public def remake(newGroup:PlaceGroup, newTeam:Team, newAddedPlaces:ArrayList[Place]) {
@@ -214,32 +202,6 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
 	        async P.restoreSnapshot_local(store);
 	        appTempDataPLH().iter = lastCheckpointIter;
     	}    	
-    }
-    
-    public def restore(newGroup:PlaceGroup, store:ApplicationSnapshotStore, lastCheckpointIter:Long, newAddedPlaces:ArrayList[Place]):void {
-        val oldPlaces = G.places();
-        val newTeam = new Team(newGroup);
-        
-        val newRowPs = newGroup.size();
-        val newColPs = 1;
-        Console.OUT.println("Going to restore PageRank app, newRowPs["+newRowPs+"], newColPs["+newColPs+"] ...");
-        G.remakeSparse(newRowPs, newColPs, nzd, newGroup, newAddedPlaces);	
-        U.remake(G.getAggRowBs(), newGroup, newTeam, newAddedPlaces);
-        P.remake(newGroup, newTeam, newAddedPlaces);
-
-        GP.remake(G.getAggRowBs(), newGroup, newTeam, newAddedPlaces);
-        
-        store.restore();
-        
-        //TODO: make a snapshottable class for the app data
-        PlaceLocalHandle.destroy(oldPlaces, appTempDataPLH, (Place)=>true);
-        appTempDataPLH = PlaceLocalHandle.make[AppTempData](newGroup, ()=>new AppTempData());
-        //adjust the iteration number and the norm value
-        finish ateach(Dist.makeUnique(newGroup)) {
-            appTempDataPLH().iter = lastCheckpointIter;
-        }
-        
-        Console.OUT.println("Restore succeeded. Restarting from iteration["+appTempDataPLH().iter+"] ...");
     }
     
     class AppTempData{

@@ -33,15 +33,4 @@ public interface LocalViewResilientIterativeAppOpt {
     public def remake(newPlaces:PlaceGroup, newTeam:Team, newAddedPlaces:ArrayList[Place]):void;
     
     public def restore_local(store:DistObjectSnapshot, lastCheckpointIter:Long):void;
-    
-    /**
-     * Restore the application state to the new place group, using the last
-     * consistent checkpoint from the resilient store.
-     * @param newPlaces the set of places over which to restore
-     * @param store a resilient store containing an application checkpoint
-     * @param lastCheckpointIter the iteration number of the saved checkpoint
-     * @param list of added spare places for restore
-     */
-    public def restore(newPlaces:PlaceGroup, newTeam:Team, store:DistObjectSnapshot, lastCheckpointIter:Long, newAddedPlaces:ArrayList[Place]):void;
-    
 }
