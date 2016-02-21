@@ -193,9 +193,8 @@ appTempDataPLH().localCompTime += Timer.milliTime();
      * Restore from the snapshot with new PlaceGroup
      */
     
-    public def remake(newPlaces:PlaceGroup, newTeam:Team, newAddedPlaces:ArrayList[Place]):void {
+    public def remake(newPg:PlaceGroup, newTeam:Team, newAddedPlaces:ArrayList[Place]):void {
         val oldPlaces = V.places();
-        val newTeam = new Team(newPg);
         val newRowPs = newPg.size();
         val newColPs = 1;
         //remake all the distributed data structures
