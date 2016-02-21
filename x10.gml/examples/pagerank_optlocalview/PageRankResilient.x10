@@ -20,11 +20,12 @@ import x10.regionarray.Dist;
 import x10.matrix.distblock.DistVector;
 import x10.matrix.distblock.DupVector;
 import x10.matrix.distblock.DistBlockMatrix;
-import x10.util.resilient.iterative.LocalViewResilientIterativeApp;
-import x10.util.resilient.iterative.LocalViewResilientExecutor;
+import x10.util.resilient.iterative.LocalViewResilientIterativeAppOpt;
+import x10.util.resilient.iterative.LocalViewResilientExecutorOpt;
 import x10.util.resilient.iterative.ApplicationSnapshotStore;
 import x10.util.Team;
 import x10.util.ArrayList;
+import x10.util.resilient.iterative.DistObjectSnapshot
 
 /**
  * Parallel Page Rank algorithm based on GML distributed block matrix.
@@ -125,7 +126,7 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
         val places = G.places();
         appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());
     
-        new LocalViewResilientExecutor(chkpntIterations, places, true).run(this, start);
+        new LocalViewResilientExecutorOpt(chkpntIterations, places, true).run(this, start);
 
 //        paraRunTime = P.getCalcTime() + GP.getCalcTime();
 //        commTime = P.getCommTime() + GP.getCommTime();
