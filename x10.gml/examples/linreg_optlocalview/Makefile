@@ -17,7 +17,7 @@ target = RunLinReg
 target_list = $(target)
 
 ## for source dependence check 
-depend_src  = SeqLinearRegression.x10 LinearRegression.x10
+depend_src  = SeqLinearRegression.x10 LinearRegressionResilient.x10
 #-------------------------------------
 # build path
 build_path	= build
