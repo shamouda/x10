@@ -17,7 +17,7 @@ target = RunLogReg
 target_list = $(target)
 
 ## for source dependence check 
-depend_src  = SeqLogReg.x10 LogisticRegression.x10
+depend_src  = SeqLogReg.x10 LogisticRegressionResilient.x10
 #-------------------------------------
 # build path
 build_path	= build
