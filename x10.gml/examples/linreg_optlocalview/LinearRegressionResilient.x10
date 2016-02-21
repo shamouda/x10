@@ -93,7 +93,7 @@ public class LinearRegressionResilient implements LocalViewResilientIterativeApp
         val start = (startTime != 0)?startTime:Timer.milliTime();  
         assert (V.isDistVertical()) : "dist block matrix must have vertical distribution";
         val places = V.places();
-        appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());
+        appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData(0));
         new LocalViewResilientExecutorOpt(checkpointFreq, places, true).run(this, start);
         return d_w.local();
     }

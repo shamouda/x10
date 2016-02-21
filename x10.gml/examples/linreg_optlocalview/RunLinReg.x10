@@ -100,7 +100,7 @@ public class RunLinReg {
             Console.OUT.printf("Linear regression with random examples X(%d,%d) blocks(%dx%d) ", mX, nX, rowBlocks, colBlocks);
             Console.OUT.printf("dist(%dx%d) nonzeroDensity:%g\n", places.size(), 1, nonzeroDensity);
 
-            if (nonzeroDensity < LinearRegression.MAX_SPARSE_DENSITY) {
+            if (nonzeroDensity < LinearRegressionResilient.MAX_SPARSE_DENSITY) {
                 X = DistBlockMatrix.makeSparse(mX, nX, rowBlocks, colBlocks, places.size(), 1, nonzeroDensity, places);
             } else {
                 Console.OUT.println("Using dense matrix as non-zero density = " + nonzeroDensity);
