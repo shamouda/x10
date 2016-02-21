@@ -24,7 +24,6 @@ import x10.util.resilient.iterative.PlaceGroupBuilder;
 import x10.util.resilient.iterative.LocalViewResilientIterativeAppOpt;
 import x10.util.resilient.iterative.LocalViewResilientExecutorOpt;
 import x10.util.resilient.iterative.DistObjectSnapshot;
-import x10.util.resilient.iterative.ApplicationSnapshotStore;
 
 import x10.util.Team;
 

@@ -15,19 +15,10 @@ import x10.util.ArrayList;
 import x10.util.Team;
 
 public interface LocalViewResilientIterativeAppOpt {
-    /** @return true if computation has finished. */
     public def isFinished_local():Boolean;
     
-    /**
-     * Perform a single step of the computation on a single place
-     * and update the finished status as required.
-     */
     public def step_local():void;
     
-    /**
-     * Checkpoint the application state at all places.
-     * @param store a resilient store containing an application checkpoint
-     */
     public def checkpoint_local(store:DistObjectSnapshot):void;
     
     public def remake(newPlaces:PlaceGroup, newTeam:Team, newAddedPlaces:ArrayList[Place]):void;
