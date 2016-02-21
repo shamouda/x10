@@ -17,7 +17,7 @@ target = RunPageRank
 target_list = $(target)
 
 ## for source dependence check 
-depend_src  = PageRank.x10 SeqPageRank.x10
+depend_src  = PageRankResilient.x10 SeqPageRank.x10
 
 #-------------------------------------
 # build path
