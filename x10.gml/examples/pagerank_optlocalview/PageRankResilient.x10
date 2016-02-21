@@ -25,7 +25,7 @@ import x10.util.resilient.iterative.LocalViewResilientExecutorOpt;
 import x10.util.resilient.iterative.ApplicationSnapshotStore;
 import x10.util.Team;
 import x10.util.ArrayList;
-import x10.util.resilient.iterative.DistObjectSnapshot
+import x10.util.resilient.iterative.DistObjectSnapshot;
 
 /**
  * Parallel Page Rank algorithm based on GML distributed block matrix.
