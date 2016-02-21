@@ -565,22 +565,26 @@ public class LocalViewResilientExecutorOpt {
 
 simple test  spare-restore:
 ===========================
+X10_NUM_IMMEDIATE_THREADS=1 \
 X10_EXIT_BY_SIGKILL=1 \
 EXECUTOR_KILL_STEP=15 \
 EXECUTOR_KILL_STEP_PLACE=7 \
 X10_PLACE_GROUP_RESTORE_MODE=1 \
 X10_RESILIENT_MODE=1 \
-X10_ASYMMETRIC_IMMEDIATE_THREAD=true \
+X10_RESILIENT_STORE_MODE=1 \
 mpirun -np 9 -am ft-enable-mpi \
 --mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
 --mca orte_base_help_aggregate 0 \
 bin/lulesh2.0 -e 1 -k 100 -s 10 -i 50 -p
 
 
+
+X10_ASYMMETRIC_IMMEDIATE_THREAD=true \
+
+
 simple test  non resilient:
 ===========================
-mpirun -np 8 -am ft-enable-mpi \
---mca errmgr_rts_hnp_proc_fail_xcast_delay 0 \
+mpirun -np 8 \
 --mca orte_base_help_aggregate 0 \
 bin/lulesh2.0 -s 10 -i 50 -p
 
