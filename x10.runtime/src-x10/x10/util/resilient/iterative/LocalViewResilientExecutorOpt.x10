@@ -49,6 +49,7 @@ public class LocalViewResilientExecutorOpt {
     
     private transient var runTime:Long = 0;
     private transient var remakeTime:Long = 0;
+    private transient var reconstructTeamTime:Long = 0;
     private transient var remakeCount:Long = 0;    
     private transient var failureDetectionTime:Long = 0;
     private transient var failureDetectionCount:Long = 0;
@@ -196,7 +197,9 @@ public class LocalViewResilientExecutorOpt {
                                 str += p.id + ",";
                             Console.OUT.println("Restore places are: " + str);
                         } 
+                        reconstructTeamTime -= Timer.milliTime();
                         team = new Team(newPG);
+                        reconstructTeamTime += Timer.milliTime();
                         app.remake(newPG, team, addedPlaces);
                         ///////////////////////////////////////////////////////////
                         //Initialize the new places with the same info at place 0//
@@ -341,7 +344,7 @@ public class LocalViewResilientExecutorOpt {
              + "   ---TotalCheckpointing:"+ (railSum(averageCheckpoint)+railSum(averageCheckpointAgreement) ) );
         Console.OUT.println();
         Console.OUT.println("Failure Detection:"   + failureDetectionTime);
-        Console.OUT.println("Remake:"              + remakeTime);
+        Console.OUT.println("Remake:"              + remakeTime              + "...........TeamReconstruction:"+reconstructTeamTime);
         Console.OUT.println("RestoreData:"         + railSum(averageRestore));
         Console.OUT.println("RestoreAgreement:"    + railSum(averageRestoreAgreement) 
              + "   ---TotalRecovery:" + (failureDetectionTime + remakeTime + railSum(averageRestore) + railSum(averageRestoreAgreement) ));
