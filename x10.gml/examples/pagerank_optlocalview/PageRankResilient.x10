@@ -166,14 +166,14 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
     }
     
     public def checkpoint_local(store:DistObjectSnapshot):void {
+    	//using finish here causes deadlock
     	//Read only data will be saved only in the first checkpoint
-    	finish {
-    	    if (appTempDataPLH().iter == 0) {  
-    	        async G.makeSnapshot_local(store);
-    	        async U.makeSnapshot_local(store);
-    	    }
-    	    P.makeSnapshot_local(store);
-    	}
+    	if (appTempDataPLH().iter == 0) {  
+    	    G.makeSnapshot_local("G", store);
+    	    U.makeSnapshot_local("U", store);
+        }
+    	P.makeSnapshot_local("P", store);
+    	
     }
 
     public def remake(newGroup:PlaceGroup, newTeam:Team, newAddedPlaces:ArrayList[Place]) {
@@ -196,12 +196,11 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
     }
     
     public def restore_local(store:DistObjectSnapshot, lastCheckpointIter:Long):void {
-    	finish {
-    	    async G.restoreSnapshot_local(store);
-	        async U.restoreSnapshot_local(store);
-	        async P.restoreSnapshot_local(store);
-	        appTempDataPLH().iter = lastCheckpointIter;
-    	}    	
+    	//using finish here causes deadlock
+    	G.restoreSnapshot_local("G", store);
+	    U.restoreSnapshot_local("U", store);
+	    P.restoreSnapshot_local("P", store);
+	    appTempDataPLH().iter = lastCheckpointIter;   	
     }
     
     class AppTempData{
