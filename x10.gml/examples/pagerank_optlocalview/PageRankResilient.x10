@@ -107,7 +107,7 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
         val places = G.places();
         finish ateach(Dist.makeUnique(places)) {
             G.initRandom_local();            
-            // initialize pagerank to personalization vector
+            // initialize pagerank to personalization vector-- does broadcast internally
             P.initRandom_local(root);
             
             val normalization = 1.0 / (0.5 * nzd * G.N);
@@ -115,7 +115,7 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
 
             val sum = P.local().sum();
             P.local().cellDiv(sum);            
-            U.copyFrom_local(root, P.local());              
+            U.copyFrom_local(P.local());
         }
     }
 

@@ -230,6 +230,12 @@ distV().scattervTime -= Timer.milliTime();
 distV().scattervTime += Timer.milliTime();
     }
     
+    public def copyFrom_local(src:Vector(M)): void {
+    	val offset=getOffset();
+    	val size = getSegSize()(distV().placeIndex);
+        val dist = distV().vec;
+        Rail.copy(src, offset, dist, 0, size);    
+    }
 
     /**
      * For debug and verification use only. 
