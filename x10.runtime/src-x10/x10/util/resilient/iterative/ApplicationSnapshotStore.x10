@@ -122,7 +122,7 @@ public class ApplicationSnapshotStore {
                 if (!key.ignore) {
                     var distObjectSnapshot:DistObjectSnapshot = appSnapshotMap.getOrElse(key, null);
                     val snapshot = appSnapshotMap.getOrElse(key, null);                    
-                    async key.snapshottable.makeSnapshot_local(snapshot);
+                    async key.snapshottable.makeSnapshot_local("", snapshot);
                 }
             }
         }
@@ -168,7 +168,7 @@ public class ApplicationSnapshotStore {
             while (iter.hasNext()) {
                 val key = iter.next();
                 val distObjectSnapshot = appSnapshotMap.getOrElse(key, null);
-                async key.snapshottable.restoreSnapshot_local(distObjectSnapshot);                
+                async key.snapshottable.restoreSnapshot_local("", distObjectSnapshot);                
             }
         }
     }
