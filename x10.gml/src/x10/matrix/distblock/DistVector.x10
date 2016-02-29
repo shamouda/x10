@@ -234,7 +234,7 @@ distV().scattervTime += Timer.milliTime();
     	val offset=getOffset();
     	val size = getSegSize()(distV().placeIndex);
         val dist = distV().vec;
-        Rail.copy(src, offset, dist, 0, size);    
+        Rail.copy(src.d, offset, dist.d, 0, size);    
     }
 
     /**
