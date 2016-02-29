@@ -75,13 +75,16 @@ public class RunPageRank {
 	if ((mG<=0) || iterations < 1n || nonzeroDensity <= 0.0 || sparePlaces < 0 || sparePlaces >= Place.numPlaces())
             Console.OUT.println("Error in settings");
         else {
-            val startTime = Timer.milliTime();
+            
             val places = (sparePlaces==0n) ? Place.places() 
                                           : PlaceGroupBuilder.execludeSparePlaces(sparePlaces);
             val rowBlocks = opts("r", places.size());
             val colBlocks = opts("c", 1);
 
             val paraPR = PageRankResilient.make(mG, nonzeroDensity, iterations, rowBlocks, colBlocks, checkpointFreq, places);
+            
+            val startTime = Timer.milliTime(); //moved here to be similar to LULESH
+            
             paraPR.init(nonzeroDensity);
 
             if (print) paraPR.printInfo();
