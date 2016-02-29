@@ -19,7 +19,7 @@ public interface Snapshottable {
     public def makeSnapshot():DistObjectSnapshot;
     public def restoreSnapshot(snapshot:DistObjectSnapshot):void;
     
-    public def makeSnapshot_local(snapshot:DistObjectSnapshot):void;
-    public def restoreSnapshot_local(snapshot:DistObjectSnapshot):void;
+    public def makeSnapshot_local(prefix:String, snapshot:DistObjectSnapshot):void;
+    public def restoreSnapshot_local(prefix:String, snapshot:DistObjectSnapshot):void;
     
 }

@@ -701,7 +701,7 @@ distV().allReduceTime += Timer.milliTime();
         return snapshot;
     }
     
-    public def restoreSnapshot(snapshot:DistObjectSnapshot, localViewFlag:Boolean) {
+    public def restoreSnapshot(prefix:String, snapshot:DistObjectSnapshot, localViewFlag:Boolean) {
         //val startTime = Timer.milliTime();
         val currentSegSizes = distV().segSize;
         val snapshotSegSize = distV().snapshotSegSize;
@@ -728,9 +728,9 @@ distV().allReduceTime += Timer.milliTime();
         }
         else {
             if (!segmentsChanged)
-                restoreSnapshotSegmentBySegment_local(snapshot);
+                restoreSnapshotSegmentBySegment_local(prefix, snapshot);
             else
-                restoreSnapshotElementByElement_local(snapshot);
+                restoreSnapshotElementByElement_local(prefix, snapshot);
         }
         //Console.OUT.println("DistVector.RestoreTime["+(Timer.milliTime() - startTime)+"]");
     }
@@ -741,7 +741,7 @@ distV().allReduceTime += Timer.milliTime();
      */
     public def restoreSnapshot(snapshot:DistObjectSnapshot) {
         //val startTime = Timer.milliTime();
-        restoreSnapshot(snapshot, false);
+        restoreSnapshot("", snapshot, false);
         //Console.OUT.println("DistVector.RestoreTime["+(Timer.milliTime() - startTime)+"]");
     }
     
@@ -810,31 +810,31 @@ distV().allReduceTime += Timer.milliTime();
     }
     
     //val snapshot = DistObjectSnapshot.make();
-    public def makeSnapshot_local(snapshot:DistObjectSnapshot):void {
+    public def makeSnapshot_local(prefix:String, snapshot:DistObjectSnapshot):void {
         val i = distV().placeIndex;
         val data = distV().vec.d;        
         val distVecInfo = new VectorSnapshotInfo(i, data);
-        snapshot.save(i, distVecInfo);       
+        snapshot.save(prefix+i, distVecInfo);       
         
         distV().snapshotSegSize = distV().segSize;
         distV().snapshotOffsets = distV().offsets;    
     }
     
-    public def restoreSnapshot_local(snapshot:DistObjectSnapshot) {        
+    public def restoreSnapshot_local(prefix:String, snapshot:DistObjectSnapshot) {        
         //val startTime = Timer.milliTime();
-        restoreSnapshot(snapshot, true);
+        restoreSnapshot(prefix, snapshot, true);
         //Console.OUT.println("DistVector.RestoreTime["+(Timer.milliTime() - startTime)+"]");
     }
     
-    private def restoreSnapshotSegmentBySegment_local(snapshot:DistObjectSnapshot) {
+    private def restoreSnapshotSegmentBySegment_local(prefix:String, snapshot:DistObjectSnapshot) {
         val segmentPlaceIndex = distV().placeIndex;
-        val storedSegment = snapshot.load(segmentPlaceIndex) as VectorSnapshotInfo;
+        val storedSegment = snapshot.load(prefix+segmentPlaceIndex) as VectorSnapshotInfo;
         val srcRail = storedSegment.data;
         val dstRail = distV().vec.d;
         Rail.copy(srcRail, 0, dstRail, 0, srcRail.size);
     }
     
-    private def restoreSnapshotElementByElement_local(snapshot:DistObjectSnapshot) {
+    private def restoreSnapshotElementByElement_local(prefix:String,snapshot:DistObjectSnapshot) {
         //val startTime = Timer.milliTime();
         val newSegSize = distV().segSize;
         val snapshotSegSize = distV().snapshotSegSize;            
@@ -861,7 +861,7 @@ distV().allReduceTime += Timer.milliTime();
                 if (high_old < high)
                     endIndex = high_old;
                 //load the old segment from resilient store
-                var storedSegment:VectorSnapshotInfo = snapshot.load(i) as VectorSnapshotInfo;
+                var storedSegment:VectorSnapshotInfo = snapshot.load(prefix+i) as VectorSnapshotInfo;
                 val srcRail = storedSegment.data;
                 val dstRail = distV().vec.d;
                 val elemCount = endIndex - startIndex;
