@@ -182,10 +182,11 @@ public class LocalViewResilientExecutorOpt {
         applicationInitializationTime = Timer.milliTime() - startRunTime;
         val root = here;
         val snapshots = (isResilient)?new Rail[DistObjectSnapshot](2, (i:Long)=>DistObjectSnapshot.make(places)):null;
-        var readOnlySnapshot:DistObjectSnapshot = null;
+        var tmpROSnapshot:DistObjectSnapshot = null;
         if (createReadOnlyStore){
-            readOnlySnapshot = DistObjectSnapshot.make(places);
+        	tmpROSnapshot = DistObjectSnapshot.make(places);
         }
+        val readOnlySnapshot = tmpROSnapshot;
         placeTempData = PlaceLocalHandle.make[PlaceTempData](places, ()=>new PlaceTempData(snapshots, readOnlySnapshot));
         team = new Team(places);
         var globalIter:Long = 0;
