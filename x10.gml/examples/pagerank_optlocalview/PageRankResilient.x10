@@ -254,7 +254,10 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
 	    	throw new Exception(here + " restore failed  Gstatus["+Gstatus.get()+"]  Ustatus["+Ustatus.get()+"] ...");
     }
     
-    class AppTempData{
-        public var iter:Long;
-    }
+    
 }
+
+class AppTempData{
+    public var iter:Long;
+}
+
