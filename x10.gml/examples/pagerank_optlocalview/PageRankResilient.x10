@@ -26,6 +26,7 @@ import x10.util.resilient.iterative.ApplicationSnapshotStore;
 import x10.util.Team;
 import x10.util.ArrayList;
 import x10.util.resilient.iterative.DistObjectSnapshot;
+import x10.util.concurrent.AtomicInteger;
 
 /**
  * Parallel Page Rank algorithm based on GML distributed block matrix.
@@ -168,12 +169,42 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
     public def checkpoint_local(store:DistObjectSnapshot):void {
     	//using finish here causes deadlock
     	//Read only data will be saved only in the first checkpoint
-    	if (appTempDataPLH().iter == 0) {  
-    	    G.makeSnapshot_local("G", store);
-    	    U.makeSnapshot_local("U", store);
-        }
-    	P.makeSnapshot_local("P", store);
+    	val Gstatus = new AtomicInteger(0N);
+    	val Ustatus = new AtomicInteger(0N);
     	
+    	if (appTempDataPLH().iter == 0) {  
+    	    async {
+    	    	try{
+    	    	    G.makeSnapshot_local("G", store);
+    	    	    Gstatus.set(1N);
+    	    	}
+    	    	catch(ex:Exception){
+    	    		ex.printStackTrace();
+    	    		Gstatus.set(2N);
+    	    	}
+    	    }
+    	    
+    	    async {
+    	    	try{
+    	    	     U.makeSnapshot_local("U", store);
+    	    	     Ustatus.set(1N);
+    	    	}catch(ex:Exception){
+    	    		ex.printStackTrace();
+    	    		Ustatus.set(2N);
+    	    	}
+    	    }
+        } else{
+        	Gstatus.set(1N);
+        	Ustatus.set(1N);
+        }
+    	
+    	P.makeSnapshot_local("P", store);  
+    	
+        when(Gstatus.get() > 0 && Ustatus.get() > 0);
+	    
+	    if (Gstatus.get() == 2N || Ustatus.get() == 2N)
+	    	throw new Exception(here + " Checkpoint failed  Gstatus["+Gstatus.get()+"]  Ustatus["+Ustatus.get()+"] ...");
+	    
     }
 
     public def remake(newGroup:PlaceGroup, newTeam:Team, newAddedPlaces:ArrayList[Place]) {
@@ -196,11 +227,38 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
     }
     
     public def restore_local(store:DistObjectSnapshot, lastCheckpointIter:Long):void {
-    	//using finish here causes deadlock
-    	G.restoreSnapshot_local("G", store);
-	    U.restoreSnapshot_local("U", store);
+    	//using finish here causes deadlock, we use when instead
+    	val Gstatus = new AtomicInteger(0N);
+    	val Ustatus = new AtomicInteger(0N);
+    	
+    	async {
+    		try{
+    			G.restoreSnapshot_local("G", store);
+    			Gstatus.set(1N);
+    		}
+    		catch(ex:Exception){
+    			ex.printStackTrace();
+    			Gstatus.set(2N);
+    		}
+    	}
+	    async {
+	    	try{
+	    		U.restoreSnapshot_local("U", store);
+	    		Ustatus.set(1N);
+	    	}
+	    	catch(ex:Exception){
+	    		ex.printStackTrace();
+    			Ustatus.set(2N);
+	    	}
+	    }
+	    
 	    P.restoreSnapshot_local("P", store);
-	    appTempDataPLH().iter = lastCheckpointIter;   	
+	    appTempDataPLH().iter = lastCheckpointIter; 
+	    
+	    when(Gstatus.get() > 0 && Ustatus.get() > 0);
+	    
+	    if (Gstatus.get() == 2N || Ustatus.get() == 2N)
+	    	throw new Exception(here + " Restore failed  Gstatus["+Gstatus.get()+"]  Ustatus["+Ustatus.get()+"] ...");
     }
     
     class AppTempData{
