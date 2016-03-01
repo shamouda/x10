@@ -68,6 +68,8 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
     private val root:Place;
     private var team:Team;
     
+    private val readOnlyDataStore:DistObjectSnapshot;
+    	
     public def this(
             g:DistBlockMatrix{self.M==self.N}, 
             p:DupVector(g.N), 
@@ -90,6 +92,8 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
         nzd = sparseDensity;
         root = here;
         this.team = team;
+        
+        readOnlyDataStore = DistObjectSnapshot.make(places);
     }
 
     public static def make(gN:Long, nzd:Float, it:Long, numRowBs:Long, numColBs:Long, chkpntIter:Long, places:PlaceGroup) {
@@ -117,6 +121,10 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
             val sum = P.local().sum();
             P.local().cellDiv(sum);            
             U.copyFrom_local(P.local());
+            
+            //checkpointing read only data once
+            async G.makeSnapshot_local("G", readOnlyDataStore);
+            async U.makeSnapshot_local("U", readOnlyDataStore);
         }
     }
 
@@ -167,45 +175,8 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
     }
     
     public def checkpoint_local(store:DistObjectSnapshot):void {
-    	//using finish here causes deadlock
-    	//Read only data will be saved only in the first checkpoint
-    	val Gstatus = new AtomicInteger(0N);
-    	val Ustatus = new AtomicInteger(0N);
-    	
-    	if (appTempDataPLH().iter == 0) {  
-    	    async {
-    	    	try{
-    	    	    G.makeSnapshot_local("G", store);
-    	    	    atomic Gstatus.set(1N);
-    	    	}
-    	    	catch(ex:Exception){
-    	    		ex.printStackTrace();
-    	    		atomic Gstatus.set(2N);
-    	    	}
-    	    }
-    	    
-    	    async {
-    	    	try{
-    	    	     U.makeSnapshot_local("U", store);
-    	    	     atomic Ustatus.set(1N);
-    	    	}catch(ex:Exception){
-    	    		ex.printStackTrace();
-    	    		atomic Ustatus.set(2N);
-    	    	}
-    	    }
-        } else{
-        	Gstatus.set(1N);
-        	Ustatus.set(1N);
-        }
-    	
-    	P.makeSnapshot_local("P", store);  
-    	
-    	Console.OUT.println(here + "Waiting on when >>>>>>>>>>>");
-        when(Gstatus.get() > 0N && Ustatus.get() > 0N);
-	    
-	    if (Gstatus.get() == 2N || Ustatus.get() == 2N)
-	    	throw new Exception(here + " Checkpoint failed  Gstatus["+Gstatus.get()+"]  Ustatus["+Ustatus.get()+"] ...");
-	    
+    	//using finish here causes deadlock!!!!!
+    	P.makeSnapshot_local("P", store);
     }
 
     public def remake(newGroup:PlaceGroup, newTeam:Team, newAddedPlaces:ArrayList[Place]) {
@@ -224,40 +195,37 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
             Console.OUT.println("Adding place["+sparePlace+"] to appTempDataPLH ...");
             PlaceLocalHandle.addPlace[AppTempData](appTempDataPLH, sparePlace, ()=>new AppTempData());
         }    
-        Console.OUT.println("Restore succeeded. Restarting from iteration["+appTempDataPLH().iter+"] ...");
+        Console.OUT.println("Remake succeeded. ...");
     }
     
     public def restore_local(store:DistObjectSnapshot, lastCheckpointIter:Long):void {
     	//using finish here causes deadlock, we use when instead
     	val Gstatus = new AtomicInteger(0N);
     	val Ustatus = new AtomicInteger(0N);
-    	
     	async {
     		try{
-    			G.restoreSnapshot_local("G", store);
-    			Gstatus.set(1N);
+    			G.restoreSnapshot_local("G", readOnlyDataStore);
+    			atomic Gstatus.set(1N);
     		}
     		catch(ex:Exception){
     			ex.printStackTrace();
-    			Gstatus.set(2N);
+    			atomic Gstatus.set(2N);
     		}
     	}
 	    async {
 	    	try{
-	    		U.restoreSnapshot_local("U", store);
-	    		Ustatus.set(1N);
+	    		U.restoreSnapshot_local("U", readOnlyDataStore);
+	    		atomic Ustatus.set(1N);
 	    	}
 	    	catch(ex:Exception){
 	    		ex.printStackTrace();
-    			Ustatus.set(2N);
+    			atomic Ustatus.set(2N);
 	    	}
 	    }
 	    
 	    P.restoreSnapshot_local("P", store);
 	    appTempDataPLH().iter = lastCheckpointIter; 
-	    
 	    when(Gstatus.get() > 0N && Ustatus.get() > 0N);
-	    
 	    if (Gstatus.get() == 2N || Ustatus.get() == 2N)
 	    	throw new Exception(here + " Restore failed  Gstatus["+Gstatus.get()+"]  Ustatus["+Ustatus.get()+"] ...");
     }
