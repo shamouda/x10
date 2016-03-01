@@ -68,7 +68,6 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
     private val root:Place;
     private var team:Team;
     
-    private val readOnlyDataStore:DistObjectSnapshot;
     	
     public def this(
             g:DistBlockMatrix{self.M==self.N}, 
@@ -78,13 +77,15 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
             sparseDensity:Float,
             chkpntIter:Long,
             places:PlaceGroup,
-            team:Team) {
+            team:Team,
+            tmpDataPLH:PlaceLocalHandle[AppTempData]) {
         Debug.assure(DistGrid.isVertical(g.getGrid(), g.getMap()), 
                 "Input block matrix g does not have vertical distribution.");
         G = g;
         P = p as DupVector(G.N);
         U = u as DistVector(G.N);
         iterations = it;
+        appTempDataPLH=tmpDataPLH;
         
         GP = DistVector.make(G.N, G.getAggRowBs(), places, team);//G must have vertical distribution
 
@@ -93,7 +94,6 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
         root = here;
         this.team = team;
         
-        readOnlyDataStore = DistObjectSnapshot.make(places);
     }
 
     public static def make(gN:Long, nzd:Float, it:Long, numRowBs:Long, numColBs:Long, chkpntIter:Long, places:PlaceGroup) {
@@ -105,7 +105,9 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
         val g = DistBlockMatrix.makeSparse(gN, gN, numRowBs, numColBs, numRowPs, numColPs, nzd, places);
         val p = DupVector.make(gN, places, team);
         val u = DistVector.make(gN, g.getAggRowBs(), places, team);
-        return new PageRankResilient(g, p, u, it, nzd, chkpntIter, places, team);
+        val appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());
+        
+        return new PageRankResilient(g, p, u, it, nzd, chkpntIter, places, team, appTempDataPLH);
     } 
     
     public def init(nzd:Float):void {
@@ -121,10 +123,6 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
             val sum = P.local().sum();
             P.local().cellDiv(sum);            
             U.copyFrom_local(P.local());
-            
-            //checkpointing read only data once
-            async G.makeSnapshot_local("G", readOnlyDataStore);
-            async U.makeSnapshot_local("U", readOnlyDataStore);
         }
     }
 
@@ -133,9 +131,9 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
         assert (G.isDistVertical()) : "dist block matrix must have vertical distribution";
     
         val places = G.places();
-        appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());
-    
-        new LocalViewResilientExecutorOpt(chkpntIterations, places, true).run(this, start);
+        val implicitBarrier = true;
+        val createReadOnlyStore = true;
+        new LocalViewResilientExecutorOpt(chkpntIterations, places, implicitBarrier, createReadOnlyStore).run(this, start);
         
         return P.local();
     }
@@ -174,10 +172,36 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
         appTempDataPLH().iter++;
     }
     
-    public def checkpoint_local(store:DistObjectSnapshot):void {
+    public def checkpoint_local(store:DistObjectSnapshot, readOnlyDataStore:DistObjectSnapshot):void {
     	//using finish here causes deadlock!!!!!
-    	P.makeSnapshot_local("P", store);
+    	val Gstatus = new AtomicInteger(0N);
+    	val Ustatus = new AtomicInteger(0N);
+    	async {
+    		try{
+    		    G.makeSnapshot_local("G", readOnlyDataStore);
+    	  	    atomic Gstatus.set(1N);
+    		}catch(ex:Exception){
+    			ex.printStackTrace();
+    			atomic Gstatus.set(2N);
+    		}
+    	}
+    	
+        async {
+        	try{
+        	    U.makeSnapshot_local("U", readOnlyDataStore);
+        	    atomic Ustatus.set(1N);
+        	}catch(ex:Exception){
+        		ex.printStackTrace();
+        		atomic Ustatus.set(2N);
+        	}
+        }
+        
+        P.makeSnapshot_local("P", store);
+        when (Gstatus.get() >= 0N && Ustatus.get() >=0);
+        if (Gstatus.get() == 2N || Ustatus.get() == 2N)
+        	throw new Exception(here + "  failed to checkpoint readonly data ...");   
     }
+    
 
     public def remake(newGroup:PlaceGroup, newTeam:Team, newAddedPlaces:ArrayList[Place]) {
         val oldPlaces = G.places();
@@ -198,7 +222,7 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
         Console.OUT.println("Remake succeeded. ...");
     }
     
-    public def restore_local(store:DistObjectSnapshot, lastCheckpointIter:Long):void {
+    public def restore_local(store:DistObjectSnapshot, readOnlyDataStore:DistObjectSnapshot, lastCheckpointIter:Long):void {
     	//using finish here causes deadlock, we use when instead
     	val Gstatus = new AtomicInteger(0N);
     	val Ustatus = new AtomicInteger(0N);
@@ -227,7 +251,7 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
 	    appTempDataPLH().iter = lastCheckpointIter; 
 	    when(Gstatus.get() > 0N && Ustatus.get() > 0N);
 	    if (Gstatus.get() == 2N || Ustatus.get() == 2N)
-	    	throw new Exception(here + " Restore failed  Gstatus["+Gstatus.get()+"]  Ustatus["+Ustatus.get()+"] ...");
+	    	throw new Exception(here + " restore failed  Gstatus["+Gstatus.get()+"]  Ustatus["+Ustatus.get()+"] ...");
     }
     
     class AppTempData{

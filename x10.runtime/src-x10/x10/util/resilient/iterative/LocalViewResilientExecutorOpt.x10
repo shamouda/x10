@@ -35,6 +35,7 @@ public class LocalViewResilientExecutorOpt {
     private var isResilient:Boolean = false;
     // if step_local() are implicitly synchronized, no need for a step barrier inside the executor
     private val implicitStepSynchronization:Boolean; 
+    private val createReadOnlyStore:Boolean;
     private val VERBOSE = (System.getenv("EXECUTOR_DEBUG") != null 
                         && System.getenv("EXECUTOR_DEBUG").equals("1"));
     
@@ -72,6 +73,7 @@ public class LocalViewResilientExecutorOpt {
         var lastCheckpointIter:Long = -1;
         var commitCount:Long = 0;
         val snapshots:Rail[DistObjectSnapshot];
+    	val readOnlySnapshot:DistObjectSnapshot;
         
         val checkpointTimes:ArrayList[Long];
         val checkpointAgreementTimes:ArrayList[Long];
@@ -94,7 +96,8 @@ public class LocalViewResilientExecutorOpt {
         //used for initializing spare places with the same values from Place0
         public def this(snapshots:Rail[DistObjectSnapshot], checkTimes:ArrayList[Long], checkAgreeTimes:ArrayList[Long], 
         		restoreTimes:ArrayList[Long], restoreAgreeTimes:ArrayList[Long],
-        		stepTimes:ArrayList[Long], lastCheckpointIter:Long, commitCount:Long){
+        		stepTimes:ArrayList[Long], lastCheckpointIter:Long, commitCount:Long,
+        		readOnlySnapshot:DistObjectSnapshot){
             this.checkpointTimes = checkTimes;
             this.checkpointAgreementTimes = checkAgreeTimes;
             this.stepTimes = stepTimes;
@@ -103,15 +106,17 @@ public class LocalViewResilientExecutorOpt {
             this.snapshots = snapshots;
             this.lastCheckpointIter = lastCheckpointIter;
             this.commitCount = commitCount;
+            this.readOnlySnapshot = readOnlySnapshot;
         }
     
-        public def this(snapshots:Rail[DistObjectSnapshot]){
+        public def this(snapshots:Rail[DistObjectSnapshot], readOnlySnapshot:DistObjectSnapshot){
             this.checkpointTimes = new ArrayList[Long]();
             this.checkpointAgreementTimes = new ArrayList[Long]();
             this.restoreTimes = new ArrayList[Long]();
             this.restoreAgreementTimes = new ArrayList[Long]();
             this.stepTimes = new ArrayList[Long]();
             this.snapshots = snapshots;
+            this.readOnlySnapshot = readOnlySnapshot;
         }
         
         private def getConsistentSnapshot():DistObjectSnapshot{
@@ -145,10 +150,11 @@ public class LocalViewResilientExecutorOpt {
         }
     }
     
-    public def this(itersPerCheckpoint:Long, places:PlaceGroup, implicitStepSynchronization:Boolean) {
+    public def this(itersPerCheckpoint:Long, places:PlaceGroup, implicitStepSynchronization:Boolean, createReadOnlyStore:Boolean) {
         this.places = places;
         this.itersPerCheckpoint = itersPerCheckpoint;
         this.implicitStepSynchronization = implicitStepSynchronization;
+        this.createReadOnlyStore = createReadOnlyStore;
         if (itersPerCheckpoint > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0) {
             isResilient = true;
             if (!x10.xrx.Runtime.x10rtAgreementSupport()){
@@ -176,7 +182,11 @@ public class LocalViewResilientExecutorOpt {
         applicationInitializationTime = Timer.milliTime() - startRunTime;
         val root = here;
         val snapshots = (isResilient)?new Rail[DistObjectSnapshot](2, (i:Long)=>DistObjectSnapshot.make(places)):null;
-        placeTempData = PlaceLocalHandle.make[PlaceTempData](places, ()=>new PlaceTempData(snapshots));
+        var readOnlySnapshot:DistObjectSnapshot = null;
+        if (createReadOnlyStore){
+            readOnlySnapshot = DistObjectSnapshot.make(places);
+        }
+        placeTempData = PlaceLocalHandle.make[PlaceTempData](places, ()=>new PlaceTempData(snapshots, readOnlySnapshot));
         team = new Team(places);
         var globalIter:Long = 0;
         
@@ -210,12 +220,14 @@ public class LocalViewResilientExecutorOpt {
                         val tmpPlace0RestoreAgreeTimes = placeTempData().restoreAgreementTimes;
                         val tmpPlace0StepTimes = placeTempData().stepTimes;
                         val tmpPlace0CommitCount = placeTempData().commitCount;
+                        val tmpPlace0ReadOnlySnapshot = placeTempData().readOnlySnapshot;
+                        
                         for (sparePlace in addedPlaces){
                             Console.OUT.println("LocalViewResilientExecutor: Adding place["+sparePlace+"] ...");           
                             PlaceLocalHandle.addPlace[PlaceTempData](placeTempData, sparePlace, 
                             		()=>new PlaceTempData(snapshots,tmpPlace0CheckpointTimes, tmpPlace0CheckpointAgreeTimes, 
                             				tmpPlace0RestoreTimes, tmpPlace0RestoreAgreeTimes, tmpPlace0StepTimes, lastCheckIter,
-                            				tmpPlace0CommitCount));
+                            				tmpPlace0CommitCount, tmpPlace0ReadOnlySnapshot));
                         }
                         ///////////////////////////////////////////////////////////
                         places = newPG;
@@ -336,18 +348,22 @@ public class LocalViewResilientExecutorOpt {
         Console.OUT.println("=========Totals by averaging Min/Max statistics============");
         Console.OUT.println("Initialization:"      + applicationInitializationTime);
         Console.OUT.println();
-        Console.OUT.println("Steps:"               + railSum(averageSteps)
-             + "   ---AverageSingleStep:" + (railSum(averageSteps)/averageSteps.size) );
+        Console.OUT.println("Steps:"               + railSum(averageSteps));
+        Console.OUT.println("   ---AverageSingleStep:" + (railSum(averageSteps)/averageSteps.size) );
         Console.OUT.println();
         Console.OUT.println("CheckpointData:"      + railToString(averageCheckpoint));
-        Console.OUT.println("CheckpointAgreement:" + railToString(averageCheckpointAgreement)  
-             + "   ---TotalCheckpointing:"+ (railSum(averageCheckpoint)+railSum(averageCheckpointAgreement) ) );
+        Console.OUT.println("CheckpointAgreement:" + railToString(averageCheckpointAgreement)  );
+        Console.OUT.println("   ---TotalCheckpointing:"+ (railSum(averageCheckpoint)+railSum(averageCheckpointAgreement) ) );
+  
         Console.OUT.println();
         Console.OUT.println("Failure Detection:"   + failureDetectionTime);
-        Console.OUT.println("Remake:"              + remakeTime              + "...........TeamReconstruction:"+reconstructTeamTime);
+        Console.OUT.println("Remake:"              + remakeTime);
+        Console.OUT.println("...........TeamReconstruction:"+reconstructTeamTime);
+        
         Console.OUT.println("RestoreData:"         + railSum(averageRestore));
-        Console.OUT.println("RestoreAgreement:"    + railSum(averageRestoreAgreement) 
-             + "   ---TotalRecovery:" + (failureDetectionTime + remakeTime + railSum(averageRestore) + railSum(averageRestoreAgreement) ));
+        Console.OUT.println("RestoreAgreement:"    + railSum(averageRestoreAgreement) );
+        Console.OUT.println("   ---TotalRecovery:" + (failureDetectionTime + remakeTime + railSum(averageRestore) + railSum(averageRestoreAgreement) ));
+   
         Console.OUT.println("=============================");
         Console.OUT.println("Actual RunTime:" + runTime);
         val calcTotal = applicationInitializationTime + 
@@ -477,9 +493,9 @@ public class LocalViewResilientExecutorOpt {
         var vote:Int = 1N;
         try{
             if (operation == CHECKPOINT_OPERATION)
-                app.checkpoint_local(placeTempData().getNextSnapshot());
+                app.checkpoint_local(placeTempData().getNextSnapshot(), placeTempData().readOnlySnapshot);
             else
-            	app.restore_local(placeTempData().getConsistentSnapshot(), placeTempData().lastCheckpointIter);
+            	app.restore_local(placeTempData().getConsistentSnapshot(), placeTempData().readOnlySnapshot, placeTempData().lastCheckpointIter);
             if (VERBOSE) Console.OUT.println(here+" Succeeded in operation ["+op+"_local]");
         }catch(ex:Exception){
             vote = 0N;

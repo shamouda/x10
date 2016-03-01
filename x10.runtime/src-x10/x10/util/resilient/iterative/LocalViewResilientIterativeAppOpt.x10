@@ -19,9 +19,9 @@ public interface LocalViewResilientIterativeAppOpt {
     
     public def step_local():void;
     
-    public def checkpoint_local(store:DistObjectSnapshot):void;
+    public def checkpoint_local(store:DistObjectSnapshot, readOnlyDataStore:DistObjectSnapshot):void;
     
     public def remake(newPlaces:PlaceGroup, newTeam:Team, newAddedPlaces:ArrayList[Place]):void;
     
-    public def restore_local(store:DistObjectSnapshot, lastCheckpointIter:Long):void;
+    public def restore_local(store:DistObjectSnapshot, readOnlyDataStore:DistObjectSnapshot, lastCheckpointIter:Long):void;
 }
