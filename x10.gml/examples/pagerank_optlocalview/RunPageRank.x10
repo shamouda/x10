@@ -39,7 +39,7 @@ public class RunPageRank {
             Option("v","verify","verify the parallel result against sequential computation"),
             Option("p","print","print matrix V, vectors d and w on completion")
         ], [
-            Option("m","rows","number of rows, default = 100000"),
+            Option("m","rows","number of rows, default"),
             Option("r","rowBlocks","number of row blocks, default = X10_NPLACES"),
             Option("c","colBlocks","number of columnn blocks; default = 1"),
             Option("d","density","nonzero density, default = 0.001"),
@@ -70,7 +70,7 @@ public class RunPageRank {
         
         val mG = opts("m", (20000*Math.sqrt(placesCount*5)) as Long );
         
-        Console.OUT.printf("G: rows/cols %d density: %.3f (non-zeros: %d) iterations: %d\n",
+        Console.OUT.printf("G: rows/cols %d density: %.3f (non-zeros: %ld) iterations: %d\n",
                             mG, nonzeroDensity, (nonzeroDensity*mG*mG) as Long, iterations);
 	if ((mG<=0) || iterations < 1n || nonzeroDensity <= 0.0 || sparePlaces < 0 || sparePlaces >= Place.numPlaces())
             Console.OUT.println("Error in settings");
