@@ -200,6 +200,7 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
     	
     	P.makeSnapshot_local("P", store);  
     	
+    	Console.OUT.println(here + "Waiting on when >>>>>>>>>>>");
         when(Gstatus.get() > 0 && Ustatus.get() > 0);
 	    
 	    if (Gstatus.get() == 2N || Ustatus.get() == 2N)
