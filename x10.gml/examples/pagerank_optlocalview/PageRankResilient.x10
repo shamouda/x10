@@ -201,7 +201,7 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
     	P.makeSnapshot_local("P", store);  
     	
     	Console.OUT.println(here + "Waiting on when >>>>>>>>>>>");
-        when(Gstatus.get() > 0 && Ustatus.get() > 0);
+        when(Gstatus.get() > 0N && Ustatus.get() > 0N);
 	    
 	    if (Gstatus.get() == 2N || Ustatus.get() == 2N)
 	    	throw new Exception(here + " Checkpoint failed  Gstatus["+Gstatus.get()+"]  Ustatus["+Ustatus.get()+"] ...");
@@ -256,7 +256,7 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
 	    P.restoreSnapshot_local("P", store);
 	    appTempDataPLH().iter = lastCheckpointIter; 
 	    
-	    when(Gstatus.get() > 0 && Ustatus.get() > 0);
+	    when(Gstatus.get() > 0N && Ustatus.get() > 0N);
 	    
 	    if (Gstatus.get() == 2N || Ustatus.get() == 2N)
 	    	throw new Exception(here + " Restore failed  Gstatus["+Gstatus.get()+"]  Ustatus["+Ustatus.get()+"] ...");
