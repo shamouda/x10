@@ -167,8 +167,8 @@ appTempDataPLH().localCompTime += Timer.milliTime();
     
     public def checkpoint_local(store:DistObjectSnapshot, readOnlyDataStore:DistObjectSnapshot):void {
     	    val statusRail = new Rail[AtomicInteger](4, new AtomicInteger(0N));
-    	    for (var i:Int = 0; i <=3; i++){
-    	    	val curIter = i;
+    	    for (i in 0..3){
+    	    	val curIter = i as Int;
     	        async {
 	                try{
 	                	switch(curIter){
@@ -194,8 +194,8 @@ appTempDataPLH().localCompTime += Timer.milliTime();
     
     public def restore_local(store:DistObjectSnapshot, readOnlyDataStore:DistObjectSnapshot, lastCheckpointIter:Long):void {
     	val statusRail = new Rail[AtomicInteger](4, new AtomicInteger(0N));
-	    for (var i:Int = 0; i <=3; i++){
-	    	val curIter = i;
+	    for (i in 0..3){
+	    	val curIter = i as Int;
 	        async {
                 try{
                 	switch(curIter){
