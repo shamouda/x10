@@ -26,7 +26,7 @@ import x10.util.resilient.iterative.LocalViewResilientExecutorOpt;
 import x10.util.resilient.iterative.DistObjectSnapshot;
 
 import x10.util.Team;
-
+import x10.util.concurrent.AtomicInteger;
 /**
  * Parallel linear regression based on GML distributed
  * dense/sparse matrix
@@ -93,7 +93,9 @@ public class LinearRegressionResilient implements LocalViewResilientIterativeApp
         assert (V.isDistVertical()) : "dist block matrix must have vertical distribution";
         val places = V.places();
         appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData(0));
-        new LocalViewResilientExecutorOpt(checkpointFreq, places, true).run(this, start);
+        val implicitBarrier = true;
+        val createReadOnlyStore = true;
+        new LocalViewResilientExecutorOpt(checkpointFreq, places, implicitBarrier, createReadOnlyStore).run(this, start);
         return d_w.local();
     }
     
@@ -163,31 +165,61 @@ appTempDataPLH().localCompTime -= Timer.milliTime();
 appTempDataPLH().localCompTime += Timer.milliTime();
     }
     
-    public def checkpoint_local(store:DistObjectSnapshot):void {
-    	finish {
-    	    if (appTempDataPLH().iter == 0) {  
-    	    	 async V.makeSnapshot_local(store);
+    public def checkpoint_local(store:DistObjectSnapshot, readOnlyDataStore:DistObjectSnapshot):void {
+    	    val statusRail = new Rail[AtomicInteger](4, new AtomicInteger(0N));
+    	    for (i in 0..3){
+    	    	val curIter = i;
+    	        async {
+	                try{
+	                	switch(curIter){
+	                	    case 0: if (appTempDataPLH().iter == 0) V.makeSnapshot_local(readOnlyDataStore);
+	                	    case 1: d_p.makeSnapshot_local(store);
+	                	    case 2: d_q.makeSnapshot_local(store);
+	                	    case 3: d_r.makeSnapshot_local(store);
+	                	}
+	            	    atomic statusRail(curIter).set(1N);
+	                }catch(ex:Exception){
+	        	        ex.printStackTrace();
+	        	        atomic statusRail(curIter).set(2N);
+	                }
+    	        }
     	    }
-    	    async d_p.makeSnapshot_local(store);
-            async d_q.makeSnapshot_local(store);
-            async d_r.makeSnapshot_local(store);
             d_w.makeSnapshot_local(store);
             appTempDataPLH().checkpointNorm = appTempDataPLH().norm_r2;
-    	}
+    	    when(isCompleteCheckpointRestore(statusRail));
+    	    
+    	    if (isFialedCheckpointRestore(statusRail))
+    	    	throw new Exception(here + "  failed to checkpoint ..."); 
     }
     
-    public def restore_local(store:DistObjectSnapshot, lastCheckpointIter:Long):void {
-    	finish {
-    	    async V.restoreSnapshot_local(store);
-	        async d_p.restoreSnapshot_local(store);
-	        async d_q.restoreSnapshot_local(store);
-	        async d_r.restoreSnapshot_local(store);
-	        async d_w.restoreSnapshot_local(store);
-	        
-	        appTempDataPLH().iter = lastCheckpointIter;
-	        appTempDataPLH().norm_r2 = appTempDataPLH().checkpointNorm;
-    	}
-    	
+    public def restore_local(store:DistObjectSnapshot, readOnlyDataStore:DistObjectSnapshot, lastCheckpointIter:Long):void {
+    	val statusRail = new Rail[AtomicInteger](4, new AtomicInteger(0N));
+	    for (i in 0..3){
+	    	val curIter = i;
+	        async {
+                try{
+                	switch(curIter){
+                	    case 0: if (appTempDataPLH().iter == 0) V.restoreSnapshot_local(readOnlyDataStore);
+                	    case 1: d_p.restoreSnapshot_local(store);
+                	    case 2: d_q.restoreSnapshot_local(store);
+                	    case 3: d_r.restoreSnapshot_local(store);
+                	}
+            	    atomic statusRail(curIter).set(1N);
+                }catch(ex:Exception){
+        	        ex.printStackTrace();
+        	        atomic statusRail(curIter).set(2N);
+                }
+	        }
+	    }
+	    
+	    d_w.restoreSnapshot_local(store);
+	    appTempDataPLH().iter = lastCheckpointIter;
+        appTempDataPLH().norm_r2 = appTempDataPLH().checkpointNorm;
+        
+	    when(isCompleteCheckpointRestore(statusRail));
+	    
+	    if (isFialedCheckpointRestore(statusRail))
+	    	throw new Exception(here + "  failed to restore ..."); 
     }
     /**
      * Restore from the snapshot with new PlaceGroup
@@ -217,6 +249,24 @@ appTempDataPLH().localCompTime += Timer.milliTime();
         
         Console.OUT.println("Restore succeeded. Restarting from iteration["+appTempDataPLH().iter+"] norm["+appTempDataPLH().norm_r2+"] ...");
     }    
+    
+    
+    private def isCompleteCheckpointRestore(statusRail:Rail[AtomicInteger]):Boolean{
+    	for (x in statusRail){
+    		if (x.get() == 0N)
+    			return false;
+    	}
+    	return true;
+    }
+    
+    private def isFialedCheckpointRestore(statusRail:Rail[AtomicInteger]):Boolean{
+    	for (x in statusRail){
+    		if (x.get() == 2N)
+    			return true;
+    	}
+    	return false;
+    }
+    
     
     class AppTempData{
         public var norm_r2:ElemType;

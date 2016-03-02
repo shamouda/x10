@@ -206,7 +206,7 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
         P.makeSnapshot_local("P", store);
         when (Gstatus.get() >= 0N && Ustatus.get() >=0);
         if (Gstatus.get() == 2N || Ustatus.get() == 2N)
-        	throw new Exception(here + "  failed to checkpoint readonly data ...");   
+        	throw new Exception(here + "  failed to checkpoint ...");   
     }
     
 
