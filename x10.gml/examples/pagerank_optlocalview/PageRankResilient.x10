@@ -176,24 +176,31 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
     	//using finish here causes deadlock!!!!!
     	val Gstatus = new AtomicInteger(0N);
     	val Ustatus = new AtomicInteger(0N);
-    	async {
-    		try{
-    		    G.makeSnapshot_local("G", readOnlyDataStore);
-    	  	    atomic Gstatus.set(1N);
-    		}catch(ex:Exception){
-    			ex.printStackTrace();
-    			atomic Gstatus.set(2N);
-    		}
-    	}
     	
-        async {
-        	try{
-        	    U.makeSnapshot_local("U", readOnlyDataStore);
-        	    atomic Ustatus.set(1N);
-        	}catch(ex:Exception){
-        		ex.printStackTrace();
-        		atomic Ustatus.set(2N);
+    	if (appTempDataPLH().iter == 0) {
+    		async {
+    			try{
+    		    	G.makeSnapshot_local("G", readOnlyDataStore);
+    	  	    	atomic Gstatus.set(1N);
+    			}catch(ex:Exception){
+    				ex.printStackTrace();
+    				atomic Gstatus.set(2N);
+    			}
+    		}
+    	
+        	async {
+        		try{
+        	    	U.makeSnapshot_local("U", readOnlyDataStore);
+        	    	atomic Ustatus.set(1N);
+        		}catch(ex:Exception){
+        			ex.printStackTrace();
+        			atomic Ustatus.set(2N);
+        		}
         	}
+        }
+        else {
+        	atomic Gstatus.set(1N);
+        	atomic Ustatus.set(1N);
         }
         
         P.makeSnapshot_local("P", store);
