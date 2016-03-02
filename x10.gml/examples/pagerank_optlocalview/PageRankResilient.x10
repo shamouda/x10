@@ -199,8 +199,8 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
         	}
         }
         else {
-        	atomic Gstatus.set(1N);
-        	atomic Ustatus.set(1N);
+        	Gstatus.set(1N);
+        	Ustatus.set(1N);
         }
         
         P.makeSnapshot_local("P", store);
