@@ -183,7 +183,7 @@ public class LocalViewResilientExecutorOpt {
         val root = here;
         val snapshots = (isResilient)?new Rail[DistObjectSnapshot](2, (i:Long)=>DistObjectSnapshot.make(places)):null;
         var tmpROSnapshot:DistObjectSnapshot = null;
-        if (createReadOnlyStore){
+        if (isResilient && createReadOnlyStore){
         	tmpROSnapshot = DistObjectSnapshot.make(places);
         }
         val readOnlySnapshot = tmpROSnapshot;
