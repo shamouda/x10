@@ -172,10 +172,10 @@ appTempDataPLH().localCompTime += Timer.milliTime();
     	        async {
 	                try{
 	                	switch(curIter){
-	                	    case 0: if (appTempDataPLH().iter == 0) V.makeSnapshot_local("V", readOnlyDataStore);
-	                	    case 1: d_p.makeSnapshot_local("d_p", store);
-	                	    case 2: d_q.makeSnapshot_local("d_q", store);
-	                	    case 3: d_r.makeSnapshot_local("d_r", store);
+	                	    case 0N: if (appTempDataPLH().iter == 0) V.makeSnapshot_local("V", readOnlyDataStore);
+	                	    case 1N: d_p.makeSnapshot_local("d_p", store);
+	                	    case 2N: d_q.makeSnapshot_local("d_q", store);
+	                	    case 3N: d_r.makeSnapshot_local("d_r", store);
 	                	}
 	            	    atomic statusRail(curIter).set(1N);
 	                }catch(ex:Exception){
@@ -199,10 +199,10 @@ appTempDataPLH().localCompTime += Timer.milliTime();
 	        async {
                 try{
                 	switch(curIter){
-                	    case 0: if (appTempDataPLH().iter == 0) V.restoreSnapshot_local("V", readOnlyDataStore);
-                	    case 1: d_p.restoreSnapshot_local("d_p", store);
-                	    case 2: d_q.restoreSnapshot_local("d_q", store);
-                	    case 3: d_r.restoreSnapshot_local("d_r", store);
+                	    case 0N: if (appTempDataPLH().iter == 0) V.restoreSnapshot_local("V", readOnlyDataStore);
+                	    case 1N: d_p.restoreSnapshot_local("d_p", store);
+                	    case 2N: d_q.restoreSnapshot_local("d_q", store);
+                	    case 3N: d_r.restoreSnapshot_local("d_r", store);
                 	}
             	    atomic statusRail(curIter).set(1N);
                 }catch(ex:Exception){
