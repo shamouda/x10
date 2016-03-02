@@ -172,10 +172,10 @@ appTempDataPLH().localCompTime += Timer.milliTime();
     	        async {
 	                try{
 	                	switch(curIter){
-	                	    case 0: if (appTempDataPLH().iter == 0) V.makeSnapshot_local(readOnlyDataStore);
-	                	    case 1: d_p.makeSnapshot_local(store);
-	                	    case 2: d_q.makeSnapshot_local(store);
-	                	    case 3: d_r.makeSnapshot_local(store);
+	                	    case 0: if (appTempDataPLH().iter == 0) V.makeSnapshot_local("V", readOnlyDataStore);
+	                	    case 1: d_p.makeSnapshot_local("d_p", store);
+	                	    case 2: d_q.makeSnapshot_local("d_q", store);
+	                	    case 3: d_r.makeSnapshot_local("d_r", store);
 	                	}
 	            	    atomic statusRail(curIter).set(1N);
 	                }catch(ex:Exception){
@@ -184,7 +184,7 @@ appTempDataPLH().localCompTime += Timer.milliTime();
 	                }
     	        }
     	    }
-            d_w.makeSnapshot_local(store);
+            d_w.makeSnapshot_local("d_w", store);
             appTempDataPLH().checkpointNorm = appTempDataPLH().norm_r2;
     	    when(isCompleteCheckpointRestore(statusRail));
     	    
@@ -199,10 +199,10 @@ appTempDataPLH().localCompTime += Timer.milliTime();
 	        async {
                 try{
                 	switch(curIter){
-                	    case 0: if (appTempDataPLH().iter == 0) V.restoreSnapshot_local(readOnlyDataStore);
-                	    case 1: d_p.restoreSnapshot_local(store);
-                	    case 2: d_q.restoreSnapshot_local(store);
-                	    case 3: d_r.restoreSnapshot_local(store);
+                	    case 0: if (appTempDataPLH().iter == 0) V.restoreSnapshot_local("V", readOnlyDataStore);
+                	    case 1: d_p.restoreSnapshot_local("d_p", store);
+                	    case 2: d_q.restoreSnapshot_local("d_q", store);
+                	    case 3: d_r.restoreSnapshot_local("d_r", store);
                 	}
             	    atomic statusRail(curIter).set(1N);
                 }catch(ex:Exception){
@@ -212,7 +212,7 @@ appTempDataPLH().localCompTime += Timer.milliTime();
 	        }
 	    }
 	    
-	    d_w.restoreSnapshot_local(store);
+	    d_w.restoreSnapshot_local("d_w", store);
 	    appTempDataPLH().iter = lastCheckpointIter;
         appTempDataPLH().norm_r2 = appTempDataPLH().checkpointNorm;
         
