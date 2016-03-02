@@ -199,7 +199,7 @@ appTempDataPLH().localCompTime += Timer.milliTime();
 	        async {
                 try{
                 	switch(curIter){
-                	    case 0N: if (appTempDataPLH().iter == 0) V.restoreSnapshot_local("V", readOnlyDataStore);
+                	    case 0N: V.restoreSnapshot_local("V", readOnlyDataStore);
                 	    case 1N: d_p.restoreSnapshot_local("d_p", store);
                 	    case 2N: d_q.restoreSnapshot_local("d_q", store);
                 	    case 3N: d_r.restoreSnapshot_local("d_r", store);
