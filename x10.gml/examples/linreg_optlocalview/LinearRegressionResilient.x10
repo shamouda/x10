@@ -127,8 +127,8 @@ appTempDataPLH().localCompTime += Timer.milliTime();
 
         //////Global view step:  d_q.mult(Vp.mult(V, d_p), V);
 appTempDataPLH().globalCompTime -= Timer.milliTime();
-        Vp.mult_local(V, d_p);
-        d_q.mult_local(root, Vp, V);
+        Vp.mult_local(V, d_p);  // no collectives
+        d_q.mult_local(root, Vp, V);   //Team.allReduce
 appTempDataPLH().globalCompTime += Timer.milliTime();
         
         // Replicated Computation at each place
@@ -230,23 +230,24 @@ appTempDataPLH().localCompTime += Timer.milliTime();
         val newRowPs = newPg.size();
         val newColPs = 1;
         //remake all the distributed data structures
-        if (nzd < MAX_SPARSE_DENSITY) {
-            V.remakeSparse(newRowPs, newColPs, nzd, newPg, newAddedPlaces);
-        } else {
-            V.remakeDense(newRowPs, newColPs, newPg, newAddedPlaces);
-        }
-        d_p.remake(newPg, newTeam, newAddedPlaces);
-        d_q.remake(newPg, newTeam, newAddedPlaces);
-        d_r.remake(newPg, newTeam, newAddedPlaces);
-        d_w.remake(newPg, newTeam, newAddedPlaces);
-        Vp.remake(V.getAggRowBs(), newPg, newTeam, newAddedPlaces);
+        finish {
+        	if (nzd < MAX_SPARSE_DENSITY) {
+        		async V.remakeSparse(newRowPs, newColPs, nzd, newPg, newAddedPlaces);
+        	} else {
+        		async V.remakeDense(newRowPs, newColPs, newPg, newAddedPlaces);
+        	}
+        	async d_p.remake(newPg, newTeam, newAddedPlaces);
+        	async d_q.remake(newPg, newTeam, newAddedPlaces);
+        	async d_r.remake(newPg, newTeam, newAddedPlaces);
+        	async d_w.remake(newPg, newTeam, newAddedPlaces);
+        	async Vp.remake(V.getAggRowBs(), newPg, newTeam, newAddedPlaces);
     
-        val checkpointNorm = appTempDataPLH().checkpointNorm;
-        for (sparePlace in newAddedPlaces){
-            Console.OUT.println("Adding place["+sparePlace+"] to appTempDataPLH ...");
-            PlaceLocalHandle.addPlace[AppTempData](appTempDataPLH, sparePlace, ()=>new AppTempData(checkpointNorm));
-        } 
-        
+        	val checkpointNorm = appTempDataPLH().checkpointNorm;
+        	for (sparePlace in newAddedPlaces){
+        		Console.OUT.println("Adding place["+sparePlace+"] to appTempDataPLH ...");
+        		PlaceLocalHandle.addPlace[AppTempData](appTempDataPLH, sparePlace, ()=>new AppTempData(checkpointNorm));
+        	}	 
+        }
         Console.OUT.println("Restore succeeded. Restarting from iteration["+appTempDataPLH().iter+"] norm["+appTempDataPLH().norm_r2+"] ...");
     }    
     
