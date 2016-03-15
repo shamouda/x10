@@ -158,16 +158,16 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
     }
 
     public def step_local():void {
-        GP.mult_local(G, P);
-        GP.scale_local(alpha);
+        GP.mult_local(G, P);    //no collectives
+        GP.scale_local(alpha);  // no collectives
     
-        val teleport = U.dot_local(P) * (1-alpha);
+        val teleport = U.dot_local(P) * (1-alpha);   //team.allReduce
         
-        GP.copyTo(root, P.local());     
+        GP.copyTo(root, P.local());  //team.gatherv     
         if (here.id == root.id)
             P.local().cellAdd(teleport);
 
-        P.sync_local(root);
+        P.sync_local(root); //team.bcast
 
         appTempDataPLH().iter++;
     }
@@ -216,16 +216,17 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
         val newRowPs = newGroup.size();
         val newColPs = 1;
         Console.OUT.println("Going to restore PageRank app, newRowPs["+newRowPs+"], newColPs["+newColPs+"] ...");
-        G.remakeSparse(newRowPs, newColPs, nzd, newGroup, newAddedPlaces);	
-        U.remake(G.getAggRowBs(), newGroup, newTeam, newAddedPlaces);
-        P.remake(newGroup, newTeam, newAddedPlaces);
-
-        GP.remake(G.getAggRowBs(), newGroup, newTeam, newAddedPlaces);
+        finish{
+        	async G.remakeSparse(newRowPs, newColPs, nzd, newGroup, newAddedPlaces);	
+        	async U.remake(G.getAggRowBs(), newGroup, newTeam, newAddedPlaces);
+        	async P.remake(newGroup, newTeam, newAddedPlaces);
+        	async GP.remake(G.getAggRowBs(), newGroup, newTeam, newAddedPlaces);
         
-        for (sparePlace in newAddedPlaces){
-            Console.OUT.println("Adding place["+sparePlace+"] to appTempDataPLH ...");
-            PlaceLocalHandle.addPlace[AppTempData](appTempDataPLH, sparePlace, ()=>new AppTempData());
-        }    
+        	for (sparePlace in newAddedPlaces){
+        		Console.OUT.println("Adding place["+sparePlace+"] to appTempDataPLH ...");
+        		PlaceLocalHandle.addPlace[AppTempData](appTempDataPLH, sparePlace, ()=>new AppTempData());
+        	}    
+        }
         Console.OUT.println("Remake succeeded. ...");
     }
     
