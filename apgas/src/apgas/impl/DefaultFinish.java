@@ -11,16 +11,12 @@
 
 package apgas.impl;
 
-import java.io.IOException;
-import java.io.ObjectOutputStream;
-import java.io.ObjectStreamException;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 import apgas.SerializableJob;
-import apgas.util.ByRef;
 import apgas.util.GlobalID;
 
 /**
@@ -47,8 +43,7 @@ import apgas.util.GlobalID;
  * <p>
  * The finish body counts as one local task.
  */
-final class DefaultFinish
-    implements Serializable, Finish, ByRef<DefaultFinish> {
+final class DefaultFinish implements Serializable, Finish {
   private static final long serialVersionUID = 3789869778188598267L;
 
   /**
@@ -232,7 +227,7 @@ final class DefaultFinish
       spawn(id.home.id);
       new Task(this, (SerializableJob) () -> {
         that.addSuppressed(t.t);
-      }, here).asyncat(id.home.id);
+      }, here).asyncAt(id.home.id);
     }
   }
 
@@ -270,18 +265,25 @@ final class DefaultFinish
     counts = tmp;
   }
 
-  @Override
-  public synchronized GlobalID id() {
+  /**
+   * Prepares the finish object for serialization.
+   * 
+   * @return this
+   */
+  public synchronized Object writeReplace() {
     if (id == null) {
       id = new GlobalID();
       id.putHere(this);
     }
-    return id;
+    return this;
   }
 
-  @Override
-  public DefaultFinish resolve(GlobalID id) {
-    this.id = id;
+  /**
+   * Deserializes the finish object.
+   *
+   * @return the finish object
+   */
+  public Object readResolve() {
     // count = 0;
     DefaultFinish me = (DefaultFinish) id.putHereIfAbsent(this);
     if (me == null) {
@@ -294,29 +296,5 @@ final class DefaultFinish
       }
       return me;
     }
-  }
-
-  /**
-   * Serializes the finish object.
-   *
-   * @param out
-   *          the object output stream
-   * @throws IOException
-   *           if I/O errors occur
-   */
-  private void writeObject(ObjectOutputStream out) throws IOException {
-    id();
-    out.defaultWriteObject();
-  }
-
-  /**
-   * Deserializes the finish object.
-   *
-   * @return the finish object
-   * @throws ObjectStreamException
-   *           if an error occurs
-   */
-  private Object readResolve() throws ObjectStreamException {
-    return resolve(id);
   }
 }
