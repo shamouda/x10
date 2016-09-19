@@ -2323,10 +2323,9 @@ static void team_new_recv (const x10rt_msg_params *p)
 void send_team_new (x10rt_team teamc, x10rt_team *teamv, x10rt_place placec, x10rt_place *placev,
 		x10rt_remote_ptr ch_, x10rt_remote_ptr arg_)
 {
-    X10RT_NET_DEBUG("called: teamc=%d placec=%d", teamc, placec);
 
     x10rt_place home = x10rt_net_here();
-
+    X10RT_NET_DEBUG("called: teamc=%d placec=%d  :  nhosts=%d  ndead=%d", teamc, placec, x10rt_net_nhosts(), x10rt_net_ndead());
     CounterWithLock *counter = new_counter(x10rt_net_nhosts()-x10rt_net_ndead());
     x10rt_remote_ptr counter_ = reinterpret_cast<x10rt_remote_ptr>(counter);
 
