@@ -95,34 +95,35 @@ public class LinearRegressionResilient implements LocalViewResilientIterativeApp
         appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData(0));
         val implicitBarrier = true;
         val createReadOnlyStore = true;
+        
+        init();
+        
         new LocalViewResilientExecutorOpt(checkpointFreq, places, implicitBarrier, createReadOnlyStore).run(this, start);
+        
         return d_w.local();
+    }
+    
+    public def init() {
+    	val places = V.places();
+        finish ateach(Dist.makeUnique(places)) {
+        	team.barrier();
+            
+        	d_r.mult_local(root, y, V);        
+        	            
+        	val r = d_r.local(); 
+
+        	// 5: p=-r
+        	r.copyTo(d_p.local());
+        	// 4: r=-(t(V) %*% y)
+        	r.scale(-1.0 as ElemType);
+        	// 6: norm_r2=sum(r*r)
+        	appTempDataPLH().norm_r2 = r.dot(r);            
+        }	
     }
     
     public def getResult() = d_w.local();
     
     public def step_local() {
-        // Parallel computing
-        if (appTempDataPLH().iter == 0) {
-            team.barrier();
-            
-appTempDataPLH().globalCompTime -= Timer.milliTime();
-            d_r.mult_local(root, y, V);        
-appTempDataPLH().globalCompTime += Timer.milliTime();
-            
-appTempDataPLH().localCompTime -= Timer.milliTime();
-            val r = d_r.local(); 
-        
-            // 5: p=-r
-            r.copyTo(d_p.local());
-            // 4: r=-(t(V) %*% y)
-            r.scale(-1.0 as ElemType);
-            // 6: norm_r2=sum(r*r)
-            appTempDataPLH().norm_r2 = r.dot(r);
-            
-appTempDataPLH().localCompTime += Timer.milliTime();
-        }
-
         // 10: q=((t(V) %*% (V %*% p)) )
 
         //////Global view step:  d_q.mult(Vp.mult(V, d_p), V);

@@ -96,11 +96,10 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
         
     }
 
-    public static def make(gN:Long, nzd:Float, it:Long, numRowBs:Long, numColBs:Long, chkpntIter:Long, places:PlaceGroup) {
+    public static def make(gN:Long, nzd:Float, it:Long, numRowBs:Long, numColBs:Long, chkpntIter:Long, places:PlaceGroup, team:Team) {
         //---- Distribution---
         val numRowPs = places.size();
         val numColPs = 1;
-        val team = new Team(places);
         
         val g = DistBlockMatrix.makeSparse(gN, gN, numRowBs, numColBs, numRowPs, numColPs, nzd, places);
         val p = DupVector.make(gN, places, team);
@@ -133,7 +132,7 @@ public class PageRankResilient implements LocalViewResilientIterativeAppOpt {
         val places = G.places();
         val implicitBarrier = true;
         val createReadOnlyStore = true;
-        new LocalViewResilientExecutorOpt(chkpntIterations, places, implicitBarrier, createReadOnlyStore).run(this, start);
+        new LocalViewResilientExecutorOpt(chkpntIterations, places, implicitBarrier, createReadOnlyStore, team).run(this, start);
         
         return P.local();
     }
