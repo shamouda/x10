@@ -1557,7 +1557,7 @@ static bool x10rt_net_probe_ex (bool network_only) {
         		MPI_ANY_TAG, global_state.mpi_comm,
         		&arrived, &msg_status);
         		                
-        X10RT_NET_DEBUG("MPI_Iprobe Place[%d]  mpi_error=[%d]\n", x10rt_net_here(), mpi_error);
+        //X10RT_NET_DEBUG("MPI_Iprobe Place[%d]  mpi_error=[%d]\n", x10rt_net_here(), mpi_error);
         
 
 #ifdef OPEN_MPI_ULFM
@@ -3882,6 +3882,7 @@ void mpiErrorHandler(MPI_Comm * comm, int *errorCode, ...){
     int factor =1;
     int *failed_ranks = NULL;
     int *comm_ranks   = NULL;
+    int *old_new_combined   = NULL;
 
     MPI_Group_size(failedGroup, &f_size);
 
@@ -3890,14 +3891,35 @@ void mpiErrorHandler(MPI_Comm * comm, int *errorCode, ...){
 
         failed_ranks = (int *)malloc(f_size * sizeof(int));
         comm_ranks   = (int *)malloc(f_size * sizeof(int));
+        old_new_combined = (int *)malloc( (global_state.deadPlacesSize+f_size) * sizeof(int));
         for(int i = 0; i < f_size; ++i) {
             failed_ranks[i] = i;
         }
         MPI_Group_translate_ranks(failedGroup, f_size, failed_ranks, comm_group, comm_ranks);
-
+        
+        int local_ndead = 0;
+        for(int i = 0; i < global_state.deadPlacesSize; ++i) {
+        	old_new_combined[local_ndead++] = global_state.deadPlaces[i];        	
+        }
+        
+        for(int i = 0; i < f_size; ++i) {
+        	bool found = false;
+        	for(int j = 0; j < global_state.deadPlacesSize; ++j) {
+        		if (global_state.deadPlaces[j] == comm_ranks[i]) {
+        			found = true;
+        			break;
+        		}
+        	}
+        	if (!found) {
+        		old_new_combined[local_ndead++] = comm_ranks[i];
+        	}
+        }
+        
+        
         free(global_state.deadPlaces);
-        global_state.deadPlaces = comm_ranks;
-        global_state.deadPlacesSize = f_size;
+        free(comm_ranks);
+        global_state.deadPlaces = old_new_combined;
+        global_state.deadPlacesSize = local_ndead;
         
         X10RT_NET_DEBUG("InsideErrorHandler  Place[%d]  ndead=[%d]\n", x10rt_net_here(), global_state.deadPlacesSize);
         
