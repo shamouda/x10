@@ -1556,6 +1556,9 @@ static bool x10rt_net_probe_ex (bool network_only) {
         int mpi_error = MPI_Iprobe(MPI_ANY_SOURCE,
         		MPI_ANY_TAG, global_state.mpi_comm,
         		&arrived, &msg_status);
+        		                
+        X10RT_NET_DEBUG("MPI_Iprobe Place[%d]  mpi_error=[%d]\n", x10rt_net_here(), mpi_error);
+        
 
 #ifdef OPEN_MPI_ULFM
 		if (MPI_SUCCESS != mpi_error) {
@@ -3895,7 +3898,9 @@ void mpiErrorHandler(MPI_Comm * comm, int *errorCode, ...){
         free(global_state.deadPlaces);
         global_state.deadPlaces = comm_ranks;
         global_state.deadPlacesSize = f_size;
-
+        
+        X10RT_NET_DEBUG("InsideErrorHandler  Place[%d]  ndead=[%d]\n", x10rt_net_here(), global_state.deadPlacesSize);
+        
         free(failed_ranks);
         MPI_Group_free(&comm_group);
     }
