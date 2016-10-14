@@ -1871,7 +1871,7 @@ private:
             MPI_Errhandler customErrorHandler;
             if (resilientmode && atoi(resilientmode) > 0){
             	X10RT_NET_DEBUG("%s", "pre shrink");
-                OMPI_Comm_shrink(MPI_COMM_WORLD, &shrunken);
+                MPIX_Comm_shrink(MPI_COMM_WORLD, &shrunken);
                 X10RT_NET_DEBUG("%s", "pro shrink");
                 MPI_Comm_create_errhandler(mpiErrorHandler, &customErrorHandler);
                 MPI_Comm_set_errhandler(shrunken, customErrorHandler);
@@ -2234,9 +2234,13 @@ static CounterWithLock *new_counter(int count) {
 }
 
 static void decrement_counter(CounterWithLock *c) {
+	X10RT_NET_DEBUG("%s", "getting lock");
 	get_lock(&c->lock);
+	X10RT_NET_DEBUG("%s", "getting lock succeeded");
 	c->counter--;
+	X10RT_NET_DEBUG("%s", "releasing lock");
 	release_lock(&c->lock);
+	X10RT_NET_DEBUG("%s", "releasing lock succeeded");
 }
 
 static void destroy_counter(CounterWithLock *c) {
@@ -3016,7 +3020,7 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
 #define MPI_AGREEMENT_COLLECTIVE(name, iname, ...) \
     CollectivePostprocessEnv cpe; \
     do { LOCK_IF_MPI_IS_NOT_MULTITHREADED; \
-        cpe.mpiError = OMPI_Comm_agree(__VA_ARGS__); \
+        cpe.mpiError = MPIX_Comm_agree(__VA_ARGS__); \
         if (MPI_SUCCESS != cpe.mpiError && !is_process_failure_error(cpe.mpiError)) { \
             fprintf(stderr, "[%s:%d] %s\n", \
                     __FILE__, __LINE__, "Error in MPI_" #name); \
@@ -3874,8 +3878,8 @@ void mpiErrorHandler(MPI_Comm * comm, int *errorCode, ...){
 
     MPI_Group failedGroup;
 
-    OMPI_Comm_failure_ack(*comm);
-    OMPI_Comm_failure_get_acked(*comm, &failedGroup);
+    MPIX_Comm_failure_ack(*comm);
+    MPIX_Comm_failure_get_acked(*comm, &failedGroup);
     int f_size;
     MPI_Group comm_group;
     int x = 0;
