@@ -1124,6 +1124,26 @@ public struct Team {
             val sleepUntil = (condition:() => Boolean) => @NoInline {
                 if (!condition() && Team.state(teamidcopy).isValid) {
                     Runtime.increaseParallelism();
+                    var str:String = "";
+                    if (Team.state(teamidcopy).local_parentIndex > -1) {
+                    	str += "parent["+(Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex))+"] dead=";
+                    	str += Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex).isDead();
+                    	str += " ; "
+                    }
+                    
+                    if (Team.state(teamidcopy).local_child1Index > -1) {
+                    	str += "ch1["+(Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index ))+"] dead=";
+                    	str += Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index).isDead();
+                    	str += " ; "
+                    }                    
+                    
+                    if (Team.state(teamidcopy).local_child2Index > -1) {
+                    	str += "ch2["+(Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index ))+"] dead=";
+                    	str += Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index).isDead();
+                    	str += " ; "
+                    }
+                    Console.OUT.println(here + " ==> " + str);
+                    
                     while (!condition() && Team.state(teamidcopy).isValid) {
                         // look for dead neighboring places
                         if (Team.state(teamidcopy).local_parentIndex > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex).isDead()) {
