@@ -1107,6 +1107,24 @@ public struct Team {
             if (DEBUGINTERNALS) Runtime.println(here + " leaving init phase");
         }
         
+        
+        private static def checkConnectivity(other:Place) {        	
+        	try{
+        		val x = at (other) {
+        			if (here.id == 5)
+        			    Console.OUT.println("I am still alive " + here);
+        			5
+        		};
+        		
+        		if (here.id == 4)
+        		    Runtime.println(here + " - check connectivity with place: " + other + "   x=" + x);
+        		
+        		return true;
+        	}catch(ex:Exception) {
+        		ex.printStackTrace();
+        		return false;
+        	}
+        }
         /*
          * This method contains the implementation for all collectives.  Some arguments are only valid
          * for specific collectives.
@@ -1126,24 +1144,25 @@ public struct Team {
                     Runtime.increaseParallelism();
                     var str:String = "";
                     if (Team.state(teamidcopy).local_parentIndex > -1) {
-                    	str += "parent["+(Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex))+"] dead=";
-                    	str += Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex).isDead();
-                    	str += " ; "
+                    	str += "parent[" + (Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex))+"] dead=" ;
+                    	str += Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex).isDead() ;
+                    	str += " ; ";
                     }
                     
                     if (Team.state(teamidcopy).local_child1Index > -1) {
                     	str += "ch1["+(Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index ))+"] dead=";
                     	str += Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index).isDead();
-                    	str += " ; "
+                    	str += " ; ";
                     }                    
                     
                     if (Team.state(teamidcopy).local_child2Index > -1) {
                     	str += "ch2["+(Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index ))+"] dead=";
                     	str += Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index).isDead();
-                    	str += " ; "
+                    	str += " ; ";
                     }
                     Console.OUT.println(here + " ==> " + str);
                     
+                    var count:Long = 0;
                     while (!condition() && Team.state(teamidcopy).isValid) {
                         // look for dead neighboring places
                         if (Team.state(teamidcopy).local_parentIndex > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex).isDead()) {
@@ -1160,6 +1179,23 @@ public struct Team {
                         }
                         else
                             System.threadSleep(0); // release the CPU to more productive pursuits
+                        
+                        count++;
+                        
+                        if (count % 10000 == 0) {
+                        	if ( Team.state(teamidcopy).local_parentIndex > -1 && !checkConnectivity(Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex))) {
+                                Team.state(teamidcopy).isValid = false;
+                                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex)+" is dead!");
+                            }
+                            else if (Team.state(teamidcopy).local_child1Index > -1 && !checkConnectivity(Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index)) ) {
+                                Team.state(teamidcopy).isValid = false;
+                                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index)+" is dead!");
+                            }
+                            else if (Team.state(teamidcopy).local_child2Index > -1 && !checkConnectivity(Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index)) ) {
+                                Team.state(teamidcopy).isValid = false;
+                                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index)+" is dead!");
+                            }
+                        }
                     }
                     Runtime.decreaseParallelism(1n);
                 }
