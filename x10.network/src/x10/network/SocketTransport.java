@@ -44,7 +44,9 @@ import x10.network.NetworkTransportCallbacks.compressionCodec;
  * Implementation of JavaSockets transport
  */
 public class SocketTransport {
-	private static final boolean DEBUG = false;
+	private static final boolean DEBUG = (System.getenv("SOCK_DEBUG") != null 
+    		&& System.getenv("SOCK_DEBUG").equals("1"));
+	
 	public static final String X10_FORCEPORTS = "X10_FORCEPORTS";
 	public static final String X10_LAUNCHER_PLACE = "X10_LAUNCHER_PLACE";
 	public static final String X10_NPLACES = "X10_NPLACES";
