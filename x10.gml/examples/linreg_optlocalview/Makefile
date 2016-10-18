@@ -23,8 +23,11 @@ depend_src  = SeqLinearRegression.x10 LinearRegressionResilient.x10
 build_path	= build
 gml_path    = $(X10_HOME)/x10.gml
 
+DATASTORE_SRC_FOLDER=../../../../DS2016_localstore/src
+#DATASTORE_SRC_FOLDER=../../../../x10-resilient-store/src
+
 # compile options
-X10_FLAG	= -d $(build_path) -report postcompile=2 -v -errors 5 -VERBOSE_CHECKS -g -O -NO_CHECKS
+X10_FLAG	= -sourcepath $(DATASTORE_SRC_FOLDER) -d $(build_path) -report postcompile=2 -v -errors 5 -VERBOSE_CHECKS -g -O -NO_CHECKS
 
 # runtime settings
 runtime_list = native java
