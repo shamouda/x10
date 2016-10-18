@@ -14,6 +14,8 @@ package x10.util.resilient.iterative;
 import x10.util.HashMap;
 import x10.util.Timer;
 import x10.xrx.Runtime;
+import x10.util.resilient.localstore.Cloneable;
+
 
 /**
  * A distributed snapshot of an object, which can be used to restore the
@@ -117,7 +119,7 @@ public abstract class DistObjectSnapshot {
                 val copiedValue = Runtime.deepCopy(value);
                 atomic { hm().put(key, copiedValue ); }
             } else if (localCopy.equals("clone")) {
-                val copiedValue = (value as Snapshot).clone();
+                val copiedValue = (value as Cloneable).clone();
                 atomic { hm().put(key, copiedValue); }
             } else {
                 throw new Exception("unknown local copy mode");
@@ -147,7 +149,7 @@ public abstract class DistObjectSnapshot {
             } else if (localCopy.equals("clone")) {
                 var v:Any;
                 atomic { v = hm().getOrThrow(key); }
-                return (v as Snapshot).clone();
+                return (v as Cloneable).clone();
             } else {
                 throw new Exception("unknown local copy mode");
             }
@@ -284,7 +286,7 @@ public abstract class DistObjectSnapshot {
                 atomic { hm().put(key, copiedValue); }
             }                    
             else if (localCopy.equals("clone")) {
-                val copiedValue = (value as Snapshot).clone();
+                val copiedValue = (value as Cloneable).clone();
                 atomic { hm().put(key, copiedValue); }
             }
             else
@@ -314,7 +316,7 @@ public abstract class DistObjectSnapshot {
             } else if (localCopy.equals("clone")) {
                 var v:Any;
                 atomic { v = hm().getOrThrow(key); }
-                return (v as Snapshot).clone();
+                return (v as Cloneable).clone();
             } else {
                 throw new Exception("unknown local copy mode");
             }

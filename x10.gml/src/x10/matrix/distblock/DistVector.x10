@@ -34,6 +34,7 @@ import x10.util.resilient.VectorSnapshotInfo;
 
 import x10.util.RailUtils;
 import x10.util.Team;
+import x10.util.resilient.localstore.Cloneable;
 
 public type DistVector(m:Long)=DistVector{self.M==m};
 public type DistVector(v:DistVector)=DistVector{self==v};

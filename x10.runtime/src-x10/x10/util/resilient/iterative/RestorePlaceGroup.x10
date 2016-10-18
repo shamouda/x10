@@ -9,14 +9,19 @@
  *  (C) Copyright IBM Corporation 2006-2016.
  *  (C) Copyright Sara Salem Hamouda 2014-2016.
  */
+
 package x10.util.resilient.iterative;
 
-import x10.util.HashMap;
+import x10.util.ArrayList;
 
 /**
- * A snapshot of an object, providing methods to copy objects locally and remotely.
+ * A utility class to represent a restored place group
  */
-public interface Snapshot {
-    public abstract def remoteCopyAndSave(key:Any, hm:PlaceLocalHandle[HashMap[Any,Any]], backupPlace:Place):void;
-    public abstract def remoteClone(targetPlace:Place):GlobalRef[Any]{self.home==targetPlace};
+public class RestorePlaceGroup {
+    public val newGroup:PlaceGroup;
+    public val newAddedPlaces:ArrayList[Place];
+    public def this(g:PlaceGroup, n:ArrayList[Place]){
+        this.newGroup = g;
+        this.newAddedPlaces = n;
+    }
 }

@@ -14,12 +14,13 @@ package x10.util.resilient;
 import x10.util.HashMap;
 import x10.matrix.ElemType;
 import x10.util.resilient.iterative.Snapshot;
+import x10.util.resilient.localstore.Cloneable;
 
-public class VectorSnapshotInfo(placeIndex:Long, data:Rail[ElemType]{self!=null}) implements Snapshot {
+public class VectorSnapshotInfo(placeIndex:Long, data:Rail[ElemType]{self!=null}) implements Snapshot, Cloneable {
     private static val DEBUG_DATA_SIZE:Boolean = (System.getenv("X10_GML_DEBUG_DATA_SIZE") != null 
  												&& System.getenv("X10_GML_DEBUG_DATA_SIZE").equals("1"));
 
-    public def clone():Any {  
+    public def clone():Cloneable {  
         return new VectorSnapshotInfo(placeIndex, new Rail[ElemType](data));
     }
     

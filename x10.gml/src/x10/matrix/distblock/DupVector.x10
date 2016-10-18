@@ -28,6 +28,7 @@ import x10.util.resilient.VectorSnapshotInfo;
 
 import x10.util.Team;
 import x10.util.ArrayList;
+import x10.util.resilient.localstore.Cloneable;
 
 public type DupVector(m:Long)=DupVector{self.M==m};
 public type DupVector(v:DupVector)=DupVector{self==v};
@@ -559,6 +560,20 @@ public class DupVector(M:Long) implements Snapshottable {
     /*
      * Snapshot mechanism
      */
+    
+    public def getCheckpoint_local():Cloneable {
+    	val data = dupV().vec.d;
+        val placeIndex = dupV().placeIndex;
+        return new VectorSnapshotInfo(placeIndex, data) as Cloneable;
+    }
+    
+    public def restore_local(vec:Cloneable) {
+        val vecInfo = vec as VectorSnapshotInfo;	
+    	val srcRail = vecInfo.data;
+        val dstRail = dupV().vec.d;
+        Rail.copy(srcRail, 0, dstRail, 0, srcRail.size);        
+    }
+    
     private transient val DUMMY_KEY:Long = 8888L;
 
     /**

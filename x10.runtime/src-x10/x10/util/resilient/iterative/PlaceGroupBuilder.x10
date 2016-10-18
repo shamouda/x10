@@ -19,7 +19,7 @@ import x10.util.ArrayList;
  */
 public class PlaceGroupBuilder {
 
-    static val mode = getEnvLong("X10_PLACE_GROUP_RESTORE_MODE", RESTORE_MODE_SHRINK);
+    static val mode = getEnvLong("X10_PLACE_GROUP_RESTORE_MODE", RESTORE_MODE_REPLACE_REDUNDANT);
     private static val VERBOSE = (System.getenv("DEBUG_RESILIENT_EXECUTOR") != null 
                           && System.getenv("DEBUG_RESILIENT_EXECUTOR").equals("1"));
     
@@ -88,7 +88,7 @@ public class PlaceGroupBuilder {
         return new RestorePlaceGroup(new SparsePlaceGroup(group.toRail()), addedSparePlaces);        
     }
 
-    public static def execludeSparePlaces(sparePlaces:Long):PlaceGroup {
+    public static def excludeSparePlaces(sparePlaces:Long):PlaceGroup {
         val livePlaces = new x10.util.ArrayList[Place]();
         val allPlaces = Place.places();
         val inPlacesCount = allPlaces.size() - sparePlaces;
@@ -99,7 +99,7 @@ public class PlaceGroupBuilder {
         return placeGroup;
     }
     
-    public static def execludePlace(placeId:Long):PlaceGroup {
+    public static def excludePlace(placeId:Long):PlaceGroup {
         val livePlaces = new x10.util.ArrayList[Place]();
         val allPlaces = Place.places();
         for (var i:Long = 0; i < Place.numPlaces(); i++){
@@ -108,14 +108,5 @@ public class PlaceGroupBuilder {
         }
         var placeGroup:SparsePlaceGroup = new SparsePlaceGroup(livePlaces.toRail());
         return placeGroup;
-    }
-}
-
-class RestorePlaceGroup {
-    val newGroup:PlaceGroup;
-    val newAddedPlaces:ArrayList[Place];
-    public def this(g:PlaceGroup, n:ArrayList[Place]){
-        this.newGroup = g;
-        this.newAddedPlaces = n;
     }
 }

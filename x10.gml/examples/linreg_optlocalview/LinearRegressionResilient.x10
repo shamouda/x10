@@ -10,6 +10,7 @@
  *  (C) Copyright Sara Salem Hamouda 2014-2016.
  */
 import x10.matrix.Vector;
+
 import x10.matrix.ElemType;
 import x10.regionarray.Dist;
 import x10.util.Timer;
@@ -27,11 +28,18 @@ import x10.util.resilient.iterative.DistObjectSnapshot;
 
 import x10.util.Team;
 import x10.util.concurrent.AtomicInteger;
+
+import x10.util.resilient.localstore.SPMDResilientIterativeExecutorULFM;
+import x10.util.resilient.localstore.SPMDResilientIterativeExecutor;
+import x10.util.resilient.localstore.SPMDResilientIterativeApp;
+import x10.util.resilient.localstore.ResilientStore;
+import x10.util.resilient.localstore.Cloneable;
+
 /**
  * Parallel linear regression based on GML distributed
  * dense/sparse matrix
  */
-public class LinearRegressionResilient implements LocalViewResilientIterativeAppOpt {
+public class LinearRegressionResilient implements SPMDResilientIterativeApp {
     public static val MAX_SPARSE_DENSITY = 0.1f;
     static val lambda = 1e-6 as Float; // regularization parameter
     
