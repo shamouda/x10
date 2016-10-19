@@ -24,12 +24,14 @@ import x10.matrix.distblock.DistVector;
 import x10.matrix.regression.RegressionInputData;
 import x10.matrix.util.Debug;
 import x10.matrix.util.MathTool;
-import x10.util.resilient.iterative.PlaceGroupBuilder;
 import x10.util.Team;
+import x10.util.resilient.localstore.ResilientStore;
 
 /**
  * Test harness for Linear Regression using GML
  */
+//Resilient run command over MPI-ULFM
+//LINREG_DEBUG=1 KILL_STEPS=25 KILL_PLACES=5 DISABLE_ULFM_AGREEMENT=1 EXECUTOR_DEBUG=1 X10_RESILIENT_MODE=1 mpirun -n 9 -am ft-enable-mpi ./RunLinReg_mpi_double -m 1000 -n 1000 --density 1.0 --iterations 30 --verify -k 10 -s 1
 public class RunLinReg {
 
     public static def main(args:Rail[String]): void {
@@ -88,10 +90,15 @@ public class RunLinReg {
         }
         
         val startTime = Timer.milliTime();
-        
-        val places = (sparePlaces==0n) ? Place.places() 
-                                      : PlaceGroupBuilder.excludeSparePlaces(sparePlaces);
-        val team = new Team(places);
+        var resilientStore:ResilientStore = null;
+        var placesVar:PlaceGroup = Place.places();
+        var team:Team = Team.WORLD;
+        if (x10.xrx.Runtime.RESILIENT_MODE > 0 && sparePlaces > 0) {
+        	resilientStore = ResilientStore.make(sparePlaces);
+        	placesVar = resilientStore.getActivePlaces();
+        	team = new Team(placesVar);
+        }        
+        val places = placesVar;
         
         val rowBlocks = opts("r", places.size());
         val colBlocks = opts("c", 1);
@@ -153,7 +160,7 @@ public class RunLinReg {
         val checkpointFrequency = opts("checkpointFreq", -1n);
 
         val parLR = new LinearRegression(X, y, iterations, checkpointFrequency,
-                                         nonzeroDensity, regularization, places, team);
+                                         nonzeroDensity, regularization, places, team, resilientStore);
 
         var localX:DenseMatrix(M, N) = null;
         var localY:Vector(M) = null;
