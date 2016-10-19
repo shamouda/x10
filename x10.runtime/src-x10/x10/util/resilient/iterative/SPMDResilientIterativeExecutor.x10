@@ -10,10 +10,9 @@
  *  (C) Copyright Sara Salem Hamouda 2014-2016.
  */
 
-package x10.util.resilient.localstore;
+package x10.util.resilient.iterative;
 
 import x10.util.Timer;
-
 import x10.util.Random;
 import x10.regionarray.Dist;
 import x10.util.ArrayList;
@@ -23,6 +22,7 @@ import x10.util.Team;
 import x10.util.GrowableRail;
 import x10.util.RailUtils;
 import x10.xrx.Runtime;
+import x10.util.resilient.localstore.*;
 /*
  * TODO:
  * -> maximum retry for restore failures
@@ -59,16 +59,22 @@ public class SPMDResilientIterativeExecutor {
     private var lastCkptIter:Long = -1;
     
     public def this(itersPerCheckpoint:Long, resilientMap:ResilientStore, implicitStepSynchronization:Boolean) {
-        this.resilientMap = resilientMap;
         this.itersPerCheckpoint = itersPerCheckpoint;
         this.implicitStepSynchronization = implicitStepSynchronization;
-        this.simplePlaceHammer = new SimplePlaceHammer(HAMMER_STEPS, HAMMER_PLACES);
-        if (itersPerCheckpoint > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0) {
+        if (itersPerCheckpoint > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0 && resilientMap != null) {
             isResilient = true;            
+            this.resilientMap = resilientMap;
+            this.simplePlaceHammer = new SimplePlaceHammer(HAMMER_STEPS, HAMMER_PLACES);
+            places = resilientMap.getActivePlaces();
             if (VERBOSE){
                 Console.OUT.println("HAMMER_STEPS="+HAMMER_STEPS);
                 Console.OUT.println("HAMMER_PLACES="+HAMMER_PLACES);
             }
+        }
+        else {        	            
+            this.resilientMap = null;
+            this.simplePlaceHammer = null;
+            places = Place.places();
         }
     }
 
@@ -82,7 +88,6 @@ public class SPMDResilientIterativeExecutor {
         this.startRunTime = startRunTime;
         Console.OUT.println("SPMDResilientIterativeExecutor: Application start time ["+startRunTime+"] ...");
         val root = here;
-        places = resilientMap.getActivePlaces();
         team = new Team(places);
         placeTempData = PlaceLocalHandle.make[PlaceTempData](places, ()=>new PlaceTempData());
         var tmpGlobalIter:Long = 0;        
@@ -113,7 +118,7 @@ public class SPMDResilientIterativeExecutor {
                 val ckptVersion = lastCkptVersion;
                 val globalIter = tmpGlobalIter;
                 
-                Console.OUT.println("LocalViewResilientExecutor: remakeRequired["+remakeRequired+"] restoreRequired["+restoreRequired+"] ...");           
+                Console.OUT.println("SPMDResilientIterativeExecutor: remakeRequired["+remakeRequired+"] restoreRequired["+restoreRequired+"] ...");           
                 finish ateach(Dist.makeUnique(places)) {
                     placeTempData().globalIter = globalIter;
                     
@@ -219,7 +224,7 @@ public class SPMDResilientIterativeExecutor {
         
         restoreRequired = true;
         remakeTimes.add(Timer.milliTime() - startRemake) ;                        
-        Console.OUT.println("LocalViewResilientExecutor: All remake steps completed successfully lastCkptVersion=["+lastCkptVersion+"]...");
+        Console.OUT.println("SPMDResilientIterativeExecutor: All remake steps completed successfully lastCkptVersion=["+lastCkptVersion+"]...");
         return restoreRequired;
     }
     

@@ -10,7 +10,7 @@
  *  (C) Copyright Sara Salem Hamouda 2014-2016.
  */
 
-package x10.util.resilient.localstore;
+package x10.util.resilient.iterative;
 
 import x10.util.Timer;
 
@@ -23,6 +23,8 @@ import x10.util.Team;
 import x10.util.GrowableRail;
 import x10.util.RailUtils;
 import x10.xrx.Runtime;
+import x10.util.resilient.localstore.*;
+
 /*
  * TODO:
  * -> maximum retry for restore failures
@@ -65,12 +67,15 @@ public class SPMDResilientIterativeExecutorULFM {
     private val RESTORE_OPERATION = 2;
     
     public def this(itersPerCheckpoint:Long, resilientMap:ResilientStore, implicitStepSynchronization:Boolean) {
-        this.resilientMap = resilientMap;
+        
         this.itersPerCheckpoint = itersPerCheckpoint;
         this.implicitStepSynchronization = implicitStepSynchronization;
-        this.simplePlaceHammer = new SimplePlaceHammer(HAMMER_STEPS, HAMMER_PLACES);
-        if (itersPerCheckpoint > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0) {
-            isResilient = true;            
+        
+        if (itersPerCheckpoint > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0 && resilientMap != null) {
+            isResilient = true;
+            this.resilientMap = resilientMap;
+            this.simplePlaceHammer = new SimplePlaceHammer(HAMMER_STEPS, HAMMER_PLACES);
+            places = resilientMap.getActivePlaces();
             if (!x10.xrx.Runtime.x10rtAgreementSupport()){
                 throw new UnsupportedOperationException("This executor requires an agreement algorithm from the transport layer ...");
             }
@@ -83,7 +88,12 @@ public class SPMDResilientIterativeExecutorULFM {
                 Console.OUT.println("EXECUTOR_KILL_RESTOREVOTING_PLACE"+KILL_RESTOREVOTING_PLACE);
             }
         }
-    }
+        else {
+        	this.resilientMap = null;
+            this.simplePlaceHammer = null;
+            places = Place.places();
+        }
+    }    
 
     public def run(app:SPMDResilientIterativeApp) {
         run(app, Timer.milliTime());
@@ -95,7 +105,7 @@ public class SPMDResilientIterativeExecutorULFM {
         this.startRunTime = startRunTime;
         Console.OUT.println("SPMDResilientIterativeExecutor: Application start time ["+startRunTime+"] ...");
         val root = here;
-        places = resilientMap.getActivePlaces();
+        
         team = new Team(places);
         placeTempData = PlaceLocalHandle.make[PlaceTempData](places, ()=>new PlaceTempData());
         var globalIter:Long = 0;        
@@ -114,7 +124,7 @@ public class SPMDResilientIterativeExecutorULFM {
                     }
                     remakeRequired = false;
                 }
-                Console.OUT.println("LocalViewResilientExecutor: remakeRequired["+remakeRequired+"] restoreRequired["+restoreRequired+"] ...");           
+                Console.OUT.println("SPMDResilientIterativeExecutorULFM: remakeRequired["+remakeRequired+"] restoreRequired["+restoreRequired+"] ...");           
                 
                 //to be copied to all places
                 val tmpRestoreRequired = tmpRestoreFlag;
@@ -231,7 +241,7 @@ public class SPMDResilientIterativeExecutorULFM {
         places = newPG;
         restoreRequired = true;
         remakeTimes.add(Timer.milliTime() - startRemake) ;                        
-        Console.OUT.println("LocalViewResilientExecutor: All remake steps completed successfully ...");
+        Console.OUT.println("SPMDResilientIterativeExecutorULFM: All remake steps completed successfully ...");
     
         return restoreRequired;
     }
