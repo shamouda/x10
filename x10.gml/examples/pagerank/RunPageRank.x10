@@ -35,6 +35,9 @@ import x10.util.Team;
  * <li>Print output flag: Default false.</li>
  * </ol>
  */
+//Resilient run command over MPI-ULFM
+//PAGERANK_DEBUG=1 KILL_STEPS=15,30 KILL_PLACES=5,6 DISABLE_ULFM_AGREEMENT=1 EXECUTOR_DEBUG=1 X10_RESILIENT_MODE=1 mpirun -n 10 -am ft-enable-mpi ./RunPageRank_mpi_double -m 1000 --density 0.08 --iterations 40 -k 10 -s 2
+
 public class RunPageRank {
     public static def main(args:Rail[String]): void {
         val opts = new OptionsParser(args, [
@@ -48,8 +51,8 @@ public class RunPageRank {
             Option("d","density","nonzero density, default = 0.001"),
             Option("i","iterations","number of iterations, default = 0 (run until convergence)"),
             Option("t","tolerance","convergence tolerance, default = 0.0001"),
-            Option("s","skip","skip places count (at least one place should remain), default = 0"),
-            Option("", "checkpointFreq","checkpoint iteration frequency")
+            Option("s","spare","spare places count (at least one place should remain), default = 0"),
+            Option("k", "checkpointFreq","checkpoint iteration frequency")
         ]);
 
         if (opts.filteredArgs().size!=0) {
