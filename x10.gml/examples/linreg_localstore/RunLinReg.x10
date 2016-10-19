@@ -30,6 +30,8 @@ import x10.util.resilient.localstore.ResilientStore;
 /**
  * Test harness for Linear Regression using GML
  */
+//Resilient run command over MPI-ULFM
+//LINREG_DEBUG=1 KILL_STEPS=25 KILL_PLACES=5 DISABLE_ULFM_AGREEMENT=1 EXECUTOR_DEBUG=1 X10_RESILIENT_MODE=1 mpirun -n 9 -am ft-enable-mpi ./RunLinReg_mpi_double -m 1000 -n 1000 --density 1.0 --iterations 30 --verify -k 10 -s 1
 public class RunLinReg {
 
     public static def main(args:Rail[String]): void {
