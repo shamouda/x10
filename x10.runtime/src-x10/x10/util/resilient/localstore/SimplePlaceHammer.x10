@@ -28,4 +28,8 @@ public class SimplePlaceHammer {
             return false;
         }
     }
+    
+    public def getVictimPlaceId(curStep:Long):Long {
+    	return map.getOrElse(curStep,-1);
+    }
 }

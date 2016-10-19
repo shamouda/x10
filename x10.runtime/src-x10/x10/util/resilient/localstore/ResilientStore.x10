@@ -26,14 +26,14 @@ public class ResilientStore {
     }
     
     public static def make(spare:Long):ResilientStore {
-    val activePlaces = PlaceGroupBuilder.excludeSparePlaces(spare);
-    val slaveMap = new Rail[Long](activePlaces.size, (i:long) => { (i + 1) % activePlaces.size} );
-    val plh = PlaceLocalHandle.make[LocalStore](Place.places(), () => new LocalStore(spare, slaveMap));
+        val activePlaces = PlaceGroupBuilder.excludeSparePlaces(spare);
+        val slaveMap = new Rail[Long](activePlaces.size, (i:long) => { (i + 1) % activePlaces.size} );
+        val plh = PlaceLocalHandle.make[LocalStore](Place.places(), () => new LocalStore(spare, slaveMap));
         val sparePlaces = new ArrayList[Place]();
         for (var i:Long = activePlaces.size(); i< Place.numPlaces(); i++){
             sparePlaces.add(Place(i));
         }
-    return new ResilientStore(activePlaces, plh, slaveMap, sparePlaces);
+        return new ResilientStore(activePlaces, plh, slaveMap, sparePlaces);
     }
     
     public def getVirtualPlaceId() = activePlaces.indexOf(here);
@@ -57,21 +57,14 @@ public class ResilientStore {
                     group.add(sparePlace);
                     addedSparePlaces.put(sparePlace.id,virtualPlaceId);
                     Console.OUT.println("=========================================================");
-                    Console.OUT.println("=========================================================");
-                    Console.OUT.println("=========================================================");
                     Console.OUT.println("[         "+sparePlace.id+"       ,        "+virtualPlaceId+"         ]");
-                    Console.OUT.println("=========================================================");
-                    Console.OUT.println("=========================================================");
-                    Console.OUT.println("=========================================================");
-                    
-                    
-                    
+                    Console.OUT.println("=========================================================");                    
                     allocated++;
                 }
                 else
                     throw new Exception("No enough spare places found ...");
                 
-                //FIXME: may be more than one
+                //FIXME: there may be more than one
                 mastersLostTheirSlaves.add(findMasterVirtualIdGivenSlave(p.id));
             }
             else{
@@ -137,24 +130,24 @@ public class ResilientStore {
      * In that case, we must consult another member in the transaction to know what to do with the pending transactions at the slave
      * */    
     private def recoverSlavePendingTransactions(slave:Place, masterVirtualId:Long) {
-    val pendingTransactions = at (slave) plh().slaveStore.getPendingTransactions(masterVirtualId);
-    val commitMap = new HashMap[Long,Boolean]();
-    val iter = pendingTransactions.iterator();
-    while (iter.hasNext()) {
-    val transId = iter.next();
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    //FIXME: now we rely that the current place is always a member in the active places (not a slave)
-    val status = plh().masterStore.getTransactionStatus(transId);
-    assert (status != Constants.TRANS_STATUS_UNFOUND && status != Constants.TRANS_STATUS_PENDING);
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    if (status == Constants.TRANS_STATUS_COMMITTED) {
-    commitMap.put(transId, true);
-    }
-    else {
-    commitMap.put(transId, false);
-    }
-    }
-    at (slave) plh().slaveStore.handlePendingTransactions(masterVirtualId, commitMap);
+        val pendingTransactions = at (slave) plh().slaveStore.getPendingTransactions(masterVirtualId);
+        val commitMap = new HashMap[Long,Boolean]();
+        val iter = pendingTransactions.iterator();
+        while (iter.hasNext()) {
+            val transId = iter.next();
+            ////////////////////////////////////////////////////////////////////////////////////////////////
+            //FIXME: now we rely that the current place is always a member in the active places (not a slave)
+            val status = plh().masterStore.getTransactionStatus(transId);
+            assert (status != Constants.TRANS_STATUS_UNFOUND && status != Constants.TRANS_STATUS_PENDING);
+            //////////////////////////////////////////////////////////////////////////////////////////////////
+            if (status == Constants.TRANS_STATUS_COMMITTED) {
+                commitMap.put(transId, true);
+            }
+            else {
+                commitMap.put(transId, false);
+            }
+        }
+        at (slave) plh().slaveStore.handlePendingTransactions(masterVirtualId, commitMap);
     }
     
     private def recoverSlaves(mastersLostTheirSlaves:ArrayList[Long]) {

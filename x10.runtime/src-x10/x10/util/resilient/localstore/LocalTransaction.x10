@@ -11,7 +11,7 @@ private val moduleName = "LocalTransaction";
 
     private val transLog:HashMap[String,TransKeyLog] = new HashMap[String,TransKeyLog]();    
     private var preparedToCommit:Boolean = false;
-private var alive:Boolean = true; // the transaction is alive if it can process more puts and gets
+    private var alive:Boolean = true; // the transaction is alive if it can process more puts and gets
 
     public def put(key:String, newValue:Cloneable):Cloneable {
     assert(alive);
@@ -82,11 +82,11 @@ private var alive:Boolean = true; // the transaction is alive if it can process 
         val masterVirtualId = plh().virtualPlaceId;
         plh().masterStore.epoch++;
         val masterEpoch = plh().masterStore.epoch;
+        val masterPL = here;
         at (plh().slave) {
             plh().slaveStore.addPendingTransaction(masterVirtualId, id, transLog, masterEpoch);
             plh().slaveStore.commit(masterVirtualId, id, masterEpoch);
         }
-        
         //master commit
         plh().masterStore.commit(id, transLog);
         
