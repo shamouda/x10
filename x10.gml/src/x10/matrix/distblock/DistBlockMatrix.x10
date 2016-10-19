@@ -39,6 +39,7 @@ import x10.util.HashMap;
 import x10.util.RailUtils;
 import x10.util.Team;
 import x10.compiler.Inline;
+import x10.util.resilient.localstore.Cloneable;
 
 public type DistBlockMatrix(M:Long, N:Long)=DistBlockMatrix{self.M==M, self.N==N};   
 public type DistBlockMatrix(M:Long)=DistBlockMatrix{self.M==M}; 
@@ -1044,7 +1045,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
             else { // spare mode
                 blks = handleBS; 
                 for (sparePlace in addedPlaces){
-                    Console.OUT.println("Adding place["+sparePlace+"] to DistBlockMarix PLH ...");
+                    //Console.OUT.println("Adding place["+sparePlace+"] to DistBlockMarix PLH ...");
                     PlaceLocalHandle.addPlace[BlockSet](blks, sparePlace, ()=>(BlockSet.makeForRestore(oldGrid,rowPs,colPs, newPg, snapshotInfo)));
                 }
             }
@@ -1119,6 +1120,81 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
             allocDenseBlocks(addedPlaces);
         else
             allocDenseBlocks();
+    }
+    
+    public def getCheckpoint_local():Cloneable {
+    	val data = handleBS();
+        val i = handleBS().placeIndex;
+        val isSparse = data.blocklist.get(0).isSparse();
+        var blockSetInfo:BlockSetSnapshotInfo = null;
+        if (isSparse) {
+            val blocksCount = data.blocklist.size();
+            val metadata = data.getBlocksMetaData();
+            val totalSize = data.getStorageSize();
+            val allIndex = new Rail[Long](totalSize);
+            val allValue = new Rail[ElemType](totalSize);
+    
+            data.initSparseBlocksRemoteCopyAtSource();
+            data.flattenIndex(allIndex);
+            data.flattenValue(allValue);
+            data.finalizeSparseBlocksRemoteCopyAtSource();
+    
+            blockSetInfo = new BlockSetSnapshotInfo(i, isSparse);
+            blockSetInfo.initSparse(blocksCount, metadata, allIndex, allValue);            
+        } else {            
+            blockSetInfo = new BlockSetSnapshotInfo(i, isSparse);
+            blockSetInfo.setBlockSet(data);                    
+        }
+        handleBS().snapshotDistInfo.updateGrid(getGrid());
+        handleBS().snapshotDistInfo.updateDistMap(getMap()); 
+        
+        return blockSetInfo;
+    }
+    
+    public def restore_local(bs:Cloneable) {
+    	val bsInfo = bs as BlockSetSnapshotInfo;
+    	val oldGrid = handleBS().snapshotDistInfo.getGrid();
+        val oldDistMap = handleBS().snapshotDistInfo.getDistMap();
+        val newGrid = getGrid();
+        
+        var copyToTime:Long = 0;
+        var loadingTime:Long=0;
+        /*
+         * calculate the required blocks from each old place
+         */
+        val newBlockSet = handleBS();
+        val placeBlockMap = new HashMap[Long, ArrayList[MatrixBlock]]();
+        val blkitr = newBlockSet.iterator();
+        while (blkitr.hasNext()) {
+            val newBlock = blkitr.next();
+            val blockRowId = newBlock.myRowId;
+            val blockColId = newBlock.myColId;
+            //assuming that the block row id and col id will remain the same after a failure
+            val blockId = oldGrid.getBlockId(blockRowId, blockColId);
+            val oldPlaceIndex = oldDistMap.findPlaceIndex(blockId);
+        
+            var list:ArrayList[MatrixBlock] = placeBlockMap.getOrElse(oldPlaceIndex,null);
+            if (list == null){
+                list = new ArrayList[MatrixBlock]();
+                placeBlockMap.put(oldPlaceIndex,list);
+            }
+            list.add(newBlock);
+        }
+        /*
+         * Block by block restore
+         */
+        val placesIter = placeBlockMap.keySet().iterator();
+        while (placesIter.hasNext()) {
+            val oldPlaceIndex = placesIter.next();
+            val oldBlockSet = bsInfo.getBlockSet();
+            val blocksList = placeBlockMap.get(oldPlaceIndex);
+            for (newBlock in blocksList){
+                val blockRowId = newBlock.myRowId;
+                val blockColId = newBlock.myColId;
+                val oldBlock = oldBlockSet.find(blockRowId, blockColId);
+                oldBlock.copyTo(newBlock);
+            }
+        }             
     }
     
     /**

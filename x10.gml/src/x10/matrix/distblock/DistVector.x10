@@ -34,6 +34,7 @@ import x10.util.resilient.VectorSnapshotInfo;
 
 import x10.util.RailUtils;
 import x10.util.Team;
+import x10.util.resilient.localstore.Cloneable;
 
 public type DistVector(m:Long)=DistVector{self.M==m};
 public type DistVector(v:DistVector)=DistVector{self==v};
@@ -672,7 +673,7 @@ distV().allReduceTime += Timer.milliTime();
         }
         else {
             for (sparePlace in addedPlaces){
-                Console.OUT.println("Adding place["+sparePlace+"] to DistVector PLH ...");
+                //Console.OUT.println("Adding place["+sparePlace+"] to DistVector PLH ...");
                 PlaceLocalHandle.addPlace[DistVectorLocalState](
                     distV, sparePlace, ()=>new DistVectorLocalState(
                     Vector.make(segsz(newPg.indexOf(here))),segsz,offsets, newPg.indexOf(here), 
@@ -694,6 +695,21 @@ distV().allReduceTime += Timer.milliTime();
         remake (slst, newPg, newTeam, addedPlaces);
     }
 
+    public def getCheckpoint_local():Cloneable {
+    	val i = distV().placeIndex;
+        val data = distV().vec.d;
+        distV().snapshotSegSize = distV().segSize;
+        distV().snapshotOffsets = distV().offsets;    
+        return new VectorSnapshotInfo(i, data);
+    }
+    
+    public def restore_local(vec:Cloneable) {
+        val storedSegment = vec as VectorSnapshotInfo;
+        val srcRail = storedSegment.data;
+        val dstRail = distV().vec.d;
+        Rail.copy(srcRail, 0, dstRail, 0, srcRail.size);
+    }
+    
     /**
      * Create a snapshot for the DistVector data 
      * @return a snapshot for the DistVector data stored in a resilient store
