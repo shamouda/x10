@@ -43,8 +43,8 @@ public class SPMDResilientIterativeExecutorULFM {
     
     //parameters for killing places at different times
     private val simplePlaceHammer:SimplePlaceHammer;
-    private val HAMMER_STEPS = System.getenv("EXECUTOR_KILL_STEPS");
-    private val HAMMER_PLACES = System.getenv("EXECUTOR_KILL_PLACES");
+    private val HAMMER_STEPS = System.getenv("KILL_STEPS");
+    private val HAMMER_PLACES = System.getenv("KILL_PLACES");
     // index of the checkpoint first checkpoint (0), second checkpoint (1), ...etc    
     private val KILL_CHECKVOTING_INDEX = (System.getenv("EXECUTOR_KILL_CHECKVOTING") != null)?Long.parseLong(System.getenv("EXECUTOR_KILL_CHECKVOTING")):-1;
     private val KILL_CHECKVOTING_PLACE = (System.getenv("EXECUTOR_KILL_CHECKVOTING_PLACE") != null)?Long.parseLong(System.getenv("EXECUTOR_KILL_CHECKVOTING_PLACE")):-1;   

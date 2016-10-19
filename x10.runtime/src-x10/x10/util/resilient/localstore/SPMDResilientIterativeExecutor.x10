@@ -313,7 +313,7 @@ public class SPMDResilientIterativeExecutor {
         Console.OUT.println("Steps-max:" + railToString(placeTempData().stat.placeMaxStep));
         
         if (isResilient){
-            Console.OUT.println("CheckpointCreateNewVersion:" + railToString(ckptTimes.toRail()));            
+            Console.OUT.println("Checkpoint:" + railToString(ckptTimes.toRail()));            
             
             Console.OUT.println("RestoreData-avg:" + railToString(averageRestore));
             Console.OUT.println("RestoreData-min:" + railToString(placeTempData().stat.placeMinRestore));
