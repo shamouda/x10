@@ -15,8 +15,9 @@ import x10.util.HashMap;
 import x10.matrix.distblock.BlockSet;
 import x10.matrix.ElemType;
 import x10.util.resilient.iterative.Snapshot;
+import x10.util.resilient.localstore.Cloneable;
 
-public class BlockSetSnapshotInfo(placeIndex:Long, isSparse:Boolean) implements Snapshot {
+public class BlockSetSnapshotInfo(placeIndex:Long, isSparse:Boolean) implements Snapshot, Cloneable {
     private var blockSet:BlockSet;
     
     //**Variables for Flat BlockSet**//
@@ -42,7 +43,7 @@ public class BlockSetSnapshotInfo(placeIndex:Long, isSparse:Boolean) implements 
         this.value = value;
     }
     
-    public def clone():Any {
+    public def clone():Cloneable {
         val cloneObject = new BlockSetSnapshotInfo(placeIndex, isSparse);
         if (isSparse) {
             cloneObject.blocksCount = blocksCount; 
