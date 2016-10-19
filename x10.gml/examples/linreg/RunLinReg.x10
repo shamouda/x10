@@ -47,8 +47,8 @@ public class RunLinReg {
             Option("c","colBlocks","number of columnn blocks; default = 1"),
             Option("d","density","nonzero density, default = 0.9"),
             Option("i","iterations","number of iterations, default = 0 (no max)"),
-            Option("s","skip","skip places count (at least one place should remain), default = 0"),
-            Option("", "checkpointFreq","checkpoint iteration frequency")
+            Option("s","spare","spare places count (at least one place should remain), default = 0"),
+            Option("k", "checkpointFreq","checkpoint iteration frequency")
         ]);
 
         if (opts.filteredArgs().size!=0) {
@@ -68,29 +68,29 @@ public class RunLinReg {
         val verify = opts("v");
         val print = opts("p");
         val iterations = opts("i", 0n);
-        val skipPlaces = opts("s", 0n);
+        val sparePlaces = opts("s", 0n);
 
         if (nonzeroDensity<0.0f
-         || skipPlaces < 0 || skipPlaces >= Place.numPlaces()) {
+         || sparePlaces < 0 || sparePlaces >= Place.numPlaces()) {
             Console.OUT.println("Error in settings");
             System.setExitCode(1n);
             return;
         }
 
-        if (skipPlaces > 0) {
+        if (sparePlaces > 0) {
             if (Runtime.RESILIENT_MODE <= 0) {
                 Console.ERR.println("Error: attempt to skip places when not in resilient mode.  Aborting.");
                 System.setExitCode(1n);
                 return;
             } else {
-                Console.OUT.println("Skipping "+skipPlaces+" places to reserve for failure.");
+                Console.OUT.println("Skipping "+sparePlaces+" places to reserve for failure.");
             }
         }
         
         val startTime = Timer.milliTime();
         
-        val places = (skipPlaces==0n) ? Place.places() 
-                                      : PlaceGroupBuilder.excludeSparePlaces(skipPlaces);
+        val places = (sparePlaces==0n) ? Place.places() 
+                                      : PlaceGroupBuilder.excludeSparePlaces(sparePlaces);
         val team = new Team(places);
         
         val rowBlocks = opts("r", places.size());
@@ -105,10 +105,10 @@ public class RunLinReg {
             Console.OUT.printf("dist(%dx%d) nonzeroDensity:%g\n", places.size(), 1, nonzeroDensity);
 
             if (nonzeroDensity < LinearRegression.MAX_SPARSE_DENSITY) {
-                X = DistBlockMatrix.makeSparse(mX, nX, rowBlocks, colBlocks, places.size(), 1, nonzeroDensity, places);
+                X = DistBlockMatrix.makeSparse(mX, nX, rowBlocks, colBlocks, places.size(), 1, nonzeroDensity, places, team);
             } else {
                 Console.OUT.println("Using dense matrix as non-zero density = " + nonzeroDensity);
-                X = DistBlockMatrix.makeDense(mX, nX, rowBlocks, colBlocks, places.size(), 1, places);
+                X = DistBlockMatrix.makeDense(mX, nX, rowBlocks, colBlocks, places.size(), 1, places, team);
             }
             y = DistVector.make(X.M, places, team);
 
@@ -130,7 +130,7 @@ public class RunLinReg {
             nX = inputData.numFeatures+1; // including bias
             nonzeroDensity = 1.0f; // TODO allow sparse input
             
-            X = DistBlockMatrix.makeDense(mX, nX, rowBlocks, colBlocks, places.size(), 1, places);
+            X = DistBlockMatrix.makeDense(mX, nX, rowBlocks, colBlocks, places.size(), 1, places, team);
             y = DistVector.make(X.M, places, team);
 
             // initialize labels, examples at each place
