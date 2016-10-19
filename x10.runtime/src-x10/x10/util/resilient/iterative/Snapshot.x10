@@ -17,7 +17,6 @@ import x10.util.HashMap;
  * A snapshot of an object, providing methods to copy objects locally and remotely.
  */
 public interface Snapshot {
-    public abstract def clone():Any;
     public abstract def remoteCopyAndSave(key:Any, hm:PlaceLocalHandle[HashMap[Any,Any]], backupPlace:Place):void;
     public abstract def remoteClone(targetPlace:Place):GlobalRef[Any]{self.home==targetPlace};
 }
