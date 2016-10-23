@@ -82,7 +82,7 @@ public class RunPageRank {
             val startTime = Timer.milliTime();
             var resilientStore:ResilientStore = null;
             var placesVar:PlaceGroup = Place.places();
-            if (x10.xrx.Runtime.RESILIENT_MODE > 0 && sparePlaces > 0) {
+            if (x10.xrx.Runtime.RESILIENT_MODE > 0 && checkpointFreq > 0) {
                 resilientStore = ResilientStore.make(sparePlaces);
                 placesVar = resilientStore.getActivePlaces();
             }

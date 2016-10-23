@@ -88,16 +88,16 @@ public class RunLinReg {
                 Console.OUT.println("Skipping "+sparePlaces+" places to reserve for failure.");
             }
         }
-        
+        val checkpointFrequency = opts("checkpointFreq", -1n);
         val startTime = Timer.milliTime();
         var resilientStore:ResilientStore = null;
         var placesVar:PlaceGroup = Place.places();
         var team:Team = Team.WORLD;
-        if (x10.xrx.Runtime.RESILIENT_MODE > 0 && sparePlaces > 0) {
+        if (x10.xrx.Runtime.RESILIENT_MODE > 0 && checkpointFrequency > 0) {
         	resilientStore = ResilientStore.make(sparePlaces);
         	placesVar = resilientStore.getActivePlaces();
         	team = new Team(placesVar);
-        }        
+        }
         val places = placesVar;
         
         val rowBlocks = opts("r", places.size());
@@ -157,7 +157,7 @@ public class RunLinReg {
 
         val M = mX;
         val N = nX;
-        val checkpointFrequency = opts("checkpointFreq", -1n);
+        
 
         val parLR = new LinearRegression(X, y, iterations, checkpointFrequency,
                                          nonzeroDensity, regularization, places, team, resilientStore);
