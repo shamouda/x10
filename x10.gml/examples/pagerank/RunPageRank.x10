@@ -50,7 +50,8 @@ public class RunPageRank {
             Option("i","iterations","number of iterations, default = 0 (run until convergence)"),
             Option("t","tolerance","convergence tolerance, default = 0.0001"),
             Option("s","spare","spare places count (at least one place should remain), default = 0"),
-            Option("k", "checkpointFreq","checkpoint iteration frequency")
+            Option("k", "checkpointFreq","checkpoint iteration frequency"),
+            Option("disk", "disk","store on disk")
         ]);
 
         if (opts.filteredArgs().size!=0) {
@@ -71,6 +72,8 @@ public class RunPageRank {
         val print = opts("p");
         val sparePlaces = opts("s", 0n);
         val checkpointFreq = opts("checkpointFreq", -1n);
+        val diskStorage = (opts("disk", 0n) == 1n);
+        
         val placesCount = Place.numPlaces() - sparePlaces;
         
         val mG = opts("m", (20000*Math.sqrt(placesCount*5)) as Long );
@@ -83,7 +86,10 @@ public class RunPageRank {
             var resilientStore:ResilientStore = null;
             var placesVar:PlaceGroup = Place.places();
             if (x10.xrx.Runtime.RESILIENT_MODE > 0 && checkpointFreq > 0) {
-                resilientStore = ResilientStore.make(sparePlaces);
+            	if (diskStorage)
+            		resilientStore = ResilientStore.makeDisk();
+            	else
+            		resilientStore = ResilientStore.make(sparePlaces);
                 placesVar = resilientStore.getActivePlaces();
             }
             val places = placesVar;

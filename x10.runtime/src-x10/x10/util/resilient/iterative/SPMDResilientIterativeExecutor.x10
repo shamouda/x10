@@ -133,6 +133,9 @@ public class SPMDResilientIterativeExecutor {
                     		val key = iter.next();
                     		placeTempData().ckptKeyVersion.put(key, ckptVersion);
                     	}
+                    	if (resilientMap.isDiskStore()){
+                    		resilientMap.storeKeyVersions_local(placeTempData().ckptKeyVersion);
+                    	}
                     }
                     
                     var localIter:Long = 0;
@@ -235,20 +238,38 @@ public class SPMDResilientIterativeExecutor {
         val newVersion = (lastCkptVersion+1)%2;
         finish ateach(Dist.makeUnique(places)) {
             placeTempData().lastCkptKeys.clear();
-            val trans = resilientMap.startLocalTransaction();
-            val ckptMap = app.getCheckpointData_local();
-            if (ckptMap != null) {
-                val iter = ckptMap.keySet().iterator();
-                while (iter.hasNext()) {                    
-                    val appKey = iter.next();
-                    val key = appKey +":v" + newVersion;
-                    val value = ckptMap.getOrThrow(appKey);
-                    trans.put(key, value);
-                    placeTempData().lastCkptKeys.add(appKey); 
-                    //if (VERBOSE) Console.OUT.println(here + "checkpointing key["+appKey+"]  version["+newVersion+"] succeeded ...");
-                }                
+            if (resilientMap.isDiskStore()) {
+            	val trans = resilientMap.startLocalDiskTransaction();
+	            val ckptMap = app.getCheckpointData_local();
+	            if (ckptMap != null) {
+	                val iter = ckptMap.keySet().iterator();
+	                while (iter.hasNext()) {                    
+	                    val appKey = iter.next();
+	                    val key = appKey +":v" + newVersion;
+	                    val value = ckptMap.getOrThrow(appKey);
+	                    trans.put(key, value);
+	                    placeTempData().lastCkptKeys.add(appKey); 
+	                    //if (VERBOSE) Console.OUT.println(here + "checkpointing key["+appKey+"]  version["+newVersion+"] succeeded ...");
+	                }                
+	            }
+	            
             }
-            trans.prepareAndCommit();
+            else {
+	            val trans = resilientMap.startLocalTransaction();
+	            val ckptMap = app.getCheckpointData_local();
+	            if (ckptMap != null) {
+	                val iter = ckptMap.keySet().iterator();
+	                while (iter.hasNext()) {                    
+	                    val appKey = iter.next();
+	                    val key = appKey +":v" + newVersion;
+	                    val value = ckptMap.getOrThrow(appKey);
+	                    trans.put(key, value);
+	                    placeTempData().lastCkptKeys.add(appKey); 
+	                    //if (VERBOSE) Console.OUT.println(here + "checkpointing key["+appKey+"]  version["+newVersion+"] succeeded ...");
+	                }                
+	            }
+	            trans.prepareAndCommit();
+            }
         }
         lastCkptVersion = newVersion;
         lastCkptIter = placeTempData().globalIter;

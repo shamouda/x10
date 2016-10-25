@@ -8,15 +8,27 @@ import x10.util.concurrent.SimpleLatch;
 import x10.util.concurrent.AtomicLong;
 import x10.compiler.Ifdef;
 import x10.util.resilient.iterative.PlaceGroupBuilder;
+import x10.util.Timer;
+import x10.io.FileWriter;
+import x10.io.File;
 
 public class ResilientStore {
     private val moduleName = "ResilientStore";
-    private val plh:PlaceLocalHandle[LocalStore];
+    private var plh:PlaceLocalHandle[LocalStore];
     private var activePlaces:PlaceGroup;
     private var sparePlaces:ArrayList[Place];
     private var deadPlaces:ArrayList[Place];    
-    private val slaveMap:Rail[Long]; //master virtual place to slave physical place
+    private var slaveMap:Rail[Long]; //master virtual place to slave physical place
     private val sequence:AtomicLong = new AtomicLong();
+    private val randomDiskRunId = Timer.milliTime();
+    private var diskStorage:Boolean = false;
+    
+    /*used for disk storage, no need for spare places, when a failure happens halt*/
+    private def this(){    	
+        this.activePlaces = Place.places();
+        this.sparePlaces = new ArrayList[Place]();
+        diskStorage = true;
+    }
     
     private def this(activePlaces:PlaceGroup, plh:PlaceLocalHandle[LocalStore], slaveMap:Rail[Long], sparePlaces:ArrayList[Place]){
         this.activePlaces = activePlaces;
@@ -24,6 +36,8 @@ public class ResilientStore {
         this.slaveMap = slaveMap;
         this.sparePlaces = sparePlaces;
     }
+    
+    
     
     public static def make(spare:Long):ResilientStore {
         val activePlaces = PlaceGroupBuilder.excludeSparePlaces(spare);
@@ -35,12 +49,20 @@ public class ResilientStore {
         }
         return new ResilientStore(activePlaces, plh, slaveMap, sparePlaces);
     }
+         
+    
+    public static def makeDisk():ResilientStore {        
+        return new ResilientStore();
+    }    
     
     public def getVirtualPlaceId() = activePlaces.indexOf(here);
     
     public def getActivePlaces() = activePlaces;
     
+    public def isDiskStore() = diskStorage;
+    
     public def recoverDeadPlaces():HashMap[Long,Long] {
+    	assert(!diskStorage);
         val oldPlaceGroup = activePlaces;
         val addedSparePlaces = new HashMap[Long,Long](); // key=readId, value=virtualPlaceId
         val mastersLostTheirSlaves = new ArrayList[Long]();
@@ -212,24 +234,32 @@ public class ResilientStore {
     }
     
     public def startLocalTransaction():LocalTransaction {
+    	assert(!diskStorage);
         assert(plh().virtualPlaceId != -1);
         val placeIndex = activePlaces.indexOf(here);
         return new LocalTransaction(plh, getNextTransactionId(), placeIndex);
     }
     
-    /*
-    public def startGlobalTransaction(places:PlaceGroup):GlobalTransaction {
-        assert(plh().virtualPlaceId != -1);
-        return new GlobalTransaction(plh, Utils.getNextTransactionId(), places);
+    public def startLocalDiskTransaction():LocalDiskTransaction {
+    	assert(diskStorage);
+        val placeIndex = activePlaces.indexOf(here);
+        return new LocalDiskTransaction(getNextTransactionId(), placeIndex, randomDiskRunId);
     }
-    */
     
     public def getNextTransactionId() {
         val id = sequence.incrementAndGet();
         return 100000+id;
     }
-    
-    public def printStatus() {
-       //Console.OUT.println("DS-- " + here + " " + plh().slave);
+
+    public def storeKeyVersions_local(map:HashMap[String,Long]) {
+    	val nameStr = "x10chkpt_"+getVirtualPlaceId()+"_"+randomDiskRunId+".versions";  	   	
+        val file = new FileWriter(new File(nameStr));
+        val iter = map.keySet().iterator();
+        while (iter.hasNext()) { 
+        	val key = iter.next();
+        	val value = map.getOrThrow(key);
+        	file.write(key+":"+value+"\n");
+        }
+        file.close();
     }
 }

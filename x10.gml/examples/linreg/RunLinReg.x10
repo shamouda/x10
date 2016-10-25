@@ -50,7 +50,8 @@ public class RunLinReg {
             Option("d","density","nonzero density, default = 0.9"),
             Option("i","iterations","number of iterations, default = 0 (no max)"),
             Option("s","spare","spare places count (at least one place should remain), default = 0"),
-            Option("k", "checkpointFreq","checkpoint iteration frequency")
+            Option("k", "checkpointFreq","checkpoint iteration frequency"),
+            Option("disk", "disk","store on disk")
         ]);
 
         if (opts.filteredArgs().size!=0) {
@@ -71,6 +72,8 @@ public class RunLinReg {
         val print = opts("p");
         val iterations = opts("i", 0n);
         val sparePlaces = opts("s", 0n);
+        val diskStorage = (opts("disk", 0n) == 1n);
+        Console.OUT.println("diskStorage flag=" + diskStorage);
 
         if (nonzeroDensity<0.0f
          || sparePlaces < 0 || sparePlaces >= Place.numPlaces()) {
@@ -94,7 +97,10 @@ public class RunLinReg {
         var placesVar:PlaceGroup = Place.places();
         var team:Team = Team.WORLD;
         if (x10.xrx.Runtime.RESILIENT_MODE > 0 && checkpointFrequency > 0) {
-        	resilientStore = ResilientStore.make(sparePlaces);
+        	if (diskStorage)
+        		resilientStore = ResilientStore.makeDisk();
+        	else
+        		resilientStore = ResilientStore.make(sparePlaces);
         	placesVar = resilientStore.getActivePlaces();
         	team = new Team(placesVar);
         }
