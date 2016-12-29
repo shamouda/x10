@@ -1223,10 +1223,22 @@ bool probe (bool onlyProcessAccept, bool block)
 
 				x10rt_msg_params mp;
 				mp.dest_place = context.myPlaceId;
-				if (nonBlockingRead(context.socketLinks[whichPlaceToHandle].fd, &mp.type, sizeof(x10rt_msg_type)) < (int)sizeof(x10rt_msg_type))
-					return fatal_error("reading x10rt_msg_params.type"), false;
-				if (nonBlockingRead(context.socketLinks[whichPlaceToHandle].fd, &mp.len, sizeof(uint32_t)) < (int)sizeof(uint32_t))
-					return fatal_error("reading x10rt_msg_params.len"), false;
+				if (nonBlockingRead(context.socketLinks[whichPlaceToHandle].fd, &mp.type, sizeof(x10rt_msg_type)) < (int)sizeof(x10rt_msg_type)) {
+					//return fatal_error("reading x10rt_msg_params.type"), false;
+                    #ifdef DEBUG_MESSAGING
+						fprintf(stderr, "X10rt.Sockets: Place %u failed in reading x10rt_msg_params.type from place %u (likely a closed socket)\n", context.myPlaceId, whichPlaceToHandle);
+					#endif
+					markPlaceDead(whichPlaceToHandle);
+					return false;
+				}
+				if (nonBlockingRead(context.socketLinks[whichPlaceToHandle].fd, &mp.len, sizeof(uint32_t)) < (int)sizeof(uint32_t)) {
+					//return fatal_error("reading x10rt_msg_params.len"), false;
+					#ifdef DEBUG_MESSAGING
+						fprintf(stderr, "X10rt.Sockets: Place %u failed in reading x10rt_msg_params.len from place %u (likely a closed socket)\n", context.myPlaceId, whichPlaceToHandle);
+					#endif
+					markPlaceDead(whichPlaceToHandle);
+					return false;
+				}
 				#ifdef DEBUG_MESSAGING
 					fprintf(stderr, "X10rt.Sockets: place %u decoded a message of type %d from place %u\n", context.myPlaceId, (int)mp.type, whichPlaceToHandle);
 				#endif
