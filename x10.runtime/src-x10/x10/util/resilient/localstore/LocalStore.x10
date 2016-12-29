@@ -18,30 +18,36 @@ import x10.compiler.Inline;
 import x10.xrx.Runtime;
 import x10.util.concurrent.AtomicLong;
 import x10.compiler.Ifdef;
+import x10.util.resilient.localstore.Cloneable;
 
 public class LocalStore {
-    private val moduleName = "LocalStore";
-    
+    static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
+        
     public var masterStore:MasterStore = null;
-    public var slave:Place;
-    
-    public var slaveStore:SlaveStore = null;
     public var virtualPlaceId:Long = -1; //-1 means a spare place
+    
+    /*resilient mode variables*/    
+    public var slave:Place;
+    public var slaveStore:SlaveStore = null;
     
     public def this(virtualPlaceId:Long, slave:Place) {
         this.virtualPlaceId = virtualPlaceId;
-        this.slave = slave;
-        masterStore = new MasterStore(virtualPlaceId);
-        slaveStore = new SlaveStore();
+        masterStore = new MasterStore();
+        if (resilient) {
+            slaveStore = new SlaveStore();
+            this.slave = slave;
+        }
     }
 
     /* used to initialize elastically added or spare places */
     public def this() { }
 
     /*used when a spare place joins*/
-    public def joinAsMaster (virtualPlaceId:Long, data:HashMap[String,HashMap[String,Cloneable]]) {
+    public def joinAsMaster (virtualPlaceId:Long, slave:Place, data:HashMap[String,HashMap[String,Cloneable]]) {
+        assert(resilient);
         this.virtualPlaceId = virtualPlaceId;
-        masterStore = new MasterStore(virtualPlaceId, data);
+        masterStore = new MasterStore(data);
         slaveStore = new SlaveStore();
+        this.slave = slave;
     }
 }

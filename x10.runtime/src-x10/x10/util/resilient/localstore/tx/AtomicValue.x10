@@ -10,13 +10,10 @@
  *  (C) Copyright Sara Salem Hamouda 2014-2016.
  */
 
-package x10.util.resilient.localstore;
+package x10.util.resilient.localstore.tx;
 
-public class Constants {
+import x10.util.resilient.localstore.Cloneable;
 
-    public static val TRANS_STATUS_UNFOUND = -1;
-    public static val TRANS_STATUS_PENDING = 1;
-    public static val TRANS_STATUS_COMMITTED = 2;
-    public static val TRANS_STATUS_ROLLEDBACK = 3;
+public class AtomicValue(version:Int, value:Cloneable){
     
 }

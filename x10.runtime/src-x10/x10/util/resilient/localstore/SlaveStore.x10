@@ -12,90 +12,108 @@
 
 package x10.util.resilient.localstore;
 
-import x10.util.HashSet;
 import x10.util.HashMap;
 import x10.util.ArrayList;
-import x10.util.concurrent.AtomicLong;
 import x10.compiler.Ifdef;
 import x10.util.concurrent.Lock;
+import x10.util.resilient.localstore.tx.*;
+import x10.util.resilient.localstore.Cloneable;
 
+/* Slave methods are being called by only one place at a time,
+ * either its master during normal execution, or the store coordinator during failure recovery */
 public class SlaveStore {
-    private val moduleName = "SlaveStore";
+    static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
+    static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
-    private val mastersMap:HashMap[Long,MasterState]; // master_virtual_id, master_data
-    private transient val lock:Lock = new Lock();
+    private var masterState:SlaveMasterState;
+    private var logs:HashMap[Long, TxSlaveLog];
+    private transient val lock:Lock = new Lock(); 
     
     public def this() {
-        mastersMap = new HashMap[Long,MasterState]();
+        assert(resilient);
+        masterState = new SlaveMasterState(new HashMap[String,HashMap[String,Cloneable]]());
+        logs = new HashMap[Long, TxSlaveLog]();
     }
     
-    public def addMasterPlace(masterVirtualId:Long, masterState:MasterState) {
+    /******* Recovery functions (called by one place) , no risk of race condition *******/
+    public def addMasterPlace(masterVirtualId:Long, state:SlaveMasterState) {
+        masterState = state;
+        logs = new HashMap[Long, TxSlaveLog]();
+    }
+    
+    public def getSlaveMasterState():SlaveMasterState {
+        return masterState;
+    }
+    
+    /******* Prepare/Commit/Abort functions *******/
+    public def commit(id:Long, mapName:String, transLog:HashMap[String,TxKeyChange]) {
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit1() started ...");
         try {
             lock.lock();
-            mastersMap.put(masterVirtualId, masterState);
+            commitLockAcquired(new TxSlaveLog(id, mapName, transLog));
         }
         finally {
             lock.unlock();
         }
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit1() committed ...");
     }
     
-    public def getMasterState(masterVirtualId:Long):MasterState {
+    public def commit(id:Long) {
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit2() started ...");
         try {
             lock.lock();
-            var state:MasterState = mastersMap.getOrElse(masterVirtualId, null);
-            if (state == null)
-                return new MasterState(new HashMap[String,HashMap[String,Cloneable]]());
-            return state;
-        }
-        finally {
+			val txLog = logs.getOrElse(id, null);
+			if (txLog != null)
+                commitLockAcquired(txLog);
+        } finally {
             lock.unlock();
         }
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit2() committed ...");
     }
     
-    public def commit(mapName:String, masterVirtualId:Long, transLog:HashMap[String,TransKeyLog]) {
-    try {
-            lock.lock();
-            var state:MasterState = mastersMap.getOrElse(masterVirtualId, null);
-            if (state == null) {
-                state = new MasterState(new HashMap[String,HashMap[String,Cloneable]]());
-            	mastersMap.put(masterVirtualId, state); 
+    private def commitLockAcquired(txLog:TxSlaveLog) {
+        try {
+            val data = masterState.getMapData(txLog.mapName);
+            val iter = txLog.transLog.keySet().iterator();
+            while (iter.hasNext()) {
+                val key = iter.next();
+                val log = txLog.transLog.getOrThrow(key);
+                if (log.readOnly())
+                    continue;
+                if (log.isDeleted()) 
+                    data.remove(key);
+                else
+                    data.put(key, log.getValue());
             }
-            applyChangesLockAcquired(mapName, state, transLog);
+            logs.delete(txLog.id);
+        }catch(ex:Exception){
+            if (TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] here["+here+"] SlaveStore.commitLockAcquired() exception["+ex.getMessage()+"] ...");
+            throw ex;
+        }
+    }
+    
+    public def prepare(id:Long, mapName:String, transLog:HashMap[String,TxKeyChange]) {
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() started ...");
+        try {
+            lock.lock();
+            logs.put(id, new TxSlaveLog(id, mapName, transLog));
+            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() logs.put(id="+id+") ...");
         }
         finally {
             lock.unlock();
         }
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() completed ...");
     }
-    
-    private def applyChangesLockAcquired(mapName:String, state:MasterState, transLog:HashMap[String,TransKeyLog]) {
-        val data = state.getMapData(mapName);
-        val iter = transLog.keySet().iterator();
-        while (iter.hasNext()) {
-            val key = iter.next();
-            val log = transLog.getOrThrow(key);
-            if (log.readOnly())
-                continue;
-            if (log.isDeleted()) 
-                data.remove(key);
-            else
-                data.put(key, log.getValue());
-        }
-    }
-}
 
-class MasterState {
-    public var maps:HashMap[String,HashMap[String,Cloneable]];
-   
-    public def this(maps:HashMap[String,HashMap[String,Cloneable]]) {
-        this.maps = maps;
-    }
-    
-    public def getMapData(mapName:String) {
-    	var data:HashMap[String,Cloneable] = maps.getOrElse(mapName, null);
-        if (data == null) {
-        	data = new HashMap[String,Cloneable]();
-        	maps.put(mapName, data);
+    public def abort(id:Long) {
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.abort() started ...");
+        try {
+            lock.lock();
+            logs.delete(id);
         }
-        return data;
+        finally {
+            lock.unlock();
+        }
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.abort() completed ...");
     }
 }
