@@ -36,7 +36,7 @@ public class TxLockCREW extends TxLock {
                     checkDeadLockers();
                 if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] lockRead conflict writephase["+writePhase+"] readersCount["+readers.size()+"] lockedBy["+readers.iterator().next()+"] allReaders["+readersAsString(readers)+"] ");
                 //allow only one reader during the writePhase
-                throw new ConflictException("ConflictException - WritePhase", here);
+                throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] - WritePhase", here);
             }
             if (locked == -1n || locked == 0n){
                 locked = 0n;
@@ -48,7 +48,7 @@ public class TxLockCREW extends TxLock {
                        checkDeadLockers();
                    
                    if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] lockRead conflict lockedWriter["+lockedWriter+"] != ["+txId+"] ");
-                   throw new ConflictException("ConflictException", here);
+                   throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] ", here);
                }
             }
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] lockRead succeeded readersCount["+readers.size()+"] allReaders["+readersAsString(readers)+"] ");
@@ -77,7 +77,7 @@ public class TxLockCREW extends TxLock {
                     if (resilient)
                         checkDeadLockers();
                     if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] lockWrite conflict set write phase ["+writePhase+"] readersCount["+readers.size()+"] allReaders["+readersAsString(readers)+"] ");
-                    throw new ConflictException("ConflictException", here);
+                    throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] ", here);
                 }
             }
             else if (locked == 1n && lockedWriter != txId) {
@@ -85,7 +85,7 @@ public class TxLockCREW extends TxLock {
                     checkDeadLockers();
                 
                 if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] lockWrite conflict lockedWriter["+lockedWriter+"] != txId["+txId+"] ");
-                throw new ConflictException("ConflictException", here);
+                throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] ", here);
             }
             writePhase = false;
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] lockWrite succeeded  lockedWriter["+lockedWriter+"] locked["+locked+"] allReaders["+readersAsString(readers)+"] ");

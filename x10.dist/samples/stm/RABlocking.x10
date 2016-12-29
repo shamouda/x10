@@ -59,7 +59,7 @@ public class RABlocking {
             
             map.printTxStatistics();
             
-            val actualSum = sumAccounts(map, mgr.activePlaces());
+            val actualSum = STMAppUtils.sumAccounts(map, mgr.activePlaces());
             
             val end = System.nanoTime();
             if (actualSum == expectedSum) {
@@ -90,11 +90,11 @@ public class RABlocking {
                     if (i%debugProgress == 0)
                         Console.OUT.println(here + " progress " + i);
                     val rand1 = requests.accountsRail(i-1);
-                    val p1 = getPlace(rand1, activePG, accountsPerPlace);
+                    val p1 = STMAppUtils.getPlace(rand1, activePG, accountsPerPlace);
                     
                     val randAcc = "acc"+rand1;
                     val amount = requests.amountsRail(i-1);
-                    val members = STMResilientAppUtils.createGroup(p1);
+                    val members = STMAppUtils.createGroup(p1);
                     var trial:Long = -1;
                     do {
                         var txId:Long = -1;
@@ -124,38 +124,6 @@ public class RABlocking {
                 Runtime.decreaseParallelism(1n);
             }
         }
-    }
-    
-    public static def sumAccounts(map:ResilientNativeMap, activePG:PlaceGroup){
-        var sum:Long = 0;
-        val list = new ArrayList[TxFuture]();
-        val tx = map.startGlobalTransaction(activePG);
-        for (p in activePG) {
-            val f = tx.asyncAt(p, () => {
-                var localSum:Long = 0;
-                val set = tx.keySet();
-                val iter = set.iterator();
-                while (iter.hasNext()) {
-                    val accId  = iter.next();
-                    val obj = tx.get(accId) as BankAccount;
-                    var value:Long = 0;
-                    if (obj != null) {
-                        value = obj.account;
-                    }
-                    localSum += value;
-                }
-                return localSum;
-            });
-            list.add(f);
-        }
-        for (f in list)
-            sum += f.waitV() as Long;
-        tx.commit();
-        return sum;
-    }
-    
-    public static def getPlace(accId:Long, activePG:PlaceGroup, accountPerPlace:Long):Place{
-        return activePG(accId/accountPerPlace);
     }
     
 }

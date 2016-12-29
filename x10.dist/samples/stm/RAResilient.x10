@@ -86,7 +86,7 @@ public class RAResilient {
             
             map.printTxStatistics();
             
-            val actualSum = sumAccounts(map, mgr.activePlaces());
+            val actualSum = STMAppUtils.sumAccounts(map, mgr.activePlaces());
             
             val end = System.nanoTime();
             if (actualSum == expectedSum) {
@@ -119,91 +119,47 @@ public class RAResilient {
             at (p) async {
                 var start:Long = 1;
                 if (recover) {
-                    start = STMResilientAppUtils.restoreProgress(map, placeIndex, 0)+1;
+                    start = STMAppUtils.restoreProgress(map, placeIndex, 0)+1;
                     Console.OUT.println(here + " continue transfering from " + start + "   slave:" + map.store.plh().slave);
                 }
                 val rand = new Random(System.nanoTime());
                 for (i in start..updatesPerPlace) {
                     val rand1 = requests.accountsRail(i-1);
-                    val p1 = getPlace(rand1, activePG, accountsPerPlace);
-                    
+                    val p1 = STMAppUtils.getPlace(rand1, activePG, accountsPerPlace);
                     val randAcc = "acc"+rand1;
                     val amount = requests.amountsRail(i-1);
                     
-                    var members:PlaceGroup;
+                    var pg:PlaceGroup;
                     if (DISABLE_CKPT)
-                        members = STMResilientAppUtils.createGroup(p1);
+                        pg = STMAppUtils.createGroup(p1);
                     else
-                        members = STMResilientAppUtils.createGroup(here,p1);
-                    
-                    
-                    var trial:Long = -1;
-                    do {
-                        var txId:Long = -1;
-                        try {
-                            val tx = map.startGlobalTransaction(members);
-                            txId = tx.id;
-                            
-                            if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXSTART trial["+trial+"] accounts["+randAcc+"] place["+p1+"] amount["+amount+"]");
-                            val f1 = tx.asyncAt(p1, () => {
-                                var acc:BankAccount = tx.get(randAcc) as BankAccount;
-                                if (acc == null) {
-                                    acc = new BankAccount(0);
-                                }
-                                acc.account += amount;
-                                tx.put(randAcc, acc);
-                            });
-                            if (!DISABLE_CKPT)
-                                tx.put("p"+placeIndex, new CloneableLong(i));
-                            val success = tx.commit();
-                            if (success == Tx.SUCCESS_RECOVER_STORE) {
-                                if (TM_DEBUG || recover) 
-                                    Console.OUT.println("Tx["+txId+"] here["+here+"] success["+success+"]");
-                                throw new RecoverDataStoreException("RecoverDataStoreException", here);
+                        pg = STMAppUtils.createGroup(here,p1);
+                    val members = pg;
+                    map.executeTransaction( () => {
+                        val tx = map.startGlobalTransaction(members);
+                        val txId = tx.id;
+                        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXSTART accounts["+randAcc+"] place["+p1+"] amount["+amount+"]");
+                        val f1 = tx.asyncAt(p1, () => {
+                            var acc:BankAccount = tx.get(randAcc) as BankAccount;
+                            if (acc == null) {
+                                acc = new BankAccount(0);
                             }
-                            if (i%debugProgress == 0)
-                                Console.OUT.println(here + " progress " + i);
-                            break;
-                        } catch(ex:Exception) {
-                            trial = STMResilientAppUtils.processException(txId, ex, trial);
+                            acc.account += amount;
+                            tx.put(randAcc, acc);
+                        });
+                        if (!DISABLE_CKPT)
+                            tx.put("p"+placeIndex, new CloneableLong(i));
+                        val success = tx.commit();
+                        if (success == Tx.SUCCESS_RECOVER_STORE) {
+                            throw new RecoverDataStoreException("RecoverDataStoreException", here);
                         }
-                    } while(true);
+                        if (i%debugProgress == 0)
+                            Console.OUT.println(here + " progress " + i);
+                    });
                 }
             }
         }
-    }
-    
-    public static def sumAccounts(map:ResilientNativeMap, activePG:PlaceGroup){
-        var sum:Long = 0;
-        val list = new ArrayList[TxFuture]();
-        val tx = map.startGlobalTransaction(activePG);
-        for (p in activePG) {
-            val f = tx.asyncAt(p, () => {
-                var localSum:Long = 0;
-                val set = tx.keySet();
-                val iter = set.iterator();
-                while (iter.hasNext()) {
-                    val accId  = iter.next();
-                    val obj = tx.get(accId);
-
-                    if (obj != null && obj instanceof BankAccount) {
-                        val v = (obj as BankAccount).account;
-                        localSum += v;
-                    }
-                }
-                return localSum;
-            });
-            list.add(f);
-        }
-        for (f in list)
-            sum += f.waitV() as Long;
-        tx.commit();
-        return sum;
-    }
-    
-    public static def getPlace(accId:Long, activePG:PlaceGroup, accountPerPlace:Long):Place{
-        return activePG(accId/accountPerPlace);
-    }
+    }    
     
 }
 

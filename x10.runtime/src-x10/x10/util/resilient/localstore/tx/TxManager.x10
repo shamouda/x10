@@ -334,7 +334,7 @@ public abstract class TxManager(data:MapData) {
                /*another transaction have modified it and committed since we read the initial value*/
                 memory.unlock(id, key);
                 //don't mark it as locked, because at abort time we return the old value for locked variables. our old value is wrong.
-                throw new ConflictException("ConflictException", here);
+                throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
             }
             
             log.markAsLocked(key);
@@ -462,7 +462,7 @@ public abstract class TxManager(data:MapData) {
                /*another transaction have modified it and committed since we read the initial value*/
                 memory.unlock(id, key);
                 //don't mark it as locked, because at abort time we return the old value for locked variables. our old value is wrong.
-                throw new ConflictException("ConflictException", here);
+                throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
             }
             
             log.markAsLocked(key);
@@ -651,7 +651,7 @@ public abstract class TxManager(data:MapData) {
                 //detect write after read
                 if (curVer != initVer) {
                     //Console.OUT.println(here + "   TxManager.validate_RV_LA_WB throwing conflict");
-                    throw new ConflictException("ConflictException", here);
+                    throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
                 }
             }
         } catch(ex:Exception) {
@@ -683,7 +683,7 @@ public abstract class TxManager(data:MapData) {
                 //detect write after read
                 if (curVer != initVer && memory.getLockedBy() != id) {
                     //Console.OUT.println("Tx["+log.id+"] here["+here + "] TxManager.validate_RV_EA throwing conflict");
-                    throw new ConflictException("ConflictException", here);
+                    throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
                 }
             }
         } catch(ex:Exception) {
@@ -713,8 +713,7 @@ public abstract class TxManager(data:MapData) {
                 val curVer = memory.getAtomicValue(false, key, id).version;
                 //detect write after read
                 if (curVer != initVer) {
-                    //Console.OUT.println("Tx["+log.id+"] here["+here + "] TxManager.validate_RV_EA throwing conflict");
-                    throw new ConflictException("ConflictException", here);
+                    throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
                 }
             }
         } catch(ex:Exception) {

@@ -24,11 +24,14 @@ import x10.util.resilient.PlaceManager;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.store.Store;
+import x10.util.resilient.localstore.Tx;
 
 public class SPMDResilientIterativeExecutor (home:Place) {
     private static val VERBOSE = (System.getenv("EXECUTOR_DEBUG") != null 
                                 && System.getenv("EXECUTOR_DEBUG").equals("1"));
 
+    private static val EXECUTOR_ENABLE_STM = (System.getenv("EXECUTOR_ENABLE_STM") != null 
+            && System.getenv("EXECUTOR_ENABLE_STM").equals("1"));
     private val manager:GlobalRef[PlaceManager]{self.home == this.home};
     private val resilientMap:Store[Cloneable];
     private var plh:PlaceLocalHandle[PlaceTempData];
@@ -117,7 +120,10 @@ public class SPMDResilientIterativeExecutor (home:Place) {
                 
                 /*** Checkpoint (save new version) ***/                
                 if (isResilient && !tmpRestoreFlag) {
-                    checkpoint(app);
+                    if (EXECUTOR_ENABLE_STM)
+                        checkpointSTM(app);
+                    else
+                        checkpoint(app);
                 }
                 
                 val restoreRequired = tmpRestoreFlag;
@@ -259,6 +265,37 @@ public class SPMDResilientIterativeExecutor (home:Place) {
         lastCkptIter = plh().globalIter;
         ckptTimes.add(Timer.milliTime() - startCheckpoint);
     }
+    
+    private def checkpointSTM(app:SPMDResilientIterativeApp){here == home} {
+        val startCheckpoint = Timer.milliTime();
+        //take new checkpoint only if restore was not done in this iteration
+        if (VERBOSE) Console.OUT.println("checkpointing at iter " + plh().globalIter);
+        val newVersion = (lastCkptVersion+1)%2;
+        
+        finish for (p in manager().activePlaces()) at (p) async {
+            plh().lastCkptKeys.clear();            
+            val ckptMap = app.getCheckpointData_local();
+            if (ckptMap != null) {
+                val verMap = new HashMap[String,Cloneable]();               
+                val iter = ckptMap.keySet().iterator();
+                while (iter.hasNext()) {                    
+                    val appKey = iter.next();
+                    val key = appKey +":v" + newVersion;
+                    val value = ckptMap.getOrThrow(appKey);
+                    verMap.put(key, value);
+                    plh().lastCkptKeys.add(appKey); 
+                    //if (VERBOSE) Console.OUT.println(here + "checkpointing key["+appKey+"]  version["+newVersion+"] succeeded ...");
+                }
+                resilientMap.setAll(verMap);
+            }
+            
+        }
+        
+        lastCkptVersion = newVersion;
+        lastCkptIter = plh().globalIter;
+        ckptTimes.add(Timer.milliTime() - startCheckpoint);
+    }
+    
     
     private def restore(app:SPMDResilientIterativeApp, lastCkptIter:Long) {
     	val startRestoreData = Timer.milliTime();        

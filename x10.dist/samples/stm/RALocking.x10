@@ -84,7 +84,7 @@ public class RALocking {
                     if (i%debugProgress == 0)
                         Console.OUT.println(here + " progress " + i);
                     val rand1 = requests.accountsRail(i);
-                    val p1 = getPlace(rand1, activePG, accountsPerPlace);
+                    val p1 = STMAppUtils.getPlace(rand1, activePG, accountsPerPlace);
                     
                     val randAcc = "acc"+rand1;
                     val amount = requests.amountsRail(i);
@@ -130,9 +130,6 @@ public class RALocking {
         return sum;
     }
     
-    public static def getPlace(accId:Long, activePG:PlaceGroup, accountPerPlace:Long):Place{
-        return activePG(accId/accountPerPlace);
-    }
 }
 
 class PlaceUpdateRequests(size:Long){

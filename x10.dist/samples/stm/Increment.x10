@@ -25,7 +25,7 @@ public class Increment {
     
     public static def increment(map:ResilientNativeMap, activePG:PlaceGroup, start:Long) {
         val startProc = System.nanoTime();
-        val members = STMResilientAppUtils.createGroup(Place(2));
+        val members = STMAppUtils.createGroup(Place(2));
         
         finish for (p in activePG) at (p) async {
             do {

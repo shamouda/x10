@@ -1,43 +1,15 @@
 import x10.util.resilient.localstore.CloneableLong;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.tx.ConflictException;
+import x10.util.ArrayList;
+import x10.util.resilient.localstore.tx.TxFuture;
 
-public class STMResilientAppUtils {
+
+public class STMAppUtils {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
-    public static def processException(txId:Long, ex:Exception, trial:Long) {
-        var newTrial:Long = 0;
-        if (ex instanceof  ConflictException) {
-            newTrial = trial +1 ;
-            if (TM_DEBUG) {
-                Console.OUT.println("Tx["+txId+"] ApplicationException["+ex.getMessage()+"] CE retry ...");
-                ex.printStackTrace();
-            }
-        }
-        else if (ex instanceof MultipleExceptions) {
-            val deadExList = (ex as MultipleExceptions).getExceptionsOfType[DeadPlaceException]();
-            if (deadExList != null) {
-                if (TM_DEBUG) {
-                    Console.OUT.println("Tx["+txId+"] ApplicationException["+ex.getMessage()+"] ME throw recoverException ");
-                    ex.printStackTrace();
-                }
-                throw new RecoverDataStoreException("MultipleException->RecoverDataStoreException", here);
-            }//else it is a conflict exception
-            
-            if (TM_DEBUG) {
-                Console.OUT.println("Tx["+txId+"] ApplicationException["+ex.getMessage()+"] ME retry ");
-                ex.printStackTrace();
-            }
-            
-            newTrial = trial +1 ;
-        } else {
-            if (TM_DEBUG) {
-                Console.OUT.println("Tx["+txId+"] ApplicationException["+ex.getMessage()+"] EX throw recoverException");
-                ex.printStackTrace();
-            }
-            throw new RecoverDataStoreException("Exception->RecoverDataStoreException", here); 
-        }
-        return newTrial;
+    public static def getPlace(accId:Long, activePG:PlaceGroup, accountPerPlace:Long):Place{
+        return activePG(accId/accountPerPlace);
     }
     
     public static def restoreProgress(map:ResilientNativeMap, placeIndex:Long, defaultProg:Long){
@@ -86,6 +58,32 @@ public class STMResilientAppUtils {
         rail(1) = p2;
         rail(2) = p3;
         return new SparsePlaceGroup(rail);
+    }
+    
+    public static def sumAccounts(map:ResilientNativeMap, activePG:PlaceGroup){
+        var sum:Long = 0;
+        val list = new ArrayList[TxFuture]();
+        val tx = map.startGlobalTransaction(activePG);
+        for (p in activePG) {
+            val f = tx.asyncAt(p, () => {
+                var localSum:Long = 0;
+                val set = tx.keySet();
+                val iter = set.iterator();
+                while (iter.hasNext()) {
+                    val accId  = iter.next();
+                    val obj = tx.get(accId);
+                    if (obj != null  && obj instanceof BankAccount) {
+                        localSum += (obj as BankAccount).account;
+                    }
+                }
+                return localSum;
+            });
+            list.add(f);
+        }
+        for (f in list)
+            sum += f.waitV() as Long;
+        tx.commit();
+        return sum;
     }
 }
 

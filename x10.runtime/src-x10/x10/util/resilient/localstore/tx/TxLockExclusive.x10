@@ -32,7 +32,7 @@ public class TxLockExclusive extends TxLock {
                 if (resilient)
                     TxManager.checkDeadCoordinator(lockedBy);
                 //Console.OUT.println(here + "   TxLockExclusive.lockWrite   throwing conflict");
-                throw new ConflictException("ConflictException", here);
+                throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] ", here);
             }
             locked = true;
             lockedBy = txId;

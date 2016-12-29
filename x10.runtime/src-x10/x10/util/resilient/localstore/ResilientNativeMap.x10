@@ -63,6 +63,20 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         trans.commit();
     }
     
+    public def set2(key:String, value:Cloneable, place:Place, key2:String, value2:Cloneable) {
+        assert(here.id != place.id);
+        val rail = new Rail[Place](2);
+        rail(0) = here; 
+        rail(1) = place;
+        val members = new SparsePlaceGroup(rail);
+        executeTransaction (()=>{
+            val tx = startGlobalTransaction(members);
+            tx.asyncAt(place, ()=> {tx.put(key2, value2);});
+            tx.put(key, value);
+            tx.commit();
+        });
+    }
+    
     public def startLocalTransaction():LocalTx {
         assert(store.plh().virtualPlaceId != -1);
         val id = store.plh().masterStore.getNextTransactionId();
@@ -83,6 +97,28 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         val tx = new Tx(store.plh, id, name, members, store.activePlaces, store.txDescMap);
         plh().add(tx);
         return tx;
+    }
+    
+    
+    public def executeTransaction(closure:()=>void) {
+        do {
+            try {
+                closure();
+                break;
+            } catch(ex:Exception) {
+                processException(ex);
+            }
+        }while(true);
+    }
+    
+    private static def processException(ex:Exception) {
+        if (ex instanceof MultipleExceptions) {
+            val deadExList = (ex as MultipleExceptions).getExceptionsOfType[DeadPlaceException]();
+            if (deadExList != null && deadExList.size != 0)
+                throw ex;
+        } 
+        else if (!(ex instanceof ConflictException))
+            throw ex;
     }
     
     public def restartGlobalTransaction(txDesc:TxDesc):Tx {

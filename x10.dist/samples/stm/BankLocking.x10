@@ -68,13 +68,13 @@ public class BankLocking {
                 if (i%debugProgress == 0)
                     Console.OUT.println(here + " progress " + i);
                 val rand1 = Math.abs(rand.nextLong()% accountsMAX);
-                val p1 = getPlace(rand1, activePG, accountsPerPlace);
+                val p1 = STMAppUtils.getPlace(rand1, activePG, accountsPerPlace);
                 
                 var rand2:Long = Math.abs(rand.nextLong()% accountsMAX);
-                var p2:Place = getPlace(rand2, activePG, accountsPerPlace);
+                var p2:Place = STMAppUtils.getPlace(rand2, activePG, accountsPerPlace);
                 while (rand1 == rand2 || p1.id == p2.id) {
                     rand2 = Math.abs(rand.nextLong()% accountsMAX);
-                    p2 = getPlace(rand2, activePG, accountsPerPlace);
+                    p2 = STMAppUtils.getPlace(rand2, activePG, accountsPerPlace);
                 }
                 val randAcc1 = "acc"+rand1;
                 val randAcc2 = "acc"+rand2;
@@ -132,10 +132,6 @@ public class BankLocking {
         for (f in list)
             sum += f.waitV() as Long;
         return sum;
-    }
-    
-    public static def getPlace(accId:Long, activePG:PlaceGroup, accountPerPlace:Long):Place{
-        return activePG(accId/accountPerPlace);
     }
     
 }

@@ -71,11 +71,11 @@ public class DummyRandomAccess {
                     if (i%debugProgress == 0)
                         Console.OUT.println(here + " progress " + i);
                     val rand1 = requests.accountsRail(i);
-                    val p1 = getPlace(rand1, activePG, accountsPerPlace);
+                    val p1 = STMAppUtils.getPlace(rand1, activePG, accountsPerPlace);
                     
                     val randAcc = "acc"+rand1;
                     val amount = requests.amountsRail(i);
-                    val members = STMResilientAppUtils.createGroup(p1);
+                    val members = STMAppUtils.createGroup(p1);
                     var trial:Long = -1;
                     do {
                         var txId:Long = -1;
@@ -104,10 +104,6 @@ public class DummyRandomAccess {
                 }
             }
         }
-    }
-    
-    public static def getPlace(accId:Long, activePG:PlaceGroup, accountPerPlace:Long):Place{
-        return activePG(accId/accountPerPlace);
     }
     
 }
