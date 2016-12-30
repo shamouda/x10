@@ -54,4 +54,8 @@ public class NativeStore[V]{V haszero, V <: Cloneable} extends Store[V] {
     store.updateForChangedPlaces(changes);
   }
   
+  public def startGlobalTransaction(members:PlaceGroup) {
+      return map.startGlobalTransaction(members);
+  }
+  
 }

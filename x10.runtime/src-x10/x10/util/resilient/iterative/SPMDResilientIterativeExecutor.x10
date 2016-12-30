@@ -25,6 +25,7 @@ import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.store.Store;
 import x10.util.resilient.localstore.Tx;
+import x10.util.resilient.store.NativeStore;
 
 public class SPMDResilientIterativeExecutor (home:Place) {
     private static val VERBOSE = (System.getenv("EXECUTOR_DEBUG") != null 
@@ -120,8 +121,8 @@ public class SPMDResilientIterativeExecutor (home:Place) {
                 
                 /*** Checkpoint (save new version) ***/                
                 if (isResilient && !tmpRestoreFlag) {
-                    if (EXECUTOR_ENABLE_STM)
-                        checkpointSTM(app);
+                    if (EXECUTOR_ENABLE_STM && resilientMap instanceof NativeStore[Cloneable])
+                        checkpointSTM(app, resilientMap as NativeStore[Cloneable]);
                     else
                         checkpoint(app);
                 }
@@ -266,31 +267,30 @@ public class SPMDResilientIterativeExecutor (home:Place) {
         ckptTimes.add(Timer.milliTime() - startCheckpoint);
     }
     
-    private def checkpointSTM(app:SPMDResilientIterativeApp){here == home} {
+    private def checkpointSTM(app:SPMDResilientIterativeApp, nativeStore:NativeStore[Cloneable]){here == home} {
         val startCheckpoint = Timer.milliTime();
-        //take new checkpoint only if restore was not done in this iteration
         if (VERBOSE) Console.OUT.println("checkpointing at iter " + plh().globalIter);
         val newVersion = (lastCkptVersion+1)%2;
         
-        finish for (p in manager().activePlaces()) at (p) async {
-            plh().lastCkptKeys.clear();            
-            val ckptMap = app.getCheckpointData_local();
-            if (ckptMap != null) {
-                val verMap = new HashMap[String,Cloneable]();               
-                val iter = ckptMap.keySet().iterator();
-                while (iter.hasNext()) {                    
-                    val appKey = iter.next();
-                    val key = appKey +":v" + newVersion;
-                    val value = ckptMap.getOrThrow(appKey);
-                    verMap.put(key, value);
-                    plh().lastCkptKeys.add(appKey); 
-                    //if (VERBOSE) Console.OUT.println(here + "checkpointing key["+appKey+"]  version["+newVersion+"] succeeded ...");
+        val tx = nativeStore.startGlobalTransaction(manager().activePlaces());
+        for (p in manager().activePlaces()) {
+            tx.asyncAt(p, ()=> {
+                plh().lastCkptKeys.clear();            
+                val ckptMap = app.getCheckpointData_local();
+                if (ckptMap != null) {
+                    val iter = ckptMap.keySet().iterator();
+                    while (iter.hasNext()) {
+                        val appKey = iter.next();
+                        val key = appKey +":v" + newVersion;
+                        val value = ckptMap.getOrThrow(appKey);
+                        tx.put(key, value);
+                        plh().lastCkptKeys.add(appKey);
+                        //if (VERBOSE) Console.OUT.println(here + "checkpointing key["+appKey+"]  version["+newVersion+"] succeeded ...");
+                    }
                 }
-                resilientMap.setAll(verMap);
-            }
-            
+            });
         }
-        
+        tx.commit();
         lastCkptVersion = newVersion;
         lastCkptIter = plh().globalIter;
         ckptTimes.add(Timer.milliTime() - startCheckpoint);

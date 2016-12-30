@@ -36,7 +36,7 @@ public class ResilientStore {
     private val appMaps:HashMap[String,ResilientNativeMap];
     private transient val lock:SimpleLatch;
     
-    /*A resilient map for transactions' descriptors*/
+    //A resilient map for transactions' descriptors
     var txDescMap:ResilientNativeMap;
     
     private def this(pg:PlaceGroup, plh:PlaceLocalHandle[LocalStore]) {
@@ -91,6 +91,7 @@ public class ResilientStore {
 
         checkIfBothMasterAndSlaveDied(changes);
         
+        /*complete transactions whose coordinator died*/
         recoverTransactions(changes);
         
         recoverMasters(changes);
@@ -105,7 +106,7 @@ public class ResilientStore {
             val slave = changes.oldActivePlaces.next(dp);
             if (changes.removedPlaces.contains(slave)) {
                 val virtualId = changes.oldActivePlaces.indexOf(dp);
-                throw new Exception("Fatal: both master and slave lost for virtual place["+virtualId+"] ");
+                throw new Exception("Fatal: both master and slave were lost for virtual place["+virtualId+"] ");
             }
         }
     }
@@ -155,24 +156,26 @@ public class ResilientStore {
                 Console.OUT.println("recoverTransactions deadPlace["+deadPlace+"] moving to its slave["+slave+"] ");
                 at (slave) async {
                     val masterState = plh().slaveStore.getSlaveMasterState();
-                    val txDescMap = masterState.maps.getOrThrow("_TxDesc_");
-                    val set = txDescMap.keySet();
-                    val iter = set.iterator();
-                    while (iter.hasNext()) {
-                        val txId = iter.next();
-                        val obj = txDescMap.get(txId);
-                        if (obj != null) {
-                            val txDesc = obj as TxDesc;
-                            val map = appMaps.getOrThrow(txDesc.mapName);
-                            if (TM_DEBUG) Console.OUT.println(here + " recovering txdesc " + txDesc);
-                            val tx = map.restartGlobalTransaction(txDesc);
-                            if (txDesc.status == TxDesc.COMMITTING) {
-                                if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] commit it");
-                                tx.commit(true); //ignore phase one
-                            }
-                            else {
-                                if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] abort it");
-                                tx.abort();
+                    val txDescMap = masterState.maps.getOrElse("_TxDesc_", null);
+                    if (txDescMap != null) {
+                        val set = txDescMap.keySet();
+                        val iter = set.iterator();
+                        while (iter.hasNext()) {
+                            val txId = iter.next();
+                            val obj = txDescMap.get(txId);
+                            if (obj != null) {
+                                val txDesc = obj as TxDesc;
+                                val map = appMaps.getOrThrow(txDesc.mapName);
+                                if (TM_DEBUG) Console.OUT.println(here + " recovering txdesc " + txDesc);
+                                val tx = map.restartGlobalTransaction(txDesc);
+                                if (txDesc.status == TxDesc.COMMITTING) {
+                                    if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] commit it");
+                                    tx.commit(true); //ignore phase one
+                                }
+                                else {
+                                    if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] abort it");
+                                    tx.abort();
+                                }
                             }
                         }
                     }
