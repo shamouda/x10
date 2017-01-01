@@ -84,13 +84,7 @@ public class RunLinReg {
         }
 
         if (sparePlaces > 0) {
-            if (Runtime.RESILIENT_MODE <= 0) {
-                Console.ERR.println("Error: attempt to skip places when not in resilient mode.  Aborting.");
-                System.setExitCode(1n);
-                return;
-            } else {
-                Console.OUT.println("Skipping "+sparePlaces+" places to reserve for failure.");
-            }
+            Console.OUT.println("Using  "+sparePlaces+" spare places.");
         }
         
         val startTime = Timer.milliTime();
