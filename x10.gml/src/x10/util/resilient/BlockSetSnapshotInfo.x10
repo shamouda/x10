@@ -17,7 +17,7 @@ import x10.matrix.ElemType;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.LocalStore;
 
-public class BlockSetSnapshotInfo(placeIndex:Long, blockSet:BlockSet, isSpare:Boolean) implements Cloneable {
+public class BlockSetSnapshotInfo(placeIndex:Long, blockSet:BlockSet, isSparse:Boolean) implements Cloneable {
     
     public def clone():Cloneable {
         return new BlockSetSnapshotInfo(placeIndex, blockSet.clone());
@@ -58,7 +58,6 @@ public class BlockSetSnapshotInfo(placeIndex:Long, blockSet:BlockSet, isSpare:Bo
             val value = new Rail[ElemType](totalSize);
             blockSet.flattenValue(value);
             val srcbuf_value = new GlobalRail[ElemType](value);
-            val srcbufCnt_index = index.size;
             at (plh().slave) async {
                 val dstbuf_value = Unsafe.allocRailUninitialized[ElemType](srcbuf_value.size);
                 Rail.asyncCopy[ElemType](srcbuf_value, 0, dstbuf_value, 0, srcbuf_value.size);
