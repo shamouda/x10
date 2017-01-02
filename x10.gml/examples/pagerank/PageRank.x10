@@ -249,7 +249,7 @@ public class PageRank implements SPMDResilientIterativeApp {
     }
     
     public def isFinished_local():Boolean {
-        return (iterations <= 0 && appTempDataPLH().maxDelta < tolerance) || (iterations > 0 && appTempDataPLH().iter >= iterations);
+        return /* (iterations <= 0 && appTempDataPLH().maxDelta < tolerance) || */ (iterations > 0 && appTempDataPLH().iter >= iterations);
     }
 
     public def step_local():void {
