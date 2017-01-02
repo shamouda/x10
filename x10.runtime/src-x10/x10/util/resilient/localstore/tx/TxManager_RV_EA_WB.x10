@@ -27,7 +27,7 @@ public class TxManager_RV_EA_WB extends TxManager {
     }
     
     public def delete(id:Long, key:String):Cloneable {
-        return delete_EA_WB(id, key);
+        return put_EA_WB(id, key, null);
     }
     
     public def validate(log:TxLog) {
