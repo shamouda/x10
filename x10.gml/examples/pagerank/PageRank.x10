@@ -253,6 +253,7 @@ public class PageRank implements SPMDResilientIterativeApp {
     }
 
     public def step_local():void {
+        if (here.id == 0) Console.OUT.println("progress: " + appTempDataPLH().iter);
         GP.mult_local(G, P);
         GP.scale_local(alpha);
     
