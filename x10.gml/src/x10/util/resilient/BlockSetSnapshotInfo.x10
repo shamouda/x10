@@ -20,7 +20,7 @@ import x10.util.resilient.localstore.LocalStore;
 public class BlockSetSnapshotInfo(placeIndex:Long, blockSet:BlockSet, isSparse:Boolean) implements Cloneable {
     
     public def clone():Cloneable {
-        return new BlockSetSnapshotInfo(placeIndex, blockSet.clone());
+        return new BlockSetSnapshotInfo(placeIndex, blockSet.clone(), isSparse);
     }
     
     public final def asyncRemoteCopy(id:Long, mapName:String, key:String, plh:PlaceLocalHandle[LocalStore]) {
