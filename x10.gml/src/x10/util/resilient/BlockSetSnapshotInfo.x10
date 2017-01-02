@@ -15,6 +15,7 @@ import x10.util.HashMap;
 import x10.matrix.distblock.BlockSet;
 import x10.matrix.ElemType;
 import x10.util.resilient.localstore.Cloneable;
+import x10.util.resilient.localstore.LocalStore;
 
 public class BlockSetSnapshotInfo(placeIndex:Long, blockSet:BlockSet, isSpare:Boolean) implements Cloneable {
     
