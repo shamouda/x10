@@ -23,6 +23,8 @@ public class BlockSetSnapshotInfo(placeIndex:Long, blockSet:BlockSet, isSparse:B
         return new BlockSetSnapshotInfo(placeIndex, blockSet.clone(), isSparse);
     }
     
+    public def asyncRemoteCopySupported() = true;
+    
     public final def asyncRemoteCopy(id:Long, mapName:String, key:String, plh:PlaceLocalHandle[LocalStore]) {
         val idx = placeIndex;
         val sparse = isSparse;
