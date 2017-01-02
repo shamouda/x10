@@ -136,7 +136,6 @@ public class PageRank implements SPMDResilientIterativeApp {
         val pr = new PageRank(g, it, tolerance, g.getTotalNonZeroCount(), executor);
         finish ateach(Dist.makeUnique(executor.activePlaces())) {
             g.initRandom_local();
-            Console.OUT.println(here + ":init:" + g.handleBS().toString());
             // TODO init personalization vector U
         }
         return pr;
@@ -289,9 +288,7 @@ public class PageRank implements SPMDResilientIterativeApp {
     }
     
     public def restore_local(restoreDataMap:HashMap[String,Cloneable], lastCheckpointIter:Long) {
-        G.initRandom_local();
-        Console.OUT.println(here + ":recovered:" + G.handleBS().toString());
-        //G.restoreSnapshot_local(restoreDataMap.getOrThrow("G"));
+        G.restoreSnapshot_local(restoreDataMap.getOrThrow("G"));
     	//U.restore_local(restoreDataMap.getOrThrow("U"));
     	P.restoreSnapshot_local(restoreDataMap.getOrThrow("P"));
     	appTempDataPLH().restoreSnapshot_local(restoreDataMap.getOrThrow("app"));
