@@ -136,7 +136,7 @@ public class PageRank implements SPMDResilientIterativeApp {
         val pr = new PageRank(g, it, tolerance, g.getTotalNonZeroCount(), executor);
         finish ateach(Dist.makeUnique(executor.activePlaces())) {
             g.initRandom_local();
-            Console.OUT.println(here + ":init:" + G.handleBS().toString());
+            Console.OUT.println(here + ":init:" + g.handleBS().toString());
             // TODO init personalization vector U
         }
         return pr;
