@@ -46,7 +46,7 @@ public class SlaveStore {
     }
     
     /******* Prepare/Commit/Abort functions *******/
-    public def commit(id:Long, mapName:String, transLog:HashMap[String,TxKeyChange]) {
+    public def commit(id:Long, mapName:String, transLog:HashMap[String,Cloneable]) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit1() started ...");
         try {
             lock.lock();
@@ -77,13 +77,8 @@ public class SlaveStore {
             val iter = txLog.transLog.keySet().iterator();
             while (iter.hasNext()) {
                 val key = iter.next();
-                val log = txLog.transLog.getOrThrow(key);
-                if (log.readOnly())
-                    continue;
-                if (log.isDeleted()) 
-                    data.remove(key);
-                else
-                    data.put(key, log.getValue());
+                val value = txLog.transLog.getOrThrow(key);
+                data.put(key, value);
             }
             logs.delete(txLog.id);
         }catch(ex:Exception){
@@ -92,17 +87,38 @@ public class SlaveStore {
         }
     }
     
-    public def prepare(id:Long, mapName:String, transLog:HashMap[String,TxKeyChange]) {
+    public def prepare(id:Long, mapName:String, remainingEntries:HashMap[String,Cloneable]) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() started ...");
         try {
             lock.lock();
-            logs.put(id, new TxSlaveLog(id, mapName, transLog));
+            val txSlaveLog = logs.getOrElse(id, new TxSlaveLog( id, mapName, new HashMap[String,Cloneable]()) );
+            
+            val iter = remainingEntries.keySet().iterator();
+            while (iter.hasNext()) {
+                val key = iter.next();
+                val value = remainingEntries.getOrThrow(key);
+                txSlaveLog.transLog.put(key, value);
+            }
             if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() logs.put(id="+id+") ...");
         }
         finally {
             lock.unlock();
         }
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() completed ...");
+    }
+    
+    public def addEntry(id:Long, mapName:String, key:String, value:Cloneable) {
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.addEntry() started ...");
+        try {
+            lock.lock();
+            val txSlaveLog = logs.getOrElse(id, new TxSlaveLog( id, mapName, new HashMap[String,Cloneable]()) );
+            txSlaveLog.transLog.put(key, value);
+            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.addEntry() logs.put(id="+id+") ...");
+        }
+        finally {
+            lock.unlock();
+        }
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.addEntry() completed ...");
     }
 
     public def abort(id:Long) {

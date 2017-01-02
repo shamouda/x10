@@ -32,6 +32,7 @@ import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.Snapshottable;
 import x10.util.resilient.iterative.*;
+import x10.util.resilient.localstore.LocalStore;
 
 /**
  * Parallel PageRank algorithm based on GML distributed sparse block matrix.
@@ -329,6 +330,12 @@ public class PageRank implements SPMDResilientIterativeApp {
         
         public def clone():Cloneable {
         	return new AppTempData(iter, maxDelta);
+        }
+        
+        public def asyncRemoteCopySupported() = false;
+        
+        public def asyncRemoteCopy(id:Long, mapName:String, key:String, plh:PlaceLocalHandle[LocalStore]) {
+            throw new Exception("CloneableLong.asyncRemoteCopy  not supported ...");
         }
         
         public def makeSnapshot_local() = this;

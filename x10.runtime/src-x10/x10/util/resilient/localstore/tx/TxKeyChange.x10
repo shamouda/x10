@@ -33,9 +33,6 @@ public class TxKeyChange {
     /*A flag to indicate if the value was used for read only operations*/
     private var readOnly:Boolean = true;
 
-    /*A flag to differentiate between setting a NULL and deleting an object*/
-    private var deleted:Boolean = false;
-
     private var locked:Boolean = false;
 
     private var unlocked:Boolean = false;
@@ -46,39 +43,29 @@ public class TxKeyChange {
         this.initTxId = initTxId;
     }
     
-    public def this (value:Cloneable, initVersion:Int, initTxId:Long, readOnly:Boolean, deleted:Boolean, locked:Boolean, unlocked:Boolean) {
+    public def this (value:Cloneable, initVersion:Int, initTxId:Long,
+            readOnly:Boolean, locked:Boolean, unlocked:Boolean) {
         this.value = value;
         this.initVersion = initVersion;
         this.initTxId = initTxId;
         this.readOnly = readOnly;
-        this.deleted = deleted;
         this.locked = locked;
         this.unlocked = unlocked;
     }
+    
+  /*  
+    public static makeRemote():TxKeyChange {
+        
+    }*/
     
     public def update(n:Cloneable) {
         //Undo Logging should only log the initial value and perform updates inplace
         value = n;
         readOnly = false;
-        if (deleted)
-            deleted = false;
     }
-    
-    public def delete() {
-        //Undo Logging should only log the initial value and perform updates inplace
-        readOnly = false;
-        deleted = true;
-        value = null;
-    }
-    
     
     public def markAsModified() {
         readOnly = false;
-    }
-    
-    public def markAsDeleted() {
-        readOnly = false;
-        deleted = true;
     }
     
     public def markAsLocked() {
@@ -90,12 +77,11 @@ public class TxKeyChange {
     }
     
     public def clone() {
-        return new TxKeyChange(value, initVersion, initTxId, readOnly, deleted, locked, unlocked);
+        return new TxKeyChange(value, initVersion, initTxId, readOnly, locked, unlocked);
     }
     
     public def getValue() = value;
     public def readOnly() = readOnly;
-    public def isDeleted() = deleted;
     public def getInitVersion() = initVersion;
     public def getInitTxId() = initTxId;
     public def isLocked() = locked;

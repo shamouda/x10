@@ -71,12 +71,11 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commit() get commit log = " + log);
         try {
             try {
-                if (resilient && log != null && log.transLog.size() > 0) {
-                    val transLog = log.transLog;
+                if (resilient && log != null && log.size() > 0) {
                     if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commit() before moving to slave["+plh().slave+"] ...");
                     finish at (plh().slave) async {
                         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commit() before moved to slave["+here+"] ...");
-                        plh().slaveStore.commit(id, mapName, transLog);
+                        plh().slaveStore.commit(id, mapName, log);
                     }
                 }
             }catch(exSl:Exception) {

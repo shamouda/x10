@@ -13,6 +13,7 @@
 package x10.util.resilient.localstore.tx;
 
 import x10.util.resilient.localstore.Cloneable;
+import x10.util.resilient.localstore.LocalStore;
 
 public class TxDesc(id:Long, mapName:String, members:Rail[Long]) implements Cloneable{
     public var status:Long = STARTED;
@@ -37,6 +38,12 @@ public class TxDesc(id:Long, mapName:String, members:Rail[Long]) implements Clon
         else if (status == ABORTING)
             return "ABORTING";
         return "";
+    }
+    
+    public def asyncRemoteCopySupported() = false;
+    
+    public def asyncRemoteCopy(id:Long, mapName:String, key:String, plh:PlaceLocalHandle[LocalStore]) {
+        throw new Exception("TxDesc.asyncRemoteCopy  not supported ...");
     }
     
     public def toString() {

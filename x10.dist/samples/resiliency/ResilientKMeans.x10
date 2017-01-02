@@ -17,6 +17,7 @@ import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.iterative.*;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.Snapshottable;
+import x10.util.resilient.localstore.LocalStore;
 
 /**
  * A resilient distributed implementation of KMeans clustering
@@ -117,6 +118,11 @@ public class ResilientKMeans {
     static class LocalStateSnapshot(points:Rail[Float], numPoints:Long, dim:Long, numClusters:Long) implements Cloneable {
         public def clone():Cloneable {
             return new LocalStateSnapshot(points, numPoints, dim, numClusters);
+        }
+        public def asyncRemoteCopySupported() = false;
+        
+        public def asyncRemoteCopy(id:Long, mapName:String, key:String, plh:PlaceLocalHandle[LocalStore]) {
+            throw new Exception("CloneableLong.asyncRemoteCopy  not supported ...");
         }
     }
 

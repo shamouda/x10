@@ -15,6 +15,7 @@ import java.security.NoSuchAlgorithmException;
 
 import x10.interop.Java;
 import x10.util.resilient.localstore.Cloneable;
+import x10.util.resilient.localstore.LocalStore;
 
 final class UTS implements Cloneable {
   static den = Math.log(4.0 / (1.0 + 4.0));
@@ -178,6 +179,12 @@ final class UTS implements Cloneable {
 
   public def clone() {
       return trim();
+  }
+  
+  public def asyncRemoteCopySupported() = false;
+  
+  public def asyncRemoteCopy(id:Long, mapName:String, key:String, plh:PlaceLocalHandle[LocalStore]) {
+      throw new Exception("CloneableLong.asyncRemoteCopy  not supported ...");
   }
 
   static def sub(str:String, start:Int, end:Int):String {

@@ -22,4 +22,10 @@ public class CloneableLong implements Cloneable {
     public def clone():Cloneable {
         return new CloneableLong(v);
     }
+    
+    public def asyncRemoteCopySupported() = false;
+    
+    public def asyncRemoteCopy(id:Long, mapName:String, key:String, plh:PlaceLocalHandle[LocalStore]) {
+        throw new Exception("CloneableLong.asyncRemoteCopy  not supported ...");
+    }
 }

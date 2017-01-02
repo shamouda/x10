@@ -61,7 +61,7 @@ public abstract class TxManager(data:MapData) {
             throw new Exception("Wrong Tx Manager Configuration (undo logging can not be selected with late acquire");
     }
     
-    public def getTxCommitLog(id:Long) {
+    public def getTxCommitLog(id:Long):HashMap[String,Cloneable] {
         logsLock.lock();
         val log = txLogs.getOrElse(id, null);
         logsLock.unlock();
@@ -75,22 +75,15 @@ public abstract class TxManager(data:MapData) {
                 return log.removeReadOnlyKeys();
             }
             else {
-                val tmp = log.removeReadOnlyKeys();
-                val iter = tmp.transLog.keySet().iterator();
+                val map = log.removeReadOnlyKeys();
+                val iter = map.keySet().iterator();
                 while (iter.hasNext()) {
                     val key = iter.next();
-                    val kLog = log.transLog.getOrThrow(key);
-                    val kLogTmp = tmp.transLog.getOrThrow(key);
-                    if (kLog.isDeleted()) {
-                        kLogTmp.delete();
-                    }
-                    else if (!kLog.readOnly()) {
-                        val memory = data.getMemoryUnit(key);
-                        val atomicV = memory.getAtomicValue(true, key, id);
-                        kLogTmp.update(atomicV.value);
-                    }
+                    val memory = data.getMemoryUnit(key);
+                    val atomicV = memory.getAtomicValue(true, key, id);
+                    map.put(key, atomicV.value);
                 }
-                return tmp;
+                return map;
             }
         }finally {
             log.unlock();
@@ -387,104 +380,6 @@ public abstract class TxManager(data:MapData) {
         }
     }
     
-    public def delete_LA_WB(id:Long, key:String):Cloneable {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] delete_LA_WB started");
-        var log:TxLog = null;
-        try{
-            val cont = logInitialIfNotLogged(id, key, false);
-            val memory = cont.memory;
-            log = cont.log;
-            
-            /*** DO NOT ACQUIRE WRITE LOCK HERE ***/
-            
-            /*** Write Buffering ***/
-            val oldValue = log.getValue(key);
-            log.logDelete(key);
-            return oldValue;//return old value
-        } catch(ex:AbortedTransactionException) {
-            return null;
-        } catch(ex:Exception) {
-            abortAndThrowException(log, ex);
-            return null;
-        } finally {
-            if (log != null)
-                log.unlock();
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] delete_LA_WB completed");
-        }
-    }
-    
-    protected def delete_EA_WB(id:Long, key:String):Cloneable {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] delete_EA_WB started");
-        var log:TxLog = null;
-        try{
-            val cont = logInitialIfNotLogged(id, key, false);
-            val memory = cont.memory;
-            log = cont.log;
-            
-            /*** EarlyAcquire ***/
-            memory.lock(id, key); 
-            log.markAsLocked(key);
-            
-            /*** Write Buffering ***/
-            val oldValue = log.getValue(key);
-            log.logDelete(key);
-            
-            return oldValue;//return old value
-        } catch(ex:AbortedTransactionException) {
-            return null;
-        } catch(ex:Exception) {
-            abortAndThrowException(log, ex);
-            return null;
-        } finally {
-            if (log != null)
-                log.unlock();
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] delete_EA_WB completed");
-        }
-    }
-    
-    protected def delete_RV_EA_UL(id:Long, key:String):Cloneable {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] delete_RV_EA_UL started");
-        var log:TxLog = null;
-        try{
-            val cont = logInitialIfNotLogged(id, key, false);
-            val memory = cont.memory;
-            log = cont.log;
-            
-            /*** EarlyAcquire ***/
-            memory.lock(id, key);
-            val atomicV = memory.getAtomicValue(true, key, id);
-            
-            val curVer = atomicV.version;
-            val initVer = log.getInitVersion(key);
-            
-            val wasLocked = log.isLocked(key);
-            if (!wasLocked && curVer != initVer) {
-               /*another transaction have modified it and committed since we read the initial value*/
-                memory.unlock(id, key);
-                //don't mark it as locked, because at abort time we return the old value for locked variables. our old value is wrong.
-                throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
-            }
-            
-            log.markAsLocked(key);
-            
-            /*** Undo Logging ***/
-            val oldValue = memory.getAtomicValue(true, key, id).value;
-            memory.setValue(null, key, id);
-            log.markAsDeleted(key);
-            
-            return oldValue;//return old value
-        } catch(ex:AbortedTransactionException) {
-            return null;
-        } catch(ex:Exception) {
-            abortAndThrowException(log, ex);
-            return null;
-        } finally {
-            if (log != null)
-                log.unlock();
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] delete_RV_EA_UL completed");
-        }
-    }
-    
     protected def get_RL_UL(id:Long, key:String):Cloneable {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] get_RL_UL started");
         var log:TxLog = null;
@@ -732,12 +627,8 @@ public abstract class TxManager(data:MapData) {
             val key = iter.next();
             val kLog = logMap.getOrThrow(key);
             val memory = data.getMemoryUnit(key);
-            if (kLog.isDeleted()) {
-                memory.setValue(null, key, log.id);
-            }
-            else if (!kLog.readOnly()){
+            if (!kLog.readOnly())
                 memory.setValue(kLog.getValue(), key, log.id);
-            }
             memory.unlock(log.id, key);
         }
         stat.commitCount++;

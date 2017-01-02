@@ -68,19 +68,11 @@ public class TxLog (id:Long, mapName:String) {
         transLog.getOrThrow(key).update(copiedValue);
     }
     
-    public def logDelete(key:String) {
-        assert ( TxManager.TM_RECOVER == TxManager.WRITE_BUFFERING );
-        transLog.getOrThrow(key).delete();
-    }
-    
     //*used by Undo Logging*//
     public def markAsModified(key:String) {
         transLog.getOrThrow(key).markAsModified();
     }
     
-    public def markAsDeleted(key:String) {
-        transLog.getOrThrow(key).markAsDeleted();
-    }
     
     //*used by Undo Logging*//
     public def isModified(key:String) {
@@ -100,17 +92,18 @@ public class TxLog (id:Long, mapName:String) {
     }
     
     /*Get log without readonly changes*/
-    public def removeReadOnlyKeys():TxLog {
-        val tmpLog = new TxLog(id, mapName);
+    public def removeReadOnlyKeys():HashMap[String,Cloneable] {
+        val map = new HashMap[String,Cloneable]();
         val iter = transLog.keySet().iterator();
         while (iter.hasNext()) {
             val key = iter.next();
             val log = transLog.getOrThrow(key);
             if (!log.readOnly()) {
-                tmpLog.transLog.put(key, log.clone());
+                val copy = log.getValue() == null ? null:log.getValue().clone();
+                map.put(key, copy);
             }
         }
-        return tmpLog;
+        return map;
     }
     
     public def lock() {

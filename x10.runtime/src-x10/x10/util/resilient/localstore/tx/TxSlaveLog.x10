@@ -13,7 +13,8 @@
 package x10.util.resilient.localstore.tx;
 
 import x10.util.HashMap;
+import x10.util.resilient.localstore.Cloneable;
 
-public class TxSlaveLog(id:Long, mapName:String, transLog:HashMap[String,TxKeyChange]) {
+public class TxSlaveLog(id:Long, mapName:String, transLog:HashMap[String,Cloneable]) {
     
 }

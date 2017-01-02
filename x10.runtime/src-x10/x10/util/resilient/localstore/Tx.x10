@@ -469,11 +469,24 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                     
                     if (resilient && !DISABLE_SLAVE) {
                         val log = plh().masterStore.getTxCommitLog(mapName, id);
-                        if (log != null && log.transLog.size() > 0) {
-                            val transLog = log.transLog;
-                            //send txLog to slave (very important to be able to tolerate failures of masters just after prepare)
-                            at (plh().slave) async {
-                                plh().slaveStore.prepare(id, mapName, transLog);
+                        if (log != null && log.size() > 0) {
+                            val remainingEntries = new HashMap[String,Cloneable]();
+                            
+                            val iter = log.keySet().iterator();
+                            while (iter.hasNext()) {
+                                val key = iter.next();
+                                val value = log.getOrThrow(key);
+                                if (value.asyncRemoteCopySupported())
+                                    value.asyncRemoteCopy(id, mapName, key, plh);
+                                else
+                                    remainingEntries.put(key, value);
+                            }
+                                
+                            if ( remainingEntries.size() > 0 ) {
+                                //send txLog to slave (very important to be able to tolerate failures of masters just after prepare)
+                                at (plh().slave) async {
+                                    plh().slaveStore.prepare(id, mapName, remainingEntries );
+                                }
                             }
                         }
                     }
@@ -528,7 +541,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                 var ex:Exception = null;
                 if (resilient && !DISABLE_SLAVE) {
                     val log = plh().masterStore.getTxCommitLog(mapName, id);
-                    if (log != null && log.transLog.size() > 0) {
+                    if (log != null && log.size() > 0) {
                         //ask slave to commit, slave's death is not fatal
                         try {
                             if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalize here["+here+"] moving to slave["+plh().slave+"] to " + ( commit? "commit": "abort" ));

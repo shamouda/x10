@@ -28,6 +28,7 @@ import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.Snapshottable;
 import x10.util.resilient.iterative.*;
+import x10.util.resilient.localstore.LocalStore;
 
 /*
  * Multinomial Logistic Regression 
@@ -546,6 +547,12 @@ public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implem
             return new AppTempData(delta, iter, obj, norm_Grad, norm_Grad_initial, norm_R2, converge);
         }
     
+        public def asyncRemoteCopySupported() = false;
+        
+        public def asyncRemoteCopy(id:Long, mapName:String, key:String, plh:PlaceLocalHandle[LocalStore]) {
+            throw new Exception("CloneableLong.asyncRemoteCopy  not supported ...");
+        }
+        
         public def makeSnapshot_local() = this;
     
         public def restoreSnapshot_local(o:Cloneable) {

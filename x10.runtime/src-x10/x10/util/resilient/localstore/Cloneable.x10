@@ -14,4 +14,6 @@ package x10.util.resilient.localstore;
 
 public interface Cloneable {
     public def clone():Cloneable;
+    public def asyncRemoteCopySupported():Boolean;
+    public def asyncRemoteCopy(id:Long, mapName:String, key:String, plh:PlaceLocalHandle[LocalStore]):void;
 }
