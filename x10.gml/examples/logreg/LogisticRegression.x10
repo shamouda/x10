@@ -129,7 +129,7 @@ public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implem
     }
     
     public def isFinished_local() {
-        return plh().converge;// || plh().iter > maxiter;
+        return plh().iter > maxiter; //plh().converge || plh().iter > maxiter;
     }
     
     public def train(startTime:Long):Vector(D) {
