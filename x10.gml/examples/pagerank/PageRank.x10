@@ -278,8 +278,8 @@ public class PageRank implements SPMDResilientIterativeApp {
 
     public def getCheckpointData_local():HashMap[String,Cloneable] {
     	val map = new HashMap[String,Cloneable]();
-    /*	if (appTempDataPLH().iter == 0)
-    		map.put("G", G.makeSnapshot_local());*/
+    	if (appTempDataPLH().iter == 0)
+    		map.put("G", G.makeSnapshot_local());
     	//map.put("U", U.makeSnapshot_local());
     	map.put("P", P.makeSnapshot_local());
     	map.put("app", appTempDataPLH().makeSnapshot_local());
