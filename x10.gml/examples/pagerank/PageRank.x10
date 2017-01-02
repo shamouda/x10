@@ -136,6 +136,7 @@ public class PageRank implements SPMDResilientIterativeApp {
         val pr = new PageRank(g, it, tolerance, g.getTotalNonZeroCount(), executor);
         finish ateach(Dist.makeUnique(executor.activePlaces())) {
             g.initRandom_local();
+            Console.OUT.println(here + ":init:" + G.handleBS().toString());
             // TODO init personalization vector U
         }
         return pr;
@@ -278,9 +279,8 @@ public class PageRank implements SPMDResilientIterativeApp {
 
     public def getCheckpointData_local():HashMap[String,Cloneable] {
     	val map = new HashMap[String,Cloneable]();
-    	if (appTempDataPLH().iter == 0) {
-    		map.put("G", G.makeSnapshot_local());
-    	}
+    /*	if (appTempDataPLH().iter == 0)
+    		map.put("G", G.makeSnapshot_local());*/
     	//map.put("U", U.makeSnapshot_local());
     	map.put("P", P.makeSnapshot_local());
     	map.put("app", appTempDataPLH().makeSnapshot_local());
@@ -289,7 +289,9 @@ public class PageRank implements SPMDResilientIterativeApp {
     }
     
     public def restore_local(restoreDataMap:HashMap[String,Cloneable], lastCheckpointIter:Long) {
-    	G.restoreSnapshot_local(restoreDataMap.getOrThrow("G"));
+        G.initRandom_local();
+        Console.OUT.println(here + ":recovered:" + G.handleBS().toString());
+        //G.restoreSnapshot_local(restoreDataMap.getOrThrow("G"));
     	//U.restore_local(restoreDataMap.getOrThrow("U"));
     	P.restoreSnapshot_local(restoreDataMap.getOrThrow("P"));
     	appTempDataPLH().restoreSnapshot_local(restoreDataMap.getOrThrow("app"));
