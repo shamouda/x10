@@ -9,7 +9,7 @@ import x10.util.resilient.localstore.ResilientStore;
 import x10.util.Set;
 import x10.xrx.Runtime;
 
-public class RABlocking {
+public class RASTMMoveData {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     public static def main(args:Rail[String]) {
@@ -29,7 +29,7 @@ public class RABlocking {
         val accountsPerPlace = Math.ceil(Math.pow(2, expAccounts) ) as Long;
         val updatesPerPlace = Math.ceil(Math.pow(2, expUpdates) ) as Long;
         
-        Console.OUT.println("Running RandomAccess (Blocking) Benchmark. Places["+Place.numPlaces()
+        Console.OUT.println("Running RASTMMoveData Benchmark. Places["+Place.numPlaces()
                 +"] Accounts["+(accountsPerPlace*Place.numPlaces()) +"] AccountsPerPlace["+accountsPerPlace
                 +"] Updates["+(updatesPerPlace*Place.numPlaces()) +"] UpdatesPerPlace["+updatesPerPlace+"] "
                 +" PrintProgressEvery["+debugProgress+"] iterations");
@@ -94,31 +94,20 @@ public class RABlocking {
                     val randAcc = "acc"+rand1;
                     val amount = requests.amountsRail(i-1);
                     val members = STMAppUtils.createGroup(p1);
-                    var trial:Long = -1;
-                    do {
-                        var txId:Long = -1;
-                        try {
-                            val tx = map.startGlobalTransaction(members);
-                            txId = tx.id;
-                            if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXSTART trial["+trial+"] accounts["+randAcc+"] place["+p1+"]");
-                            val obj = tx.getRemote(p1, randAcc);
-                            var acc:BankAccount = null;
-                            if (obj == null)
-                                acc = new BankAccount(0);
-                            else
-                                acc = obj as BankAccount;
-                            acc.account += amount;
-                            tx.putRemote(p1, randAcc, acc);
-                            tx.commit();
-                            break;
-                        }catch(ex:Exception) {
-                            trial++;
-                            if (TM_DEBUG) {
-                                Console.OUT.println("Tx["+txId+"] ApplicationException["+ex.getMessage()+"] ");
-                                ex.printStackTrace();
-                            }
-                        }
-                    } while(true);
+                    map.executeTransaction( () => {
+                        val tx = map.startGlobalTransaction(members);
+                        val txId = tx.id;
+                        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXSTART accounts["+randAcc+"] place["+p1+"]");
+                        val obj = tx.getRemote(p1, randAcc);
+                        var acc:BankAccount = null;
+                        if (obj == null)
+                            acc = new BankAccount(0);
+                        else
+                            acc = obj as BankAccount;
+                        acc.account += amount;
+                        tx.putRemote(p1, randAcc, acc);
+                        tx.commit();
+                    });
                 }
             }
         }
