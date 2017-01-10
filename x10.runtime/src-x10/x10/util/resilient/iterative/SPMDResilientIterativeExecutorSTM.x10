@@ -24,8 +24,9 @@ import x10.util.resilient.PlaceManager;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.*;
 import x10.util.resilient.store.Store;
+import x10.util.resilient.store.NativeStore;
 
-public class SPMDResilientIterativeExecutor (home:Place) {
+public class SPMDResilientIterativeExecutorSTM (home:Place) {
     private static val VERBOSE = (System.getenv("EXECUTOR_DEBUG") != null 
                                 && System.getenv("EXECUTOR_DEBUG").equals("1"));
 
@@ -49,7 +50,6 @@ public class SPMDResilientIterativeExecutor (home:Place) {
     private transient var failureDetectionTimes:ArrayList[Long] = new ArrayList[Long]();
     private transient var applicationInitializationTime:Long = 0;
     private transient var startRunTime:Long = 0;
-    private transient var lastCkptVersion:Long = -1;
     private transient var lastCkptIter:Long = -1;
     
     public def this(itersPerCheckpoint:Long, sparePlaces:Long, supportShrinking:Boolean, implicitStepSynchronization:Boolean) {
@@ -116,11 +116,10 @@ public class SPMDResilientIterativeExecutor (home:Place) {
                 
                 /*** Checkpoint (save new version) ***/                
                 if (isResilient && !tmpRestoreFlag) {
-                    checkpoint(app);
+                        checkpointSTM(app, resilientMap as NativeStore[Cloneable]);
                 }
                 
                 val restoreRequired = tmpRestoreFlag;
-                val ckptVersion = lastCkptVersion;
                 val globalIter = tmpGlobalIter;
                 
                 Console.OUT.println("SPMDResilientIterativeExecutor iter: " + plh().globalIter + " remakeRequired["+remakeRequired+"] restoreRequired["+restoreRequired+"] ...");           
@@ -130,14 +129,6 @@ public class SPMDResilientIterativeExecutor (home:Place) {
                     /*** Restore ***/
                     if (restoreRequired){
                         restore(app, globalIter);
-                    }
-                    else {
-                    	//increment the last version of the keys
-                    	val iter = plh().lastCkptKeys.iterator(); 
-                    	while (iter.hasNext()) {
-                    		val key = iter.next();
-                    		plh().ckptKeyVersion.put(key, ckptVersion);
-                    	}
                     }
                     
                     var localIter:Long = 0;
@@ -216,9 +207,8 @@ public class SPMDResilientIterativeExecutor (home:Place) {
             val virtualId = newPG.indexOf(p);
             val victimStat =  plh().place0VictimsStats.getOrElse(virtualId, plh().stat);
             val p0GlobalIter = plh().globalIter;
-            val p0AllCkptKeys = plh().ckptKeyVersion;
-            val p0LastCkptKeys = plh().lastCkptKeys;
-            PlaceLocalHandle.addPlace[PlaceTempData](plh, p, ()=>new PlaceTempData(victimStat, p0GlobalIter, p0LastCkptKeys, p0AllCkptKeys));
+            val p0CkptKeys = plh().ckptKeys;
+            PlaceLocalHandle.addPlace[PlaceTempData](plh, p, ()=>new PlaceTempData(victimStat, p0GlobalIter, p0CkptKeys));
         }
 
         val startAppRemake = Timer.milliTime();
@@ -230,27 +220,25 @@ public class SPMDResilientIterativeExecutor (home:Place) {
         return restoreRequired;
     }
     
-    private def checkpoint(app:SPMDResilientIterativeApp){here == home} {
+    private def checkpointSTM(app:SPMDResilientIterativeApp, nativeStore:NativeStore[Cloneable]){here == home} {
         val startCheckpoint = Timer.milliTime();
         if (VERBOSE) Console.OUT.println("checkpointing at iter " + plh().globalIter);
-        val newVersion = (lastCkptVersion+1)%2;
-        finish for (p in manager().activePlaces()) at (p) async {
-            plh().lastCkptKeys.clear();
-            val ckptMap = app.getCheckpointData_local();
-            if (ckptMap != null) {
-            	val verMap = new HashMap[String,Cloneable]();            	
-                val iter = ckptMap.keySet().iterator();
-                while (iter.hasNext()) {
-                    val appKey = iter.next();
-                    val key = appKey +":v" + newVersion;
-                    val value = ckptMap.getOrThrow(appKey);
-                    verMap.put(key, value);
-                    plh().lastCkptKeys.add(appKey);
+        val tx = nativeStore.startGlobalTransaction(manager().activePlaces());
+        for (p in manager().activePlaces()) {
+            tx.asyncAt(p, ()=> {
+                val ckptMap = app.getCheckpointData_local();
+                if (ckptMap != null) {
+                    val iter = ckptMap.keySet().iterator();
+                    while (iter.hasNext()) {
+                        val key = iter.next();
+                        val value = ckptMap.getOrThrow(key);
+                        tx.put(key, value);
+                        plh().ckptKeys.add(key);
+                    }
                 }
-                resilientMap.setAll(verMap);
-            }
+            });
         }
-        lastCkptVersion = newVersion;
+        tx.commit();
         lastCkptIter = plh().globalIter;
         ckptTimes.add(Timer.milliTime() - startCheckpoint);
     }
@@ -258,13 +246,11 @@ public class SPMDResilientIterativeExecutor (home:Place) {
     private def restore(app:SPMDResilientIterativeApp, lastCkptIter:Long) {
     	val startRestoreData = Timer.milliTime();        
         val restoreDataMap = new HashMap[String,Cloneable]();
-        val iter = plh().ckptKeyVersion.keySet().iterator();
+        val iter = plh().ckptKeys.iterator();
         while (iter.hasNext()) {
-            val appKey = iter.next();
-            val keyVersion = plh().ckptKeyVersion.getOrThrow(appKey);
-            val key = appKey + ":v" + keyVersion;
+            val key = iter.next();
             val value = resilientMap.get(key);
-            restoreDataMap.put(appKey, value);
+            restoreDataMap.put(key, value);
         }
         app.restore_local(restoreDataMap, lastCkptIter);        
         
@@ -496,15 +482,13 @@ public class SPMDResilientIterativeExecutor (home:Place) {
         val place0VictimsStats:HashMap[Long,PlaceStatistics];//key=victim_index value=its_old_statistics
         val stat:PlaceStatistics;
         var globalIter:Long = 0;
-        var lastCkptKeys:HashSet[String] = new HashSet[String]();
-        var ckptKeyVersion:HashMap[String,Long] = new HashMap[String,Long]();
+        var ckptKeys:HashSet[String] = new HashSet[String]();
         //used for initializing spare places with the same values from Place0
-        private def this(otherStat:PlaceStatistics, gIter:Long, lastCkptKeys:HashSet[String], ckptKeyVersion:HashMap[String,Long]){
+        private def this(otherStat:PlaceStatistics, gIter:Long, ckptKeys:HashSet[String]){
             this.stat = otherStat;
             this.place0VictimsStats = here.id == 0? new HashMap[Long,PlaceStatistics]() : null;            
             this.globalIter = gIter;
-            this.lastCkptKeys = lastCkptKeys;
-            this.ckptKeyVersion = ckptKeyVersion;
+            this.ckptKeys = ckptKeys;
         }
     
         public def this(){
