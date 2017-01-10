@@ -46,8 +46,6 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     private static val DISABLE_SLAVE = System.getenv("DISABLE_SLAVE") != null && System.getenv("DISABLE_SLAVE").equals("1");
     private static val DISABLE_DESC = System.getenv("DISABLE_DESC") != null && System.getenv("DISABLE_DESC").equals("1");
-    private static val DISABLE_NON_BLOCKING = System.getenv("DISABLE_NON_BLOCKING") != null && System.getenv("DISABLE_NON_BLOCKING").equals("1");
-    private static val VALIDATION_REQUIRED = ! ( DISABLE_NON_BLOCKING && ( TxManager.TM.equals("RL_EA_UL") || TxManager.TM.equals("RL_EA_WB" ) ) ) ;
     
     public static val SUCCESS = 0n;
     public static val SUCCESS_RECOVER_STORE = 1n;
@@ -452,21 +450,17 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     private def commitPhaseOne(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, root:GlobalRef[Tx]) {
         if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne ...");
         
-        if (VALIDATION_REQUIRED)
-            plh().masterStore.validate(mapName, id);
+        plh().masterStore.validate(mapName, id);
         
-        if (VALIDATION_REQUIRED || (resilient && !DISABLE_SLAVE)) {
+        if (resilient && !DISABLE_SLAVE) {
             finish for (p in members) {
                 if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne going to move to ["+p+"] ...");
                 at (p) async {
-                    
-                    if (VALIDATION_REQUIRED) {
-                        //check for local conflicts and remove readonly keys
-                        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate started ...");
-                        plh().masterStore.validate(mapName, id);
-                        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate done ...");
-                    }
-                    
+                    //check for local conflicts and remove readonly keys
+                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate started ...");
+                    plh().masterStore.validate(mapName, id);
+                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate done ...");
+                
                     if (resilient && !DISABLE_SLAVE) {
                         val log = plh().masterStore.getTxCommitLog(mapName, id);
                         if (log != null && log.size() > 0) {

@@ -16,11 +16,6 @@ public class BankBlocking {
             Console.OUT.println("Parameters missing exp_accounts_per_place exp_transfers_per_place progress");
             return;
         }
-        val disableNonBlocking = System.getenv("DISABLE_NON_BLOCKING");
-        if (disableNonBlocking == null || !disableNonBlocking.equals("1")) {
-            Console.OUT.println("Blocking mode required, must export DISABLE_NON_BLOCKING=1");
-            return;
-        }
         val expAccounts = Long.parseLong(args(0));
         val expTransfers = Long.parseLong(args(1));
         val debugProgress = Long.parseLong(args(2));

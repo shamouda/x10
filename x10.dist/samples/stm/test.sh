@@ -23,12 +23,12 @@ x10c++ -x10rt mpi BankLocking.x10 -o BankLocking.mpi
 x10c++ -x10rt mpi Increment.x10 -o Increment.mpi
 x10c++ -x10rt mpi IncrementLocking.x10 -o IncrementLocking.mpi
 
-x10c++ -x10rt mpi RA.x10 -o RA.mpi
-x10c++ -x10rt mpi RABlocking.x10 -o RABlocking.mpi
-x10c++ -x10rt mpi RAResilient.x10 -o RAResilient.mpi
+
+x10c++ -x10rt mpi RASTMMoveWork.x10 -o RASTMMoveWork.mpi
+x10c++ -x10rt mpi RASTMMoveData.x10 -o RASTMMoveData.mpi
 x10c++ -x10rt mpi RALocking.x10 -o RALocking.mpi
 
-x10c++ -x10rt mpi RABlocking.x10 -o RABlocking.mpi
+x10c++ -x10rt mpi RAResilient.x10 -o RAResilient.mpi
 
 ----bank---- (success)
 TM_DEBUG=1 TM=RL_EA_UL X10_NTHREADS=1 X10_NPLACES=5 ./Bank.o 10 10 2000 &> bank.RL_EA_UL.txt
