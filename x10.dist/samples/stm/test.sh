@@ -1,18 +1,3 @@
-----Socket compilation----
-
-x10c++ Bank.x10 -o Bank.o
-x10c++ BankBlocking.x10 -o BankBlocking.o
-x10c++ BankResilient.x10 -o BankResilient.o
-x10c++ BankLocking.x10 -o BankLocking.o
-
-x10c++ Increment.x10 -o Increment.o
-x10c++ IncrementLocking.x10 -o IncrementLocking.o
-
-x10c++ RA.x10 -o RA.o
-x10c++ RABlocking.x10 -o RABlocking.o
-x10c++ RAResilient.x10 -o RAResilient.o
-x10c++ RALocking.x10 -o RALocking.o
-
 ----MPI compilation----
 
 x10c++ -x10rt mpi Bank.x10 -o Bank.mpi
