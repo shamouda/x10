@@ -139,11 +139,13 @@ public class RAResilient {
                         val tx = map.startGlobalTransaction(members);
                         val txId = tx.id;
                         if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXSTART accounts["+randAcc+"] place["+p1+"] amount["+amount+"]");
-                        val f1 = tx.asyncAt(p1, () => {
-                            var acc:BankAccount = tx.get(randAcc) as BankAccount;
-                            if (acc == null) {
+                        tx.syncAt(p1, () => {
+                            val obj = tx.get(randAcc);
+                            var acc:BankAccount = null;
+                            if (obj == null)
                                 acc = new BankAccount(0);
-                            }
+                            else
+                                acc = obj as BankAccount;
                             acc.account += amount;
                             tx.put(randAcc, acc);
                         });
