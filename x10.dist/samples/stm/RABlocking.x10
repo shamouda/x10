@@ -85,7 +85,6 @@ public class RABlocking {
             val requests = requestsMap.getOrThrow(p.id);
             at (p) async {
                 val rand = new Random(System.nanoTime());
-                Runtime.increaseParallelism();
                 for (i in 1..updatesPerPlace) {
                     if (i%debugProgress == 0)
                         Console.OUT.println(here + " progress " + i);
@@ -121,7 +120,6 @@ public class RABlocking {
                         }
                     } while(true);
                 }
-                Runtime.decreaseParallelism(1n);
             }
         }
     }
