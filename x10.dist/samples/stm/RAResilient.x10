@@ -161,32 +161,5 @@ public class RAResilient {
                 }
             }
         }
-    }    
-    
-}
-
-class PlaceUpdateRequests(size:Long){
-    val accountsRail:Rail[Long];
-    val amountsRail:Rail[Long];
-    var amountsSum:Long = 0;
-    public def this (s:Long) {
-        property(s);
-        accountsRail = new Rail[Long](s);
-        amountsRail = new Rail[Long](s);
-    }
-    
-    public def initRandom(accountsMAX:Long) {
-        val rand = new Random(System.nanoTime());
-        for (var i:Long = 0; i < size; i += 2) {
-            accountsRail(i) = Math.abs(rand.nextLong()% accountsMAX);
-            amountsRail(i) = Math.abs(rand.nextLong()%1000);
-            
-            accountsRail(i+1) = Math.abs(rand.nextLong()% accountsMAX);
-            amountsRail(i+1) = -1*amountsRail(i);
-            
-            amountsSum+= amountsRail(i) ;
-            amountsSum+= amountsRail(i+1);
-        }
-    }
-    
+    }   
 }
