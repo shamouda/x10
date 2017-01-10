@@ -96,7 +96,7 @@ public class RASTMMoveWork {
                     map.executeTransaction( () => {
                         val tx = map.startGlobalTransaction(members);
                         val txId = tx.id;
-                        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXSTART accounts["+randAcc+"] place["+p1+"] amount["+amount+"]);
+                        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXSTART accounts["+randAcc+"] place["+p1+"] amount["+amount+"]");
                         tx.syncAt(p1, () => {
                             val obj = tx.get(randAcc);
                             var acc:BankAccount = null;
