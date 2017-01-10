@@ -93,6 +93,7 @@ public class RASTMMoveWork {
                         val txId = tx.id;
                         if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXSTART accounts["+randAcc+"] place["+p1+"]");
                         tx.syncAt(p1, () => {
+                            val obj = tx.get(randAcc);
                             var acc:BankAccount = null;
                             if (obj == null)
                                 acc = new BankAccount(0);

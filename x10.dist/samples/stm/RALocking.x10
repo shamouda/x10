@@ -90,10 +90,12 @@ public class RALocking {
                     val amount = requests.amountsRail(i);
                     locker.syncAt(p1, () => {
                         locker.lock(randAcc);
-                        var acc:BankAccount = locker.getLocked(randAcc) as BankAccount;
-                        if (acc == null) {
+                        val obj = locker.getLocked(randAcc);
+                        var acc:BankAccount = null;
+                        if (obj == null)
                             acc = new BankAccount(0);
-                        }
+                        else
+                            acc = obj as BankAccount;
                         acc.account += amount;
                         locker.putLocked(randAcc, acc);
                         locker.unlock(randAcc);
