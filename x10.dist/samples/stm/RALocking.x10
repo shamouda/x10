@@ -17,6 +17,11 @@ public class RALocking {
             Console.OUT.println("Parameters missing exp_accounts_per_place exp_updates_per_place");
             return;
         }
+        Console.OUT.println("X10_NUM_IMMEDIATE_THREADS="+System.getenv("X10_NUM_IMMEDIATE_THREADS"));
+        Console.OUT.println("X10_NTHREADS="+System.getenv("X10_NTHREADS"));
+        Console.OUT.println("X10_RESILIENT_MODE="+System.getenv("X10_RESILIENT_MODE"));
+        Console.OUT.println("TM="+System.getenv("TM"));
+        
         val expAccounts = Long.parseLong(args(0));
         val expUpdates = Long.parseLong(args(1));
         val debugProgress = Long.parseLong(args(2));
