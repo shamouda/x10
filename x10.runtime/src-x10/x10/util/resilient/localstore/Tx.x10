@@ -452,35 +452,32 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         
         plh().masterStore.validate(mapName, id);
         
-        if (resilient && !DISABLE_SLAVE) {
-            finish for (p in members) {
-                if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne going to move to ["+p+"] ...");
-                at (p) async {
-                    //check for local conflicts and remove readonly keys
-                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate started ...");
-                    plh().masterStore.validate(mapName, id);
-                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate done ...");
-                
-                    if (resilient && !DISABLE_SLAVE) {
-                        val log = plh().masterStore.getTxCommitLog(mapName, id);
-                        if (log != null && log.size() > 0) {
-                            val remainingEntries = new HashMap[String,Cloneable]();
-                            
-                            val iter = log.keySet().iterator();
-                            while (iter.hasNext()) {
-                                val key = iter.next();
-                                val value = log.getOrThrow(key);
-                                if (value.asyncRemoteCopySupported())
-                                    value.asyncRemoteCopy(id, mapName, key, plh);
-                                else
-                                    remainingEntries.put(key, value);
-                            }
-                                
-                            if ( remainingEntries.size() > 0 ) {
-                                //send txLog to slave (very important to be able to tolerate failures of masters just after prepare)
-                                at (plh().slave) async {
-                                    plh().slaveStore.prepare(id, mapName, remainingEntries );
-                                }
+        finish for (p in members) {
+            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne going to move to ["+p+"] ...");
+            at (p) async {
+                //check for local conflicts and remove readonly keys
+                if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate started ...");
+                plh().masterStore.validate(mapName, id);
+                if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate done ...");
+            
+                if (resilient && !DISABLE_SLAVE) {
+                    val log = plh().masterStore.getTxCommitLog(mapName, id);
+                    if (log != null && log.size() > 0) {
+                        val remainingEntries = new HashMap[String,Cloneable]();
+                        
+                        val iter = log.keySet().iterator();
+                        while (iter.hasNext()) {
+                            val key = iter.next();
+                            val value = log.getOrThrow(key);
+                            if (value.asyncRemoteCopySupported())
+                                value.asyncRemoteCopy(id, mapName, key, plh);
+                            else
+                                remainingEntries.put(key, value);
+                        }
+                        if ( remainingEntries.size() > 0 ) {
+                            //send txLog to slave (very important to be able to tolerate failures of masters just after prepare)
+                            at (plh().slave) async {
+                                plh().slaveStore.prepare(id, mapName, remainingEntries );
                             }
                         }
                     }
