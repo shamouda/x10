@@ -140,25 +140,6 @@ public abstract class TxManager(data:MapData) {
         }
     }
     
-    
-    public def notifyPlaceDeath() {
-        try {
-            futuresLock.lock();
-            val iter = futures.keySet().iterator();
-            while (iter.hasNext()) {
-                val txId = iter.next();
-                val list = futures.getOrElse(txId, null);
-                if (list != null) {
-                    for (future in list) {
-                        future.notifyPlaceDeath();
-                    }
-                }
-            }
-        }finally{
-            futuresLock.unlock();
-        }
-    }
-    
     public static def checkDeadCoordinator(txId:Long) {
        val placeId = (txId / MasterStore.TX_FACTOR) -1;
         if (Place(placeId).isDead()) {
@@ -257,9 +238,7 @@ public abstract class TxManager(data:MapData) {
     
     protected def abortAndThrowException(log:TxLog, ex:Exception) {
         if (log != null) {
-            val s = System.nanoTime();
             abort(log);
-            Console.OUT.println("Tx["+log.id+"] localAbortTime["+ (System.nanoTime()-s)/1e6+"] ");
             if (TM_DEBUG) Console.OUT.println("Tx["+log.id+"]  " + here + "   TxManager.abortAndThrowException   throwing exception["+ex.getMessage()+"] ");
         }
         throw ex;

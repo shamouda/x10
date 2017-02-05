@@ -166,19 +166,4 @@ public class MasterStore {
     public def putLocked(mapName:String, id:Long, key:String, value:Cloneable):Cloneable {
         return getTxManager(mapName).put(id, key, value);
     }
-    
-    public def notifyPlaceDeath() {
-        try {
-            lock.lock();
-            val iter = maps.keySet().iterator();
-            while (iter.hasNext()) {
-                val name = iter.next();
-                val manager = maps.getOrThrow(name);
-                manager.notifyPlaceDeath();
-            }
-        }
-        finally {
-            lock.unlock();
-        }
-    }
 }

@@ -1396,7 +1396,6 @@ public final class Runtime {
         } else if (RESILIENT_MODE == Configuration.RESILIENT_MODE_X10RT_ONLY) {
             // Nothing to do at the XRX level in this mode.
         } else {
-            x10.util.resilient.localstore.ResilientStore.notifyPlaceDeath();
             FinishResilient.notifyPlaceDeath();
             getRegistryNotifyPlaceDeath();
         }

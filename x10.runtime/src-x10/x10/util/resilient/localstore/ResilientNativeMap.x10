@@ -229,9 +229,6 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         }
     }
     
-    public def notifyPlaceDeath() {
-        store.plh().masterStore.notifyPlaceDeath();
-    }
 }
 
 class TxPlaceStatistics(p:Place, commitCount:Long, avgCommitTimeNS:Double, abortCount:Long, avgAbortTimeNS:Double) {
