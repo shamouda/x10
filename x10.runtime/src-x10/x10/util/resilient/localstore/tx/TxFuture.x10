@@ -37,25 +37,21 @@ public class TxFuture(txId:Long, fid:Long, targetPlace:Place) {
     }
     
     public def notifyPlaceDeath() {
-        Console.OUT.println("Tx["+txId+"] future["+fid+"] futureNotifyPlaceDeath ...");
         if (targetPlace.isDead()) {
             atomic complete = true;
-            Console.OUT.println("Tx["+txId+"] future["+fid+"] futureNotifyPlaceDeath  set flag to true...");
+            if(TM_DEBUG) Console.OUT.println("Tx["+txId+"] future["+fid+"] targetPlace["+targetPlace+"] notifyPlaceDeath ...");
         }
-        if(TM_DEBUG) Console.OUT.println("Tx["+txId+"] future["+fid+"] targetPlace["+targetPlace+"] notifyPlaceDeath ...");
     }
     
     /* Changed the name from wait() to waitV() because Java has a Object.wait() 
      * function that gets confused with this function*/
     public def waitV():Any {
        val startWhen = System.nanoTime();
-       Console.OUT.println(here + " Tx["+txId+"] future["+fid+"] startwait   target["+targetPlace+"] ");
+       Console.OUT.println(here + " Tx["+txId+"] future["+fid+"] startwait target["+targetPlace+"] ");
        if (!targetPlace.isDead())
            when (complete);
-       Console.OUT.println(here + " Tx["+txId+"] future["+fid+"] endwait");
        val endWhen = System.nanoTime();
-       
-       if(TM_DEBUG) Console.OUT.println("Tx["+txId+"] when waiting time: [" + ((endWhen-startWhen)/1e6) + "] ms, targetPlaceDied["+targetPlace.isDead()+"] ");
+       if(TM_DEBUG) Console.OUT.println("Tx["+txId+"] future["+fid+"] endwait time:[" + ((endWhen-startWhen)/1e6) + "] ms, targetPlaceDied["+targetPlace.isDead()+"] ");
        
        if (targetPlace.isDead())
            throw new DeadPlaceException(targetPlace);
