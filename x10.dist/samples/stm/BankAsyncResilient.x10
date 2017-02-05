@@ -11,7 +11,7 @@ import x10.util.resilient.iterative.SimplePlaceHammer;
 import x10.util.resilient.localstore.CloneableLong;
 import x10.util.resilient.localstore.tx.ConflictException;
 
-public class BankResilient {
+public class BankAsyncResilient {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     private static val DISABLE_CKPT = System.getenv("DISABLE_CKPT") != null && System.getenv("DISABLE_CKPT").equals("1");
     
@@ -20,10 +20,12 @@ public class BankResilient {
             Console.OUT.println("Parameters missing exp_accounts_per_place exp_transfers_per_place progress spare");
             return;
         }
-        if (x10.xrx.Runtime.RESILIENT_MODE == 0n)
-            Console.OUT.println("Running in non-resilient mode");
-        else
-            Console.OUT.println("Running in resilient mode");
+
+        Console.OUT.println("X10_NUM_IMMEDIATE_THREADS="+System.getenv("X10_NUM_IMMEDIATE_THREADS"));
+        Console.OUT.println("X10_NTHREADS="+System.getenv("X10_NTHREADS"));
+        Console.OUT.println("X10_RESILIENT_MODE="+System.getenv("X10_RESILIENT_MODE"));
+        Console.OUT.println("TM="+System.getenv("TM"));
+        Console.OUT.println("TM_FUTURE_WAIT="+System.getenv("TM_FUTURE_WAIT"));
         
         val start = System.nanoTime();
         val expAccounts = Long.parseLong(args(0));
@@ -38,7 +40,7 @@ public class BankResilient {
             val hammer = new SimplePlaceHammer();
             hammer.scheduleTimers();
         }
-        Console.OUT.println("Running Resilient Bank (Non Blocking) Benchmark. Places["+ (Place.numPlaces() - sparePlaces)
+        Console.OUT.println("Running BankAsyncResilient Benchmark. Places["+ (Place.numPlaces() - sparePlaces)
                 +"] Accounts["+(accountsPerPlace*Place.numPlaces()) +"] AccountsPerPlace["+accountsPerPlace
                 +"] Transfers["+(transfersPerPlace*Place.numPlaces()) +"] TransfersPerPlace["+transfersPerPlace+"] "
                 +" PrintProgressEvery["+debugProgress+"] iterations sparePlaces["+sparePlaces+"] ");

@@ -1,28 +1,35 @@
 import x10.util.Random;
 import x10.util.ArrayList;
-import x10.util.resilient.localstore.tx.TxFuture;
 import x10.util.resilient.PlaceManager;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.Tx;
+import x10.util.resilient.localstore.tx.TxFuture;
 import x10.util.resilient.localstore.ResilientStore;
 import x10.util.Set;
 import x10.xrx.Runtime;
 
-public class BankBlocking {
+public class BankAsync {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     public static def main(args:Rail[String]) {
         if (args.size != 3) {
-            Console.OUT.println("Parameters missing exp_accounts_per_place exp_transfers_per_place progress");
+            Console.OUT.println("Parameters missing exp_accounts_per_place exp_transfers_per_place");
             return;
         }
+        
+        Console.OUT.println("X10_NUM_IMMEDIATE_THREADS="+System.getenv("X10_NUM_IMMEDIATE_THREADS"));
+        Console.OUT.println("X10_NTHREADS="+System.getenv("X10_NTHREADS"));
+        Console.OUT.println("X10_RESILIENT_MODE="+System.getenv("X10_RESILIENT_MODE"));
+        Console.OUT.println("TM="+System.getenv("TM"));
+        Console.OUT.println("TM_FUTURE_WAIT="+System.getenv("TM_FUTURE_WAIT"));
+        
         val expAccounts = Long.parseLong(args(0));
         val expTransfers = Long.parseLong(args(1));
         val debugProgress = Long.parseLong(args(2));
         val accountsPerPlace = Math.ceil(Math.pow(2, expAccounts)) as Long;
         val transfersPerPlace = Math.ceil(Math.pow(2, expTransfers)) as Long;
         
-        Console.OUT.println("Running Bank (Blocking) Benchmark. Places["+Place.numPlaces()
+        Console.OUT.println("Running BankAsync Benchmark. Places["+Place.numPlaces()
                 +"] Accounts["+(accountsPerPlace*Place.numPlaces()) +"] AccountsPerPlace["+accountsPerPlace
                 +"] Transfers["+(transfersPerPlace*Place.numPlaces()) +"] TransfersPerPlace["+transfersPerPlace+"] "
                 +" PrintProgressEvery["+debugProgress+"] iterations");
@@ -77,7 +84,7 @@ public class BankBlocking {
                     rand2 = Math.abs(rand.nextLong()% accountsMAX);
                     tmpP2 = STMAppUtils.getPlace(rand2, activePG, accountsPerPlace);
                 }
-                val p2 = tmpP2;
+                val p2=  tmpP2;
                 val randAcc1 = "acc"+rand1;
                 val randAcc2 = "acc"+rand2;
                 //val amount = Math.abs(rand.nextLong()%100);
@@ -86,17 +93,21 @@ public class BankBlocking {
                     val tx = map.startGlobalTransaction(members);
                     val txId = tx.id;
                     val amount = txId;
-                    if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXSTART accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"] amount["+ amount + "]");
-                    var acc1:BankAccount = tx.getRemote(p1, randAcc1) as BankAccount;
-                    var acc2:BankAccount = tx.getRemote(p2, randAcc2) as BankAccount;
-                    if (acc1 == null)
-                        acc1 = new BankAccount(0);
-                    if (acc2 == null)
-                        acc2 = new BankAccount(0);
-                    acc1.account -= amount;
-                    acc2.account += amount;
-                    tx.putRemote(p1, randAcc1, acc1);
-                    tx.putRemote(p2, randAcc2, acc2);
+                    if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXSTART accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"] amount["+amount+"] ");
+                    val f1 = tx.asyncAt(p1, () => {
+                        var acc1:BankAccount = tx.get(randAcc1) as BankAccount;
+                        if (acc1 == null)
+                            acc1 = new BankAccount(0);
+                        acc1.account -= amount;
+                        tx.put(randAcc1, acc1);
+                    });
+                    val f2 = tx.asyncAt(p2, () => {
+                        var acc2:BankAccount = tx.get(randAcc2) as BankAccount;
+                        if (acc2 == null)
+                            acc2 = new BankAccount(0);
+                        acc2.account += amount;
+                        tx.put(randAcc2, acc2);
+                    });
                     tx.commit();
                 });
             }

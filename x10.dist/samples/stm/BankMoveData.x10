@@ -1,14 +1,14 @@
 import x10.util.Random;
 import x10.util.ArrayList;
+import x10.util.resilient.localstore.tx.TxFuture;
 import x10.util.resilient.PlaceManager;
 import x10.util.resilient.localstore.ResilientNativeMap;
-import x10.util.resilient.localstore.LockManager;
-import x10.util.resilient.localstore.tx.TxFuture;
+import x10.util.resilient.localstore.Tx;
 import x10.util.resilient.localstore.ResilientStore;
 import x10.util.Set;
 import x10.xrx.Runtime;
 
-public class BankLocking {
+public class BankMoveData {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     public static def main(args:Rail[String]) {
@@ -22,7 +22,7 @@ public class BankLocking {
         val accountsPerPlace = Math.ceil(Math.pow(2, expAccounts)) as Long;
         val transfersPerPlace = Math.ceil(Math.pow(2, expTransfers)) as Long;
         
-        Console.OUT.println("Running BankTransfer Benchmark. Places["+Place.numPlaces()
+        Console.OUT.println("Running BankMoveData Benchmark. Places["+Place.numPlaces()
                 +"] Accounts["+(accountsPerPlace*Place.numPlaces()) +"] AccountsPerPlace["+accountsPerPlace
                 +"] Transfers["+(transfersPerPlace*Place.numPlaces()) +"] TransfersPerPlace["+transfersPerPlace+"] "
                 +" PrintProgressEvery["+debugProgress+"] iterations");
@@ -34,13 +34,14 @@ public class BankLocking {
         val store = ResilientStore.make(mgr.activePlaces());
 
         val map = store.makeMap("mapA");
-        val locker = map.getLockManager();
         try {
             val startTransfer = System.nanoTime();
-            randomTransfer(locker, mgr.activePlaces(), accountsPerPlace, transfersPerPlace, debugProgress);
+            randomTransfer(map, mgr.activePlaces(), accountsPerPlace, transfersPerPlace, debugProgress);
             val endTransfer = System.nanoTime();
             
-            val sum2 = sumAccounts(locker, mgr.activePlaces());
+            map.printTxStatistics();
+            
+            val sum2 = STMAppUtils.sumAccounts(map, mgr.activePlaces());
             
             val end = System.nanoTime();
             if (sum2 == 0) {
@@ -55,12 +56,12 @@ public class BankLocking {
             else
                 Console.OUT.println(" ! Test Failed ! sum2["+sum2+"] != 0");
         }catch(ex:Exception) {
-            Console.OUT.println(" ! Test Failed ! Exception thrown");
+            Console.OUT.println(" ! Test Failed ! Exception thrown  ["+ex.getMessage()+"] ");
             ex.printStackTrace();
         }
     }
     
-    public static def randomTransfer(locker:LockManager, activePG:PlaceGroup, accountsPerPlace:Long, transfersPerPlace:Long, debugProgress:Long){
+    public static def randomTransfer(map:ResilientNativeMap, activePG:PlaceGroup, accountsPerPlace:Long, transfersPerPlace:Long, debugProgress:Long){
         val accountsMAX = accountsPerPlace * activePG.size();
         finish for (p in activePG) at (p) async {
             val rand = new Random(System.nanoTime());
@@ -71,67 +72,35 @@ public class BankLocking {
                 val p1 = STMAppUtils.getPlace(rand1, activePG, accountsPerPlace);
                 
                 var rand2:Long = Math.abs(rand.nextLong()% accountsMAX);
-                var p2:Place = STMAppUtils.getPlace(rand2, activePG, accountsPerPlace);
-                while (rand1 == rand2 || p1.id == p2.id) {
+                var tmpP2:Place = STMAppUtils.getPlace(rand2, activePG, accountsPerPlace);
+                while (rand1 == rand2 || p1.id == tmpP2.id) {
                     rand2 = Math.abs(rand.nextLong()% accountsMAX);
-                    p2 = STMAppUtils.getPlace(rand2, activePG, accountsPerPlace);
+                    tmpP2 = STMAppUtils.getPlace(rand2, activePG, accountsPerPlace);
                 }
+                val p2 = tmpP2;
                 val randAcc1 = "acc"+rand1;
                 val randAcc2 = "acc"+rand2;
-                val amount = Math.abs(rand.nextLong()%100);
-
-                locker.lock(p1, randAcc1, p2, randAcc2); //sort and lock
-                
-                val f1 = locker.asyncAt(p1, () => {
-                    var acc1:BankAccount = locker.getLocked(randAcc1) as BankAccount;
-                    if (acc1 == null) {
+                //val amount = Math.abs(rand.nextLong()%100);
+                val members = STMAppUtils.createGroup(p1, p2);
+                map.executeTransaction( () => {
+                    val tx = map.startGlobalTransaction(members);
+                    val txId = tx.id;
+                    val amount = txId;
+                    if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXSTART accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"] amount["+ amount + "]");
+                    var acc1:BankAccount = tx.getRemote(p1, randAcc1) as BankAccount;
+                    var acc2:BankAccount = tx.getRemote(p2, randAcc2) as BankAccount;
+                    if (acc1 == null)
                         acc1 = new BankAccount(0);
-                    }
-                    acc1.account -= amount;
-                    locker.putLocked(randAcc1, acc1);
-                });
-                
-                val f2 = locker.asyncAt(p2, () => {
-                    var acc2:BankAccount = locker.getLocked(randAcc2) as BankAccount;
-                    if (acc2 == null) {
+                    if (acc2 == null)
                         acc2 = new BankAccount(0);
-                    }
+                    acc1.account -= amount;
                     acc2.account += amount;
-                    locker.putLocked(randAcc2, acc2);
+                    tx.putRemote(p1, randAcc1, acc1);
+                    tx.putRemote(p2, randAcc2, acc2);
+                    tx.commit();
                 });
-                
-                f1.waitV();
-                f2.waitV();
-                
-                locker.unlock(p1, randAcc1, p2, randAcc2);
             }
         }
-    }
-    
-    public static def sumAccounts(locker:LockManager, activePG:PlaceGroup){
-        var sum:Long = 0;
-        val list = new ArrayList[TxFuture]();
-        for (p in activePG) {
-            val f = locker.asyncAt(p, () => {
-                var localSum:Long = 0;
-                val set = locker.keySet();
-                val iter = set.iterator();
-                while (iter.hasNext()) {
-                    val accId  = iter.next();
-                    val obj = locker.getLocked(accId) as BankAccount;
-                    var value:Long = 0;
-                    if (obj != null) {
-                        value = obj.account;
-                    }
-                    localSum += value;
-                }
-                return localSum;
-            });
-            list.add(f);
-        }
-        for (f in list)
-            sum += f.waitV() as Long;
-        return sum;
     }
     
 }
