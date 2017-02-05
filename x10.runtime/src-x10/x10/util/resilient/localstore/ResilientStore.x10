@@ -117,6 +117,7 @@ public class ResilientStore {
             for (newMaster in changes.addedPlaces) {
                 val virtualId = changes.newActivePlaces.indexOf(newMaster);
                 val slave = changes.newActivePlaces.next(newMaster);
+                Console.OUT.println("recovering masters: newMaster["+newMaster+"] slave["+slave+"] ");
                 at (slave) async {
                     val maps = plh().slaveStore.getSlaveMasterState().maps;
                     at (newMaster) async {
