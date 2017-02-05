@@ -137,11 +137,13 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     }
     
     public def getMembers(members:Rail[Long]):PlaceGroup {
-        val rail = new Rail[Place](members.size);
+    	val list = new ArrayList[Place]();
         val activePG = store.activePlaces;
-        for (var i:Long = 0; i < members.size; i++)
-            rail(i) = activePG(members(i));
-        return new SparsePlaceGroup(rail);
+        for (var i:Long = 0; i < members.size; i++) {
+        	if (!activePG(members(i)).isDead())
+        		list.add(activePG(members(i)));
+        }
+        return new SparsePlaceGroup(list.toRail());
     }
     
     public def getLockManager():LockManager {
