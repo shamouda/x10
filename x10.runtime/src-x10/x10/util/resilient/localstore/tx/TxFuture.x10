@@ -17,7 +17,7 @@ import x10.xrx.Runtime;
 
 public class TxFuture(txId:Long, fid:Long, targetPlace:Place) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-    private static val TM_FUTURE_WAIT = System.getenv("TM_FUTURE_WAIT");
+    private static val TM_FUTURE_WAIT = System.getenv("TM_FUTURE_WAIT") == null ? "loop" : System.getenv("TM_FUTURE_WAIT");
     
     private var value:Any;
     private var complete:Boolean = false;
@@ -39,7 +39,7 @@ public class TxFuture(txId:Long, fid:Long, targetPlace:Place) {
     /* Changed the name from wait() to waitV() because Java has a Object.wait() 
      * function that gets confused with this function*/
     public def waitV():Any {
-        if (TM_FUTURE_WAIT != null || TM_FUTURE_WAIT.equals("when")) {
+        if (TM_FUTURE_WAIT.equals("when")) {
            val startWhen = System.nanoTime();
            when (complete);
            val endWhen = System.nanoTime();
