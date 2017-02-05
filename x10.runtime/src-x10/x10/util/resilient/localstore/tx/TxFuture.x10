@@ -36,36 +36,33 @@ public class TxFuture(txId:Long, fid:Long, targetPlace:Place) {
         if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] here["+here+"] future ["+fid+"] completed ...");
     }
     
+    public def notifyPlaceDeath() {
+        Console.OUT.println("Tx["+txId+"] future["+fid+"] futureNotifyPlaceDeath ...");
+        if (targetPlace.isDead()) {
+            atomic complete = true;
+            Console.OUT.println("Tx["+txId+"] future["+fid+"] futureNotifyPlaceDeath  set flag to true...");
+        }
+        if(TM_DEBUG) Console.OUT.println("Tx["+txId+"] future["+fid+"] targetPlace["+targetPlace+"] notifyPlaceDeath ...");
+    }
+    
     /* Changed the name from wait() to waitV() because Java has a Object.wait() 
      * function that gets confused with this function*/
     public def waitV():Any {
-        if (!resilient || TM_FORCE_WHEN) {
-           val startWhen = System.nanoTime();
+       val startWhen = System.nanoTime();
+       Console.OUT.println(here + " Tx["+txId+"] future["+fid+"] startwait   target["+targetPlace+"] ");
+       if (!targetPlace.isDead())
            when (complete);
-           val endWhen = System.nanoTime();
-           if(TM_DEBUG) Console.OUT.println("Tx["+txId+"] when waiting time: [" + ((endWhen-startWhen)/1e6) + "] ms");
-           if (exception != null)
-               throw exception;
-        }
-        else {
-            var c:Long = 0;
-            Runtime.increaseParallelism();
-            while (!complete && !targetPlace.isDead()) {
-                System.threadSleep(0);
-                c++;
-                if ( c%100 == 0 && TM_DEBUG )
-                    Console.OUT.println("Tx["+txId+"] future waiting for place["+targetPlace+"]  isDead["+targetPlace.isDead()+"] ");
-            }
-            Runtime.decreaseParallelism(1n);
-            if (targetPlace.isDead()) {
-                if(TM_DEBUG) Console.OUT.println("Tx["+txId+"] future ["+fid+"] here["+here+"] throwing DPE targetPlace["+targetPlace+"]");
-                throw new DeadPlaceException(targetPlace);
-            }
-            if (exception != null) {
-                if(TM_DEBUG) Console.OUT.println("Tx["+txId+"] future ["+fid+"] here["+here+"] throwing exception["+exception.getMessage()+"] targetPlace["+targetPlace+"]");
-                throw exception;
-            }
-        }
+       Console.OUT.println(here + " Tx["+txId+"] future["+fid+"] endwait");
+       val endWhen = System.nanoTime();
+       
+       if(TM_DEBUG) Console.OUT.println("Tx["+txId+"] when waiting time: [" + ((endWhen-startWhen)/1e6) + "] ms, targetPlaceDied["+targetPlace.isDead()+"] ");
+       
+       if (targetPlace.isDead())
+           throw new DeadPlaceException(targetPlace);
+       
+       if (exception != null)
+           throw exception;
+
         return value;
     }
     

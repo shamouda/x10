@@ -33,8 +33,8 @@ public class ResilientStore {
     public val plh:PlaceLocalHandle[LocalStore];
     public var activePlaces:PlaceGroup;
     
-    private val appMaps:HashMap[String,ResilientNativeMap];
-    private transient val lock:SimpleLatch;
+    private static val appMaps = new HashMap[String,ResilientNativeMap]();
+    private static val lock = new SimpleLatch();
     
     //A resilient map for transactions' descriptors
     var txDescMap:ResilientNativeMap;
@@ -42,8 +42,6 @@ public class ResilientStore {
     private def this(pg:PlaceGroup, plh:PlaceLocalHandle[LocalStore]) {
         this.activePlaces = pg;
         this.plh = plh;
-        this.appMaps = new HashMap[String,ResilientNativeMap]();
-        this.lock = new SimpleLatch();
     }
     
     public static def make(pg:PlaceGroup):ResilientStore {
@@ -183,6 +181,24 @@ public class ResilientStore {
             }
         }
         Console.OUT.println("recoverTransactions completed");
+    }
+    
+    public static def notifyPlaceDeath() {
+        Console.OUT.println(here + " ResilientStore.notifyPlaceDeath started ");
+        try {
+            lock.lock();
+            val iter = appMaps.keySet().iterator();
+            while (iter.hasNext()) {
+                val name = iter.next();
+                val map = appMaps.getOrThrow(name);
+                map.notifyPlaceDeath();
+            }
+        } catch (ex:Exception) {
+            
+        } finally {
+            lock.unlock();
+        }
+        Console.OUT.println(here + " ResilientStore.notifyPlaceDeath completed ");
     }
     
 }
