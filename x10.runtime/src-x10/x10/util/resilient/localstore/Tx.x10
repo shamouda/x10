@@ -89,12 +89,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     }
     
     public def getRemote(dest:Place, key:String):Cloneable {
-        try {
-            //Runtime.increaseParallelism();
-            return execute(GET_REMOTE, dest, key, null, null, null, plh, id, mapName, members, root).value as Cloneable;
-        }finally {
-            //Runtime.decreaseParallelism(1n);
-        }
+        return execute(GET_REMOTE, dest, key, null, null, null, plh, id, mapName, members, root).value as Cloneable;
     }
     
     public def asyncGetRemote(dest:Place, key:String):TxFuture {
@@ -111,12 +106,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     }
     
     public def putRemote(dest:Place, key:String, value:Cloneable):Cloneable {
-        try {
-            //Runtime.increaseParallelism();
-            return execute(PUT_REMOTE, dest, key, value, null, null, plh, id, mapName, members, root).value as Cloneable;
-        } finally {
-            //Runtime.decreaseParallelism(1n);
-        }
+        return execute(PUT_REMOTE, dest, key, value, null, null, plh, id, mapName, members, root).value as Cloneable;
     }
     
     public def asyncPutRemote(dest:Place, key:String, value:Cloneable):TxFuture {
@@ -133,12 +123,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     }
     
     public def deleteRemote(dest:Place, key:String):Cloneable {
-        try {
-            //Runtime.increaseParallelism();
-            return execute(DELETE_REMOTE, dest, key, null, null, null, plh, id, mapName, members, root).value as Cloneable;
-        } finally {
-            //Runtime.decreaseParallelism(1n);
-        }
+        return execute(DELETE_REMOTE, dest, key, null, null, null, plh, id, mapName, members, root).value as Cloneable;
     }
     
     public def asyncDeleteRemote(dest:Place, key:String):TxFuture {
@@ -155,12 +140,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     }
     
     public def keySetRemote(dest:Place):Set[String] {
-        try {
-            //Runtime.increaseParallelism();
-            return execute(KEYSET_REMOTE, dest, null, null, null, null, plh, id, mapName, members, root).set; 
-        } finally {
-            //Runtime.decreaseParallelism(1n);
-        }
+        return execute(KEYSET_REMOTE, dest, null, null, null, null, plh, id, mapName, members, root).set; 
     }
     
     public def asyncKeySetRemote(dest:Place):TxFuture {
@@ -173,21 +153,11 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     
     /***************** At ********************/
     public def syncAt(dest:Place, closure:()=>void) {
-        try {
-            //Runtime.increaseParallelism();
-            execute(AT_VOID, dest, null, null, closure, null, plh, id, mapName, members, root);
-        } finally {
-            //Runtime.decreaseParallelism(1n);
-        }
+        execute(AT_VOID, dest, null, null, closure, null, plh, id, mapName, members, root);
     }
     
     public def syncAt(dest:Place, closure:()=>Any):Cloneable {
-        try {
-            //Runtime.increaseParallelism();
-            return execute(AT_RETURN, dest, null, null, null, closure, plh, id, mapName, members, root).value as Cloneable;
-        } finally {
-            //Runtime.decreaseParallelism(1n);
-        }
+        return execute(AT_RETURN, dest, null, null, null, closure, plh, id, mapName, members, root).value as Cloneable;
     }
     
     public def asyncAt(dest:Place, closure:()=>void):TxFuture {
