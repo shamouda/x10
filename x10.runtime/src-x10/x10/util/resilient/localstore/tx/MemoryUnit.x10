@@ -56,7 +56,10 @@ public class MemoryUnit {
     public def rollbackValue(oldValue:Cloneable, oldVersion:Int, key:String, txId:Long) {
         atomic {
             version++; 
-            //with RV_UL: some Tx A may read a value modified in the middle of another Tx B (Ver=1). Then B rolls back to old version (Ver 0) and unlocks. Then A changes the value and makes the version to Ver=1. In that case RV will not detect the conflict. 
+            /*with RV_UL: some Tx A may read a value modified in the middle of another Tx B (Ver=1). 
+            Then B rolls back to old version (Ver 0) and unlocks. 
+            Then A changes the value and makes the version to Ver=1. 
+            In that case RV will not detect the conflict. */
             value = oldValue;
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] rollsetvv key["+key+"] ver["+version+"] val["+value+"]");
         }
