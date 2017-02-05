@@ -91,8 +91,11 @@ public class SlaveStore {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() started ...");
         try {
             lock.lock();
-            val txSlaveLog = logs.getOrElse(id, new TxSlaveLog( id, mapName, new HashMap[String,Cloneable]()) );
-            
+            var txSlaveLog:TxSlaveLog = logs.getOrElse(id, null );
+            if (txSlaveLog == null) {
+            	txSlaveLog = new TxSlaveLog( id, mapName, new HashMap[String,Cloneable]());
+            	logs.put(id, txSlaveLog);
+            }
             val iter = remainingEntries.keySet().iterator();
             while (iter.hasNext()) {
                 val key = iter.next();
