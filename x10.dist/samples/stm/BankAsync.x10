@@ -3,7 +3,7 @@ import x10.util.ArrayList;
 import x10.util.resilient.PlaceManager;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.Tx;
-import x10.util.resilient.localstore.tx.TxFuture;
+import x10.util.concurrent.Future;
 import x10.util.resilient.localstore.ResilientStore;
 import x10.util.Set;
 import x10.xrx.Runtime;

@@ -14,6 +14,9 @@ package x10.util.resilient.localstore.tx;
 
 import x10.util.concurrent.Lock;
 
+/*
+ * 
+ **/
 public class TxLockExclusive extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
@@ -31,7 +34,6 @@ public class TxLockExclusive extends TxLock {
             if (locked && lockedBy != txId) {
                 if (resilient)
                     TxManager.checkDeadCoordinator(lockedBy);
-                //Console.OUT.println(here + "   TxLockExclusive.lockWrite   throwing conflict");
                 throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] ", here);
             }
             locked = true;

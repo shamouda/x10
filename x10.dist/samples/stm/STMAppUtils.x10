@@ -2,8 +2,7 @@ import x10.util.resilient.localstore.CloneableLong;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.tx.ConflictException;
 import x10.util.ArrayList;
-import x10.util.resilient.localstore.tx.TxFuture;
-
+import x10.util.concurrent.Future;
 
 public class STMAppUtils {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
@@ -62,7 +61,7 @@ public class STMAppUtils {
     
     public static def sumAccounts(map:ResilientNativeMap, activePG:PlaceGroup){
         var sum:Long = 0;
-        val list = new ArrayList[TxFuture]();
+        val list = new ArrayList[Future[Any]]();
         val tx = map.startGlobalTransaction(activePG);
         for (p in activePG) {
             val f = tx.asyncAt(p, () => {
@@ -81,7 +80,7 @@ public class STMAppUtils {
             list.add(f);
         }
         for (f in list)
-            sum += f.waitV() as Long;
+            sum += f.force() as Long;
         tx.commit();
         return sum;
     }

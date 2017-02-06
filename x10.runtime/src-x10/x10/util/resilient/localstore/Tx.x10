@@ -24,7 +24,7 @@ import x10.util.resilient.localstore.tx.*;
 import x10.compiler.Uncounted;
 import x10.compiler.Immediate;
 import x10.util.resilient.localstore.Cloneable;
-
+import x10.util.concurrent.Future;
 
 public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
@@ -92,7 +92,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         return execute(GET_REMOTE, dest, key, null, null, null, plh, id, mapName, members, root).value as Cloneable;
     }
     
-    public def asyncGetRemote(dest:Place, key:String):TxFuture {
+    public def asyncGetRemote(dest:Place, key:String):Future[Any] {
         return execute(ASYNC_GET, dest, key, null, null, null, plh, id, mapName, members, root).future;
     }
     
@@ -109,7 +109,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         return execute(PUT_REMOTE, dest, key, value, null, null, plh, id, mapName, members, root).value as Cloneable;
     }
     
-    public def asyncPutRemote(dest:Place, key:String, value:Cloneable):TxFuture {
+    public def asyncPutRemote(dest:Place, key:String, value:Cloneable):Future[Any] {
         return execute(ASYNC_PUT, dest, key, value, null, null, plh, id, mapName, members, root).future;
     }
     
@@ -126,7 +126,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         return execute(DELETE_REMOTE, dest, key, null, null, null, plh, id, mapName, members, root).value as Cloneable;
     }
     
-    public def asyncDeleteRemote(dest:Place, key:String):TxFuture {
+    public def asyncDeleteRemote(dest:Place, key:String):Future[Any] {
         return execute(ASYNC_DELETE, dest, key, null, null, null, plh, id, mapName, members, root).future;
     }
     
@@ -143,7 +143,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         return execute(KEYSET_REMOTE, dest, null, null, null, null, plh, id, mapName, members, root).set; 
     }
     
-    public def asyncKeySetRemote(dest:Place):TxFuture {
+    public def asyncKeySetRemote(dest:Place):Future[Any] {
         return execute(ASYNC_KEYSET, dest, null, null, null, null, plh, id, mapName, members, root).future; 
     }
     
@@ -160,11 +160,11 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         return execute(AT_RETURN, dest, null, null, null, closure, plh, id, mapName, members, root).value as Cloneable;
     }
     
-    public def asyncAt(dest:Place, closure:()=>void):TxFuture {
+    public def asyncAt(dest:Place, closure:()=>void):Future[Any] {
         return execute(ASYNC_AT_VOID, dest, null, null, closure, null, plh, id, mapName, members, root).future;
     }
     
-    public def asyncAt(dest:Place, closure:()=>Any):TxFuture {
+    public def asyncAt(dest:Place, closure:()=>Any):Future[Any] {
         return execute(ASYNC_AT_RETURN, dest, null, null, null, closure, plh, id, mapName, members, root).future;
     }
     
@@ -208,50 +208,31 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             }
             else {  /*Remote Async Operations*/
                 val fid = plh().masterStore.getNextFutureId();
-                val future = new TxFuture(id, fid, dest);
-                val gr = new GlobalRef(future);
-                
-                plh().masterStore.addFuture(mapName, id, future);
-                
-                try {
-                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] Op["+opDesc(op)+"] going to move to dest["+dest+"] key["+key+"] ...");
-                    at (dest) @Uncounted async {
-                        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] Op["+opDesc(op)+"] moved here["+here+"] key["+key+"] ...");
-                        var result:Any = null;
-                        var exp:Exception = null;
-                        try {
-                            if (op == ASYNC_GET) {
-                                result = getLocal(key, plh, id, mapName);
-                            }
-                            else if (op == ASYNC_PUT) {
-                                result = putLocal(key, value, plh, id, mapName);
-                            }
-                            else if (op == ASYNC_DELETE) {
-                                result = deleteLocal(key, plh, id, mapName);
-                            }
-                            else if (op == ASYNC_KEYSET) {
-                                result = keySetLocal(plh, id, mapName);
-                            }
-                            else if (op == ASYNC_AT_VOID) {
-                                closure_void();
-                            }
-                            else if (op == ASYNC_AT_RETURN) {
-                                result = closure_return();
-                            }
-                        }catch(e:Exception) {
-                            exp = e;
-                        }
-                        
-                        val x = result;
-                        val y = exp;
-                        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] Op["+opDesc(op)+"] finished here["+here+"] key["+key+"] going to fill future at["+gr.home+"]...");
-                        at (gr) @Immediate async {
-                            gr().fill(x, y);
-                        }
-                    }
-                } catch (m:Exception) {
-                    future.fill(null, m);
-                }
+                val future = Future.make[Any](() => 
+                	at (dest) {
+                		var result:Any = null;
+                    	if (op == ASYNC_GET) {
+                    		result = getLocal(key, plh, id, mapName);
+                    	}
+                    	else if (op == ASYNC_PUT) {
+                    		result = putLocal(key, value, plh, id, mapName);
+                    	}
+                    	else if (op == ASYNC_DELETE) {
+                    		result = deleteLocal(key, plh, id, mapName);
+                    	}
+                    	else if (op == ASYNC_KEYSET) {
+                    		result = keySetLocal(plh, id, mapName);
+                    	}
+                    	else if (op == ASYNC_AT_VOID) {
+                    		closure_void();
+                    	}
+                    	else if (op == ASYNC_AT_RETURN) {
+                    		result = closure_return();
+                    	}
+                    	return result;
+                	}
+                );                
+                plh().masterStore.addFuture(mapName, id, future);                
                 return new TxOpResult(future);
             }
         }catch (ex:Exception) {
@@ -612,14 +593,14 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
 class TxOpResult {
     var set:Set[String];
     var value:Any;
-    var future:TxFuture;
+    var future:Future[Any];
     public def this(s:Set[String]) {
         set = s;
     }
     public def this(v:Any) {
         value = v;
     }
-    public def this(f:TxFuture) {
+    public def this(f:Future[Any]) {
         future = f;
     }
 }

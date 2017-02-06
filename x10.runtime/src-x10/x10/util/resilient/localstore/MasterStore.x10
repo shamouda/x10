@@ -21,6 +21,7 @@ import x10.compiler.Ifdef;
 import x10.xrx.Runtime;
 import x10.util.resilient.localstore.tx.*;
 import x10.util.resilient.localstore.Cloneable;
+import x10.util.concurrent.Future;
 
 public class MasterStore {
     /*Each map has an object of TxManager (same object even after failures)*/
@@ -56,7 +57,7 @@ public class MasterStore {
         }
     }    
     
-    public def addFuture(mapName:String, id:Long, future:TxFuture) {
+    public def addFuture(mapName:String, id:Long, future:Future[Any]) {
         getTxManager(mapName).addFuture(id, future);
     }
     

@@ -7,6 +7,7 @@ import x10.util.concurrent.Lock;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.MasterStore;
 import x10.xrx.Runtime;
+import x10.util.concurrent.Future;
 
 public abstract class TxManager(data:MapData) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
@@ -35,7 +36,7 @@ public abstract class TxManager(data:MapData) {
     protected val abortedTxs = new ArrayList[Long](); //aborted NULL transactions 
     protected val validatedTxLogs = new HashMap[Long,TxLog]();
     
-    protected val futures = new HashMap[Long,ArrayList[TxFuture]]();
+    protected val futures = new HashMap[Long,ArrayList[Future[Any]]]();
     protected val futuresLock = new Lock();
     
     protected val stat:TxManagerStatistics = new TxManagerStatistics();
@@ -109,12 +110,12 @@ public abstract class TxManager(data:MapData) {
         return log;
     }
     
-    public def addFuture(id:Long, future:TxFuture) {
+    public def addFuture(id:Long, future:Future[Any]) {
         try {
             futuresLock.lock();
-            var list:ArrayList[TxFuture] = futures.getOrElse(id, null);
+            var list:ArrayList[Future[Any]] = futures.getOrElse(id, null);
             if (list == null) {
-                list = new ArrayList[TxFuture]();
+                list = new ArrayList[Future[Any]]();
                 futures.put(id, list);
             }
             list.add(future);
@@ -122,32 +123,29 @@ public abstract class TxManager(data:MapData) {
         finally{
             futuresLock.unlock();
         }
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] add future ["+future.fid+"] ...");
     }
     
     protected def waitForFutures(id:Long) {
-        var list:ArrayList[TxFuture] = null;
+        var list:ArrayList[Future[Any]] = null;
         futuresLock.lock();
         list = futures.getOrElse(id, null);
         futuresLock.unlock();
         
         if (list != null) {
-            for (future in list) {
-                if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] waiting for future["+future.fid+"] from place["+future.targetPlace+"] ...");
-                future.waitV();
-                if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] waiting for future["+future.fid+"] from place["+future.targetPlace+"] completed ...");
+            for (future in list) {                
+                future.force();
             }
         }
     }
     
+   
     public static def checkDeadCoordinator(txId:Long) {
-       val placeId = (txId / MasterStore.TX_FACTOR) -1;
+        //FIXME: this does not hold when a spare place replaces a dead place
+        val placeId = (txId / MasterStore.TX_FACTOR) -1;
         if (Place(placeId).isDead()) {
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] coordinator place["+Place(placeId)+"] died !!!!");
             throw new DeadPlaceException(Place(placeId));
         }
-        else
-            if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] coordinator place["+Place(placeId)+"] is alive");
     }
     
     /*************** Abstract Methods ****************/
