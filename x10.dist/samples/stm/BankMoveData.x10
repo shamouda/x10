@@ -1,6 +1,5 @@
 import x10.util.Random;
 import x10.util.ArrayList;
-import x10.util.resilient.localstore.tx.TxFuture;
 import x10.util.resilient.PlaceManager;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.Tx;
@@ -21,18 +20,13 @@ public class BankMoveData {
         val debugProgress = Long.parseLong(args(2));
         val accountsPerPlace = Math.ceil(Math.pow(2, expAccounts)) as Long;
         val transfersPerPlace = Math.ceil(Math.pow(2, expTransfers)) as Long;
-        
-        Console.OUT.println("Running BankMoveData Benchmark. Places["+Place.numPlaces()
-                +"] Accounts["+(accountsPerPlace*Place.numPlaces()) +"] AccountsPerPlace["+accountsPerPlace
-                +"] Transfers["+(transfersPerPlace*Place.numPlaces()) +"] TransfersPerPlace["+transfersPerPlace+"] "
-                +" PrintProgressEvery["+debugProgress+"] iterations");
-        val start = System.nanoTime();
-        
         val sparePlaces = 0;
+        STMAppUtils.printBenchmarkStartingMessage("BankMoveData", accountsPerPlace, transfersPerPlace, debugProgress, sparePlaces);
+        val start = System.nanoTime();
+
         val supportShrinking = false;
         val mgr = new PlaceManager(sparePlaces, supportShrinking);
         val store = ResilientStore.make(mgr.activePlaces());
-
         val map = store.makeMap("mapA");
         try {
             val startTransfer = System.nanoTime();

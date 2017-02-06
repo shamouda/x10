@@ -16,30 +16,18 @@ public class BankAsync {
             Console.OUT.println("Parameters missing exp_accounts_per_place exp_transfers_per_place");
             return;
         }
-        
-        Console.OUT.println("X10_NUM_IMMEDIATE_THREADS="+System.getenv("X10_NUM_IMMEDIATE_THREADS"));
-        Console.OUT.println("X10_NTHREADS="+System.getenv("X10_NTHREADS"));
-        Console.OUT.println("X10_RESILIENT_MODE="+System.getenv("X10_RESILIENT_MODE"));
-        Console.OUT.println("TM="+System.getenv("TM"));
-        Console.OUT.println("TM_FUTURE_WAIT="+System.getenv("TM_FUTURE_WAIT"));
-        
         val expAccounts = Long.parseLong(args(0));
         val expTransfers = Long.parseLong(args(1));
         val debugProgress = Long.parseLong(args(2));
         val accountsPerPlace = Math.ceil(Math.pow(2, expAccounts)) as Long;
         val transfersPerPlace = Math.ceil(Math.pow(2, expTransfers)) as Long;
-        
-        Console.OUT.println("Running BankAsync Benchmark. Places["+Place.numPlaces()
-                +"] Accounts["+(accountsPerPlace*Place.numPlaces()) +"] AccountsPerPlace["+accountsPerPlace
-                +"] Transfers["+(transfersPerPlace*Place.numPlaces()) +"] TransfersPerPlace["+transfersPerPlace+"] "
-                +" PrintProgressEvery["+debugProgress+"] iterations");
+        val sparePlaces = 0;
+        STMAppUtils.printBenchmarkStartingMessage("BankAsync", accountsPerPlace, transfersPerPlace, debugProgress, sparePlaces);
         val start = System.nanoTime();
         
-        val sparePlaces = 0;
         val supportShrinking = false;
         val mgr = new PlaceManager(sparePlaces, supportShrinking);
         val store = ResilientStore.make(mgr.activePlaces());
-
         val map = store.makeMap("mapA");
         try {
             val startTransfer = System.nanoTime();
@@ -87,13 +75,10 @@ public class BankAsync {
                 val p2=  tmpP2;
                 val randAcc1 = "acc"+rand1;
                 val randAcc2 = "acc"+rand2;
-                //val amount = Math.abs(rand.nextLong()%100);
+                val amount = Math.abs(rand.nextLong()%100);
                 val members = STMAppUtils.createGroup(p1, p2);
-                map.executeTransaction( () => {
-                    val tx = map.startGlobalTransaction(members);
-                    val txId = tx.id;
-                    val amount = txId;
-                    if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXSTART accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"] amount["+amount+"] ");
+                map.executeTransaction(members, (tx:Tx) => {
+                    if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"] amount["+amount+"] ");
                     val f1 = tx.asyncAt(p1, () => {
                         var acc1:BankAccount = tx.get(randAcc1) as BankAccount;
                         if (acc1 == null)
@@ -108,7 +93,6 @@ public class BankAsync {
                         acc2.account += amount;
                         tx.put(randAcc2, acc2);
                     });
-                    tx.commit();
                 });
             }
         }

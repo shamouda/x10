@@ -3,8 +3,8 @@ import x10.util.ArrayList;
 import x10.util.resilient.PlaceManager;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.LockManager;
-import x10.util.resilient.localstore.tx.TxFuture;
 import x10.util.resilient.localstore.ResilientStore;
+import x10.util.concurrent.Future;
 import x10.util.Set;
 import x10.xrx.Runtime;
 
@@ -16,23 +16,12 @@ public class BankAsyncLocking {
             Console.OUT.println("Parameters missing exp_accounts_per_place exp_transfers_per_place progress");
             return;
         }
-        
-        Console.OUT.println("X10_NUM_IMMEDIATE_THREADS="+System.getenv("X10_NUM_IMMEDIATE_THREADS"));
-        Console.OUT.println("X10_NTHREADS="+System.getenv("X10_NTHREADS"));
-        Console.OUT.println("X10_RESILIENT_MODE="+System.getenv("X10_RESILIENT_MODE"));
-        Console.OUT.println("TM="+System.getenv("TM"));
-        Console.OUT.println("TM_FUTURE_WAIT="+System.getenv("TM_FUTURE_WAIT"));
-        
         val expAccounts = Long.parseLong(args(0));
         val expTransfers = Long.parseLong(args(1));
         val debugProgress = Long.parseLong(args(2));
         val accountsPerPlace = Math.ceil(Math.pow(2, expAccounts)) as Long;
         val transfersPerPlace = Math.ceil(Math.pow(2, expTransfers)) as Long;
-        
-        Console.OUT.println("Running BankAsyncLocking Benchmark. Places["+Place.numPlaces()
-                +"] Accounts["+(accountsPerPlace*Place.numPlaces()) +"] AccountsPerPlace["+accountsPerPlace
-                +"] Transfers["+(transfersPerPlace*Place.numPlaces()) +"] TransfersPerPlace["+transfersPerPlace+"] "
-                +" PrintProgressEvery["+debugProgress+"] iterations");
+        STMAppUtils.printBenchmarkStartingMessage("BankAsyncLocking", accountsPerPlace, transfersPerPlace, debugProgress, 0);
         val start = System.nanoTime();
         
         val sparePlaces = 0;
@@ -47,7 +36,7 @@ public class BankAsyncLocking {
             randomTransfer(locker, mgr.activePlaces(), accountsPerPlace, transfersPerPlace, debugProgress);
             val endTransfer = System.nanoTime();
             
-            val sum2 = sumAccounts(locker, mgr.activePlaces());
+            val sum2 = STMAppUtils.sumAccountsLocking(locker, mgr.activePlaces());
             
             val end = System.nanoTime();
             if (sum2 == 0) {
@@ -107,38 +96,14 @@ public class BankAsyncLocking {
                     locker.putLocked(randAcc2, acc2);
                 });
                 
-                f1.waitV();
-                f2.waitV();
+                f1.force();
+                f2.force();
                 
                 locker.unlock(p1, randAcc1, p2, randAcc2);
             }
         }
     }
     
-    public static def sumAccounts(locker:LockManager, activePG:PlaceGroup){
-        var sum:Long = 0;
-        val list = new ArrayList[TxFuture]();
-        for (p in activePG) {
-            val f = locker.asyncAt(p, () => {
-                var localSum:Long = 0;
-                val set = locker.keySet();
-                val iter = set.iterator();
-                while (iter.hasNext()) {
-                    val accId  = iter.next();
-                    val obj = locker.getLocked(accId) as BankAccount;
-                    var value:Long = 0;
-                    if (obj != null) {
-                        value = obj.account;
-                    }
-                    localSum += value;
-                }
-                return localSum;
-            });
-            list.add(f);
-        }
-        for (f in list)
-            sum += f.waitV() as Long;
-        return sum;
-    }
+
     
 }

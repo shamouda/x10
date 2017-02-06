@@ -3,38 +3,28 @@ import x10.util.ArrayList;
 import x10.util.HashMap;
 import x10.util.resilient.PlaceManager;
 import x10.util.resilient.localstore.ResilientNativeMap;
-import x10.util.resilient.localstore.LockManager;
-import x10.util.resilient.localstore.tx.TxFuture;
+import x10.util.resilient.localstore.Tx;
 import x10.util.resilient.localstore.ResilientStore;
 import x10.util.Set;
 import x10.xrx.Runtime;
 
-public class RALocking {
+public class RAMoveData {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     public static def main(args:Rail[String]) {
         if (args.size != 3) {
-            Console.OUT.println("Parameters missing exp_accounts_per_place exp_updates_per_place");
+            Console.OUT.println("Parameters missing exp_accounts_per_place exp_updates_per_place progress");
             return;
         }
-        Console.OUT.println("X10_NUM_IMMEDIATE_THREADS="+System.getenv("X10_NUM_IMMEDIATE_THREADS"));
-        Console.OUT.println("X10_NTHREADS="+System.getenv("X10_NTHREADS"));
-        Console.OUT.println("X10_RESILIENT_MODE="+System.getenv("X10_RESILIENT_MODE"));
-        Console.OUT.println("TM="+System.getenv("TM"));
-        
         val expAccounts = Long.parseLong(args(0));
         val expUpdates = Long.parseLong(args(1));
         val debugProgress = Long.parseLong(args(2));
         val accountsPerPlace = Math.ceil(Math.pow(2, expAccounts) ) as Long;
         val updatesPerPlace = Math.ceil(Math.pow(2, expUpdates) ) as Long;
-        
-        Console.OUT.println("Running RandomAccess Benchmark. Places["+Place.numPlaces()
-                +"] Accounts["+(accountsPerPlace*Place.numPlaces()) +"] AccountsPerPlace["+accountsPerPlace
-                +"] Updates["+(updatesPerPlace*Place.numPlaces()) +"] UpdatesPerPlace["+updatesPerPlace+"] "
-                +" PrintProgressEvery["+debugProgress+"] iterations");
+        val sparePlaces = 0;
+    	STMAppUtils.printBenchmarkStartingMessage("RAMoveData", accountsPerPlace, updatesPerPlace, debugProgress, sparePlaces);
         val start = System.nanoTime();
         
-        val sparePlaces = 0;
         val supportShrinking = false;
         val mgr = new PlaceManager(sparePlaces, supportShrinking);
         val store = ResilientStore.make(mgr.activePlaces());
@@ -51,15 +41,14 @@ public class RALocking {
         }
         
         val map = store.makeMap("mapA");
-        val locker = map.getLockManager();
         try {
             val startTransfer = System.nanoTime();
-            randomUpdate(locker, mgr.activePlaces(), accountsPerPlace, updatesPerPlace, debugProgress, requestsMap);
+            randomUpdate(map, mgr.activePlaces(), accountsPerPlace, updatesPerPlace, debugProgress, requestsMap);
             val endTransfer = System.nanoTime();
             
             map.printTxStatistics();
             
-            val actualSum = sumAccounts(locker, mgr.activePlaces());
+            val actualSum = STMAppUtils.sumAccounts(map, mgr.activePlaces());
             
             val end = System.nanoTime();
             if (actualSum == expectedSum) {
@@ -79,62 +68,33 @@ public class RALocking {
         }
     }
     
-    public static def randomUpdate(locker:LockManager, activePG:PlaceGroup, accountsPerPlace:Long, 
+    public static def randomUpdate(map:ResilientNativeMap, activePG:PlaceGroup, accountsPerPlace:Long, 
             updatesPerPlace:Long, debugProgress:Long, requestsMap:HashMap[Long,PlaceUpdateRequests]){
         finish for (p in activePG) {
             val requests = requestsMap.getOrThrow(p.id);
             at (p) async {
                 val rand = new Random(System.nanoTime());
-                for (i in 0..(updatesPerPlace-1)) {
+                for (i in 1..updatesPerPlace) {
                     if (i%debugProgress == 0)
                         Console.OUT.println(here + " progress " + i);
-                    val rand1 = requests.accountsRail(i);
+                    val rand1 = requests.accountsRail(i-1);
                     val p1 = STMAppUtils.getPlace(rand1, activePG, accountsPerPlace);
-                    
                     val randAcc = "acc"+rand1;
-                    val amount = requests.amountsRail(i);
-                    locker.syncAt(p1, () => {
-                        locker.lock(randAcc);
-                        val obj = locker.getLocked(randAcc);
+                    val amount = requests.amountsRail(i-1);
+                    val members = STMAppUtils.createGroup(p1);
+                    map.executeTransaction(members, (tx:Tx) => {
+                        if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc+"] place["+p1+"] amount["+amount+"]");
+                        val obj = tx.getRemote(p1, randAcc);
                         var acc:BankAccount = null;
                         if (obj == null)
                             acc = new BankAccount(0);
                         else
                             acc = obj as BankAccount;
                         acc.account += amount;
-                        locker.putLocked(randAcc, acc);
-                        locker.unlock(randAcc);
+                        tx.putRemote(p1, randAcc, acc);
                     });
-                        
                 }
             }
         }
     }
-    
-    public static def sumAccounts(locker:LockManager, activePG:PlaceGroup){
-        var sum:Long = 0;
-        val list = new ArrayList[TxFuture]();
-        for (p in activePG) {
-            val f = locker.asyncAt(p, () => {
-                var localSum:Long = 0;
-                val set = locker.keySet();
-                val iter = set.iterator();
-                while (iter.hasNext()) {
-                    val accId  = iter.next();
-                    val obj = locker.getLocked(accId) as BankAccount;
-                    var value:Long = 0;
-                    if (obj != null) {
-                        value = obj.account;
-                    }
-                    localSum += value;
-                }
-                return localSum;
-            });
-            list.add(f);
-        }
-        for (f in list)
-            sum += f.waitV() as Long;
-        return sum;
-    }
-    
 }

@@ -99,12 +99,12 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         return tx;
     }
     
-    
-    public def executeTransaction(closure:()=>void) {
+    public def executeTransaction(members:PlaceGroup, closure:(Tx)=>void):Int {
         do {
             try {
-                closure();
-                break;
+            	val tx = startGlobalTransaction(members);
+                closure(tx);
+                return tx.commit();
             } catch(ex:Exception) {
                 processException(ex);
             }

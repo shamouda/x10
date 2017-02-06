@@ -3,14 +3,14 @@ import x10.util.ArrayList;
 import x10.util.resilient.PlaceManager;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.Tx;
-import x10.util.resilient.localstore.tx.TxFuture;
 import x10.util.resilient.localstore.ResilientStore;
 
 public class Increment {
     
     public static def main(args:Rail[String]) {
-        val start = System.nanoTime();
         val sparePlaces = 0;
+        STMAppUtils.printBenchmarkStartingMessage("Increment", -1, -1, -1, sparePlaces);
+        val start = System.nanoTime();
         val supportShrinking = false;
         val mgr = new PlaceManager(sparePlaces, supportShrinking);
         val store = ResilientStore.make(mgr.activePlaces());

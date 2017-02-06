@@ -4,7 +4,6 @@ import x10.util.HashMap;
 import x10.util.resilient.PlaceManager;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.Tx;
-import x10.util.resilient.localstore.tx.TxFuture;
 import x10.util.resilient.localstore.ResilientStore;
 import x10.util.Set;
 import x10.xrx.Runtime;
@@ -20,33 +19,22 @@ public class RAAsyncResilient {
         if (args.size != 4) {
             Console.OUT.println("Parameters missing exp_accounts_per_place exp_updates_per_place progress spare");
             return;
-        }
-        
-        Console.OUT.println("X10_NUM_IMMEDIATE_THREADS="+System.getenv("X10_NUM_IMMEDIATE_THREADS"));
-        Console.OUT.println("X10_NTHREADS="+System.getenv("X10_NTHREADS"));
-        Console.OUT.println("X10_RESILIENT_MODE="+System.getenv("X10_RESILIENT_MODE"));
-        
-        Console.OUT.println("TM="+System.getenv("TM"));
-        Console.OUT.println("TM_FUTURE_WAIT="+System.getenv("TM_FUTURE_WAIT"));
-                
-        val start = System.nanoTime();
+        }        
         val expAccounts = Long.parseLong(args(0));
         val expUpdates = Long.parseLong(args(1));
         val debugProgress = Long.parseLong(args(2));
         val accountsPerPlace = Math.ceil(Math.pow(2, expAccounts) ) as Long;
         val updatesPerPlace = Math.ceil(Math.pow(2, expUpdates) ) as Long;
         val sparePlaces = Long.parseLong(args(3));
+    	STMAppUtils.printBenchmarkStartingMessage("RAAsyncResilient", accountsPerPlace, updatesPerPlace, debugProgress, sparePlaces);
+        val start = System.nanoTime();
+        
         val supportShrinking = false;
         val recoveryTimes = new ArrayList[Long]();
         if (x10.xrx.Runtime.RESILIENT_MODE == 0n || !DISABLE_CKPT) {
             val hammer = new SimplePlaceHammer();
             hammer.scheduleTimers();
-        }
-        Console.OUT.println("Running RAAsyncResilient Benchmark. Places["+Place.numPlaces()
-                +"] Accounts["+(accountsPerPlace*Place.numPlaces()) +"] AccountsPerPlace["+accountsPerPlace
-                +"] Updates["+(updatesPerPlace*Place.numPlaces()) +"] UpdatesPerPlace["+updatesPerPlace+"] "
-                +" PrintProgressEvery["+debugProgress+"] iterations sparePlaces["+sparePlaces+"] ");
-        
+        }        
         val mgr = new PlaceManager(sparePlaces, supportShrinking);
         val store = ResilientStore.make(mgr.activePlaces());
         val activePG = mgr.activePlaces();
@@ -126,6 +114,9 @@ public class RAAsyncResilient {
                 }
                 val rand = new Random(System.nanoTime());
                 for (i in start..updatesPerPlace) {
+                	if (i%debugProgress == 0)
+                        Console.OUT.println(here + " progress " + i);
+                	
                     val rand1 = requests.accountsRail(i-1);
                     val p1 = STMAppUtils.getPlace(rand1, activePG, accountsPerPlace);
                     val randAcc = "acc"+rand1;
@@ -137,10 +128,8 @@ public class RAAsyncResilient {
                     else
                         pg = STMAppUtils.createGroup(here,p1);
                     val members = pg;
-                    map.executeTransaction( () => {
-                        val tx = map.startGlobalTransaction(members);
-                        val txId = tx.id;
-                        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXSTART accounts["+randAcc+"] place["+p1+"] amount["+amount+"]");
+                    val success = map.executeTransaction(members, (tx:Tx) => {
+                        if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc+"] place["+p1+"] amount["+amount+"]");
                         tx.asyncAt(p1, () => {
                             val obj = tx.get(randAcc);
                             var acc:BankAccount = null;
@@ -152,14 +141,11 @@ public class RAAsyncResilient {
                             tx.put(randAcc, acc);
                         });
                         if (!DISABLE_CKPT)
-                            tx.put("p"+placeIndex, new CloneableLong(i));
-                        val success = tx.commit();
-                        if (success == Tx.SUCCESS_RECOVER_STORE) {
-                            throw new RecoverDataStoreException("RecoverDataStoreException", here);
-                        }
-                        if (i%debugProgress == 0)
-                            Console.OUT.println(here + " progress " + i);
+                            tx.put("p"+placeIndex, new CloneableLong(i));                        
                     });
+                    if (success == Tx.SUCCESS_RECOVER_STORE) {
+                        throw new RecoverDataStoreException("RecoverDataStoreException", here);
+                    }
                 }
             }
         }

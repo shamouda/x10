@@ -3,18 +3,18 @@ import x10.util.ArrayList;
 import x10.util.resilient.PlaceManager;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.LockManager;
-import x10.util.resilient.localstore.tx.TxFuture;
 import x10.util.resilient.localstore.ResilientStore;
 
 public class IncrementLocking {
     
     public static def main(args:Rail[String]) {
+    	val sparePlaces = 0;
+        STMAppUtils.printBenchmarkStartingMessage("IncrementLocking", -1, -1, -1, sparePlaces);
         val start = System.nanoTime();
-        val sparePlaces = 0;
+        
         val supportShrinking = false;
         val mgr = new PlaceManager(sparePlaces, supportShrinking);
         val store = ResilientStore.make(mgr.activePlaces());
-        
         try {
             val map = store.makeMap("map");
             val locker = map.getLockManager();
