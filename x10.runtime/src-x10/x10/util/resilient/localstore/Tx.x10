@@ -207,7 +207,6 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                 return new TxOpResult(at (dest) closure_return());
             }
             else {  /*Remote Async Operations*/
-                val fid = plh().masterStore.getNextFutureId();
                 val future = Future.make[Any](() => 
                 	at (dest) {
                 		var result:Any = null;
@@ -323,19 +322,16 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                 if (resilient && !DISABLE_DESC)
                     updateTxDesc(TxDesc.COMMITTING);
             } catch(ex:ConflictException) {
-                //ex.printStackTrace();
                 val list = new ArrayList[Place]();
                 list.add(ex.place);
                 abort(list);
                 throw ex;
             } catch(ex:DeadPlaceException) {
-                //ex.printStackTrace();
                 val list = new ArrayList[Place]();
                 list.add(ex.place);
                 abort(list);
                 throw ex;
             } catch(ex:MultipleExceptions) {
-                //ex.printStackTrace();
                 val list = getDeadAndConflictingPlaces(ex);
                 abort(list);
                 throw ex;

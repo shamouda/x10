@@ -24,7 +24,7 @@ import x10.util.resilient.localstore.tx.*;
 import x10.compiler.Uncounted;
 import x10.compiler.Immediate;
 import x10.util.resilient.localstore.Cloneable;
-
+import x10.util.concurrent.Future;
 
 public class LockManager (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
@@ -89,55 +89,13 @@ public class LockManager (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Str
         return (at (dest) closure()) as Cloneable;
     }
     
-    public def asyncAt(dest:Place, closure:()=>void):TxFuture {
-        val fid = plh().masterStore.getNextFutureId();
-        val future = new TxFuture(id, fid, dest);
-        val gr = new GlobalRef(future);
-        
-        try {
-            at (dest) @Uncounted async {
-                var result:Any = null;
-                var exp:Exception = null;
-                try {
-                    closure();
-                }catch(e:Exception) {
-                    exp = e;
-                }
-                val x = result;
-                val y = exp;
-                at (gr) @Immediate ("fill_tx_future") async {
-                    gr().fill(x, y);
-                }
-            }
-        } catch (m:Exception) {
-            future.fill(null, m);
-        }
+    public def asyncAt(dest:Place, closure:()=>void):Future[Any] {
+        val future = Future.make[Any]( () => at (dest) { closure(); return null;} );                
         return future;
     }
     
-    public def asyncAt(dest:Place, closure:()=>Any):TxFuture {
-        val fid = plh().masterStore.getNextFutureId();
-        val future = new TxFuture(id, fid, dest);
-        val gr = new GlobalRef(future);
-        
-        try {
-            at (dest) @Uncounted async {
-                var result:Any = null;
-                var exp:Exception = null;
-                try {
-                    result = closure();
-                }catch(e:Exception) {
-                    exp = e;
-                }
-                val x = result;
-                val y = exp;
-                at (gr) @Immediate ("fill_tx_future2") async {
-                    gr().fill(x, y);
-                }
-            }
-        } catch (m:Exception) {
-            future.fill(null, m);
-        }
+    public def asyncAt(dest:Place, closure:()=>Any):Future[Any] {
+        val future = Future.make[Any]( () => at (dest) { return closure(); } );                
         return future;
     }   
     
