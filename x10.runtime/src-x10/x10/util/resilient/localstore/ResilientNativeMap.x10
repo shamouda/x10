@@ -69,11 +69,9 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         rail(0) = here; 
         rail(1) = place;
         val members = new SparsePlaceGroup(rail);
-        executeTransaction (()=>{
-            val tx = startGlobalTransaction(members);
+        executeTransaction (members, (tx:Tx)=>{
             tx.asyncAt(place, ()=> {tx.put(key2, value2);});
             tx.put(key, value);
-            tx.commit();
         });
     }
     
