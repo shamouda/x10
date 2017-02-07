@@ -76,7 +76,9 @@ public class BankAsyncLocking {
                 val randAcc2 = "acc"+rand2;
                 val amount = Math.abs(rand.nextLong()%100);
 
-                locker.lock(p1, randAcc1, p2, randAcc2); //sort and lock
+                val txId = ( (here.id + 1) * 1000000) + i;
+                
+                locker.lock(p1, randAcc1, p2, randAcc2, txId); //sort and lock
                 
                 val f1 = locker.asyncAt(p1, () => {
                     var acc1:BankAccount = locker.getLocked(randAcc1) as BankAccount;
@@ -99,7 +101,7 @@ public class BankAsyncLocking {
                 f1.force();
                 f2.force();
                 
-                locker.unlock(p1, randAcc1, p2, randAcc2);
+                locker.unlock(p1, randAcc1, p2, randAcc2, txId);
             }
         }
     }

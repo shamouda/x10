@@ -31,7 +31,7 @@ public class LockManager (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Str
     
     /***************** Locking ********************/
     
-    public def lock(p1:Place, key1:String, p2:Place, key2:String) {
+    public def lock(p1:Place, key1:String, p2:Place, key2:String, id:Long) {
         if (key1.hashCode() < key2.hashCode()) {
             at (p1) plh().masterStore.lock(mapName, id, key1);
             at (p2) plh().masterStore.lock(mapName, id, key2);
@@ -41,7 +41,7 @@ public class LockManager (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Str
             at (p1) plh().masterStore.lock(mapName, id, key1);
         }
     }
-    public def unlock(p1:Place, key1:String, p2:Place, key2:String) {
+    public def unlock(p1:Place, key1:String, p2:Place, key2:String, id:Long) {
         if (key1.hashCode() < key2.hashCode()) {
             at (p1) plh().masterStore.unlock(mapName, id, key1);
             at (p2) plh().masterStore.unlock(mapName, id, key2);
