@@ -12,12 +12,13 @@
 
 package x10.util.resilient.localstore.tx;
 
-import x10.util.concurrent.Lock;
+import x10.util.concurrent.Latch;
 
 public class TxLockWait extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
-    private var locked:Boolean;
+    private val latch = new Latch();
+    private var locked:Boolean = false;
 
     public def lockRead(txId:Long, key:String) {
         lockWrite(txId, key);
@@ -25,15 +26,23 @@ public class TxLockWait extends TxLock {
     
     public def lockWrite(txId:Long, key:String) {
         if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] waiting for lock");
-        when (!locked) {
-            locked = true;
-        }
+       	lock.lock();
+       	while (locked) {
+       		lock.unlock();
+       		latch.await();
+       		lock.lock();
+       	}
+       	locked = true;
+       	lock.unlock();
         if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] locked");
         
     }
   
     public def unlock(txId:Long, key:String) {
-        atomic locked = false;
+    	lock.lock();
+    	locked = false;
+    	latch.release();
+        lock.unlock();
         if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] unlocked");
     }
     
