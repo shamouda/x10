@@ -16,12 +16,14 @@ import x10.compiler.Pinned;
 import x10.io.Unserializable;
 
 /**
- * <p>X10 wrapper class for native semaphore with 1 permit.
+ * <p>X10 wrapper class for native unnamed semaphore.
  * Unlike Lock.x10, a Semaphore can be unlocked by a different thread</p>
+ * 
+ * Will not work on operating systems that do not support the unnamed semaphore (like Mac OS)
  */
 @NativeClass("java", "x10.core.concurrent", "NativeSemaphore")
 @NativeClass("c++", "x10.lang", "Semaphore")
-@Pinned public class Semaphore(permits:Int) implements Unserializable {
+@Pinned public class UnnamedSemaphore(permits:Int) implements Unserializable {
     public native def this(permits:Int);
 
     public native def acquire():void;

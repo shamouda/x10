@@ -12,13 +12,13 @@
 
 package x10.util.resilient.localstore.tx;
 
-import x10.util.concurrent.Semaphore;
+import x10.util.concurrent.UnnamedSemaphore;
 import x10.xrx.Runtime;
 
 public class TxLockWait extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
-    private val latch = new Semaphore(1n);
+    private val latch = new UnnamedSemaphore(1n);
     private var locked:Boolean = false;
     private var waiters:Int = 0n;
     
