@@ -19,7 +19,8 @@ public class TxLockWait extends TxLock {
     
     private val latch = new Latch();
     private var locked:Boolean = false;
-
+    private var latchUsed:Boolean = false;
+    
     public def lockRead(txId:Long, key:String) {
         lockWrite(txId, key);
     }
@@ -28,20 +29,24 @@ public class TxLockWait extends TxLock {
         if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] waiting for lock");
        	lock.lock();
        	while (locked) {
+       		latchUsed = true;
        		lock.unlock();
+
        		latch.await();
+       		
        		lock.lock();
        	}
        	locked = true;
        	lock.unlock();
-        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] locked");
-        
+       	if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] locked ");        
     }
   
     public def unlock(txId:Long, key:String) {
+    	if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] start unlock");
     	lock.lock();
     	locked = false;
-    	latch.release();
+    	if (latchUsed)
+   	       latch.release();
         lock.unlock();
         if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] unlocked");
     }
