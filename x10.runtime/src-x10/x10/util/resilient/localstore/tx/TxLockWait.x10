@@ -45,8 +45,10 @@ public class TxLockWait extends TxLock {
     	if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] start unlock");
     	lock.lock();
     	locked = false;
+    	
     	if (latchUsed)
    	       latch.release();
+    	
         lock.unlock();
         if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] unlocked");
     }
