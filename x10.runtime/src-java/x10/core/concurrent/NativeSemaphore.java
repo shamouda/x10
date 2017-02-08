@@ -1,38 +1,36 @@
 package x10.core.concurrent;
 
+import java.util.concurrent.Semaphore;
+
 @SuppressWarnings("serial")
-public class NativeSemaphore extends java.util.concurrent.Semaphore {
-	
-    public NativeSemaphore(System[] $dummy) { 
-    	super(-1); 
-    }
+public class NativeSemaphore  {
+	private Semaphore sem;
     
-    // constructor just for allocation
-    public NativeSemaphore(int permits) {
-        super(permits);
+    public NativeSemaphore(System[] $dummy) {
     }
     
     public final NativeSemaphore x10$core$concurrent$NativeSemaphore$$init$S(int permits) {
+        sem = new Semaphore(permits);
         return this;
     }
     
     public void acquire() {
        try {
-    	   super.acquire();
+           sem.acquire();
        }catch (java.lang.InterruptedException e) {
            throw new x10.xrx.InterruptedException();
        }
     }   
 
     public boolean tryAcquire$O() {
-    	return super.tryAcquire();
+    	return sem.tryAcquire();
     }
 
     public void release() {
-    	super.release();
+        sem.release();
     }
     
     public int availablePermits$O() {
-    	return super.availablePermits();
+    	return sem.availablePermits();
     }
 }
