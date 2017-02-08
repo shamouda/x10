@@ -12,14 +12,15 @@
 
 package x10.util.resilient.localstore.tx;
 
-import x10.util.concurrent.Latch;
+import x10.util.concurrent.Semaphore;
+import x10.xrx.Runtime;
 
 public class TxLockWait extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
-    private val latch = new Latch();
+    private val latch = new Semaphore(1n);
     private var locked:Boolean = false;
-    private var latchUsed:Boolean = false;
+    private var waiters:Int = 0n;
     
     public def lockRead(txId:Long, key:String) {
         lockWrite(txId, key);
@@ -27,29 +28,15 @@ public class TxLockWait extends TxLock {
     
     public def lockWrite(txId:Long, key:String) {
         if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] waiting for lock");
-       	lock.lock();
-       	while (locked) {
-       		latchUsed = true;
-       		lock.unlock();
-
-       		latch.await();
-       		
-       		lock.lock();
-       	}
-       	locked = true;
-       	lock.unlock();
+        Runtime.increaseParallelism();
+        latch.acquire();
+        Runtime.decreaseParallelism(1n);
        	if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] locked ");        
     }
   
     public def unlock(txId:Long, key:String) {
     	if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] start unlock");
-    	lock.lock();
-    	locked = false;
-    	
-    	if (latchUsed)
-   	       latch.release();
-    	
-        lock.unlock();
+    	latch.release();
         if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] unlocked");
     }
     
