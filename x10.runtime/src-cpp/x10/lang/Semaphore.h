@@ -22,8 +22,6 @@ namespace x10 {
        /**
         * A low-level lock that provides a subset of the functionality
         * of java.util.concurrent.Semaphore.
-        * 
-        * TODOSEM: describe the semapahore class
         */
         class Semaphore : public ::x10::lang::X10Class {
         public:
@@ -49,26 +47,9 @@ namespace x10 {
             ~Semaphore() { }
 
         public:
-           /**
-            * TODOSEM: describe the semapahore class
-            */
             void acquire() { _sem.acquire(); }
-
-
-            /**
-             * TODOSEM: describe the semapahore class
-             */
             void release() { if (!_sem.release()) raiseException(); }
-                
-
-            /**
-             * TODOSEM: describe the semapahore class
-             */
             x10_boolean tryAcquire() { return _sem.tryAcquire(); }
-
-            /**
-             * TODOSEM: describe the semapahore class
-             */
             x10_int availablePermits() { return _sem.availablePermits(); }
 
         private:

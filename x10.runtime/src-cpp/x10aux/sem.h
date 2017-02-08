@@ -32,24 +32,9 @@ namespace x10aux {
 
     public:
 
-        /**
-         * TODOSEM: 
-         */
         void acquire();
-
-        /**
-         * TODOSEM:
-         */
         bool release();
-
-        /**
-         * TODOSEM
-         */
         bool tryAcquire();
-
-        /**
-         * TODOSEM:
-         */
         int availablePermits();
 
     private:

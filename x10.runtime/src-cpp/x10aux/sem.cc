@@ -12,6 +12,7 @@
 #include <x10aux/sem.h>
 
 #include <errno.h>
+#include <cstdio>
 
 void x10aux::semaphore::initialize(unsigned int permits) {
     sem_init(&__sem, PTHREAD_PROCESS_PRIVATE, permits);    
@@ -31,7 +32,10 @@ void x10aux::semaphore::acquire() {
 
 // release lock
 bool x10aux::semaphore::release() {
-    if (sem_post(&__sem) != 0) {
+	int err = sem_post(&__sem);
+	int errsv = errno;
+    if ( err != 0) {
+    	printf("sem_error %d  %d \n", err, errsv );
         return false;
     }
     return true;
