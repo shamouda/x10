@@ -14,8 +14,15 @@ package x10.util.resilient.localstore.tx;
 
 import x10.util.concurrent.UnnamedSemaphore;
 import x10.xrx.Runtime;
-
-public class TxLockWait extends TxLock {
+/*
+ * An exclusive blocking lock based on a Semaphore. 
+ * A thread waits until it gets an exclusive access to the lock.
+ * A runtime-thread can release the semaphore even if it is not the one that locked it.
+ * A normal Lock would not allow this relaxed synchronization scheme. 
+ * However, we need it to allow a remote place to lock, do some work, and come back to unlock a key.
+ * When it comes back, it can use a different thread than the one used while locking the semaphor. 
+ * */
+public class TxLockExclusiveBlocking extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     private val latch = new UnnamedSemaphore(1n);
@@ -26,22 +33,17 @@ public class TxLockWait extends TxLock {
         lockWrite(txId, key);
     }
     
+    public def unlockRead(txId:Long, key:String) {
+        unlockWrite(txId, key);
+    }
+    
     public def lockWrite(txId:Long, key:String) {
-        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] waiting for lock");
         Runtime.increaseParallelism();
         latch.acquire();
-        Runtime.decreaseParallelism(1n);
-       	if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] locked ");        
+        Runtime.decreaseParallelism(1n);        
     }
   
-    public def unlock(txId:Long, key:String) {
-    	if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] start unlock");
+    public def unlockWrite(txId:Long, key:String) {
     	latch.release();
-        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] key["+key+"] unlocked");
     }
-    
-    public def getLockedBy():Long {
-        throw new Exception("lock.getLockedBy not supported for TxLockWait");
-    }
-    
 }
