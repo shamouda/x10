@@ -121,6 +121,11 @@ public class STMAppUtils {
             + " DebugProgress["+debugProgress+"] "
             + " SparePlaces["+sparePlaces+"] ");
         
+        printEnv();
+    }
+    
+    
+    public static def printEnv() {
         Console.OUT.println("X10_NUM_IMMEDIATE_THREADS="+System.getenv("X10_NUM_IMMEDIATE_THREADS"));
         Console.OUT.println("X10_NTHREADS="+System.getenv("X10_NTHREADS"));
         Console.OUT.println("X10_RESILIENT_MODE="+System.getenv("X10_RESILIENT_MODE"));
