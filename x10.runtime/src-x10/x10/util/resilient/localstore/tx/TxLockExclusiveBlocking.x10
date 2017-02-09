@@ -24,10 +24,7 @@ import x10.xrx.Runtime;
  * */
 public class TxLockExclusiveBlocking extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-    
-    private val latch = new UnnamedSemaphore(1n);
-    private var locked:Boolean = false;
-    private var waiters:Int = 0n;
+    private val semaphore = new UnnamedSemaphore(1n);
     
     public def lockRead(txId:Long, key:String) {
         lockWrite(txId, key);
@@ -39,11 +36,11 @@ public class TxLockExclusiveBlocking extends TxLock {
     
     public def lockWrite(txId:Long, key:String) {
         Runtime.increaseParallelism();
-        latch.acquire();
+        semaphore.acquire();
         Runtime.decreaseParallelism(1n);        
     }
   
     public def unlockWrite(txId:Long, key:String) {
-        latch.release();
+        semaphore.release();
     }
 }
