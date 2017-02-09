@@ -26,12 +26,9 @@ public class MemoryUnit {
     public def this(v:Cloneable) {
         value = v;
         if (TxManager.TM_DISABLED) 
-            lock = new TxLockWait();
-        else if (TxManager.TM_READ == TxManager.READ_VALIDATION)
-            lock = new TxLockExclusive();
-         else
+            lock = new TxLockExclusiveBlocking();
+        else
             lock = new TxLockCREW();
-            
     }
     
     public def getAtomicValue(copy:Boolean, key:String, txId:Long) {
@@ -46,40 +43,48 @@ public class MemoryUnit {
     }
     
     public def setValue(v:Cloneable, key:String, txId:Long) {
+    	var oldValue:Cloneable;
         atomic {
+        	oldValue = value;
             version++;
             value = v;
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] setvv key["+key+"] ver["+version+"] val["+value+"]");
         }
+        return oldValue;
     }
     
     public def rollbackValue(oldValue:Cloneable, oldVersion:Int, key:String, txId:Long) {
         atomic {
-            version++; 
-            /*with RV_UL: some Tx A may read a value modified in the middle of another Tx B (Ver=1). 
-            Then B rolls back to old version (Ver 0) and unlocks. 
-            Then A changes the value and makes the version to Ver=1. 
-            In that case RV will not detect the conflict. */
+            version = oldVersion; 
             value = oldValue;
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] rollsetvv key["+key+"] ver["+version+"] val["+value+"]");
         }
     }
     
-    public def getLockedBy() {
-        return lock.getLockedBy();
-    }
     public def lock(txId:Long, key:String) {
-        lock.lockWrite(txId, key);
+        lock.lock(txId, key);
     }
-    public def lockRead(txId:Long, key:String) {
-        lock.lockRead(txId, key);
-    }
-    public def lockWrite(txId:Long, key:String) {
-        lock.lockWrite(txId, key);
-    }
+    
     public def unlock(txId:Long, key:String) {
         lock.unlock(txId, key);
     }
+    
+    public def lockRead(txId:Long, key:String) {
+        lock.lockRead(txId, key);
+    }
+    
+    public def unlockRead(txId:Long, key:String) {
+        lock.unlockRead(txId, key);
+    }
+    
+    public def lockWrite(txId:Long, key:String) {
+        lock.lockWrite(txId, key);
+    }
+    
+    public def unlockWrite(txId:Long, key:String) {
+        lock.unlockWrite(txId, key);
+    }
+
     public def toString() {
         return "version:"+version+":value:"+value;
     }
@@ -96,9 +101,11 @@ public class MemoryUnit {
     }
     
     public def setValueLocked(v:Cloneable, key:String, txId:Long) {
+    	val oldValue = value;
         version++;
         value = v;
         if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] setvv key["+key+"] ver["+version+"] val["+value+"]");
+        return oldValue;
     }
     
 }

@@ -19,7 +19,7 @@ public class TxManager_LockBased extends TxManager {
     }
     
     public def delete(id:Long, key:String):Cloneable {
-        return delete_LockBased(id, key);
+        return put_LockBased(id, key, null);
     }
     
     public def lock(id:Long, key:String) {

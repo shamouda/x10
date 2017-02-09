@@ -17,6 +17,9 @@ import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Lock;
 
 /*
+ * The log to track actions done on a key. 
+ *  * In resilient mode, it is used to replicate the key changes on the slave.
+ * 
  * Only one thread will be accessing a TxLog at a certain place
  * X10-STM does not allow multiple threads accessing same Tx in the same place.
  * However, an abort request may occur concurrenctly with other requests, that is why we have a lock to prevent
@@ -39,8 +42,13 @@ public class TxLog (id:Long, mapName:String) {
     }
     
     // get currently logged value (throws an exception if value was not set before)
-    public def getValue(key:String) {
-        return transLog.getOrThrow(key).getValue();
+    public def getValue(copy:Boolean, key:String) {
+    	val value = transLog.getOrThrow(key).getValue();
+        var v:Cloneable = value;
+        if (copy) {
+            v = value == null?null:value.clone();
+        }
+        return v;
     }
     
     // get version
@@ -54,40 +62,49 @@ public class TxLog (id:Long, mapName:String) {
     }
     
     /*MUST be called before logPut and logDelete*/
-    public def logInitialValue(key:String, copiedValue:Cloneable, version:Int, txId:Long) {
+    public def logInitialValue(key:String, copiedValue:Cloneable, version:Int, txId:Long, lockedRead:Boolean) {
         var log:TxKeyChange = transLog.getOrElse(key, null);
         if (log == null) {
-            log = new TxKeyChange(copiedValue, version, txId);
+            log = new TxKeyChange(copiedValue, version, txId, lockedRead);
             transLog.put(key, log);
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] initial read ver["+version+"] val["+copiedValue+"]");
         }
     }
     
     public def logPut(key:String, copiedValue:Cloneable) {
-        //assert ( TxManager.TM_RECOVER == TxManager.WRITE_BUFFERING );
-        transLog.getOrThrow(key).update(copiedValue);
+        return transLog.getOrThrow(key).update(copiedValue);
+    }
+    
+    public def setReadOnly(key:String, ro:Boolean) {
+        transLog.getOrThrow(key).setReadOnly(ro);
     }
     
     //*used by Undo Logging*//
-    public def markAsModified(key:String) {
-        transLog.getOrThrow(key).markAsModified();
-    }
-    
-    
-    //*used by Undo Logging*//
-    public def isModified(key:String) {
-        return !transLog.getOrThrow(key).readOnly();
+    public def getReadOnly(key:String) {
+        return transLog.getOrThrow(key).getReadOnly();
     }
 
-    // mark as locked
-    public def markAsLocked(key:String) {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] key["+key+"] markAsLocked");
-        transLog.getOrThrow(key).markAsLocked();
+    // mark as locked for read
+    public def setLockedRead(key:String, lr:Boolean) {
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] key["+key+"] setLockedRead("+lr+") ");
+        transLog.getOrThrow(key).setLockedRead(lr);
     }
     
-    public def isLocked(key:String) {
-        val result = transLog.getOrThrow(key).isLocked();
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] key["+key+"] isLocked?["+result+"]");
+    // mark as locked for write
+    public def setLockedWrite(key:String, lw:Boolean) {
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] key["+key+"] setLockedWrite("+lw+") ");
+        transLog.getOrThrow(key).setLockedWrite(lw);
+    }
+    
+    public def getLockedRead(key:String) {
+        val result = transLog.getOrThrow(key).getLockedRead();
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] key["+key+"] getLockedRead?["+result+"]");
+        return result;
+    }
+    
+    public def getLockedWrite(key:String) {
+        val result = transLog.getOrThrow(key).getLockedWrite();
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] key["+key+"] getLockedWrite?["+result+"]");
         return result;
     }
     
@@ -98,7 +115,7 @@ public class TxLog (id:Long, mapName:String) {
         while (iter.hasNext()) {
             val key = iter.next();
             val log = transLog.getOrThrow(key);
-            if (!log.readOnly()) {
+            if (!log.getReadOnly()) {
                 val copy = log.getValue() == null ? null:log.getValue().clone();
                 map.put(key, copy);
             }
@@ -107,15 +124,10 @@ public class TxLog (id:Long, mapName:String) {
     }
     
     public def lock() {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] ["+here+"] LOG.lock() before");
-        val startWhen = System.nanoTime();
         lock.lock();
-        val endWhen = System.nanoTime();
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] ["+here+"] LOG.lock() after  lockingtime [" +((endWhen-startWhen)/1e6) + "] ms");
     }
+    
     public def unlock() {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] ["+here+"] LOG.unlock() before");
         lock.unlock();
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] ["+here+"] LOG.unlock() after");
     }
 }
