@@ -72,7 +72,7 @@ public class TxLockCREW extends TxLock {
         try {
             lock.lock();
             if (status == UNLOCKED || (status == LOCKED_WRITE && lockedWriter == txId)) {  
-                assert(readers.size() == 0);
+                assert(readers.size() == 0 && (lockedWriter == -1 || lockedWriter == txId));
                 lockedWriter = txId;
                 status = LOCKED_WRITE;
             }
@@ -88,7 +88,7 @@ public class TxLockCREW extends TxLock {
     }
     
     public def unlockWrite(txId:Long, key:String) {
-        assert(lockedWriter == txId);
+    	assert(readers.size() == 0 && lockedWriter == txId);
         try {
             lock.lock();
             lockedWriter = -1;
