@@ -5,7 +5,7 @@ import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.LockManager;
 import x10.util.resilient.localstore.ResilientStore;
 
-public class IncrementLocking {
+public class IncrementAsyncLocking {
     
     public static def main(args:Rail[String]) {
     	val sparePlaces = 0;

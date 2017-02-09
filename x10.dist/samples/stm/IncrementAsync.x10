@@ -5,7 +5,7 @@ import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.Tx;
 import x10.util.resilient.localstore.ResilientStore;
 
-public class Increment {
+public class IncrementAsync {
     
     public static def main(args:Rail[String]) {
         val sparePlaces = 0;
@@ -27,35 +27,30 @@ public class Increment {
         val startProc = System.nanoTime();
         val members = STMAppUtils.createGroup(Place(2));
         
-        finish for (p in activePG) at (p) async {
-            do {
-                try {
-                    val tx = map.startGlobalTransaction(members);
-                    tx.asyncAt(Place(2), () => {
-                        var acc1:BankAccount = tx.get("X") as BankAccount;
-                        if (acc1 == null)
-                            acc1 = new BankAccount(0);
-                        val oldv = acc1.account;
-                        acc1.account ++;
-                        val newv = acc1.account;
-                        tx.put("X", acc1);
-                        //Console.OUT.println("App-Tx["+tx.id+"] changing from ["+oldv+"] to ["+newv+"]");
-                    });
-                    tx.commit();
-                    break;
-                }catch(ex:Exception) {
-                    
-                }
-            } while(true);
+        finish for (p in activePG) at (p) async {        	
+        	map.executeTransaction( members, (tx:Tx) => { 
+        		tx.asyncAt(Place(2), () => {
+                    var acc1:BankAccount = tx.get("X") as BankAccount;
+                    if (acc1 == null)
+                        acc1 = new BankAccount(0);
+                    val oldv = acc1.account;
+                    acc1.account ++;
+                    val newv = acc1.account;
+                    tx.put("X", acc1);
+                    Console.OUT.println("App-Tx["+tx.id+"] changing from ["+oldv+"] to ["+newv+"]");
+                });
+        	});
         }
         val endProc = System.nanoTime();
         
         map.printTxStatistics();
-        
+        try {
         val tx = map.startGlobalTransaction(members);
         val acc = tx.getRemote(Place(2), "X") as BankAccount;
-        if (acc.account != activePG.size())
+        if (acc.account != activePG.size()) {
+        	Console.OUT.println("failure "+acc.account+" ,  " +activePG.size());
             throw new Exception("!! Failed !!  account:" + acc.account + " places:" + activePG.size());
+        }
         tx.commit();
         
         val initTime = (startProc-start)/1e9;
@@ -63,6 +58,9 @@ public class Increment {
         Console.OUT.println("InitTime:" + initTime + " seconds");
         Console.OUT.println("ProcessingTime:" + processingTime + " seconds");
         Console.OUT.println("+++++ Test Succeeded +++++");
+        }catch(ex1:Exception) {
+        	ex1.printStackTrace();
+        }
     }
     
 }
