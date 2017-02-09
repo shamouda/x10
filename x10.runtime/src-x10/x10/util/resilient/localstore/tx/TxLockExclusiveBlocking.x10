@@ -44,6 +44,6 @@ public class TxLockExclusiveBlocking extends TxLock {
     }
   
     public def unlockWrite(txId:Long, key:String) {
-    	latch.release();
+        latch.release();
     }
 }
