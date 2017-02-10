@@ -23,7 +23,7 @@ import x10.io.Unserializable;
  */
 @NativeClass("java", "x10.core.concurrent", "NativeSemaphore")
 @NativeClass("c++", "x10.lang", "Semaphore")
-@Pinned public class UnnamedSemaphore(permits:Int) implements Unserializable {
+@Pinned public class Semaphore(permits:Int) implements Unserializable {
     public native def this(permits:Int);
 
     public native def acquire():void;

@@ -12,7 +12,7 @@
 
 package x10.util.resilient.localstore.tx;
 
-import x10.util.concurrent.UnnamedSemaphore;
+import x10.util.concurrent.ReadWriteSemaphore;
 import x10.util.concurrent.Lock;
 import x10.xrx.Runtime;
 /*
@@ -25,55 +25,38 @@ import x10.xrx.Runtime;
  * */
 public class TxLockCREWBlocking extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-    private val wrt = new UnnamedSemaphore(1n);
-    private val mutex = new Lock();
-    private var readCount:Int = 0n;
+    private val sem = new ReadWriteSemaphore();
     
     public def lockRead(txId:Long, key:String) {
     	Runtime.increaseParallelism();
-    	mutex.lock();
-    	readCount ++;
-    	if (readCount == 1n) 
-    		wrt.acquire();
-    	mutex.unlock();
+    	sem.acquireRead();
         Runtime.decreaseParallelism(1n);
     }
     
     public def unlockRead(txId:Long, key:String) {
-    	mutex.lock();
-    	readCount --;
-    	if (readCount == 0n) 
-    		wrt.release();
-    	mutex.lock();
+    	sem.releaseRead();
     }
     
     public def lockWrite(txId:Long, key:String) {
         Runtime.increaseParallelism();
-        wrt.acquire();
+        sem.acquireWrite();
         Runtime.decreaseParallelism(1n);        
     }
   
     public def unlockWrite(txId:Long, key:String) {
-    	wrt.release();
+    	sem.releaseWrite();
     }
 
     public def tryLockRead(txId:Long, key:String) {
     	Runtime.increaseParallelism();
-    	mutex.lock();
-    	readCount ++;
-    	var acquired:Boolean = false;
-    	if (readCount == 1n) 
-    		acquired = wrt.tryAcquire();
-    	if (!acquired)
-    		readCount --;	
-    	mutex.unlock();
+    	val acquired = sem.tryAcquireRead();    	;
         Runtime.decreaseParallelism(1n);
         return acquired;
 	}
 	
 	public def tryLockWrite(txId:Long, key:String) {
 		Runtime.increaseParallelism();
-        val acquired = wrt.tryAcquire();
+        val acquired = sem.tryAcquireWrite();
         Runtime.decreaseParallelism(1n);
         return acquired;
 	}
