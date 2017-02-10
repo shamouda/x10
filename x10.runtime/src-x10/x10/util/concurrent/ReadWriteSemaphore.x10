@@ -36,7 +36,7 @@ import x10.io.Unserializable;
     	readCount --;
     	if (readCount == 0n) 
     		wrt.release();
-    	mutex.lock();
+    	mutex.unlock();
     }
     
     public def acquireWrite(txId:Long, key:String) {
