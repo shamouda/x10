@@ -27,7 +27,7 @@ public class TxLockExclusiveBlocking extends TxLock {
     private val semaphore = new Semaphore(1n);
     
 	public def tryLockRead(txId:Long, key:String) {
-		tryLockWrite(txId, key);
+		return tryLockWrite(txId, key);
 	}
 	
 	public def tryLockWrite(txId:Long, key:String) {

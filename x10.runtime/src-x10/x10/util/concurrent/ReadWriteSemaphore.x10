@@ -23,7 +23,7 @@ import x10.io.Unserializable;
     private val mutex = new Lock();
     private var readCount:Int = 0n;
     
-    public def acquireRead(txId:Long, key:String) {
+    public def acquireRead() {
     	mutex.lock();
     	readCount ++;
     	if (readCount == 1n) 
@@ -31,7 +31,7 @@ import x10.io.Unserializable;
     	mutex.unlock();
     }
     
-    public def releaseRead(txId:Long, key:String) {
+    public def releaseRead() {
     	mutex.lock();
     	readCount --;
     	if (readCount == 0n) 
@@ -39,15 +39,15 @@ import x10.io.Unserializable;
     	mutex.unlock();
     }
     
-    public def acquireWrite(txId:Long, key:String) {
+    public def acquireWrite() {
         wrt.acquire();
     }
   
-    public def releaseWrite(txId:Long, key:String) {
+    public def releaseWrite() {
     	wrt.release();
     }
 
-    public def tryAcquireRead(txId:Long, key:String) {
+    public def tryAcquireRead() {
     	mutex.lock();
     	readCount ++;
     	var acquired:Boolean = false;
@@ -59,7 +59,7 @@ import x10.io.Unserializable;
         return acquired;
 	}
 	
-	public def tryAcquireWrite(txId:Long, key:String) {
+	public def tryAcquireWrite() {
         return wrt.tryAcquire();
 	}
 }

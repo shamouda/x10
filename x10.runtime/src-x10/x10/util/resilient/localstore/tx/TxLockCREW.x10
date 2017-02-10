@@ -23,13 +23,16 @@ import x10.util.HashSet;
 public class TxLockCREW extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
+    
     private val readers = new HashSet[Long]();    
     private var lockedWriter:Long = -1;
-       
-    private val sem = new Lock();
     
-    public def tryLockRead(txId:Long, key:String)  = lockRead(txId, key);
-    public def tryLockWrite(txId:Long, key:String)  = lockWrite(txId, key);
+    private var status:Int = UNLOCKED;
+    private static val UNLOCKED=-1n;
+    private static val LOCKED_READ=0n;
+    private static val LOCKED_WRITE=1n;
+    
+    private val lock = new Lock();
     
     public def lockRead(txId:Long, key:String) {
         try {
@@ -105,6 +108,16 @@ public class TxLockCREW extends TxLock {
         return s;
     }
     
+	public def tryLockRead(txId:Long, key:String) { 
+		lockRead(txId, key); 
+		return true;
+	}
+	
+	public def tryLockWrite(txId:Long, key:String) { 
+		lockWrite(txId, key); 
+		return true; 
+	}
+	
     private def checkDeadLockers() {
         val iter = readers.iterator();
         while (iter.hasNext()) {
