@@ -34,6 +34,9 @@ public class TxLockCREW extends TxLock {
     
     private val lock = new Lock();
     
+    public def tryLockRead(txId:Long, key:String)  = lockRead(txId, key);
+    public def tryLockWrite(txId:Long, key:String)  = lockWrite(txId, key);
+    
     public def lockRead(txId:Long, key:String) {
         try {
             lock.lock();

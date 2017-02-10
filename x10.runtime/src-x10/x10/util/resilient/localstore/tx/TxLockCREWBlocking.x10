@@ -56,4 +56,26 @@ public class TxLockCREWBlocking extends TxLock {
     public def unlockWrite(txId:Long, key:String) {
     	wrt.release();
     }
+
+    public def tryLockRead(txId:Long, key:String) {
+    	Runtime.increaseParallelism();
+    	mutex.lock();
+    	readCount ++;
+    	var acquired:Boolean = false;
+    	if (readCount == 1n) 
+    		acquired = wrt.tryAcquire();
+    	if (!acquired)
+    		readCount --;	
+    	mutex.unlock();
+        Runtime.decreaseParallelism(1n);
+        return acquired;
+	}
+	
+	public def tryLockWrite(txId:Long, key:String) {
+		Runtime.increaseParallelism();
+        val acquired = wrt.tryAcquire();
+        Runtime.decreaseParallelism(1n);
+        return acquired;
+	}
+	
 }

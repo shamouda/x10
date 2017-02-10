@@ -26,6 +26,17 @@ public class TxLockExclusiveBlocking extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     private val semaphore = new UnnamedSemaphore(1n);
     
+	public def tryLockRead(txId:Long, key:String) {
+		tryLockWrite(txId, key);
+	}
+	
+	public def tryLockWrite(txId:Long, key:String) {
+        Runtime.increaseParallelism();
+        val acquired = semaphore.tryAcquire();
+        Runtime.decreaseParallelism(1n);
+        return acquired;
+	}
+	
     public def lockRead(txId:Long, key:String) {
         lockWrite(txId, key);
     }
