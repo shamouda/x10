@@ -42,14 +42,14 @@ public class IncrementAsync {
         	});
         }
         val endProc = System.nanoTime();
-        
         map.printTxStatistics();
-        try {
+        
+        
         val tx = map.startGlobalTransaction(members);
         val acc = tx.getRemote(Place(2), "X") as BankAccount;
         if (acc.account != activePG.size()) {
-        	Console.OUT.println("failure "+acc.account+" ,  " +activePG.size());
-            throw new Exception("!! Failed !!  account:" + acc.account + " places:" + activePG.size());
+        	Console.OUT.println("!! Failed !!  actual:" + acc.account + " expected:" + activePG.size());
+        	return;
         }
         tx.commit();
         
@@ -58,9 +58,7 @@ public class IncrementAsync {
         Console.OUT.println("InitTime:" + initTime + " seconds");
         Console.OUT.println("ProcessingTime:" + processingTime + " seconds");
         Console.OUT.println("+++++ Test Succeeded +++++");
-        }catch(ex1:Exception) {
-        	ex1.printStackTrace();
-        }
+        
     }
     
 }
