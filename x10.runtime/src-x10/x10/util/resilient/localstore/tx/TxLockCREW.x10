@@ -20,54 +20,92 @@ import x10.util.HashSet;
  * Failing to acquire the lock, results in receiving a ConflictException, or a DeadPlaceExeption.
  * A DeadPlaceException is thrown when the lock is being acquired by a dead place's transaction.
  * */
-public class TxLockCREW extends TxLockCREWBlocking {
+public class TxLockCREW extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
-    private val readers = new HashSet[Long]();
-    private val readersLock = new Lock();
+    
+    private val readers = new HashSet[Long]();    
     private var lockedWriter:Long = -1;
     
+    private var status:Int = UNLOCKED;
+    private static val UNLOCKED=-1n;
+    private static val LOCKED_READ=0n;
+    private static val LOCKED_WRITE=1n;
+    
+    private val lock = new Lock();
+    
+    public def tryLockRead(txId:Long, key:String) {
+    	lockRead(txId, key);
+    	return true;
+    }
+    public def tryLockWrite(txId:Long, key:String){
+    	lockWrite(txId, key);
+    	return true;
+    }
+    
     public def lockRead(txId:Long, key:String) {
-    	val acquired = super.tryLockRead(txId, key);
-    	if (acquired) {
-    		assert(lockedWriter == -1);
-    		readersLock.lock();
-            readers.add(txId);
-            readersLock.unlock();
-    	}
-    	else {
-    		if (resilient)
-                checkDeadLockers();
-            throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] key ["+key+"] ", here);
-    	}
+        try {
+            lock.lock();
+            if (status == UNLOCKED || status == LOCKED_READ) {  
+                assert(lockedWriter == -1);
+                readers.add(txId);
+                status = LOCKED_READ;
+            }
+            else {
+                if (resilient)
+                    checkDeadLockers();
+                throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] key ["+key+"] ", here);
+            }
+        }
+        finally {
+            lock.unlock();
+        }
     }
     
     public def unlockRead(txId:Long, key:String) {
-        assert(readers.contains(txId) && lockedWriter == -1);
-        super.unlockRead(txId, key);
-        readersLock.lock();
-        readers.remove(txId);
-        readersLock.unlock();
+        try {
+            lock.lock();
+            assert(status == LOCKED_READ && readers.contains(txId) && lockedWriter == -1);    
+            readers.remove(txId);
+            if (readers.size() == 0){
+                status = UNLOCKED;
+            }
+        }
+        finally {
+            lock.unlock();
+        }
     }
 
     
     public def lockWrite(txId:Long, key:String) {
-    	val acquired = super.tryLockWrite(txId, key);
-    	if (acquired) {
-    		assert(readers.size() == 0 && (lockedWriter == -1 || lockedWriter == txId));
-            lockedWriter = txId;
-    	}
-    	else {
-    		if (resilient)
-                checkDeadLockers();
-            throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] key ["+key+"] ", here);
-    	}
+        try {
+            lock.lock();
+            if (status == UNLOCKED || (status == LOCKED_WRITE && lockedWriter == txId)) {  
+                assert(readers.size() == 0 && (lockedWriter == -1 || lockedWriter == txId));
+                lockedWriter = txId;
+                status = LOCKED_WRITE;
+            }
+            else {
+                if (resilient)
+                    checkDeadLockers();
+                throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] key ["+key+"] ", here);
+            }
+        }
+        finally {
+            lock.unlock();
+        }
     }
     
     public def unlockWrite(txId:Long, key:String) {
     	assert(readers.size() == 0 && lockedWriter == txId);
-    	lockedWriter = -1;
-    	super.unlockWrite(txId, key);
+        try {
+            lock.lock();
+            lockedWriter = -1;
+            status = UNLOCKED;
+        }
+        finally {
+            lock.unlock();
+        }
     }
     
     private static def readersAsString(set:HashSet[Long]) {
@@ -79,16 +117,6 @@ public class TxLockCREW extends TxLockCREWBlocking {
         return s;
     }
     
-	public def tryLockRead(txId:Long, key:String) { 
-		lockRead(txId, key); 
-		return true;
-	}
-	
-	public def tryLockWrite(txId:Long, key:String) { 
-		lockWrite(txId, key); 
-		return true; 
-	}
-	
     private def checkDeadLockers() {
         val iter = readers.iterator();
         while (iter.hasNext()) {
