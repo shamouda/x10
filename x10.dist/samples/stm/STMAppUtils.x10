@@ -1,6 +1,7 @@
 import x10.util.resilient.localstore.CloneableLong;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.tx.ConflictException;
+import x10.util.resilient.localstore.Tx;
 import x10.util.ArrayList;
 import x10.util.concurrent.Future;
 import x10.util.resilient.localstore.LockManager;
@@ -60,29 +61,31 @@ public class STMAppUtils {
         return new SparsePlaceGroup(rail);
     }
     
-    public static def sumAccounts(map:ResilientNativeMap, activePG:PlaceGroup){
+    public static def sumAccounts(map:ResilientNativeMap, members:PlaceGroup){
         var sum:Long = 0;
         val list = new ArrayList[Future[Any]]();
-        val tx = map.startGlobalTransaction(activePG);
-        for (p in activePG) {
-            val f = tx.asyncAt(p, () => {
-                var localSum:Long = 0;
-                val set = tx.keySet();
-                val iter = set.iterator();
-                while (iter.hasNext()) {
-                    val accId  = iter.next();
-                    val obj = tx.get(accId);
-                    if (obj != null  && obj instanceof BankAccount) {
-                        localSum += (obj as BankAccount).account;
-                    }
-                }
-                return localSum;
-            });
-            list.add(f);
-        }
+
+        map.executeTransaction(members, (tx:Tx) => {
+	        for (p in members) {
+	            val f = tx.asyncAt(p, () => {
+	                var localSum:Long = 0;
+	                val set = tx.keySet();
+	                val iter = set.iterator();
+	                while (iter.hasNext()) {
+	                    val accId  = iter.next();
+	                    val obj = tx.get(accId);
+	                    if (obj != null  && obj instanceof BankAccount) {
+	                        localSum += (obj as BankAccount).account;
+	                    }
+	                }
+	                return localSum;
+	            });
+	            list.add(f);
+	        }
+        });
+        
         for (f in list)
-            sum += f.force() as Long;
-        tx.commit();
+            sum += f.force() as Long;        
         return sum;
     }
     

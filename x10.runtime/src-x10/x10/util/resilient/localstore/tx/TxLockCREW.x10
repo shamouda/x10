@@ -34,10 +34,12 @@ public class TxLockCREW extends TxLockCREWBlocking {
     		readersLock.lock();
             readers.add(txId);
             readersLock.unlock();
+            if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockRead done"); 
     	}
     	else {
     		if (resilient)
                 checkDeadLockers();
+    		if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockRead CONFLICT");
             throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] key ["+key+"] ", here);
     	}
     }
@@ -48,6 +50,7 @@ public class TxLockCREW extends TxLockCREWBlocking {
         readersLock.lock();
         readers.remove(txId);
         readersLock.unlock();
+        if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] unlockRead done");
     }
 
     
@@ -56,10 +59,12 @@ public class TxLockCREW extends TxLockCREWBlocking {
     	if (acquired) {
     		assert(readers.size() == 0 && (lockedWriter == -1 || lockedWriter == txId));
             lockedWriter = txId;
+            if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite done");
     	}
     	else {
     		if (resilient)
                 checkDeadLockers();
+    		if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite CONFLICT");
             throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] key ["+key+"] ", here);
     	}
     }
@@ -68,6 +73,7 @@ public class TxLockCREW extends TxLockCREWBlocking {
     	assert(readers.size() == 0 && lockedWriter == txId);
     	lockedWriter = -1;
     	super.unlockWrite(txId, key);
+    	if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] unlockWrite done");
     }
     
     private static def readersAsString(set:HashSet[Long]) {

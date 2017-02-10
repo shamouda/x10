@@ -37,7 +37,7 @@ public class IncrementAsync {
                     acc1.account ++;
                     val newv = acc1.account;
                     tx.put("X", acc1);
-                    Console.OUT.println("App-Tx["+tx.id+"] changing from ["+oldv+"] to ["+newv+"]");
+                    //Console.OUT.println("App-Tx["+tx.id+"] changing from ["+oldv+"] to ["+newv+"]");
                 });
         	});
         }
