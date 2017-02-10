@@ -27,13 +27,13 @@ public class TxLockCREWBlocking extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     private val wrt = new UnnamedSemaphore(1n);
     private val mutex = new Lock();
-    private var readCount:Int = 0;
+    private var readCount:Int = 0n;
     
     public def lockRead(txId:Long, key:String) {
     	Runtime.increaseParallelism();
     	mutex.lock();
     	readCount ++;
-    	if (readCount == 1) 
+    	if (readCount == 1n) 
     		wrt.acquire();
     	mutex.unlock();
         Runtime.decreaseParallelism(1n);
@@ -42,7 +42,7 @@ public class TxLockCREWBlocking extends TxLock {
     public def unlockRead(txId:Long, key:String) {
     	mutex.lock();
     	readCount --;
-    	if (readCount == 0) 
+    	if (readCount == 0n) 
     		wrt.release();
     	mutex.lock();
     }
