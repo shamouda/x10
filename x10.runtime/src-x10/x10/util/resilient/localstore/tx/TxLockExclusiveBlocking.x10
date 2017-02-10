@@ -12,7 +12,7 @@
 
 package x10.util.resilient.localstore.tx;
 
-import x10.util.concurrent.UnnamedSemaphore;
+import x10.util.concurrent.Semaphore;
 import x10.xrx.Runtime;
 /*
  * An exclusive blocking lock based on a Semaphore. 
@@ -24,7 +24,7 @@ import x10.xrx.Runtime;
  * */
 public class TxLockExclusiveBlocking extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-    private val semaphore = new UnnamedSemaphore(1n);
+    private val semaphore = new Semaphore(1n);
     
 	public def tryLockRead(txId:Long, key:String) {
 		tryLockWrite(txId, key);
