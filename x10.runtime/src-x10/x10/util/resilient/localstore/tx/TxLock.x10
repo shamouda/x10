@@ -15,11 +15,11 @@ package x10.util.resilient.localstore.tx;
 import x10.util.concurrent.Lock;
 
 public abstract class TxLock {
-	
-	public abstract def tryLockRead(txId:Long, key:String):Boolean;
-	
-	public abstract def tryLockWrite(txId:Long, key:String):Boolean;
-	
+    
+    public abstract def tryLockRead(txId:Long, key:String):Boolean;
+    
+    public abstract def tryLockWrite(txId:Long, key:String):Boolean;
+    
     public abstract def lockRead(txId:Long, key:String):void;
     
     public abstract def lockWrite(txId:Long, key:String):void;
@@ -29,9 +29,9 @@ public abstract class TxLock {
     public abstract def unlockWrite(txId:Long, key:String):void;
     
     public def lock(txId:Long, key:String) {
-		lockWrite(txId, key);
-	}
-	public def unlock(txId:Long, key:String) {
-		unlockWrite(txId, key);
-	}
+        lockWrite(txId, key);
+    }
+    public def unlock(txId:Long, key:String) {
+        unlockWrite(txId, key);
+    }
 }

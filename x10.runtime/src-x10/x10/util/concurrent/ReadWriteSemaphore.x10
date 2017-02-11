@@ -24,19 +24,19 @@ import x10.io.Unserializable;
     private var readCount:Int = 0n;
     
     public def acquireRead() {
-    	mutex.lock();
-    	readCount ++;
-    	if (readCount == 1n) 
-    		wrt.acquire();
-    	mutex.unlock();
+        mutex.lock();
+        readCount ++;
+        if (readCount == 1n) 
+            wrt.acquire();
+        mutex.unlock();
     }
     
     public def releaseRead() {
-    	mutex.lock();
-    	readCount --;
-    	if (readCount == 0n) 
-    		wrt.release();
-    	mutex.unlock();
+        mutex.lock();
+        readCount --;
+        if (readCount == 0n) 
+            wrt.release();
+        mutex.unlock();
     }
     
     public def acquireWrite() {
@@ -44,22 +44,22 @@ import x10.io.Unserializable;
     }
   
     public def releaseWrite() {
-    	wrt.release();
+        wrt.release();
     }
 
     public def tryAcquireRead() {
-    	mutex.lock();
-    	readCount ++;
-    	var acquired:Boolean = false;
-    	if (readCount == 1n) 
-    		acquired = wrt.tryAcquire();
-    	if (!acquired)
-    		readCount --;	
-    	mutex.unlock();
+        mutex.lock();
+        readCount ++;
+        var acquired:Boolean = false;
+        if (readCount == 1n) 
+            acquired = wrt.tryAcquire();
+        if (!acquired)
+            readCount --;    
+        mutex.unlock();
         return acquired;
-	}
-	
-	public def tryAcquireWrite() {
+    }
+    
+    public def tryAcquireWrite() {
         return wrt.tryAcquire();
-	}
+    }
 }

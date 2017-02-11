@@ -48,12 +48,12 @@ public class MasterStore {
         this.futureSequence = new AtomicLong();
         
         if (masterMaps != null) {
-        	val iter = masterMaps.keySet().iterator();
-        	while (iter.hasNext()) {
-        		val mapName = iter.next();
-        		val mapData = new MapData(mapName, masterMaps.getOrThrow(mapName));
-        		this.maps.put(mapName, TxManager.make(mapData));
-        	}
+            val iter = masterMaps.keySet().iterator();
+            while (iter.hasNext()) {
+                val mapName = iter.next();
+                val mapData = new MapData(mapName, masterMaps.getOrThrow(mapName));
+                this.maps.put(mapName, TxManager.make(mapData));
+            }
         }
     }    
     
@@ -127,9 +127,9 @@ public class MasterStore {
             val tmp = new HashMap[String,HashMap[String,Cloneable]]();            
             val iter = maps.keySet().iterator();
             while (iter.hasNext()) {
-            	val mapName = iter.next();
-            	val mapData = maps.getOrThrow(mapName).data;
-            	tmp.put(mapName, mapData.getKeyValueMap());
+                val mapName = iter.next();
+                val mapData = maps.getOrThrow(mapName).data;
+                tmp.put(mapName, mapData.getKeyValueMap());
             }            
             state = new SlaveMasterState(tmp);
         }

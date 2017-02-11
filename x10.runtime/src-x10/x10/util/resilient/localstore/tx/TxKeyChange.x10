@@ -54,7 +54,7 @@ public class TxKeyChange {
     
     public def update(n:Cloneable) {
         //Undo Logging should only log the initial value and perform updates inplace
-    	val oldValue = value;
+        val oldValue = value;
         value = n;
         readOnly = false;
         return oldValue;
@@ -65,11 +65,11 @@ public class TxKeyChange {
     }
     
     public def setLockedRead(lr:Boolean) {
-    	lockedRead = lr;
+        lockedRead = lr;
     }
     
     public def setLockedWrite(lw:Boolean) {
-    	lockedWrite = lw;
+        lockedWrite = lw;
     }
     
     public def clone() {

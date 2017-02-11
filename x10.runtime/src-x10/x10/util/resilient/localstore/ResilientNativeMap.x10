@@ -52,12 +52,12 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     }
     
     public def setAll(data:HashMap[String,Cloneable]) {
-    	if (data == null)
-    		return;    	
+        if (data == null)
+            return;        
         val trans = startLocalTransaction();
         val iter = data.keySet().iterator();
         while (iter.hasNext()) {
-            val k = iter.next();	
+            val k = iter.next();    
             trans.put(k, data.getOrThrow(k));
         }
         trans.commit();
@@ -100,7 +100,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     public def executeTransaction(members:PlaceGroup, closure:(Tx)=>void):Int {
         do {
             try {
-            	val tx = startGlobalTransaction(members);
+                val tx = startGlobalTransaction(members);
                 closure(tx);
                 return tx.commit();
             } catch(ex:Exception) {
@@ -135,11 +135,11 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     }
     
     public def getMembers(members:Rail[Long]):PlaceGroup {
-    	val list = new ArrayList[Place]();
+        val list = new ArrayList[Place]();
         val activePG = store.activePlaces;
         for (var i:Long = 0; i < members.size; i++) {
-        	if (!activePG(members(i)).isDead())
-        		list.add(activePG(members(i)));
+            if (!activePG(members(i)).isDead())
+                list.add(activePG(members(i)));
         }
         return new SparsePlaceGroup(list.toRail());
     }

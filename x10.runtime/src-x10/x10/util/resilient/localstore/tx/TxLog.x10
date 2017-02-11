@@ -43,7 +43,7 @@ public class TxLog (id:Long, mapName:String) {
     
     // get currently logged value (throws an exception if value was not set before)
     public def getValue(copy:Boolean, key:String) {
-    	val value = transLog.getOrThrow(key).getValue();
+        val value = transLog.getOrThrow(key).getValue();
         var v:Cloneable = value;
         if (copy) {
             v = value == null?null:value.clone();

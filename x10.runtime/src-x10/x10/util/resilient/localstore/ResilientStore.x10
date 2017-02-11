@@ -58,15 +58,15 @@ public class ResilientStore {
     }
     
     public def makeMap(name:String):ResilientNativeMap {
-    	try {
-    		lock.lock();
-    		val plh = PlaceLocalHandle.make[ArrayList[Tx]](activePlaces, () => { new ArrayList[Tx]() });
-    		val map = new ResilientNativeMap(name, this, plh);
-    		appMaps.put(name, map);
-    		return map;
-    	} finally {
-    		lock.unlock();
-    	}
+        try {
+            lock.lock();
+            val plh = PlaceLocalHandle.make[ArrayList[Tx]](activePlaces, () => { new ArrayList[Tx]() });
+            val map = new ResilientNativeMap(name, this, plh);
+            appMaps.put(name, map);
+            return map;
+        } finally {
+            lock.unlock();
+        }
     }
     
     public def getVirtualPlaceId() = activePlaces.indexOf(here);

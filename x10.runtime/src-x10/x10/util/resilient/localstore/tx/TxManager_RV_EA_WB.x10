@@ -31,7 +31,7 @@ public class TxManager_RV_EA_WB extends TxManager {
     }
     
     public def validate(log:TxLog) {
-    	validate_RV_EA(log);
+        validate_RV_EA(log);
     }
     
     public def commit(log:TxLog) {

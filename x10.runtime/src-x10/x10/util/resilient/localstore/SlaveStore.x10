@@ -62,8 +62,8 @@ public class SlaveStore {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit2() started ...");
         try {
             lock.lock();
-			val txLog = logs.getOrElse(id, null);
-			if (txLog != null)
+            val txLog = logs.getOrElse(id, null);
+            if (txLog != null)
                 commitLockAcquired(txLog);
         } finally {
             lock.unlock();
@@ -93,8 +93,8 @@ public class SlaveStore {
             lock.lock();
             var txSlaveLog:TxSlaveLog = logs.getOrElse(id, null );
             if (txSlaveLog == null) {
-            	txSlaveLog = new TxSlaveLog( id, mapName, new HashMap[String,Cloneable]());
-            	logs.put(id, txSlaveLog);
+                txSlaveLog = new TxSlaveLog( id, mapName, new HashMap[String,Cloneable]());
+                logs.put(id, txSlaveLog);
             }
             val iter = remainingEntries.keySet().iterator();
             while (iter.hasNext()) {

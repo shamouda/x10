@@ -15,7 +15,7 @@ public class MapData(name:String) {
     public def this(name:String) {
         property(name);
         metadata = new HashMap[String,MemoryUnit]();
-    	lock = new Lock();
+        lock = new Lock();
     }
     
     public def this(name:String, values:HashMap[String,Cloneable]) {
@@ -27,7 +27,7 @@ public class MapData(name:String) {
             val v = values.getOrThrow(k);
             metadata.put(k, new MemoryUnit(v));
         }
-    	lock = new Lock();
+        lock = new Lock();
     }
     
     public def getKeyValueMap() {

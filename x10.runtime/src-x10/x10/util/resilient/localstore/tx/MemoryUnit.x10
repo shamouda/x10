@@ -43,9 +43,9 @@ public class MemoryUnit {
     }
     
     public def setValue(v:Cloneable, key:String, txId:Long) {
-    	var oldValue:Cloneable;
+        var oldValue:Cloneable;
         atomic {
-        	oldValue = value;
+            oldValue = value;
             version++;
             value = v;
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] setvv key["+key+"] ver["+version+"] val["+value+"]");
@@ -101,7 +101,7 @@ public class MemoryUnit {
     }
     
     public def setValueLocked(v:Cloneable, key:String, txId:Long) {
-    	val oldValue = value;
+        val oldValue = value;
         version++;
         value = v;
         if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] setvv key["+key+"] ver["+version+"] val["+value+"]");

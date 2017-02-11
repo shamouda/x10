@@ -239,42 +239,42 @@ public abstract class TxManager(data:MapData) {
     
     /************  Common Implementations for Get/Put/Delete/Commit/Abort/Validate ****************/
     private def lockWriteRV(id:Long, key:String, cont:LogContainer) {
-    	val memory = cont.memory;
+        val memory = cont.memory;
         val log = cont.log;
         var atomicV:AtomicValue = null;
         if (!log.getLockedWrite(key)) {
-        	//there is no need to do unlockRead, in read versioning we don't lock the keys while reading
-        	memory.lockWrite(id, key); 
-        	atomicV = memory.getAtomicValue(false, key, id);
+            //there is no need to do unlockRead, in read versioning we don't lock the keys while reading
+            memory.lockWrite(id, key); 
+            atomicV = memory.getAtomicValue(false, key, id);
 
-        	val curVer = atomicV.version;
-        	val initVer = log.getInitVersion(key);
-        	if (curVer != initVer) {
-        		/*another transaction have modified it and committed since we read the initial value*/
-            	memory.unlockWrite(id, key);
-            	//don't mark it as locked, because at abort time we return the old value for locked variables. our old value is wrong.
-            	throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
-        	}
-        	log.setLockedWrite(key, true);
+            val curVer = atomicV.version;
+            val initVer = log.getInitVersion(key);
+            if (curVer != initVer) {
+                /*another transaction have modified it and committed since we read the initial value*/
+                memory.unlockWrite(id, key);
+                //don't mark it as locked, because at abort time we return the old value for locked variables. our old value is wrong.
+                throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
+            }
+            log.setLockedWrite(key, true);
         }
         else 
-        	atomicV = memory.getAtomicValue(false, key, id);
+            atomicV = memory.getAtomicValue(false, key, id);
         
         return atomicV;
     }
     
     private def lockWriteRL(id:Long, key:String, cont:LogContainer) {
-    	val memory = cont.memory;
+        val memory = cont.memory;
         val log = cont.log;
         
         if (log.getLockedRead(key)) {
-        	memory.unlockRead(id, key);
-        	log.setLockedRead(key, false);
+            memory.unlockRead(id, key);
+            log.setLockedRead(key, false);
         }
         
         if (!log.getLockedWrite(key)) {
-        	memory.lockWrite(id, key); 
-        	log.setLockedWrite(key, true);
+            memory.lockWrite(id, key); 
+            log.setLockedWrite(key, true);
         }
     }
     
@@ -465,8 +465,8 @@ public abstract class TxManager(data:MapData) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] get_RV_WB started");
         var log:TxLog = null;
         try {
-        	/*** ReadValidatoin: DO NOT ACQUIRE READ LOCK HERE ***/
-        	val lockRead = false;
+            /*** ReadValidatoin: DO NOT ACQUIRE READ LOCK HERE ***/
+            val lockRead = false;
             val cont = logInitialIfNotLogged(id, key, lockRead);
             val memory = cont.memory;
             log = cont.log;
@@ -490,8 +490,8 @@ public abstract class TxManager(data:MapData) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] get_RV_UL started");
         var log:TxLog = null;
         try {
-        	/*** ReadValidatoin: DO NOT ACQUIRE READ LOCK HERE ***/
-        	val lockRead = false;
+            /*** ReadValidatoin: DO NOT ACQUIRE READ LOCK HERE ***/
+            val lockRead = false;
             val cont = logInitialIfNotLogged(id, key, lockRead);
             val memory = cont.memory;
             log = cont.log;
@@ -538,18 +538,18 @@ public abstract class TxManager(data:MapData) {
                 val key = iter.next();
                 val memory = data.getMemoryUnit(key);
                 
-            	if (!log.getReadOnly(key)) {
-            		if (log.getLockedRead(key)) {
-            			memory.unlockRead(id, key);
-            			log.setLockedRead(key, false);            			
-            		}
-            		
-            		memory.lockWrite(id, key);
-            		log.setLockedWrite(key, true);            		
-            	}
-            	else {
-            		assert(log.getLockedRead(key));            		
-            	}
+                if (!log.getReadOnly(key)) {
+                    if (log.getLockedRead(key)) {
+                        memory.unlockRead(id, key);
+                        log.setLockedRead(key, false);                        
+                    }
+                    
+                    memory.lockWrite(id, key);
+                    log.setLockedWrite(key, true);                    
+                }
+                else {
+                    assert(log.getLockedRead(key));                    
+                }
             }
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
@@ -571,26 +571,26 @@ public abstract class TxManager(data:MapData) {
                 val memory = data.getMemoryUnit(key);
                 
                 if (log.getReadOnly(key))
-                	memory.lockRead(id, key); 
+                    memory.lockRead(id, key); 
                 else
-                	memory.lockWrite(id, key); 
+                    memory.lockWrite(id, key); 
                 
                 /*Read Validation*/
                 val initVer = logMap.getOrThrow(key).getInitVersion();
                 val curVer = memory.getAtomicValue(false, key, id).version;
                 //detect write after read
                 if (curVer != initVer) {
-                	if (log.getReadOnly(key))
-                    	memory.unlockRead(id, key);
+                    if (log.getReadOnly(key))
+                        memory.unlockRead(id, key);
                     else
-                    	memory.unlockWrite(id, key);
+                        memory.unlockWrite(id, key);
                     throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
                 }
                 
                 if (log.getReadOnly(key))
-                	log.setLockedRead(key, true);
+                    log.setLockedRead(key, true);
                 else
-                	log.setLockedWrite(key, true);
+                    log.setLockedWrite(key, true);
             }
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
@@ -621,7 +621,7 @@ public abstract class TxManager(data:MapData) {
                     
                     //detect write after read
                     if (curVer != initVer) {
-                    	memory.unlockRead(id, key);
+                        memory.unlockRead(id, key);
                         throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
                     }
                     
@@ -645,10 +645,10 @@ public abstract class TxManager(data:MapData) {
             val kLog = logMap.getOrThrow(key);
             val memory = data.getMemoryUnit(key);
             if (kLog.getLockedRead())
-            	memory.unlockRead(log.id, key);
+                memory.unlockRead(log.id, key);
             else {
-            	memory.setValue(kLog.getValue(), key, log.id);
-            	memory.unlockWrite(log.id, key);
+                memory.setValue(kLog.getValue(), key, log.id);
+                memory.unlockWrite(log.id, key);
             }
         }
         stat.commitCount++;
@@ -665,9 +665,9 @@ public abstract class TxManager(data:MapData) {
             val kLog = logMap.getOrThrow(key);
             val memory = data.getMemoryUnit(key);
             if (kLog.getLockedRead())
-            	memory.unlockRead(log.id, key);
+                memory.unlockRead(log.id, key);
             else 
-            	memory.unlockWrite(log.id, key);
+                memory.unlockWrite(log.id, key);
         }
         stat.commitCount++;
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commit_UL completed");
@@ -690,7 +690,7 @@ public abstract class TxManager(data:MapData) {
             val memory = data.getMemoryUnit(key);
            
             if (kLog.getLockedRead()) {
-            	memory.unlockRead(log.id, key);
+                memory.unlockRead(log.id, key);
             }
             else if (kLog.getLockedWrite()) {
                 memory.rollbackValue(kLog.getValue(), kLog.getInitVersion(), key, log.id);
@@ -720,9 +720,9 @@ public abstract class TxManager(data:MapData) {
             val kLog = logMap.getOrThrow(key);
             val memory = data.getMemoryUnit(key);
             if (kLog.getLockedRead())
-            	memory.unlockRead(log.id, key);
+                memory.unlockRead(log.id, key);
             else if (kLog.getLockedWrite()) 
-            	memory.unlockWrite(log.id, key);
+                memory.unlockWrite(log.id, key);
         }
         stat.abortCount++;
         log.aborted = true;

@@ -208,28 +208,28 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             }
             else {  /*Remote Async Operations*/
                 val future = Future.make[Any](() => 
-                	at (dest) {
-                		var result:Any = null;
-                    	if (op == ASYNC_GET) {
-                    		result = getLocal(key, plh, id, mapName);
-                    	}
-                    	else if (op == ASYNC_PUT) {
-                    		result = putLocal(key, value, plh, id, mapName);
-                    	}
-                    	else if (op == ASYNC_DELETE) {
-                    		result = deleteLocal(key, plh, id, mapName);
-                    	}
-                    	else if (op == ASYNC_KEYSET) {
-                    		result = keySetLocal(plh, id, mapName);
-                    	}
-                    	else if (op == ASYNC_AT_VOID) {
-                    		closure_void();
-                    	}
-                    	else if (op == ASYNC_AT_RETURN) {
-                    		result = closure_return();
-                    	}
-                    	return result;
-                	}
+                    at (dest) {
+                        var result:Any = null;
+                        if (op == ASYNC_GET) {
+                            result = getLocal(key, plh, id, mapName);
+                        }
+                        else if (op == ASYNC_PUT) {
+                            result = putLocal(key, value, plh, id, mapName);
+                        }
+                        else if (op == ASYNC_DELETE) {
+                            result = deleteLocal(key, plh, id, mapName);
+                        }
+                        else if (op == ASYNC_KEYSET) {
+                            result = keySetLocal(plh, id, mapName);
+                        }
+                        else if (op == ASYNC_AT_VOID) {
+                            closure_void();
+                        }
+                        else if (op == ASYNC_AT_RETURN) {
+                            result = closure_return();
+                        }
+                        return result;
+                    }
                 );                
                 plh().masterStore.addFuture(mapName, id, future);                
                 return new TxOpResult(future);
