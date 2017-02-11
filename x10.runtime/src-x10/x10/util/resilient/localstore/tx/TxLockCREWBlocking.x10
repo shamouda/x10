@@ -28,37 +28,31 @@ public class TxLockCREWBlocking extends TxLock {
     private val sem = new ReadWriteSemaphore();
     
     public def lockRead(txId:Long, key:String) {
-    	Runtime.increaseParallelism();
-    	sem.acquireRead();
+        Runtime.increaseParallelism();
+        sem.acquireRead();
         Runtime.decreaseParallelism(1n);
     }
     
     public def unlockRead(txId:Long, key:String) {
-    	sem.releaseRead();
+        sem.releaseRead();
     }
     
     public def lockWrite(txId:Long, key:String) {
         Runtime.increaseParallelism();
         sem.acquireWrite();
-        Runtime.decreaseParallelism(1n);        
+        Runtime.decreaseParallelism(1n);
     }
   
     public def unlockWrite(txId:Long, key:String) {
-    	sem.releaseWrite();
+        sem.releaseWrite();
     }
 
     public def tryLockRead(txId:Long, key:String) {
-    	Runtime.increaseParallelism();
-    	val acquired = sem.tryAcquireRead();    	;
-        Runtime.decreaseParallelism(1n);
-        return acquired;
-	}
-	
-	public def tryLockWrite(txId:Long, key:String) {
-		Runtime.increaseParallelism();
-        val acquired = sem.tryAcquireWrite();
-        Runtime.decreaseParallelism(1n);
-        return acquired;
-	}
-	
+        return sem.tryAcquireRead();
+    }
+    
+    public def tryLockWrite(txId:Long, key:String) {
+        return sem.tryAcquireWrite();
+    }
+    
 }
