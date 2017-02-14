@@ -48,8 +48,9 @@ import x10.io.Unserializable;
     }
 
     public def tryAcquireRead() {
-        if (!mutex.tryLock())
-            return false;
+        //if (!mutex.tryLock())
+        //    return false;
+    	mutex.lock();
         readCount ++;
         var acquired:Boolean = false;
         if (readCount == 1n) 
