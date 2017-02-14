@@ -233,6 +233,6 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
 
 class TxPlaceStatistics(p:Place, commitCount:Long, avgCommitTimeNS:Double, abortCount:Long, avgAbortTimeNS:Double) {
     public def toString() {
-        return p + ":commitCount:"+commitCount+":avgCommitTimeNanoSec:"+avgCommitTimeNS+":abortCount:"+abortCount+":avgCommitTimeNanoSec:"+avgAbortTimeNS;
+        return p + ":commitCount:"+commitCount+":avgCommitTimeNanoSec:"+avgCommitTimeNS+":abortCount:"+abortCount+":avgAbortTimeNanoSec:"+avgAbortTimeNS;
     }
 }
