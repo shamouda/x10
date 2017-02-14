@@ -12,7 +12,7 @@
 
 package x10.util.resilient.localstore.tx;
 
-import x10.util.concurrent.ReadWriteSemaphore;
+import x10.util.concurrent.ReadWriteSemaphoreBlocking;
 import x10.util.concurrent.Lock;
 import x10.xrx.Runtime;
 /*
@@ -25,7 +25,7 @@ import x10.xrx.Runtime;
  * */
 public class TxLockCREWBlocking extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-    private val sem = new ReadWriteSemaphore();
+    private val sem = new ReadWriteSemaphoreBlocking();
     
     public def lockRead(txId:Long, key:String) {
         Runtime.increaseParallelism();
@@ -47,12 +47,12 @@ public class TxLockCREWBlocking extends TxLock {
         sem.releaseWrite();
     }
 
-    public def tryLockRead(txId:Long, key:String) {
-        return sem.tryAcquireRead();
+    public def tryLockRead(txId:Long, key:String):Boolean {
+        throw new UnsupportedOperationException("TxLockCREWBlocking.tryLockRead() not supported ...");
     }
     
-    public def tryLockWrite(txId:Long, key:String) {
-        return sem.tryAcquireWrite();
+    public def tryLockWrite(txId:Long, key:String):Boolean {
+        throw new UnsupportedOperationException("TxLockCREWBlocking.tryLockWrite() not supported ...");
     }
     
 }

@@ -16,27 +16,19 @@ import x10.compiler.Pinned;
 import x10.io.Unserializable;
 
 /**
- * <p>A non-blocking concurrent read exclusive write semaphore</p>
+ * <p>A blocking concurrent read exclusive write semaphore</p>
  */
-@Pinned public class ReadWriteSemaphore implements Unserializable {
+@Pinned public class ReadWriteSemaphoreBlocking implements Unserializable {
     private val wrt = new Semaphore(1n);
     private val mutex = new Lock();
     private var readCount:Int = 0n;
-
-    public def tryAcquireRead() {
-    	mutex.lock();
-        readCount ++;
-        var acquired:Boolean = false;
-        if (readCount == 1n) 
-            acquired = wrt.tryAcquire();
-        if (!acquired)
-            readCount --;    
-        mutex.unlock();
-        return acquired;
-    }
     
-    public def tryAcquireWrite() {
-        return wrt.tryAcquire();
+    public def acquireRead() {
+        mutex.lock();
+        readCount ++;
+        if (readCount == 1n) 
+            wrt.acquire();
+        mutex.unlock();
     }
     
     public def releaseRead() {
@@ -47,6 +39,10 @@ import x10.io.Unserializable;
         mutex.unlock();
     }
     
+    public def acquireWrite() {
+        wrt.acquire();
+    }
+  
     public def releaseWrite() {
         wrt.release();
     }

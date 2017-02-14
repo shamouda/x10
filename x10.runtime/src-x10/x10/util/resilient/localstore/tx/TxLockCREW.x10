@@ -13,6 +13,7 @@
 package x10.util.resilient.localstore.tx;
 
 import x10.util.concurrent.Lock;
+import x10.util.concurrent.ReadWriteSemaphore;
 import x10.util.HashSet;
 
 /*
@@ -20,15 +21,16 @@ import x10.util.HashSet;
  * Failing to acquire the lock, results in receiving a ConflictException, or a DeadPlaceExeption.
  * A DeadPlaceException is thrown when the lock is being acquired by a dead place's transaction.
  * */
-public class TxLockCREW extends TxLockCREWBlocking {
+public class TxLockCREW extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     private val readers = new HashSet[Long]();
     private val readersLock = new Lock();
     private var lockedWriter:Long = -1;
+    private val sem = new ReadWriteSemaphore();
     
     public def lockRead(txId:Long, key:String) {
-        val acquired = super.tryLockRead(txId, key);
+        val acquired = sem.tryAcquireRead();
         if (acquired) {
             assert(lockedWriter == -1);
             readersLock.lock();
@@ -46,7 +48,7 @@ public class TxLockCREW extends TxLockCREWBlocking {
     
     public def unlockRead(txId:Long, key:String) {
         assert(readers.contains(txId) && lockedWriter == -1);
-        super.unlockRead(txId, key);
+        sem.releaseRead();
         readersLock.lock();
         readers.remove(txId);
         readersLock.unlock();
@@ -55,7 +57,7 @@ public class TxLockCREW extends TxLockCREWBlocking {
 
     
     public def lockWrite(txId:Long, key:String) {
-        val acquired = super.tryLockWrite(txId, key);
+        val acquired = sem.tryAcquireWrite();
         if (acquired) {
             assert(readers.size() == 0 && (lockedWriter == -1 || lockedWriter == txId));
             lockedWriter = txId;
@@ -72,7 +74,7 @@ public class TxLockCREW extends TxLockCREWBlocking {
     public def unlockWrite(txId:Long, key:String) {
         assert(readers.size() == 0 && lockedWriter == txId);
         lockedWriter = -1;
-        super.unlockWrite(txId, key);
+        sem.releaseWrite();
         if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] unlockWrite done");
     }
     
