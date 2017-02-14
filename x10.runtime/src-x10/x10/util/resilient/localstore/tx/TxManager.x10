@@ -125,7 +125,7 @@ public abstract class TxManager(data:MapData) {
         }
     }
     
-    protected def waitForFutures(id:Long) {
+    public def waitForFutures(id:Long) {
         var list:ArrayList[Future[Any]] = null;
         futuresLock.lock();
         list = futures.getOrElse(id, null);

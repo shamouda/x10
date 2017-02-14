@@ -397,7 +397,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     private def commitPhaseOne(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, root:GlobalRef[Tx]) {
         if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne ...");
         
-        plh().masterStore.validate(mapName, id);
+        plh().masterStore.waitForFutures(mapName, id);
         
         finish for (p in members) {
             if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne going to move to ["+p+"] ...");
