@@ -109,6 +109,24 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         }while(true);
     }
     
+    public def executeLocalTransaction(target:Place, closure:(LocalTx)=>void):Int {
+		val txResult = at (target) {
+			var result:Int = -1n;
+	        do {
+	            try {
+	            	val tx = startLocalTransaction();
+	            	closure(tx);
+	            	result = tx.commit();
+	            	break;
+	            } catch(ex:Exception) {
+	                processException(ex);
+	            }
+	        }while(true);
+	        result
+		};
+		return txResult;
+    }
+    
     private static def processException(ex:Exception) {
         if (ex instanceof MultipleExceptions) {
             val deadExList = (ex as MultipleExceptions).getExceptionsOfType[DeadPlaceException]();

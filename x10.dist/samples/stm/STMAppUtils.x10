@@ -17,7 +17,7 @@ public class STMAppUtils {
         val tx = map.startLocalTransaction();
         try {
             val cl = tx.get("p"+placeIndex);
-            tx.commitIgnoreDeadSlave();
+            tx.commit();
             var res:Long = defaultProg;
             if (cl != null)
                 res = (cl as CloneableLong).v;

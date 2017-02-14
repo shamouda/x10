@@ -51,37 +51,22 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     }
     
     /***********************   Local Commit Protocol ************************/  
-    public def commit() {
-        commit(false);
-    }
-    public def commitIgnoreDeadSlave():Int {
-        return commit(true);
-    }
-    
-    private def commit(ignoreDeadSlave:Boolean):Int {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commit() ignoreSlave["+ignoreDeadSlave+"] ");
+    public def commit():Int {
         var success:Int = Tx.SUCCESS;
         val id = this.id;
         val mapName = this.mapName;
         val plh = this.plh;
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commit() masterStore = " + plh().masterStore);
         plh().masterStore.validate(mapName, id);
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commit() masterStore validation succeeded ");
         val log = plh().masterStore.getTxCommitLog(mapName, id);
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commit() get commit log = " + log);
         try {
             try {
                 if (resilient && log != null && log.size() > 0) {
-                    if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commit() before moving to slave["+plh().slave+"] ...");
                     finish at (plh().slave) async {
-                        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commit() before moved to slave["+here+"] ...");
                         plh().slaveStore.commit(id, mapName, log);
                     }
                 }
             }catch(exSl:Exception) {
-                success = Tx.SUCCESS_RECOVER_STORE;
-                if (!ignoreDeadSlave)
-                    throw exSl;
+                success = Tx.SUCCESS_RECOVER_STORE;                
             }
             
             if (log != null) {

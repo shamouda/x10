@@ -5,11 +5,11 @@ import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.LockManager;
 import x10.util.resilient.localstore.ResilientStore;
 
-public class IncrementAsyncLocking {
+public class IncrementSyncLocking {
     
     public static def main(args:Rail[String]) {
     	val sparePlaces = 0;
-        STMAppUtils.printBenchmarkStartingMessage("IncrementLocking", -1, -1, -1, sparePlaces);
+        STMAppUtils.printBenchmarkStartingMessage("IncrementSyncLocking", -1, -1, -1, sparePlaces);
         val start = System.nanoTime();
         
         val supportShrinking = false;
@@ -20,7 +20,8 @@ public class IncrementAsyncLocking {
             val locker = map.getLockManager();
             increment(locker, mgr.activePlaces(), start);
         }catch(e:Exception) {
-            Console.OUT.println(e.getMessage());
+        	if (e.getMessage() == null)
+            Console.OUT.println("Test failed, you must set TM_DISABLED=1");
         }
     }
     

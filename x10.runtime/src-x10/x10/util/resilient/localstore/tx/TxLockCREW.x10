@@ -39,7 +39,7 @@ public class TxLockCREW extends TxLockCREWBlocking {
         else {
             if (resilient)
                 checkDeadLockers();
-            if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockRead CONFLICT");
+            if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockRead CONFLICT, lockedWriter["+lockedWriter+"] ");
             throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] key ["+key+"] ", here);
         }
     }
@@ -64,7 +64,7 @@ public class TxLockCREW extends TxLockCREWBlocking {
         else {
             if (resilient)
                 checkDeadLockers();
-            if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite CONFLICT");
+            if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite CONFLICT, lockedWriter["+lockedWriter+"] readers["+readersAsString(readers)+"] ");
             throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] key ["+key+"] ", here);
         }
     }
