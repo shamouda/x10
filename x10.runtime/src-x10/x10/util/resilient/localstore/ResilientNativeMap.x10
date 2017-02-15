@@ -314,7 +314,7 @@ class TxPlaceStatistics(p:Place, g_commitCount:Long, g_avgCommitTimeNS:Double, g
 		                       , l_commitCount:Long, l_avgCommitTimeNS:Double, l_abortCount:Long, l_avgAbortTimeNS:Double) {
     public def toString() {
         return p + ":GLOBAL_TX:commitCount:"+g_commitCount+":avgCommitTimeNS:"+g_avgCommitTimeNS+":abortCount:"+g_abortCount+":avgAbortTimeNS:"+g_avgAbortTimeNS + "\n" +
-        		     ":LOCAL_TX:commitCount:"+l_commitCount+":avgCommitTimeNS:"+l_avgCommitTimeNS+":abortCount:"+l_abortCount+":avgAbortTimeNS:"+l_avgAbortTimeNS ;
+        	   p + ":LOCAL_TX:commitCount:"+l_commitCount+":avgCommitTimeNS:"+l_avgCommitTimeNS+":abortCount:"+l_abortCount+":avgAbortTimeNS:"+l_avgAbortTimeNS ;
     }
 }
 

@@ -30,22 +30,42 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     
     /***************** Get ********************/
     public def get(key:String):Cloneable {
-        return plh().masterStore.get(mapName, id, key); 
+    	try {
+    		return plh().masterStore.get(mapName, id, key);
+    	}catch(e:Exception) {
+    		abortTime = System.nanoTime();
+    		throw e;
+    	}
     }
 
     /***************** PUT ********************/
     public def put(key:String, value:Cloneable):Cloneable {
-        return plh().masterStore.put(mapName, id, key, value);
+    	try {
+    		return plh().masterStore.put(mapName, id, key, value);
+    	}catch(e:Exception) {
+    		abortTime = System.nanoTime();
+    		throw e;
+    	}
     }
     
     /***************** Delete ********************/
     public def delete(key:String):Cloneable {
-        return plh().masterStore.delete(mapName, id, key);
+    	try {
+    		return plh().masterStore.delete(mapName, id, key);
+    	}catch(e:Exception) {
+    		abortTime = System.nanoTime();
+    		throw e;
+    	}
     }
     
     /***************** KeySet ********************/
     public def keySet():Set[String] {
-        return plh().masterStore.keySet(mapName, id); 
+    	try {
+    		return plh().masterStore.keySet(mapName, id);
+    	} catch(e:Exception) {
+    		abortTime = System.nanoTime();
+    		throw e;
+    	}
     }
     
     /***********************   Abort ************************/  
@@ -61,9 +81,10 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
         val id = this.id;
         val mapName = this.mapName;
         val plh = this.plh;
-        plh().masterStore.validate(mapName, id);
-        val log = plh().masterStore.getTxCommitLog(mapName, id);
         try {
+        	plh().masterStore.validate(mapName, id);
+            val log = plh().masterStore.getTxCommitLog(mapName, id);
+            
             try {
                 if (resilient && log != null && log.size() > 0) {
                     finish at (plh().slave) async {
@@ -82,8 +103,7 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
             return success;
         } catch(ex:Exception) { // slave is dead         
             //master abort
-            plh().masterStore.abort(mapName, id);
-            abortTime = System.nanoTime();
+        	abort();
             throw ex;
         }
     }

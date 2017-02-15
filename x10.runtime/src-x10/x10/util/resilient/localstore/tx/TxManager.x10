@@ -39,7 +39,7 @@ public abstract class TxManager(data:MapData) {
     protected val futures = new HashMap[Long,ArrayList[Future[Any]]]();
     protected val futuresLock = new Lock();
     
-    protected val stat:TxManagerStatistics = new TxManagerStatistics();
+    protected val stat = new TxManagerStatistics();
     
     public static def make(name:String) = make(new MapData(name));
     
