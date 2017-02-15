@@ -121,6 +121,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
 	            } catch(ex:Exception) {
 	                processException(ex);
 	            }
+	            System.threadSleep(0);
 	        }while(true);
 	        result
 		};
