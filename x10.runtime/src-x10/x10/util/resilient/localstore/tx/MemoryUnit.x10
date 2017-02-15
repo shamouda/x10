@@ -12,8 +12,7 @@
 
 package x10.util.resilient.localstore.tx;
 
-import x10.util.concurrent.AtomicInteger;
-import x10.util.concurrent.Lock;
+import x10.util.concurrent.ReadWriteSemaphoreBlocking;
 import x10.util.resilient.localstore.Cloneable;
 
 public class MemoryUnit {
@@ -21,18 +20,21 @@ public class MemoryUnit {
     
     private var version:Int;
     private var value:Cloneable;
-    private val lock:TxLock;
+    private val txLock:TxLock;
 
+    private val sem = new ReadWriteSemaphoreBlocking();
+    
     public def this(v:Cloneable) {
         value = v;
         if (TxManager.TM_DISABLED) 
-            lock = new TxLockExclusiveBlocking();
+            txLock = new TxLockExclusiveBlocking();
         else
-            lock = new TxLockCREW();
+            txLock = new TxLockCREW();
     }
     
     public def getAtomicValue(copy:Boolean, key:String, txId:Long) {
-        atomic {
+        try {
+        	sem.acquireRead(); //lock is used to ensure that value/version are always in sync as a composite value 
             var v:Cloneable = value;
             if (copy) {
                 v = value == null?null:value.clone();
@@ -40,49 +42,57 @@ public class MemoryUnit {
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] getvv key["+key+"] ver["+version+"] val["+v+"]");
             return new AtomicValue(version, v);
         }
+        finally {
+        	sem.releaseRead();
+        }
     }
     
     public def setValue(v:Cloneable, key:String, txId:Long) {
-        var oldValue:Cloneable;
-        atomic {
-            oldValue = value;
+    	try {
+    		sem.acquireWrite();
+            val oldValue = value;
             version++;
             value = v;
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] setvv key["+key+"] ver["+version+"] val["+value+"]");
-        }
-        return oldValue;
+            return oldValue;
+    	}finally {
+    		sem.releaseWrite();
+    	}
     }
     
     public def rollbackValue(oldValue:Cloneable, oldVersion:Int, key:String, txId:Long) {
-        atomic {
+    	try {
+    		sem.acquireWrite();
             version = oldVersion; 
             value = oldValue;
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] rollsetvv key["+key+"] ver["+version+"] val["+value+"]");
+        }finally {
+        	sem.releaseWrite();
         }
     }
     
     public def lock(txId:Long, key:String) {
-        lock.lock(txId, key);
+        txLock.lock(txId, key);
     }
     
     public def unlock(txId:Long, key:String) {
-        lock.unlock(txId, key);
+        txLock.unlock(txId, key);
     }
     
     public def lockRead(txId:Long, key:String) {
-        lock.lockRead(txId, key);
+        txLock.lockRead(txId, key);
     }
     
     public def unlockRead(txId:Long, key:String) {
-        lock.unlockRead(txId, key);
+        txLock.unlockRead(txId, key);
     }
     
     public def lockWrite(txId:Long, key:String) {
-        lock.lockWrite(txId, key);
+        txLock.lockWrite(txId, key);
     }
     
     public def unlockWrite(txId:Long, key:String) {
-        lock.unlockWrite(txId, key);
+        txLock.unlockWrite(txId, key);
     }
 
     public def toString() {
