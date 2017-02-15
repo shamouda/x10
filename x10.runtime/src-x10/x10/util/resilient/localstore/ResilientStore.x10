@@ -60,8 +60,8 @@ public class ResilientStore {
     public def makeMap(name:String):ResilientNativeMap {
         try {
             lock.lock();
-            val plh = PlaceLocalHandle.make[ArrayList[Tx]](activePlaces, () => { new ArrayList[Tx]() });
-            val map = new ResilientNativeMap(name, this, plh);
+            val list = PlaceLocalHandle.make[TransactionsList](activePlaces, () => new TransactionsList());
+            val map = new ResilientNativeMap(name, this, list);
             appMaps.put(name, map);
             return map;
         } finally {
@@ -85,7 +85,7 @@ public class ResilientStore {
             while (iter.hasNext()) {
                 val mapName = iter.next();
                 val map = appMaps.getOrThrow(mapName);
-                PlaceLocalHandle.addPlace[ArrayList[Tx]]( map.plh, p, ()=>new ArrayList[Tx]());
+                PlaceLocalHandle.addPlace[TransactionsList]( map.list, p, ()=>new TransactionsList());
             }
         }
 

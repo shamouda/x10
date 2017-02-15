@@ -23,7 +23,11 @@ import x10.util.resilient.localstore.Cloneable;
 public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
-      
+    
+    public transient val startTime:Long = System.nanoTime();
+    public transient var commitTime:Long = -1;
+    public transient var abortTime:Long = -1;   
+    
     /***************** Get ********************/
     public def get(key:String):Cloneable {
         return plh().masterStore.get(mapName, id, key); 
@@ -48,6 +52,7 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     
     public def abort() {
         plh().masterStore.abort(mapName, id);
+        abortTime = System.nanoTime();
     }
     
     /***********************   Local Commit Protocol ************************/  
@@ -73,10 +78,12 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
                 //master commit
                 plh().masterStore.commit(mapName, id);
             }
+            commitTime = System.nanoTime();
             return success;
         } catch(ex:Exception) { // slave is dead         
             //master abort
             plh().masterStore.abort(mapName, id);
+            abortTime = System.nanoTime();
             throw ex;
         }
     }

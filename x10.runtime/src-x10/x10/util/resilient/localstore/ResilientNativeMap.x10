@@ -5,15 +5,16 @@ import x10.util.HashMap;
 import x10.util.ArrayList;
 import x10.util.resilient.localstore.tx.*;
 import x10.util.resilient.localstore.Cloneable;
+import x10.xrx.Runtime;
 
 public class ResilientNativeMap (name:String, store:ResilientStore) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
-    public val plh:PlaceLocalHandle[ArrayList[Tx]];
+    public val list:PlaceLocalHandle[TransactionsList];
     
-    public def this(name:String, store:ResilientStore, plh:PlaceLocalHandle[ArrayList[Tx]]) {
+    public def this(name:String, store:ResilientStore, list:PlaceLocalHandle[TransactionsList]) {
         property(name, store);
-        this.plh = plh;
+        this.list = list;
     }
     
     /**
@@ -78,7 +79,9 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     public def startLocalTransaction():LocalTx {
         assert(store.plh().virtualPlaceId != -1);
         val id = store.plh().masterStore.getNextTransactionId();
-        return  new LocalTx(store.plh, id, name);
+        val tx = new LocalTx(store.plh, id, name);
+        list().localTx.add(tx);
+        return tx;
     }
     
     
@@ -93,7 +96,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
             if(TM_DEBUG) Console.OUT.println("Tx["+id+"] startGlobalTransaction localTx["+localTx.id+"] completed ...");
         }
         val tx = new Tx(store.plh, id, name, members, store.activePlaces, store.txDescMap);
-        plh().add(tx);
+        list().globalTx.add(tx);
         return tx;
     }
     
@@ -112,17 +115,22 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     public def executeLocalTransaction(target:Place, closure:(LocalTx)=>void):Int {
 		val txResult = at (target) {
 			var result:Int = -1n;
-	        do {
-	            try {
-	            	val tx = startLocalTransaction();
-	            	closure(tx);
-	            	result = tx.commit();
-	            	break;
-	            } catch(ex:Exception) {
-	                processException(ex);
-	            }
-	            System.threadSleep(0);
-	        }while(true);
+		    try {
+		    	Runtime.increaseParallelism();
+		    	while(true) {
+		            try {
+		            	val tx = startLocalTransaction();
+		            	closure(tx);
+		            	result = tx.commit();
+		            	break;
+		            } catch(ex:Exception) {
+		                processException(ex);
+		            }
+		            System.threadSleep(0);
+		        }
+		    }finally {
+		    	Runtime.decreaseParallelism(1n);
+		    }
 	        result
 		};
 		return txResult;
@@ -141,7 +149,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     public def restartGlobalTransaction(txDesc:TxDesc):Tx {
         assert(store.plh().virtualPlaceId != -1);
         val tx = new Tx(store.plh, txDesc.id, name, getMembers(txDesc.members), store.activePlaces, store.txDescMap);
-        plh().add(tx);
+        list().globalTx.add(tx);
         return tx;
     }
     
@@ -170,88 +178,152 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     }
     
     public def printTxStatistics() {
-        val list = new ArrayList[TxPlaceStatistics]();
+        val pl_stat = new ArrayList[TxPlaceStatistics]();
         for (p in store.activePlaces) {
             val pstat = at (p) {
-                var cSum:Double = 0;
-                var cCnt:Long = 0;
-                var aSum:Double = 0;
-                var aCnt:Long = 0;
-                for (tx in plh()) {
+                //####         Global TX         ####//
+                var g_cSum:Double = 0;
+                var g_cCnt:Long = 0;
+                var g_aSum:Double = 0;
+                var g_aCnt:Long = 0;
+                for (tx in list().globalTx) {
                     if (tx.commitTime != -1) {
-                        cSum += (tx.commitTime - tx.startTime);
-                        cCnt++;
+                        g_cSum += (tx.commitTime - tx.startTime);
+                        g_cCnt++;
                     }
                     else if (tx.abortTime != -1) {
-                        aSum += (tx.abortTime - tx.startTime);
-                        aCnt++;
+                        g_aSum += (tx.abortTime - tx.startTime);
+                        g_aCnt++;
                     }
                 }
-                var avgCommitTimeNS:Double = -1.0;
-                if (cCnt > 0)
-                    avgCommitTimeNS = (cSum/cCnt);
+                var g_avgCommitTimeNS:Double = -1.0;
+                if (g_cCnt > 0)
+                    g_avgCommitTimeNS = (g_cSum/g_cCnt);
                 
-                var avgAbortTimeNS:Double = -1.0;
-                if (aCnt > 0)
-                    avgAbortTimeNS = (aSum/aCnt);
+                var g_avgAbortTimeNS:Double = -1.0;
+                if (g_aCnt > 0)
+                    g_avgAbortTimeNS = (g_aSum/g_aCnt);
                 
-                new TxPlaceStatistics(here, cCnt, avgCommitTimeNS, aCnt, avgAbortTimeNS)
+                //####         Local TX         ####//
+                var l_cSum:Double = 0;
+                var l_cCnt:Long = 0;
+                var l_aSum:Double = 0;
+                var l_aCnt:Long = 0;
+                for (tx in list().localTx) {
+                    if (tx.commitTime != -1) {
+                        l_cSum += (tx.commitTime - tx.startTime);
+                        l_cCnt++;
+                    }
+                    else if (tx.abortTime != -1) {
+                        l_aSum += (tx.abortTime - tx.startTime);
+                        l_aCnt++;
+                    }
+                }
+                var l_avgCommitTimeNS:Double = -1.0;
+                if (l_cCnt > 0)
+                    l_avgCommitTimeNS = (l_cSum/l_cCnt);
+                
+                var l_avgAbortTimeNS:Double = -1.0;
+                if (l_aCnt > 0)
+                    l_avgAbortTimeNS = (l_aSum/l_aCnt);
+                
+                new TxPlaceStatistics(here, g_cCnt, g_avgCommitTimeNS, g_aCnt, g_avgAbortTimeNS,
+                		                    l_cCnt, l_avgCommitTimeNS, l_aCnt, l_avgAbortTimeNS)
             };
-            list.add(pstat);
+            pl_stat.add(pstat);
         }
         
-        var cCntTotal:Double = 0.0;
-        var cAvgTimeTotal:Double = 0;
-        var cCntPlaces:Long = 0;
+        var g_cCntTotal:Double = 0.0;
+        var g_cAvgTimeTotal:Double = 0;
+        var g_cCntPlaces:Long = 0;
+        var g_aCntTotal:Double = 0.0;
+        var g_aAvgTimeTotal:Double = 0;
+        var g_aCntPlaces:Long = 0;
         
-        var aCntTotal:Double = 0.0;
-        var aAvgTimeTotal:Double = 0;
-        var aCntPlaces:Long = 0;
+        var l_cCntTotal:Double = 0.0;
+        var l_cAvgTimeTotal:Double = 0;
+        var l_cCntPlaces:Long = 0;
+        var l_aCntTotal:Double = 0.0;
+        var l_aAvgTimeTotal:Double = 0;
+        var l_aCntPlaces:Long = 0;
         
-        
-        for (pstat in list) {
+        for (pstat in pl_stat) {
             Console.OUT.println(pstat);
-            
-            cCntTotal += pstat.commitCount;
-            aCntTotal += pstat.abortCount;
-            
-            if (pstat.commitCount > 0) {
-                cAvgTimeTotal += pstat.avgCommitTimeNS;
-                cCntPlaces++;
+            g_cCntTotal += pstat.g_commitCount;
+            g_aCntTotal += pstat.g_abortCount;
+            if (pstat.g_commitCount > 0) {
+                g_cAvgTimeTotal += pstat.g_avgCommitTimeNS;
+                g_cCntPlaces++;
+            }
+            if (pstat.g_abortCount > 0) {
+                g_aAvgTimeTotal += pstat.g_avgAbortTimeNS;
+                g_aCntPlaces++;
             }
             
-            if (pstat.abortCount > 0) {
-                aAvgTimeTotal += pstat.avgAbortTimeNS;
-                aCntPlaces++;
+            l_cCntTotal += pstat.l_commitCount;
+            l_aCntTotal += pstat.l_abortCount;
+            if (pstat.l_commitCount > 0) {
+                l_cAvgTimeTotal += pstat.l_avgCommitTimeNS;
+                l_cCntPlaces++;
+            }
+            if (pstat.l_abortCount > 0) {
+                l_aAvgTimeTotal += pstat.l_avgAbortTimeNS;
+                l_aCntPlaces++;
             }
         }
         
-        val cPerPlace = cCntTotal / list.size();
-        val aPerPlace = aCntTotal / list.size();
+        val g_cPerPlace = g_cCntTotal / pl_stat.size();
+        val g_aPerPlace = g_aCntTotal / pl_stat.size();
         
-        var cAvg:Double = -1.0;
-        if (cCntPlaces > 0)
-            cAvg = cAvgTimeTotal / cCntPlaces;
+        var g_cAvg:Double = 0.0;
+        if (g_cCntPlaces > 0)
+            g_cAvg = g_cAvgTimeTotal / g_cCntPlaces;
         
-        var aAvg:Double = -1.0;
-        if (aCntPlaces > 0)
-            aAvg = aAvgTimeTotal / aCntPlaces;
+        var g_aAvg:Double = 0.0;
+        if (g_aCntPlaces > 0)
+            g_aAvg = g_aAvgTimeTotal / g_aCntPlaces;
         
-        Console.OUT.println("Summary:totalCommitedTxs:"+cCntTotal+":commitsPerPlace:"+cPerPlace+":globalCommitAvgTimeMS:"+(cAvg/1e6)+":committedPlaces:"+cCntPlaces
-                                  +":totalAbortedTxs:" +aCntTotal+":abortsPerPlace:" +aPerPlace+":globalAbortAvgTimeMS:" +(aAvg/1e6)+":abortedPlaces:"+aCntPlaces);
+        val l_cPerPlace = l_cCntTotal / pl_stat.size();
+        val l_aPerPlace = l_aCntTotal / pl_stat.size();
+        
+        var l_cAvg:Double = 0.0;
+        if (l_cCntPlaces > 0)
+            l_cAvg = l_cAvgTimeTotal / l_cCntPlaces;
+        
+        var l_aAvg:Double = 0.0;
+        if (l_aCntPlaces > 0)
+            l_aAvg = l_aAvgTimeTotal / l_aCntPlaces;
+        
+        Console.OUT.println("Summary:GLOBAL_TX:committed:"+g_cCntTotal+":commitsPerPlace:"+g_cPerPlace+":commitAvgTimeMS:"+(g_cAvg/1e6)+":committedPlaces:"+g_cCntPlaces
+                                  +":aborted:" +g_aCntTotal+":abortsPerPlace:" +g_aPerPlace+":abortAvgTimeMS:" +(g_aAvg/1e6)+":abortedPlaces:"+g_aCntPlaces);
+        Console.OUT.println("Summary:LOCAL_TX:committed:"+l_cCntTotal+":commitsPerPlace:"+l_cPerPlace+":globalCommitAvgTimeMS:"+(l_cAvg/1e6)+":committedPlaces:"+l_cCntPlaces
+                                  +":aborted:" +l_aCntTotal+":abortsPerPlace:" +l_aPerPlace+":globalAbortAvgTimeMS:" +(l_aAvg/1e6)+":abortedPlaces:"+l_aCntPlaces);
     }
     
     public def resetTxStatistics() {
         finish for (p in store.activePlaces) at (p) async {
             store.plh().masterStore.resetState(name);
-            plh().clear();
+            list().globalTx.clear();
+            list().localTx.clear();
         }
     }
     
 }
 
-class TxPlaceStatistics(p:Place, commitCount:Long, avgCommitTimeNS:Double, abortCount:Long, avgAbortTimeNS:Double) {
+class TxPlaceStatistics(p:Place, g_commitCount:Long, g_avgCommitTimeNS:Double, g_abortCount:Long, g_avgAbortTimeNS:Double
+		                       , l_commitCount:Long, l_avgCommitTimeNS:Double, l_abortCount:Long, l_avgAbortTimeNS:Double) {
     public def toString() {
-        return p + ":commitCount:"+commitCount+":avgCommitTimeNanoSec:"+avgCommitTimeNS+":abortCount:"+abortCount+":avgAbortTimeNanoSec:"+avgAbortTimeNS;
+        return p + ":GLOBAL_TX:commitCount:"+g_commitCount+":avgCommitTimeNS:"+g_avgCommitTimeNS+":abortCount:"+g_abortCount+":avgAbortTimeNS:"+g_avgAbortTimeNS + "\n" +
+        		     ":LOCAL_TX:commitCount:"+l_commitCount+":avgCommitTimeNS:"+l_avgCommitTimeNS+":abortCount:"+l_abortCount+":avgAbortTimeNS:"+l_avgAbortTimeNS ;
     }
+}
+
+class TransactionsList {
+	val globalTx:ArrayList[Tx];
+    val localTx:ArrayList[LocalTx];
+
+	public def this(){
+		globalTx = new ArrayList[Tx]();
+		localTx = new ArrayList[LocalTx]();
+	}
 }
