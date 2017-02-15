@@ -296,8 +296,8 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         
         Console.OUT.println("Summary:GLOBAL_TX:committed:"+g_cCntTotal+":commitsPerPlace:"+g_cPerPlace+":commitAvgTimeMS:"+(g_cAvg/1e6)+":committedPlaces:"+g_cCntPlaces
                                   +":aborted:" +g_aCntTotal+":abortsPerPlace:" +g_aPerPlace+":abortAvgTimeMS:" +(g_aAvg/1e6)+":abortedPlaces:"+g_aCntPlaces);
-        Console.OUT.println("Summary:LOCAL_TX:committed:"+l_cCntTotal+":commitsPerPlace:"+l_cPerPlace+":globalCommitAvgTimeMS:"+(l_cAvg/1e6)+":committedPlaces:"+l_cCntPlaces
-                                  +":aborted:" +l_aCntTotal+":abortsPerPlace:" +l_aPerPlace+":globalAbortAvgTimeMS:" +(l_aAvg/1e6)+":abortedPlaces:"+l_aCntPlaces);
+        Console.OUT.println("Summary:LOCAL_TX:committed:"+l_cCntTotal+":commitsPerPlace:"+l_cPerPlace+":commitAvgTimeMS:"+(l_cAvg/1e6)+":committedPlaces:"+l_cCntPlaces
+                                  +":aborted:" +l_aCntTotal+":abortsPerPlace:" +l_aPerPlace+":abortAvgTimeMS:" +(l_aAvg/1e6)+":abortedPlaces:"+l_aCntPlaces);
     }
     
     public def resetTxStatistics() {
