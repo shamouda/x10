@@ -31,33 +31,41 @@ public class LockManager (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Str
     
     /***************** Locking ********************/
     
-    public def lock(p1:Place, key1:String, p2:Place, key2:String, id:Long) {
+    public def lockWrite(p1:Place, key1:String, p2:Place, key2:String, id:Long) {
         if (key1.hashCode() < key2.hashCode()) {
-            at (p1) plh().masterStore.lock(mapName, id, key1);
-            at (p2) plh().masterStore.lock(mapName, id, key2);
+            at (p1) plh().masterStore.lockWrite(mapName, id, key1);
+            at (p2) plh().masterStore.lockWrite(mapName, id, key2);
         }
         else {
-            at (p2) plh().masterStore.lock(mapName, id, key2);
-            at (p1) plh().masterStore.lock(mapName, id, key1);
+            at (p2) plh().masterStore.lockWrite(mapName, id, key2);
+            at (p1) plh().masterStore.lockWrite(mapName, id, key1);
         }
     }
-    public def unlock(p1:Place, key1:String, p2:Place, key2:String, id:Long) {
+    public def unlockWrite(p1:Place, key1:String, p2:Place, key2:String, id:Long) {
         if (key1.hashCode() < key2.hashCode()) {
-            at (p1) plh().masterStore.unlock(mapName, id, key1);
-            at (p2) plh().masterStore.unlock(mapName, id, key2);
+            at (p1) plh().masterStore.unlockWrite(mapName, id, key1);
+            at (p2) plh().masterStore.unlockWrite(mapName, id, key2);
         }
         else {
-            at (p2) plh().masterStore.unlock(mapName, id, key2);
-            at (p1) plh().masterStore.unlock(mapName, id, key1);
+            at (p2) plh().masterStore.unlockWrite(mapName, id, key2);
+            at (p1) plh().masterStore.unlockWrite(mapName, id, key1);
         }
     }
     
-    public def lock(key:String) {
-        plh().masterStore.lock(mapName, id, key);
+    public def lockWrite(key:String) {
+        plh().masterStore.lockWrite(mapName, id, key);
     }
     
-    public def unlock(key:String) {
-        plh().masterStore.unlock(mapName, id, key);
+    public def unlockWrite(key:String) {
+        plh().masterStore.unlockWrite(mapName, id, key);
+    }
+    
+    public def lockRead(key:String) {
+        plh().masterStore.lockRead(mapName, id, key);
+    }
+    
+    public def unlockRead(key:String) {
+        plh().masterStore.unlockRead(mapName, id, key);
     }
     
     /***************** Get ********************/

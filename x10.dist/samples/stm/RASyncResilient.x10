@@ -41,13 +41,13 @@ public class RASyncResilient {
         val activePG = mgr.activePlaces();
         
         val accountsMAX = accountsPerPlace * activePG.size();
-        val requestsMap = new HashMap[Long,PlaceUpdateRequests]();
+        val requestsMap = new HashMap[Long,PlaceRandomRequests]();
         var expectedSum:Long = 0;
         for (p in activePG) {
-            val x = new PlaceUpdateRequests(updatesPerPlace);
+            val x = new PlaceRandomRequests(updatesPerPlace, 1, -1F);
             x.initRandom(accountsMAX);
             requestsMap.put(p.id, x);
-            expectedSum += x.amountsSum;
+            expectedSum += x.valuesSum1;
         }
         
         val map = store.makeMap("mapA");
@@ -103,7 +103,7 @@ public class RASyncResilient {
     }
     
     public static def randomUpdate(map:ResilientNativeMap, activePG:PlaceGroup, accountsPerPlace:Long, 
-            updatesPerPlace:Long, debugProgress:Long, requestsMap:HashMap[Long,PlaceUpdateRequests], recovered:Boolean){
+            updatesPerPlace:Long, debugProgress:Long, requestsMap:HashMap[Long,PlaceRandomRequests], recovered:Boolean){
         finish for (p in activePG) {
             val placeIndex = activePG.indexOf(p);
             val requests = requestsMap.getOrThrow(placeIndex);
@@ -117,10 +117,10 @@ public class RASyncResilient {
                 for (i in start..updatesPerPlace) {
                 	if (i%debugProgress == 0)
                         Console.OUT.println(here + " progress " + i);
-                    val rand1 = requests.accountsRail(i-1);
+                    val rand1 = requests.keys1(i-1);
                     val p1 = STMAppUtils.getPlace(rand1, activePG, accountsPerPlace);
                     val randAcc = "acc"+rand1;
-                    val amount = requests.amountsRail(i-1);
+                    val amount = requests.values1(i-1);
                     var pg:PlaceGroup;
                     if (DISABLE_CKPT)
                         pg = STMAppUtils.createGroup(p1);

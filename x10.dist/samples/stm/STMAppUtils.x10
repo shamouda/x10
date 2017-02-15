@@ -5,6 +5,7 @@ import x10.util.resilient.localstore.Tx;
 import x10.util.ArrayList;
 import x10.util.concurrent.Future;
 import x10.util.resilient.localstore.LockManager;
+import x10.util.Random;
 
 public class STMAppUtils {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
@@ -136,7 +137,6 @@ public class STMAppUtils {
         Console.OUT.println("KILL_PLACES="+System.getenv("KILL_PLACES"));
         Console.OUT.println("KILL_TIMES="+System.getenv("KILL_TIMES"));
     }
-    
 }
 
 class RecoverDataStoreException(place:Place) extends Exception{

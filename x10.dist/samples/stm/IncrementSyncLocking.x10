@@ -30,7 +30,7 @@ public class IncrementSyncLocking {
         
         finish for (p in activePG) at (p) async {
             locker.syncAt(Place(2), () => {
-                locker.lock("X");
+                locker.lockWrite("X");
                 var acc1:BankAccount = locker.getLocked("X") as BankAccount;
                 if (acc1 == null)
                     acc1 = new BankAccount(0);
@@ -38,7 +38,7 @@ public class IncrementSyncLocking {
                 acc1.account ++;
                 val newv = acc1.account;
                 locker.putLocked("X", acc1);
-                locker.unlock("X");
+                locker.unlockWrite("X");
             });
         }
         val endProc = System.nanoTime();

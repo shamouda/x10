@@ -27,7 +27,7 @@ public class MemoryUnit {
     public def this(v:Cloneable) {
         value = v;
         if (TxManager.TM_DISABLED) 
-            txLock = new TxLockExclusiveBlocking();
+            txLock = new TxLockCREWBlocking();
         else
             txLock = new TxLockCREW();
     }
@@ -70,15 +70,7 @@ public class MemoryUnit {
         	sem.releaseWrite();
         }
     }
-    
-    public def lock(txId:Long, key:String) {
-        txLock.lock(txId, key);
-    }
-    
-    public def unlock(txId:Long, key:String) {
-        txLock.unlock(txId, key);
-    }
-    
+       
     public def lockRead(txId:Long, key:String) {
         txLock.lockRead(txId, key);
     }

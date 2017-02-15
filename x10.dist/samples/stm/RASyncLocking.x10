@@ -31,13 +31,13 @@ public class RASyncLocking {
         val store = ResilientStore.make(mgr.activePlaces());
         val activePG = mgr.activePlaces();
         val accountsMAX = accountsPerPlace * activePG.size();
-        val requestsMap = new HashMap[Long,PlaceUpdateRequests]();
+        val requestsMap = new HashMap[Long,PlaceRandomRequests]();
         var expectedSum:Long = 0;
         for (p in activePG) {
-            val x = new PlaceUpdateRequests(updatesPerPlace);
+            val x = new PlaceRandomRequests(updatesPerPlace, 1, -1F);
             x.initRandom(accountsMAX);
             requestsMap.put(p.id, x);
-            expectedSum += x.amountsSum;
+            expectedSum += x.valuesSum1;
         }
         
         val map = store.makeMap("mapA");
@@ -70,7 +70,7 @@ public class RASyncLocking {
     }
     
     public static def randomUpdate(locker:LockManager, activePG:PlaceGroup, accountsPerPlace:Long, 
-            updatesPerPlace:Long, debugProgress:Long, requestsMap:HashMap[Long,PlaceUpdateRequests]){
+            updatesPerPlace:Long, debugProgress:Long, requestsMap:HashMap[Long,PlaceRandomRequests]){
         finish for (p in activePG) {
             val requests = requestsMap.getOrThrow(p.id);
             at (p) async {
@@ -78,13 +78,13 @@ public class RASyncLocking {
                 for (i in 0..(updatesPerPlace-1)) {
                     if (i%debugProgress == 0)
                         Console.OUT.println(here + " progress " + i);
-                    val rand1 = requests.accountsRail(i);
+                    val rand1 = requests.keys1(i);
                     val p1 = STMAppUtils.getPlace(rand1, activePG, accountsPerPlace);
                     
                     val randAcc = "acc"+rand1;
-                    val amount = requests.amountsRail(i);
+                    val amount = requests.values1(i);
                     locker.syncAt(p1, () => {
-                        locker.lock(randAcc);
+                        locker.lockWrite(randAcc);
                         val obj = locker.getLocked(randAcc);
                         var acc:BankAccount = null;
                         if (obj == null)
@@ -93,7 +93,7 @@ public class RASyncLocking {
                             acc = obj as BankAccount;
                         acc.account += amount;
                         locker.putLocked(randAcc, acc);
-                        locker.unlock(randAcc);
+                        locker.unlockWrite(randAcc);
                     });
                         
                 }

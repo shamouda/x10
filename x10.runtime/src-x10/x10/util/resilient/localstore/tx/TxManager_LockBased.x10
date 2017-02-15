@@ -22,14 +22,21 @@ public class TxManager_LockBased extends TxManager {
         return put_LockBased(id, key, null);
     }
     
-    public def lock(id:Long, key:String) {
-        lock_LockBased(id, key);
+    public def lockRead(id:Long, key:String) {
+        lockRead_LockBased(id, key);
+    }
+        
+    public def lockWrite(id:Long, key:String) {
+        lockWrite_LockBased(id, key);
     }
     
-    public def unlock(id:Long, key:String) {
-        unlock_LockBased(id, key);
+    public def unlockRead(id:Long, key:String) {
+        unlockRead_LockBased(id, key);
     }
     
+    public def unlockWrite(id:Long, key:String) {
+        unlockWrite_LockBased(id, key);
+    }
     
     public def commit(log:TxLog) {
         throw new Exception("operation not supported for lock based tx manager");

@@ -737,14 +737,25 @@ public abstract class TxManager(data:MapData) {
     }    
     
     
-    /*******   Lock based methods *********/
-    public def lock_LockBased(id:Long, key:String) {
+    /*******   Blocking Lock methods *********/
+    public def lockWrite_LockBased(id:Long, key:String) {
         val memory = data.getMemoryUnit(key);
-        memory.lock(id, key);
+        memory.lockWrite(id, key);
     }
-    public def unlock_LockBased(id:Long, key:String) {
+    
+    public def lockRead_LockBased(id:Long, key:String) {
         val memory = data.getMemoryUnit(key);
-        memory.unlock(id, key);
+        memory.lockRead(id, key);
+    }
+    
+    public def unlockWrite_LockBased(id:Long, key:String) {
+        val memory = data.getMemoryUnit(key);
+        memory.unlockWrite(id, key);
+    }
+    
+    public def unlockRead_LockBased(id:Long, key:String) {
+        val memory = data.getMemoryUnit(key);
+        memory.unlockRead(id, key);
     }
     
     public def get_LockBased(id:Long, key:String):Cloneable {

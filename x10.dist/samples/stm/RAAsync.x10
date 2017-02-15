@@ -32,13 +32,13 @@ public class RAAsync {
         val activePG = mgr.activePlaces();
         
         val accountsMAX = accountsPerPlace * activePG.size();
-        val requestsMap = new HashMap[Long,PlaceUpdateRequests]();
+        val requestsMap = new HashMap[Long,PlaceRandomRequests]();
         var expectedSum:Long = 0;
         for (p in activePG) {
-            val x = new PlaceUpdateRequests(updatesPerPlace);
+            val x = new PlaceRandomRequests(updatesPerPlace, 1, -1F);
             x.initRandom(accountsMAX);
             requestsMap.put(p.id, x);
-            expectedSum += x.amountsSum;
+            expectedSum += x.valuesSum1;
         }
         
         val map = store.makeMap("mapA");
@@ -70,7 +70,7 @@ public class RAAsync {
     }
     
     public static def randomUpdate(map:ResilientNativeMap, activePG:PlaceGroup, accountsPerPlace:Long, 
-            updatesPerPlace:Long, debugProgress:Long, requestsMap:HashMap[Long,PlaceUpdateRequests]){
+            updatesPerPlace:Long, debugProgress:Long, requestsMap:HashMap[Long,PlaceRandomRequests]){
         finish for (p in activePG) {
             val requests = requestsMap.getOrThrow(p.id);
             at (p) async {
@@ -78,11 +78,11 @@ public class RAAsync {
                 for (i in 1..updatesPerPlace) {
                     if (i%debugProgress == 0)
                         Console.OUT.println(here + " progress " + i);
-                    val rand1 = requests.accountsRail(i-1);
+                    val rand1 = requests.keys1(i-1);
                     val p1 = STMAppUtils.getPlace(rand1, activePG, accountsPerPlace);
                     
                     val randAcc = "acc"+rand1;
-                    val amount = requests.amountsRail(i-1);
+                    val amount = requests.values1(i-1);
                     val members = STMAppUtils.createGroup(p1);
                     map.executeTransaction( members, (tx:Tx) => {                        
                         if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc+"] place["+p1+"] amount["+amount+"]");
