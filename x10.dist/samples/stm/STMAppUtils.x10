@@ -117,13 +117,15 @@ public class STMAppUtils {
     }
     
     
-    public static def printBenchmarkStartingMessage(name:String, accountsPerPlace:Long, transfersPerPlace:Long, debugProgress:Long, sparePlaces:Long) {
+    public static def printBenchmarkStartingMessage(name:String, accountsPerPlace:Long, 
+    		transfersPerPlace:Long, debugProgress:Long, sparePlaces:Long, readPercentage:Float) {
         Console.OUT.println("Running "+name+" Benchmark. "
         	+ " Places["+Place.numPlaces() +"] "
             + " AccountsPerPlace["+accountsPerPlace +"] "
             + " ActionsPerPlace["+transfersPerPlace+"] "
             + " DebugProgress["+debugProgress+"] "
-            + " SparePlaces["+sparePlaces+"] ");
+            + " SparePlaces["+sparePlaces+"] "
+            + " ReadPercentage["+readPercentage+"] ");
         
         printEnv();
     }

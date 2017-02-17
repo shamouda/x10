@@ -26,7 +26,7 @@ public class PlaceRandomRequests(size:Long, num:Long,readPercent:Float)
         }
     }
 
-	public def initRandom(accountsMAX:Long) {
+	public def initRandom(accountsMAX:Long, accountPerPlace:Long) {
         val rand = new Random(System.nanoTime());
         for (var i:Long = 0; i < size; i++) {
         	keys1(i) = Math.abs(rand.nextLong()% accountsMAX);
@@ -36,7 +36,10 @@ public class PlaceRandomRequests(size:Long, num:Long,readPercent:Float)
         
         if (num == 2) {
         	for (var i:Long = 0; i < size; i++) {
-        		keys2(i) = Math.abs(rand.nextLong()% accountsMAX);
+        		val p1 = keys1(i)/accountPerPlace;
+        		do {
+        			keys2(i) = Math.abs(rand.nextLong()% accountsMAX);
+        		}while(keys2(i)/accountPerPlace == p1);
         		values2(i) = Math.abs(rand.nextLong()%1000);
             	valuesSum2 += values2(i);
         	}

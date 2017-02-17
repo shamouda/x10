@@ -44,7 +44,7 @@ public class RAAsyncResilient {
         var expectedSum:Long = 0;
         for (p in activePG) {
             val x = new PlaceRandomRequests(updatesPerPlace, 1, -1F);
-            x.initRandom(accountsMAX);
+            x.initRandom(accountsMAX, accountsPerPlace);
             requestsMap.put(p.id, x);
             expectedSum += x.valuesSum1;
         }
