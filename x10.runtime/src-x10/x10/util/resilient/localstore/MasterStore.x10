@@ -120,10 +120,6 @@ public class MasterStore {
         return getTxManager(mapName).getState();
     }
     
-    public def waitForFutures(mapName:String, id:Long) {
-        getTxManager(mapName).waitForFutures(id);
-    }
-    
     public def getState():SlaveMasterState {
         var state:SlaveMasterState = null;
         try {
