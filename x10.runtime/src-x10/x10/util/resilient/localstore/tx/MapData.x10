@@ -48,9 +48,7 @@ public class MapData(name:String) {
     }
     
     public def getMemoryUnit(k:String):MemoryUnit {
-        var res:MemoryUnit = metadata.getOrElse(k, null);
-        if (res != null)
-            return res;
+    	var res:MemoryUnit = null;
         try {
             lock.lock();
             res = metadata.getOrElse(k, null);
