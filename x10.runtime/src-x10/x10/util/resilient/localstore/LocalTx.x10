@@ -24,6 +24,11 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
+    /*We can skip the validation phase in RL_EA configurations*/
+    private static val VALIDATION_REQUIRED = ! ( !TxManager.TM_DISABLED && 
+    										      TxManager.TM_READ    == TxManager.READ_LOCKING && 
+    										      TxManager.TM_ACQUIRE == TxManager.EARLY_ACQUIRE );
+    
     public transient val startTime:Long = System.nanoTime();
     public transient var commitTime:Long = -1;
     public transient var abortTime:Long = -1;   
@@ -82,9 +87,10 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
         val mapName = this.mapName;
         val plh = this.plh;
         try {
-        	plh().masterStore.validate(mapName, id);
+        	if (VALIDATION_REQUIRED)
+        		plh().masterStore.validate(mapName, id);
+        	
             val log = plh().masterStore.getTxCommitLog(mapName, id);
-            
             try {
                 if (resilient && log != null && log.size() > 0) {
                     finish at (plh().slave) async {
