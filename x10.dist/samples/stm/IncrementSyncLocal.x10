@@ -20,6 +20,7 @@ public class IncrementSyncLocal {
             increment(map, mgr.activePlaces(), start);
         }catch(e:Exception) {
             Console.OUT.println(e.getMessage());
+            e.printStackTrace();
         }
     }
     
@@ -39,15 +40,13 @@ public class IncrementSyncLocal {
         }
         val endProc = System.nanoTime();
         map.printTxStatistics();
-        
-        val members = STMAppUtils.createGroup(Place(2));
-        val tx = map.startGlobalTransaction(members);
-        val acc = tx.getRemote(Place(2), "X") as BankAccount;
+
+        val acc = at (Place(2)) map.get("X") as BankAccount;
         if (acc.account != activePG.size()) {
         	Console.OUT.println("!! Failed !!  actual:" + acc.account + " expected:" + activePG.size());
         	return;
         }
-        tx.commit();
+        
         
         val initTime = (startProc-start)/1e9;
         val processingTime = (endProc-startProc)/1e9;

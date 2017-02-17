@@ -76,8 +76,7 @@ public class BankMoveData {
                 val randAcc2 = "acc"+rand2;
                 //val amount = Math.abs(rand.nextLong()%100);
                 val members = STMAppUtils.createGroup(p1, p2);
-                map.executeTransaction( () => {
-                    val tx = map.startGlobalTransaction(members);
+                map.executeTransaction(members, (tx:Tx) => {
                     val txId = tx.id;
                     val amount = txId;
                     if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXSTART accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"] amount["+ amount + "]");
@@ -91,7 +90,6 @@ public class BankMoveData {
                     acc2.account += amount;
                     tx.putRemote(p1, randAcc1, acc1);
                     tx.putRemote(p2, randAcc2, acc2);
-                    tx.commit();
                 });
             }
         }

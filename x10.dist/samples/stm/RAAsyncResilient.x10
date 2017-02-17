@@ -130,7 +130,7 @@ public class RAAsyncResilient {
                     val members = pg;
                     val success = map.executeTransaction(members, (tx:Tx) => {
                         if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc+"] place["+p1+"] amount["+amount+"]");
-                        tx.asyncAt(p1, () => {
+                        val f = tx.asyncAt(p1, () => {
                             val obj = tx.get(randAcc);
                             var acc:BankAccount = null;
                             if (obj == null)
@@ -141,7 +141,8 @@ public class RAAsyncResilient {
                             tx.put(randAcc, acc);
                         });
                         if (!DISABLE_CKPT)
-                            tx.put("p"+placeIndex, new CloneableLong(i));                        
+                            tx.put("p"+placeIndex, new CloneableLong(i));   
+                        f.force();
                     });
                     if (success == Tx.SUCCESS_RECOVER_STORE) {
                         throw new RecoverDataStoreException("RecoverDataStoreException", here);

@@ -86,7 +86,7 @@ public class RAAsync {
                     val members = STMAppUtils.createGroup(p1);
                     map.executeTransaction( members, (tx:Tx) => {                        
                         if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc+"] place["+p1+"] amount["+amount+"]");
-                        tx.asyncAt(p1, () => {
+                        val f1 = tx.asyncAt(p1, () => {
                             val obj = tx.get(randAcc);
                             var acc:BankAccount = null;
                             if (obj == null)
@@ -96,6 +96,7 @@ public class RAAsync {
                             acc.account += amount;
                             tx.put(randAcc, acc);
                         });
+                        f1.force();
                     });
                 }
             }

@@ -124,14 +124,14 @@ public class BankAsyncResilient {
                 val members = pg;
                 val success = map.executeTransaction( members, (tx:Tx) => {
                     if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] here["+here+"] TXSTART"+ (recovered?"RECOVER":"")+" accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"] amounts["+amount+"]");
-                    tx.asyncAt(p1, () => {
+                    val f1 = tx.asyncAt(p1, () => {
                         var acc1:BankAccount = tx.get(randAcc1) as BankAccount;
                         if (acc1 == null)
                             acc1 = new BankAccount(0);
                         acc1.account -= amount;
                         tx.put(randAcc1, acc1);
                     });
-                    tx.asyncAt(p2, () => {
+                    val f2 = tx.asyncAt(p2, () => {
                         var acc2:BankAccount = tx.get(randAcc2) as BankAccount;
                         if (acc2 == null)
                             acc2 = new BankAccount(0);
@@ -140,6 +140,8 @@ public class BankAsyncResilient {
                     });
                     if (!DISABLE_CKPT)
                         tx.put("p"+placeIndex, new CloneableLong(i));
+                    f1.force();
+                    f2.force();
                 } );
                 
                 if (success == Tx.SUCCESS_RECOVER_STORE)
