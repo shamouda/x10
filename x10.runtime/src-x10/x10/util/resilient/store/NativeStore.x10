@@ -14,6 +14,7 @@ package x10.util.resilient.store;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.ResilientStore;
 import x10.util.resilient.localstore.ResilientNativeMap;
+import x10.util.resilient.localstore.Tx;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.HashMap;
 
@@ -54,8 +55,8 @@ public class NativeStore[V]{V haszero, V <: Cloneable} extends Store[V] {
     store.updateForChangedPlaces(changes);
   }
   
-  public def startGlobalTransaction(members:PlaceGroup) {
-      return map.startGlobalTransaction(members);
+  public def executeTransaction(members:PlaceGroup, closure:(Tx)=>void):Int {
+	  return map.executeTransaction(members, closure);
   }
   
 }
