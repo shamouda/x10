@@ -37,6 +37,6 @@ public class TxManager_RL_EA_UL extends TxManager {
     }
 
     public def validate(log:TxLog) {
-        validate_RL_EA(log);
+    	throw new Exception("validate() is not needed for TxManager_RL_EA_UL");
     }
 }
