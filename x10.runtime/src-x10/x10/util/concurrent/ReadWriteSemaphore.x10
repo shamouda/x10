@@ -26,7 +26,7 @@ import x10.io.Unserializable;
     public def tryAcquireRead() {
     	mutex.lock();
         readCount ++;
-        var acquired:Boolean = false;
+        var acquired:Boolean = true;
         if (readCount == 1n) 
             acquired = wrt.tryAcquire();
         if (!acquired)
