@@ -23,7 +23,7 @@ public class RAAsync {
         val accountsPerPlace = Math.ceil(Math.pow(2, expAccounts) ) as Long;
         val updatesPerPlace = Math.ceil(Math.pow(2, expUpdates) ) as Long;
     	val sparePlaces = 0;
-    	STMAppUtils.printBenchmarkStartingMessage("RAAsync", accountsPerPlace, updatesPerPlace, debugProgress, sparePlaces);
+    	STMAppUtils.printBenchmarkStartingMessage("RAAsync", accountsPerPlace, updatesPerPlace, debugProgress, sparePlaces, -1F);
         val start = System.nanoTime();
 
         val supportShrinking = false;

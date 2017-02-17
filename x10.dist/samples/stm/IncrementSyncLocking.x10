@@ -9,7 +9,7 @@ public class IncrementSyncLocking {
     
     public static def main(args:Rail[String]) {
     	val sparePlaces = 0;
-        STMAppUtils.printBenchmarkStartingMessage("IncrementSyncLocking", -1, -1, -1, sparePlaces);
+        STMAppUtils.printBenchmarkStartingMessage("IncrementSyncLocking", -1, -1, -1, sparePlaces, -1F);
         val start = System.nanoTime();
         
         val supportShrinking = false;

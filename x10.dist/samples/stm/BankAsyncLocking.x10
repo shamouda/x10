@@ -21,7 +21,7 @@ public class BankAsyncLocking {
         val debugProgress = Long.parseLong(args(2));
         val accountsPerPlace = Math.ceil(Math.pow(2, expAccounts)) as Long;
         val transfersPerPlace = Math.ceil(Math.pow(2, expTransfers)) as Long;
-        STMAppUtils.printBenchmarkStartingMessage("BankAsyncLocking", accountsPerPlace, transfersPerPlace, debugProgress, 0);
+        STMAppUtils.printBenchmarkStartingMessage("BankAsyncLocking", accountsPerPlace, transfersPerPlace, debugProgress, 0, -1F);
         val start = System.nanoTime();
         
         val sparePlaces = 0;

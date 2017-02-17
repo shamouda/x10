@@ -9,7 +9,7 @@ public class IncrementSync {
     
     public static def main(args:Rail[String]) {
         val sparePlaces = 0;
-        STMAppUtils.printBenchmarkStartingMessage("IncrementSync", -1, -1, -1, sparePlaces);
+        STMAppUtils.printBenchmarkStartingMessage("IncrementSync", -1, -1, -1, sparePlaces, -1F);
         val start = System.nanoTime();
         val supportShrinking = false;
         val mgr = new PlaceManager(sparePlaces, supportShrinking);

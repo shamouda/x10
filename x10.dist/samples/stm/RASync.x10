@@ -22,7 +22,7 @@ public class RASync {
         val accountsPerPlace = Math.ceil(Math.pow(2, expAccounts) ) as Long;
         val updatesPerPlace = Math.ceil(Math.pow(2, expUpdates) ) as Long;
         val sparePlaces = 0;
-        STMAppUtils.printBenchmarkStartingMessage("RASync", accountsPerPlace, updatesPerPlace, debugProgress, sparePlaces);
+        STMAppUtils.printBenchmarkStartingMessage("RASync", accountsPerPlace, updatesPerPlace, debugProgress, sparePlaces, -1F);
         val start = System.nanoTime();
        
         val supportShrinking = false;

@@ -21,7 +21,7 @@ public class BankMoveData {
         val accountsPerPlace = Math.ceil(Math.pow(2, expAccounts)) as Long;
         val transfersPerPlace = Math.ceil(Math.pow(2, expTransfers)) as Long;
         val sparePlaces = 0;
-        STMAppUtils.printBenchmarkStartingMessage("BankMoveData", accountsPerPlace, transfersPerPlace, debugProgress, sparePlaces);
+        STMAppUtils.printBenchmarkStartingMessage("BankMoveData", accountsPerPlace, transfersPerPlace, debugProgress, sparePlaces, -1F);
         val start = System.nanoTime();
 
         val supportShrinking = false;

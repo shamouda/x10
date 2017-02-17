@@ -26,7 +26,7 @@ public class RAAsyncResilient {
         val accountsPerPlace = Math.ceil(Math.pow(2, expAccounts) ) as Long;
         val updatesPerPlace = Math.ceil(Math.pow(2, expUpdates) ) as Long;
         val sparePlaces = Long.parseLong(args(3));
-    	STMAppUtils.printBenchmarkStartingMessage("RAAsyncResilient", accountsPerPlace, updatesPerPlace, debugProgress, sparePlaces);
+    	STMAppUtils.printBenchmarkStartingMessage("RAAsyncResilient", accountsPerPlace, updatesPerPlace, debugProgress, sparePlaces, -1F);
         val start = System.nanoTime();
         
         val supportShrinking = false;
