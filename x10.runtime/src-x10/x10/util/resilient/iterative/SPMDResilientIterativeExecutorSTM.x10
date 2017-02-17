@@ -223,22 +223,24 @@ public class SPMDResilientIterativeExecutorSTM (home:Place) {
     private def checkpointSTM(app:SPMDResilientIterativeApp, nativeStore:NativeStore[Cloneable]){here == home} {
         val startCheckpoint = Timer.milliTime();
         if (VERBOSE) Console.OUT.println("checkpointing at iter " + plh().globalIter);
-        val tx = nativeStore.startGlobalTransaction(manager().activePlaces());
-        for (p in manager().activePlaces()) {
-            tx.asyncAt(p, ()=> {
-                val ckptMap = app.getCheckpointData_local();
-                if (ckptMap != null) {
-                    val iter = ckptMap.keySet().iterator();
-                    while (iter.hasNext()) {
-                        val key = iter.next();
-                        val value = ckptMap.getOrThrow(key);
-                        tx.put(key, value);
-                        plh().ckptKeys.add(key);
-                    }
-                }
-            });
-        }
-        tx.commit();
+        val members = manager().activePlaces();
+        nativeStore.executeTransaction(members, (tx:Tx) => {
+	        for (p in members) {
+	            tx.asyncAt(p, ()=> {
+	                val ckptMap = app.getCheckpointData_local();
+	                if (ckptMap != null) {
+	                    val iter = ckptMap.keySet().iterator();
+	                    while (iter.hasNext()) {
+	                        val key = iter.next();
+	                        val value = ckptMap.getOrThrow(key);
+	                        tx.put(key, value);
+	                        plh().ckptKeys.add(key);
+	                    }
+	                }
+	            });
+	        }
+        });
+        
         lastCkptIter = plh().globalIter;
         ckptTimes.add(Timer.milliTime() - startCheckpoint);
     }
