@@ -5,6 +5,7 @@ import x10.util.HashMap;
 import x10.util.ArrayList;
 import x10.util.resilient.localstore.tx.*;
 import x10.util.resilient.localstore.Cloneable;
+import x10.util.concurrent.Lock;	
 import x10.xrx.Runtime;
 
 public class ResilientNativeMap (name:String, store:ResilientStore) {
@@ -80,12 +81,12 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         assert(store.plh().virtualPlaceId != -1);
         val id = store.plh().masterStore.getNextTransactionId();
         val tx = new LocalTx(store.plh, id, name);
-        list().localTx.add(tx);
+        list().addLocalTx(tx);
         return tx;
     }
     
     
-    public def startGlobalTransaction(members:PlaceGroup):Tx {
+    private def startGlobalTransaction(members:PlaceGroup):Tx {
         assert(store.plh().virtualPlaceId != -1);
         val id = store.plh().masterStore.getNextTransactionId();
         if (resilient) {
@@ -96,18 +97,29 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
             if(TM_DEBUG) Console.OUT.println("Tx["+id+"] startGlobalTransaction localTx["+localTx.id+"] completed ...");
         }
         val tx = new Tx(store.plh, id, name, members, store.activePlaces, store.txDescMap);
-        list().globalTx.add(tx);
+        list().addGlobalTx(tx);
         return tx;
     }
     
     public def executeTransaction(members:PlaceGroup, closure:(Tx)=>void):Int {
         do {
+        	val tx = startGlobalTransaction(members);
+        	var excpt:Exception = null;
+        	var pastFinish:Boolean = false;
             try {
-                val tx = startGlobalTransaction(members);
-                closure(tx);
+                finish closure(tx);
+                if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} succeeded ");
+                pastFinish = true;
                 return tx.commit();
             } catch(ex:Exception) {
-                processException(ex);
+            	if (TM_DEBUG) {
+            		Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] pastFinish["+pastFinish+"] ");
+            		ex.printStackTrace();
+            	}
+            	if (!pastFinish)
+            		tx.abort(excpt); // tx.commit() aborts automatically if needed
+            	
+            	throwIfNotConflictException(ex);
             }
         }while(true);
     }
@@ -124,7 +136,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
 		            	result = tx.commit();
 		            	break;
 		            } catch(ex:Exception) {
-		                processException(ex);
+		            	throwIfNotConflictException(ex);
 		            }
 		            System.threadSleep(0);
 		        }
@@ -136,7 +148,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
 		return txResult;
     }
     
-    private static def processException(ex:Exception) {
+    private static def throwIfNotConflictException(ex:Exception) {
         if (ex instanceof MultipleExceptions) {
             val deadExList = (ex as MultipleExceptions).getExceptionsOfType[DeadPlaceException]();
             if (deadExList != null && deadExList.size != 0)
@@ -149,7 +161,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     public def restartGlobalTransaction(txDesc:TxDesc):Tx {
         assert(store.plh().virtualPlaceId != -1);
         val tx = new Tx(store.plh, txDesc.id, name, getMembers(txDesc.members), store.activePlaces, store.txDescMap);
-        list().globalTx.add(tx);
+        list().addGlobalTx(tx);
         return tx;
     }
     
@@ -321,9 +333,21 @@ class TxPlaceStatistics(p:Place, g_commitCount:Long, g_avgCommitTimeNS:Double, g
 class TransactionsList {
 	val globalTx:ArrayList[Tx];
     val localTx:ArrayList[LocalTx];
+    private val listLock = new Lock();
 
 	public def this(){
 		globalTx = new ArrayList[Tx]();
 		localTx = new ArrayList[LocalTx]();
+	}
+	
+	public def addLocalTx(tx:LocalTx) {
+		listLock.lock();
+		localTx.add(tx);
+		listLock.unlock();
+	}
+	public def addGlobalTx(tx:Tx) {
+		listLock.lock();
+		globalTx.add(tx);
+		listLock.unlock();
 	}
 }
