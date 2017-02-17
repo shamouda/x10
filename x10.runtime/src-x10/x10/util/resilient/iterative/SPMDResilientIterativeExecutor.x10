@@ -403,7 +403,7 @@ public class SPMDResilientIterativeExecutor (home:Place) {
         }
         else if (ex instanceof MultipleExceptions) {
             val mulExp = ex as MultipleExceptions;
-            if (isResilient) {                
+            if (isResilient) {
                 val filtered = mulExp.filterExceptionsOfType[DeadPlaceException]();
                 if (filtered != null) throw filtered;
                 val deadPlaceExceptions = mulExp.getExceptionsOfType[DeadPlaceException]();
