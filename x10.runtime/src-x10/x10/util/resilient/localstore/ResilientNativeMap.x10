@@ -196,138 +196,85 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                 //####         Global TX         ####//
             	val g_commitList = new ArrayList[Double]();
             	val g_abortList = new ArrayList[Double]();
-                var g_cSum:Double = 0;
-                var g_cCnt:Long = 0;
-                var g_aSum:Double = 0;
-                var g_aCnt:Long = 0;
                 for (tx in list().globalTx) {
-                    if (tx.commitTime != -1) {
-                    	val cTime = tx.commitTime - tx.startTime;
-                        g_cSum += cTime;
-                        g_cCnt++;
-                        g_commitList.add(cTime);
-                    }
-                    else if (tx.abortTime != -1) {
-                    	val aTime = tx.abortTime - tx.startTime;
-                        g_aSum += aTime;
-                        g_aCnt++;
-                        g_abortList.add(aTime);
-                    }
+                    if (tx.commitTime != -1)
+                        g_commitList.add(tx.commitTime - tx.startTime);
+                    else if (tx.abortTime != -1)
+                        g_abortList.add(tx.abortTime - tx.startTime);
                 }
-                var g_commitMeanMS:Double = 0.0;
-                if (g_cCnt > 0)
-                    g_commitMeanMS = (g_cSum/g_cCnt);
-                
-                var g_abortMeanMS:Double = 0.0;
-                if (g_aCnt > 0)
-                    g_abortMeanMS = (g_aSum/g_aCnt);
-
-                val g_commitSTDEV = calStdDev(g_commitList, g_commitMeanMS);
-                val g_abortSTDEV  = calStdDev(g_abortList, g_abortMeanMS);
-                                
                 //####         Local TX         ####//
                 val l_commitList = new ArrayList[Double]();
             	val l_abortList = new ArrayList[Double]();
-                var l_cSum:Double = 0;
-                var l_cCnt:Long = 0;
-                var l_aSum:Double = 0;
-                var l_aCnt:Long = 0;
                 for (tx in list().localTx) {
-                    if (tx.commitTime != -1) {
-                    	val cTime = tx.commitTime - tx.startTime; 
-                        l_cSum += cTime;
-                        l_cCnt++;
-                        l_commitList.add(cTime);
-                    }
-                    else if (tx.abortTime != -1) {
-                    	val aTime = tx.abortTime - tx.startTime; 
-                        l_aSum += aTime;
-                        l_aCnt++;
-                        l_abortList.add(aTime);
-                    }
+                    if (tx.commitTime != -1)
+                        l_commitList.add(tx.commitTime - tx.startTime);
+                    else if (tx.abortTime != -1)
+                        l_abortList.add(tx.abortTime - tx.startTime);
                 }
-                var l_commitMeanMS:Double = 0.0;
-                if (l_cCnt > 0)
-                    l_commitMeanMS = (l_cSum/l_cCnt);
-                
-                var l_abortMeanMS:Double = 0.0;
-                if (l_aCnt > 0)
-                    l_abortMeanMS = (l_aSum/l_aCnt);
-
-                val l_commitSTDEV = calStdDev(l_commitList, l_commitMeanMS);
-                val l_abortSTDEV  = calStdDev(l_abortList, l_abortMeanMS);
-                
-                new TxPlaceStatistics(here, g_cCnt, g_commitMeanMS, g_commitSTDEV, g_aCnt, g_abortMeanMS, g_abortSTDEV, g_abortList,
-                		                    l_cCnt, l_commitMeanMS, l_commitSTDEV, l_aCnt, l_abortMeanMS, l_abortSTDEV, l_abortList)
+                 
+                new TxPlaceStatistics(here, g_commitList, g_abortList, l_commitList, l_abortList)
             };
             pl_stat.add(pstat);
         }
         
-        var g_cCnt:Double = 0.0;
-        var g_cAvgTimeTotal:Double = 0;
-        var g_cCntPlaces:Long = 0;
-        var g_aCnt:Double = 0.0;
-        var g_aAvgTimeTotal:Double = 0;
-        var g_aCntPlaces:Long = 0;
+        val g_allCommitList = new ArrayList[Double]();
+    	val g_allAbortList = new ArrayList[Double]();
+    	val l_allCommitList = new ArrayList[Double]();
+    	val l_allAbortList = new ArrayList[Double]();
+    	
+        var g_cPlaces:Long = 0;
+        var g_aPlaces:Long = 0;
         
-        var l_cCnt:Double = 0.0;
-        var l_cAvgTimeTotal:Double = 0;
-        var l_cCntPlaces:Long = 0;
-        var l_aCnt:Double = 0.0;
-        var l_aAvgTimeTotal:Double = 0;
-        var l_aCntPlaces:Long = 0;
+    	var l_cPlaces:Long = 0;
+        var l_aPlaces:Long = 0;
         
         for (pstat in pl_stat) {
             Console.OUT.println(pstat);
-            g_cCnt += pstat.g_commitCount;
-            g_aCnt += pstat.g_abortCount;
-            if (pstat.g_commitCount > 0) {
-                g_cAvgTimeTotal += pstat.g_commitMeanMS;
-                g_cCntPlaces++;
-            }
-            if (pstat.g_abortCount > 0) {
-                g_aAvgTimeTotal += pstat.g_abortMeanMS;
-                g_aCntPlaces++;
-            }
+            g_allCommitList.addAll(pstat.g_commitList);
+            if (pstat.g_commitList.size() > 0)
+            	g_cPlaces ++;
             
-            l_cCnt += pstat.l_commitCount;
-            l_aCnt += pstat.l_abortCount;
-            if (pstat.l_commitCount > 0) {
-                l_cAvgTimeTotal += pstat.l_commitMeanMS;
-                l_cCntPlaces++;
-            }
-            if (pstat.l_abortCount > 0) {
-                l_aAvgTimeTotal += pstat.l_abortMeanMS;
-                l_aCntPlaces++;
-            }
+            g_allAbortList.addAll(pstat.g_abortList);
+            if (pstat.g_abortList.size() > 0)
+            	g_aPlaces ++;
+            
+            l_allCommitList.addAll(pstat.l_commitList);
+            if (pstat.l_commitList.size() > 0)
+            	l_cPlaces ++;
+            
+            l_allAbortList.addAll(pstat.l_abortList);
+            if (pstat.l_abortList.size() > 0)
+            	l_aPlaces ++;
         }
         
-        val g_cPerPlace = g_cCnt / pl_stat.size();
-        val g_aPerPlace = g_aCnt / pl_stat.size();
+        val g_cCnt = g_allCommitList.size();
+        val g_aCnt = g_allAbortList.size();
+        val l_cCnt = l_allCommitList.size();
+        val l_aCnt = l_allAbortList.size();
         
-        var g_cAvg:Double = 0.0;
-        if (g_cCntPlaces > 0)
-            g_cAvg = g_cAvgTimeTotal / g_cCntPlaces;
+        val g_cMean  = TxPlaceStatistics.mean(g_allCommitList);
+        val g_cSTDEV = TxPlaceStatistics.stdev(g_allCommitList, g_cMean);
+        val g_aMean  = TxPlaceStatistics.mean(g_allAbortList);
+        val g_aSTDEV = TxPlaceStatistics.stdev(g_allAbortList, g_aMean);
         
-        var g_aAvg:Double = 0.0;
-        if (g_aCntPlaces > 0)
-            g_aAvg = g_aAvgTimeTotal / g_aCntPlaces;
+        val l_cMean  = TxPlaceStatistics.mean(l_allCommitList);
+        val l_cSTDEV = TxPlaceStatistics.stdev(l_allCommitList, l_cMean);
+        val l_aMean  = TxPlaceStatistics.mean(l_allAbortList);
+        val l_aSTDEV = TxPlaceStatistics.stdev(l_allAbortList, l_aMean);
         
-        val l_cPerPlace = l_cCnt / pl_stat.size();
-        val l_aPerPlace = l_aCnt / pl_stat.size();
+        if (g_cCnt > 0) {
+        	Console.OUT.println("Summary:GLOBAL_TX:committed:"+ g_cCnt + ":commitMeanMS:" + g_cMean + ":commitSTDEV:" + g_cSTDEV + ":committedPlaces:" + g_cPlaces
+                                            +":aborted:"  + g_aCnt + ":abortMeanMS:"  + g_aMean + ":abortSTDEV:"  + g_aSTDEV + ":abortedPlaces:"   + g_aPlaces);
+        	Console.OUT.println("g_commitsList:" + TxPlaceStatistics.listToString(g_allCommitList));
+        	Console.OUT.println("g_abortsList:" + TxPlaceStatistics.listToString(g_allAbortList));
+        }
         
-        var l_cAvg:Double = 0.0;
-        if (l_cCntPlaces > 0)
-            l_cAvg = l_cAvgTimeTotal / l_cCntPlaces;
-        
-        var l_aAvg:Double = 0.0;
-        if (l_aCntPlaces > 0)
-            l_aAvg = l_aAvgTimeTotal / l_aCntPlaces;
-        
-        Console.OUT.println("Summary:GLOBAL_TX:committed:"+ g_cCnt + ":commitsPerPlace:" + g_cPerPlace + ":commitMeanMS:" + (g_cAvg) + ":committedPlaces:" + g_cCntPlaces
-                                            +":aborted:"  + g_aCnt + ":abortsPerPlace:"  + g_aPerPlace + ":abortMeanMS:"  + (g_aAvg) + ":abortedPlaces:"   + g_aCntPlaces);
-        Console.OUT.println("Summary:LOCAL_TX:committed:" + l_cCnt + ":commitsPerPlace:" + l_cPerPlace + ":commitMeanMS:" + (l_cAvg) + ":committedPlaces:" + l_cCntPlaces
-                                            +":aborted:"  + l_aCnt + ":abortsPerPlace:"  + l_aPerPlace + ":abortMeanMS:"  + (l_aAvg) + ":abortedPlaces:"   + l_aCntPlaces);
+        if (l_cCnt > 0) {
+        	Console.OUT.println("Summary:LOCAL_TX:committed:"+ l_cCnt + ":commitMeanMS:" + l_cMean + ":commitSTDEV:" + l_cSTDEV + ":committedPlaces:" + l_cPlaces
+                                           +":aborted:"  + l_aCnt + ":abortMeanMS:"  + l_aMean + ":abortSTDEV:"  + l_aSTDEV + ":abortedPlaces:"   + l_aPlaces);
+        	Console.OUT.println("l_commitsList:" + TxPlaceStatistics.listToString(l_allCommitList));
+        	Console.OUT.println("l_abortsList:" + TxPlaceStatistics.listToString(l_allAbortList));
+        }
     }
     
     public def resetTxStatistics() {
@@ -338,8 +285,49 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         }
     }
     
+}
+
+class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_abortList:ArrayList[Double], l_commitList:ArrayList[Double], l_abortList:ArrayList[Double]) {
+    public def toString() {
+    	
+    	val g_commitMean = mean(g_commitList);
+    	val g_commitSTDEV = stdev(g_commitList, g_commitMean);
+    	val g_abortMean = mean(g_abortList);
+    	val g_abortSTDEV = stdev(g_abortList, g_abortMean);
+    	
+    	val l_commitMean = mean(l_commitList);
+    	val l_commitSTDEV = stdev(l_commitList, l_commitMean);
+    	val l_abortMean = mean(l_abortList);
+    	val l_abortSTDEV = stdev(l_abortList, l_abortMean);
+    	
+        var str:String = "";
+    	if (g_commitList.size() > 0)
+    		str += p + ":GLOBAL_TX:commitCount:"+g_commitList.size()+":commitMeanMS:"+g_commitMean+":commitSTDEV:"+ g_commitSTDEV+
+    		                     ":abortCount:" +g_abortList.size() +":abortMeanMS:" +g_abortMean +":abortSTDEV:" + g_abortSTDEV + 
+    		                     "\n:commitsList{"+listToString(g_commitList) +"}\n:abortsList{"+listToString(g_abortList) +"}"+"\n";
+    	
+    	if (l_commitList.size() > 0)
+    		str += p + ":LOCAL_TX:commitCount:"+l_commitList.size()+":commitMeanMS:"+l_commitMean+":commitSTDEV:"+ l_commitSTDEV+
+    							 ":abortCount:" +l_abortList.size() +":abortMeanMS:" +l_abortMean +":abortSTDEV:" + l_abortSTDEV + 
+    		                     "\n:commitsList{"+listToString(l_commitList) +"}\n:abortsList{"+listToString(l_abortList) +"}"+"\n";
+    	
+    	return str;
+    }
     
-    private static def calStdDev(values:ArrayList[Double], mean:Double) {
+    public static def mean(values:ArrayList[Double]) {
+    	if (values.size() == 0)
+    		return 0.0;
+    	
+    	var sum:Double = 0;
+        for (x in values)
+        	sum += x;
+        return sum / values.size();
+    }
+    
+    public static def stdev(values:ArrayList[Double], mean:Double) {
+    	if (values.size() == 0)
+    		return 0.0;
+    	
     	var sum:Double = 0;
         for (x in values) {
         	sum += Math.pow( x - mean , 2);
@@ -347,30 +335,15 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         return Math.sqrt(sum / (values.size() -1) ); // divide by N-1 because this is just a sample, not the whole population
     }
     
-}
-
-class TxPlaceStatistics(p:Place, g_commitCount:Long, g_commitMeanMS:Double, g_commitSTDEV:Double, g_abortCount:Long, g_abortMeanMS:Double, g_abortSTDEV:Double, g_abortList:ArrayList[Double]
-		                       , l_commitCount:Long, l_commitMeanMS:Double, l_commitSTDEV:Double, l_abortCount:Long, l_abortMeanMS:Double, l_abortSTDEV:Double, l_abortList:ArrayList[Double]) {
-    public def toString() {
+    public static def listToString[T](r:ArrayList[T]):String {
+        if (r == null)
+            return "";
         var str:String = "";
-    	if (g_commitCount > 0) {
-    		var gAborts:String = "";
-    	    for (x in g_abortList)
-    	    	gAborts += x + ",";
-    	    		
-    		str += p + ":GLOBAL_TX:commitCount:"+ g_commitCount +":commitMeanMS:" + g_commitMeanMS + ":commitSTDEV:" + g_commitSTDEV
-        		                +":abortCount:" + g_abortCount  +":abortMeanMS:"  + g_abortMeanMS  + ":abortSTDEV:"  + g_abortSTDEV + ":abortsList:{"+gAborts+"}"+ "\n" ;
-    	}
-    	if (l_commitCount > 0) {
-    		var lAborts:String = "";
-	    	for (x in l_abortList)
-	    		lAborts += x + ",";
-	    		
-    		str += p + ":LOCAL_TX:commitCount:" + l_commitCount +":commitMeanMS:" + l_commitMeanMS + ":commitSTDEV:" + l_commitSTDEV
-        	               +":abortCount:"  + l_abortCount  +":abortMeanMS:"  + l_abortMeanMS  + ":abortSTDEV:"  + l_abortSTDEV + ":abortsList:{"+lAborts+"}";
-    	}
-    	return str;
+        for (x in r)
+            str += x + ",";
+        return str;
     }
+    
 }
 
 class TransactionsList {
