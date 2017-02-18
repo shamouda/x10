@@ -32,14 +32,13 @@ public class TxLockCREW extends TxLock {
     public def lockRead(txId:Long, key:String) {
         val acquired = sem.tryAcquireRead();
         if (acquired) {
-            assert(lockedWriter == -1);
+            assert(lockedWriter == -1) : "CREW error: lockRead accepted although a writer exist" ;
             readersLock.lock();
             readers.add(txId);
             readersLock.unlock();
             if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockRead done"); 
         }
         else {
-        	assert(lockedWriter != -1);
             if (resilient)
                 checkDeadLockers();
             if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockRead CONFLICT, lockedWriter["+lockedWriter+"] ");
@@ -48,7 +47,7 @@ public class TxLockCREW extends TxLock {
     }
     
     public def unlockRead(txId:Long, key:String) {
-        assert(readers.contains(txId) && lockedWriter == -1);
+        //assert(readers.contains(txId) && lockedWriter == -1) : "CREW error: unlockRead called although I am not a reader or a writer exists" ;
         sem.releaseRead();
         readersLock.lock();
         readers.remove(txId);
@@ -60,21 +59,24 @@ public class TxLockCREW extends TxLock {
     public def lockWrite(txId:Long, key:String) {
         val acquired = sem.tryAcquireWrite();
         if (acquired) {
-            assert(readers.size() == 0 && (lockedWriter == -1 || lockedWriter == txId));
+            assert(readers.size() == 0 && (lockedWriter == -1 || lockedWriter == txId)) : "CREW error: lockWrite succeeded although some readers or another writer exist";
             lockedWriter = txId;
             if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite done");
         }
         else {
-        	assert(readers.size() > 0 || lockedWriter != -1);
+        	readersLock.lock();
+        	val readersStr = readersAsString(readers);
+        	readersLock.unlock();
+        	
             if (resilient)
                 checkDeadLockers();
-            if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite CONFLICT, lockedWriter["+lockedWriter+"] readers["+readersAsString(readers)+"] ");
+            if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite CONFLICT, lockedWriter["+lockedWriter+"] readers["+readersStr+"] ");
             throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] key ["+key+"] ", here);
         }
     }
     
     public def unlockWrite(txId:Long, key:String) {
-        assert(readers.size() == 0 && lockedWriter == txId);
+        //assert(readers.size() == 0 && lockedWriter == txId) : "CREW error: unlockWrite called although I am not the writer or readers exist";
         lockedWriter = -1;
         sem.releaseWrite();
         if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] unlockWrite done");
