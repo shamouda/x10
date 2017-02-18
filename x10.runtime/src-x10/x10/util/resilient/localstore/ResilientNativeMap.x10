@@ -249,10 +249,6 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         val g_cCnt   = g_allCommitList.size();
         val g_aCnt   = g_allAbortList.size();
         val g_cMean  = TxStatistics.mean(g_allCommitList);
-        for (d in g_allCommitList)
-            Console.OUT.println("commitTime:" + d);
-        for (d in g_allAbortList)
-            Console.OUT.println("abortTime:" + d);
         val g_cSTDEV = TxStatistics.stdev(g_allCommitList, g_cMean);
         val g_cBox   = TxStatistics.boxPlot(g_allCommitList);
         val g_aMean  = TxStatistics.mean(g_allAbortList);
