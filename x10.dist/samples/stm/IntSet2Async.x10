@@ -99,8 +99,7 @@ public class IntSet2Async {
 	                
 	                val members = STMAppUtils.createGroup(p1, p2);
 	                map.executeTransaction(members, (tx:Tx) => {
-	                    //if (TM_DEBUG) 
-	                    	Console.OUT.println(here + " Tx["+tx.id+"] TXSTARTED keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");
+	                    if (TM_DEBUG) Console.OUT.println(here + " Tx["+tx.id+"] TXSTARTED keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");
 	                    val f1 = tx.asyncAt(p1, () => {
 	                    	var result:Any = null;
 	                    	if (read)
