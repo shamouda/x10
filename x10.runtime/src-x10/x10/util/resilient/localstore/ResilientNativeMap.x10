@@ -352,7 +352,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
 class TxPlaceStatistics(p:Place, g_commitCount:Long, g_commitMeanNS:Double, g_commitSTDEV:Double, g_abortCount:Long, g_abortMeanNS:Double, g_abortSTDEV:Double
 		                       , l_commitCount:Long, l_commitMeanNS:Double, l_commitSTDEV:Double, l_abortCount:Long, l_abortMeanNS:Double, l_abortSTDEV:Double) {
     public def toString() {
-        var str:Strig = "";
+        var str:String = "";
     	if (g_commitCount > 0)
     		str += p + ":GLOBAL_TX:commitCount:"+ g_commitCount +":commitMean(ns):" + g_commitMeanNS + ":commitSTDEV:" + g_commitSTDEV
         		                +":abortCount:" + g_abortCount  +":abortMean(ns):"  + g_abortMeanNS  + ":abortSTDEV:"  + g_abortSTDEV + "\n" ;
