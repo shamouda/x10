@@ -14,6 +14,7 @@ package x10.util.resilient.localstore;
 
 import x10.util.RailUtils;
 import x10.util.Pair;
+import x10.util.ArrayList;
 
 public class TxStatistics {
     public static def mean(values:ArrayList[Double]) {
