@@ -359,6 +359,7 @@ class TxPlaceStatistics(p:Place, g_commitCount:Long, g_commitMeanNS:Double, g_co
     	if (l_commitCount > 0)
     		str += p + ":LOCAL_TX:commitCount:" + l_commitCount +":commitMean(ns):" + l_commitMeanNS + ":commitSTDEV:" + l_commitSTDEV
         	               +":abortCount:"  + l_abortCount  +":abortMean(ns):"  + l_abortMeanNS  + ":abortSTDEV:"  + l_abortSTDEV ;
+    	return str;
     }
 }
 
