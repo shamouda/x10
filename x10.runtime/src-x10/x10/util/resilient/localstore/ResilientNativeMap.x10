@@ -219,12 +219,11 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         
         val g_allCommitList = new ArrayList[Double]();
         val g_allAbortList = new ArrayList[Double]();
-        val l_allCommitList = new ArrayList[Double]();
-        val l_allAbortList = new ArrayList[Double]();
-        
         var g_cPlaces:Long = 0;
         var g_aPlaces:Long = 0;
         
+        val l_allCommitList = new ArrayList[Double]();
+        val l_allAbortList = new ArrayList[Double]();
         var l_cPlaces:Long = 0;
         var l_aPlaces:Long = 0;
         
@@ -247,23 +246,24 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                 l_aPlaces ++;
         }
         
-        val g_cCnt = g_allCommitList.size();
-        val g_aCnt = g_allAbortList.size();
-        val l_cCnt = l_allCommitList.size();
-        val l_aCnt = l_allAbortList.size();
-        
+        val g_cCnt   = g_allCommitList.size();
+        val g_aCnt   = g_allAbortList.size();
         val g_cMean  = TxStatistics.mean(g_allCommitList);
+        for (d in g_allCommitList)
+            Console.OUT.println("commitTime:" + d);
+        for (d in g_allAbortList)
+            Console.OUT.println("abortTime:" + d);
         val g_cSTDEV = TxStatistics.stdev(g_allCommitList, g_cMean);
         val g_cBox   = TxStatistics.boxPlot(g_allCommitList);
-        
         val g_aMean  = TxStatistics.mean(g_allAbortList);
         val g_aSTDEV = TxStatistics.stdev(g_allAbortList, g_aMean);
         val g_aBox   = TxStatistics.boxPlot(g_allAbortList);
         
+        val l_cCnt   = l_allCommitList.size();
+        val l_aCnt   = l_allAbortList.size();
         val l_cMean  = TxStatistics.mean(l_allCommitList);
         val l_cSTDEV = TxStatistics.stdev(l_allCommitList, l_cMean);
         val l_cBox   = TxStatistics.boxPlot(l_allCommitList);
-        
         val l_aMean  = TxStatistics.mean(l_allAbortList);
         val l_aSTDEV = TxStatistics.stdev(l_allAbortList, l_aMean);
         val l_aBox   = TxStatistics.boxPlot(l_allAbortList);
