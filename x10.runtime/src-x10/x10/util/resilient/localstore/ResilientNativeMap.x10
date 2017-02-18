@@ -252,28 +252,30 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         val l_cCnt = l_allCommitList.size();
         val l_aCnt = l_allAbortList.size();
         
-        val g_cMean  = TxPlaceStatistics.mean(g_allCommitList);
-        val g_cSTDEV = TxPlaceStatistics.stdev(g_allCommitList, g_cMean);
-        val g_aMean  = TxPlaceStatistics.mean(g_allAbortList);
-        val g_aSTDEV = TxPlaceStatistics.stdev(g_allAbortList, g_aMean);
+        val g_cMean  = TxStatistics.mean(g_allCommitList);
+        val g_cSTDEV = TxStatistics.stdev(g_allCommitList, g_cMean);
+        val g_cBox   = TxStatistics.boxPlot(g_allCommitList);
         
-        val l_cMean  = TxPlaceStatistics.mean(l_allCommitList);
-        val l_cSTDEV = TxPlaceStatistics.stdev(l_allCommitList, l_cMean);
-        val l_aMean  = TxPlaceStatistics.mean(l_allAbortList);
-        val l_aSTDEV = TxPlaceStatistics.stdev(l_allAbortList, l_aMean);
+        val g_aMean  = TxStatistics.mean(g_allAbortList);
+        val g_aSTDEV = TxStatistics.stdev(g_allAbortList, g_aMean);
+        val g_aBox   = TxStatistics.boxPlot(g_allAbortList);
+        
+        val l_cMean  = TxStatistics.mean(l_allCommitList);
+        val l_cSTDEV = TxStatistics.stdev(l_allCommitList, l_cMean);
+        val l_cBox   = TxStatistics.boxPlot(l_allCommitList);
+        
+        val l_aMean  = TxStatistics.mean(l_allAbortList);
+        val l_aSTDEV = TxStatistics.stdev(l_allAbortList, l_aMean);
+        val l_aBox   = TxStatistics.boxPlot(l_allAbortList);
         
         if (g_cCnt > 0) {
-        	Console.OUT.println("Summary:GLOBAL_TX:committed:"+ g_cCnt + ":commitMeanMS:" + g_cMean + ":commitSTDEV:" + g_cSTDEV + ":committedPlaces:" + g_cPlaces
-                                            +":aborted:"  + g_aCnt + ":abortMeanMS:"  + g_aMean + ":abortSTDEV:"  + g_aSTDEV + ":abortedPlaces:"   + g_aPlaces);
-        	Console.OUT.println("g_commitsList:" + TxPlaceStatistics.listToString(g_allCommitList));
-        	Console.OUT.println("g_abortsList:" + TxPlaceStatistics.listToString(g_allAbortList));
+        	Console.OUT.println("Summary:GLOBAL_TX:committed:"+ g_cCnt + ":commitMeanMS:" + g_cMean + ":commitSTDEV:" + g_cSTDEV + ":committedPlaces:" + g_cPlaces + ":commitBox:("+g_cBox+")" +
+                                                 ":aborted:"  + g_aCnt + ":abortMeanMS:"  + g_aMean + ":abortSTDEV:"  + g_aSTDEV + ":abortedPlaces:"   + g_aPlaces + ":abortBox:("+g_aBox+")");
         }
         
         if (l_cCnt > 0) {
-        	Console.OUT.println("Summary:LOCAL_TX:committed:"+ l_cCnt + ":commitMeanMS:" + l_cMean + ":commitSTDEV:" + l_cSTDEV + ":committedPlaces:" + l_cPlaces
-                                           +":aborted:"  + l_aCnt + ":abortMeanMS:"  + l_aMean + ":abortSTDEV:"  + l_aSTDEV + ":abortedPlaces:"   + l_aPlaces);
-        	Console.OUT.println("l_commitsList:" + TxPlaceStatistics.listToString(l_allCommitList));
-        	Console.OUT.println("l_abortsList:" + TxPlaceStatistics.listToString(l_allAbortList));
+        	Console.OUT.println("Summary:LOCAL_TX:committed:"+ l_cCnt + ":commitMeanMS:" + l_cMean + ":commitSTDEV:" + l_cSTDEV + ":committedPlaces:" + l_cPlaces + ":commitBox:("+l_cBox+")" +
+                                           +":aborted:"  + l_aCnt + ":abortMeanMS:"  + l_aMean + ":abortSTDEV:"  + l_aSTDEV + ":abortedPlaces:"   + l_aPlaces     + ":abortBox:("+l_aBox+")");
         }
     }
     
@@ -290,49 +292,26 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
 class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_abortList:ArrayList[Double], l_commitList:ArrayList[Double], l_abortList:ArrayList[Double]) {
     public def toString() {
     	
-    	val g_commitMean = mean(g_commitList);
-    	val g_commitSTDEV = stdev(g_commitList, g_commitMean);
-    	val g_abortMean = mean(g_abortList);
-    	val g_abortSTDEV = stdev(g_abortList, g_abortMean);
+    	val g_commitMean = TxStatistics.mean(g_commitList);
+    	val g_commitSTDEV = TxStatistics.stdev(g_commitList, g_commitMean);
+    	val g_abortMean = TxStatistics.mean(g_abortList);
+    	val g_abortSTDEV = TxStatistics.stdev(g_abortList, g_abortMean);
     	
-    	val l_commitMean = mean(l_commitList);
-    	val l_commitSTDEV = stdev(l_commitList, l_commitMean);
-    	val l_abortMean = mean(l_abortList);
-    	val l_abortSTDEV = stdev(l_abortList, l_abortMean);
+    	val l_commitMean = TxStatistics.mean(l_commitList);
+    	val l_commitSTDEV = TxStatistics.stdev(l_commitList, l_commitMean);
+    	val l_abortMean = TxStatistics.mean(l_abortList);
+    	val l_abortSTDEV = TxStatistics.stdev(l_abortList, l_abortMean);
     	
         var str:String = "";
     	if (g_commitList.size() > 0)
     		str += p + ":GLOBAL_TX:commitCount:"+g_commitList.size()+":commitMeanMS:"+g_commitMean+":commitSTDEV:"+ g_commitSTDEV+
-    		                     ":abortCount:" +g_abortList.size() +":abortMeanMS:" +g_abortMean +":abortSTDEV:" + g_abortSTDEV + 
-    		                     "\n:commitsList{"+listToString(g_commitList) +"}\n:abortsList{"+listToString(g_abortList) +"}"+"\n";
+    		                     ":abortCount:" +g_abortList.size() +":abortMeanMS:" +g_abortMean +":abortSTDEV:" + g_abortSTDEV +"\n";
     	
     	if (l_commitList.size() > 0)
     		str += p + ":LOCAL_TX:commitCount:"+l_commitList.size()+":commitMeanMS:"+l_commitMean+":commitSTDEV:"+ l_commitSTDEV+
-    							 ":abortCount:" +l_abortList.size() +":abortMeanMS:" +l_abortMean +":abortSTDEV:" + l_abortSTDEV + 
-    		                     "\n:commitsList{"+listToString(l_commitList) +"}\n:abortsList{"+listToString(l_abortList) +"}"+"\n";
+    							 ":abortCount:" +l_abortList.size() +":abortMeanMS:" +l_abortMean +":abortSTDEV:" + l_abortSTDEV;
     	
     	return str;
-    }
-    
-    public static def mean(values:ArrayList[Double]) {
-    	if (values.size() == 0)
-    		return 0.0;
-    	
-    	var sum:Double = 0;
-        for (x in values)
-        	sum += x;
-        return sum / values.size();
-    }
-    
-    public static def stdev(values:ArrayList[Double], mean:Double) {
-    	if (values.size() == 0)
-    		return 0.0;
-    	
-    	var sum:Double = 0;
-        for (x in values) {
-        	sum += Math.pow( x - mean , 2);
-        }
-        return Math.sqrt(sum / (values.size() -1) ); // divide by N-1 because this is just a sample, not the whole population
     }
     
     public static def listToString[T](r:ArrayList[T]):String {
