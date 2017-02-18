@@ -98,8 +98,9 @@ public class IntSet2Async {
 	                val read = requests.isRead(i-1);
 	                
 	                val members = STMAppUtils.createGroup(p1, p2);
+	                
+	                if (TM_DEBUG) Console.OUT.println(here + " OP["+i+"] Start{{ keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");
 	                map.executeTransaction(members, (tx:Tx) => {
-	                    if (TM_DEBUG) Console.OUT.println(here + " Tx["+tx.id+"] TXSTARTED keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");
 	                    val f1 = tx.asyncAt(p1, () => {
 	                    	var result:Any = null;
 	                    	if (read)
@@ -120,6 +121,7 @@ public class IntSet2Async {
 	                    f1.force();
 	                    f2.force();
 	                });
+	                if (TM_DEBUG) Console.OUT.println(here + " OP["+i+"] End}} keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");                
 	            }
             }
         }
