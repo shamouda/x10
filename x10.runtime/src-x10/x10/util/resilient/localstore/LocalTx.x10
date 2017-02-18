@@ -19,6 +19,7 @@ import x10.compiler.Ifdef;
 import x10.xrx.Runtime;
 import x10.util.resilient.localstore.tx.*;
 import x10.util.resilient.localstore.Cloneable;
+import x10.util.Timer;
 
 public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
@@ -29,7 +30,7 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     										      TxManager.TM_READ    == TxManager.READ_LOCKING && 
     										      TxManager.TM_ACQUIRE == TxManager.EARLY_ACQUIRE );
     
-    public transient val startTime:Long = System.nanoTime();
+    public transient val startTime:Long = Timer.milliTime();
     public transient var commitTime:Long = -1;
     public transient var abortTime:Long = -1;   
     
@@ -38,7 +39,7 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     	try {
     		return plh().masterStore.get(mapName, id, key);
     	}catch(e:Exception) {
-    		abortTime = System.nanoTime();
+    		abortTime = Timer.milliTime();
     		throw e;
     	}
     }
@@ -48,7 +49,7 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     	try {
     		return plh().masterStore.put(mapName, id, key, value);
     	}catch(e:Exception) {
-    		abortTime = System.nanoTime();
+    		abortTime = Timer.milliTime();
     		throw e;
     	}
     }
@@ -58,7 +59,7 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     	try {
     		return plh().masterStore.delete(mapName, id, key);
     	}catch(e:Exception) {
-    		abortTime = System.nanoTime();
+    		abortTime = Timer.milliTime();
     		throw e;
     	}
     }
@@ -68,7 +69,7 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     	try {
     		return plh().masterStore.keySet(mapName, id);
     	} catch(e:Exception) {
-    		abortTime = System.nanoTime();
+    		abortTime = Timer.milliTime();
     		throw e;
     	}
     }
@@ -77,7 +78,7 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     
     public def abort() {
         plh().masterStore.abort(mapName, id);
-        abortTime = System.nanoTime();
+        abortTime = Timer.milliTime();
     }
     
     /***********************   Local Commit Protocol ************************/  
@@ -105,7 +106,7 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
                 //master commit
                 plh().masterStore.commit(mapName, id);
             }
-            commitTime = System.nanoTime();
+            commitTime = Timer.milliTime();
             return success;
         } catch(ex:Exception) { // slave is dead         
             //master abort

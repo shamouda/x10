@@ -26,12 +26,13 @@ import x10.compiler.Immediate;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Future;
 
+import x10.util.Timer;
 public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     private val root = GlobalRef[Tx](this);
 
-    public transient val startTime:Long = System.nanoTime();
+    public transient val startTime:Long = Timer.milliTime();
     public transient var commitTime:Long = -1;
     public transient var abortTime:Long = -1;
     
@@ -178,7 +179,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, root:GlobalRef[Tx]):TxOpResult {
         assert (members.contains(dest));
         if(TM_DEBUG) Console.OUT.println("Tx["+id+"] Start Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] key["+key+"] value["+value+"] ...");
-        val startExec = System.nanoTime();
+        val startExec = Timer.milliTime();
         try {
             if (op == GET_LOCAL) {
                 return new TxOpResult(getLocal(key, plh, id, mapName));
@@ -246,8 +247,8 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             }
             throw ex;  // someone must call Tx.abort
         } finally {
-            val endExec = System.nanoTime();
-            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] execute Op["+opDesc(op)+"] time: [" + ((endExec-startExec)/1e6) + "] ms");
+            val endExec = Timer.milliTime();
+            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] execute Op["+opDesc(op)+"] time: [" + ((endExec-startExec)) + "] ms");
         }
         
     }
@@ -296,7 +297,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             deleteTxDesc();
         
         if (abortTime == -1)
-            abortTime = System.nanoTime();
+            abortTime = Timer.milliTime();
     }
 
     
@@ -309,10 +310,10 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         assert(here.id == root.home.id);
         if (!skipPhaseOne) {
             try {
-                val start = System.nanoTime();
+                val start = Timer.milliTime();
                 commitPhaseOne(plh, id, mapName, members, root); // failures are fatal
-                val end = System.nanoTime();
-                if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne time [" + ((end-start)/1e6) + "] ms");
+                val end = Timer.milliTime();
+                if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne time [" + ((end-start)) + "] ms");
                 
                 if (resilient && !DISABLE_DESC)
                     updateTxDesc(TxDesc.COMMITTING);
@@ -327,15 +328,15 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             Console.OUT.println("Tx["+id+"] skip phase one");
         }
         
-        val startWhen = System.nanoTime();
+        val startWhen = Timer.milliTime();
         commitPhaseTwo(plh, id, mapName, members, root);
-        val endWhen = System.nanoTime();
-        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseTwo time [" + ((endWhen-startWhen)/1e6) + "] ms");
+        val endWhen = Timer.milliTime();
+        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseTwo time [" + ((endWhen-startWhen)) + "] ms");
         
         if (resilient && !DISABLE_DESC)
             deleteTxDesc();
             
-        commitTime = System.nanoTime();
+        commitTime = Timer.milliTime();
         
         if (excs.size() > 0) {
             for (e in excs.toRail()) {
