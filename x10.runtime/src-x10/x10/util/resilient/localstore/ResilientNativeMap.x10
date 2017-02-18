@@ -194,98 +194,116 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         for (p in store.activePlaces) {
             val pstat = at (p) {
                 //####         Global TX         ####//
+            	val g_commitList = new ArrayList[Double]();
+            	val g_abortList = new ArrayList[Double]();
                 var g_cSum:Double = 0;
                 var g_cCnt:Long = 0;
                 var g_aSum:Double = 0;
                 var g_aCnt:Long = 0;
                 for (tx in list().globalTx) {
                     if (tx.commitTime != -1) {
-                        g_cSum += (tx.commitTime - tx.startTime);
+                    	val cTime = tx.commitTime - tx.startTime;
+                        g_cSum += cTime;
                         g_cCnt++;
+                        g_commitList.add(cTime);
                     }
                     else if (tx.abortTime != -1) {
-                        g_aSum += (tx.abortTime - tx.startTime);
+                    	val aTime = tx.abortTime - tx.startTime;
+                        g_aSum += aTime;
                         g_aCnt++;
+                        g_abortList.add(aTime);
                     }
                 }
-                var g_avgCommitTimeNS:Double = -1.0;
+                var g_commitMeanNS:Double = -1.0;
                 if (g_cCnt > 0)
-                    g_avgCommitTimeNS = (g_cSum/g_cCnt);
+                    g_commitMeanNS = (g_cSum/g_cCnt);
                 
-                var g_avgAbortTimeNS:Double = -1.0;
+                var g_abortMeanNS:Double = -1.0;
                 if (g_aCnt > 0)
-                    g_avgAbortTimeNS = (g_aSum/g_aCnt);
-                
+                    g_abortMeanNS = (g_aSum/g_aCnt);
+
+                val g_commitSTDEV = calStdDev(g_commitList, g_commitMeanNS);
+                val g_abortSTDEV  = calStdDev(g_abortList, g_abortMeanNS);
+                                
                 //####         Local TX         ####//
+                val l_commitList = new ArrayList[Double]();
+            	val l_abortList = new ArrayList[Double]();
                 var l_cSum:Double = 0;
                 var l_cCnt:Long = 0;
                 var l_aSum:Double = 0;
                 var l_aCnt:Long = 0;
                 for (tx in list().localTx) {
                     if (tx.commitTime != -1) {
-                        l_cSum += (tx.commitTime - tx.startTime);
+                    	val cTime = tx.commitTime - tx.startTime; 
+                        l_cSum += cTime;
                         l_cCnt++;
+                        l_commitList.add(cTime);
                     }
                     else if (tx.abortTime != -1) {
-                        l_aSum += (tx.abortTime - tx.startTime);
+                    	val aTime = tx.abortTime - tx.startTime; 
+                        l_aSum += aTime;
                         l_aCnt++;
+                        l_abortList.add(aTime);
                     }
                 }
-                var l_avgCommitTimeNS:Double = -1.0;
+                var l_commitMeanNS:Double = -1.0;
                 if (l_cCnt > 0)
-                    l_avgCommitTimeNS = (l_cSum/l_cCnt);
+                    l_commitMeanNS = (l_cSum/l_cCnt);
                 
-                var l_avgAbortTimeNS:Double = -1.0;
+                var l_abortMeanNS:Double = -1.0;
                 if (l_aCnt > 0)
-                    l_avgAbortTimeNS = (l_aSum/l_aCnt);
+                    l_abortMeanNS = (l_aSum/l_aCnt);
+
+                val l_commitSTDEV = calStdDev(l_commitList, l_commitMeanNS);
+                val l_abortSTDEV  = calStdDev(l_abortList, l_abortMeanNS);
                 
-                new TxPlaceStatistics(here, g_cCnt, g_avgCommitTimeNS, g_aCnt, g_avgAbortTimeNS,
-                		                    l_cCnt, l_avgCommitTimeNS, l_aCnt, l_avgAbortTimeNS)
+                new TxPlaceStatistics(here, g_cCnt, g_commitMeanNS, g_commitSTDEV, g_aCnt, g_abortMeanNS, g_abortSTDEV,
+                		                    l_cCnt, l_commitMeanNS, l_commitSTDEV, l_aCnt, l_abortMeanNS, l_abortSTDEV)
             };
             pl_stat.add(pstat);
         }
         
-        var g_cCntTotal:Double = 0.0;
+        var g_cCnt:Double = 0.0;
         var g_cAvgTimeTotal:Double = 0;
         var g_cCntPlaces:Long = 0;
-        var g_aCntTotal:Double = 0.0;
+        var g_aCnt:Double = 0.0;
         var g_aAvgTimeTotal:Double = 0;
         var g_aCntPlaces:Long = 0;
         
-        var l_cCntTotal:Double = 0.0;
+        var l_cCnt:Double = 0.0;
         var l_cAvgTimeTotal:Double = 0;
         var l_cCntPlaces:Long = 0;
-        var l_aCntTotal:Double = 0.0;
+        var l_aCnt:Double = 0.0;
         var l_aAvgTimeTotal:Double = 0;
         var l_aCntPlaces:Long = 0;
         
         for (pstat in pl_stat) {
             Console.OUT.println(pstat);
-            g_cCntTotal += pstat.g_commitCount;
-            g_aCntTotal += pstat.g_abortCount;
+            g_cCnt += pstat.g_commitCount;
+            g_aCnt += pstat.g_abortCount;
             if (pstat.g_commitCount > 0) {
-                g_cAvgTimeTotal += pstat.g_avgCommitTimeNS;
+                g_cAvgTimeTotal += pstat.g_commitMeanNS;
                 g_cCntPlaces++;
             }
             if (pstat.g_abortCount > 0) {
-                g_aAvgTimeTotal += pstat.g_avgAbortTimeNS;
+                g_aAvgTimeTotal += pstat.g_abortMeanNS;
                 g_aCntPlaces++;
             }
             
-            l_cCntTotal += pstat.l_commitCount;
-            l_aCntTotal += pstat.l_abortCount;
+            l_cCnt += pstat.l_commitCount;
+            l_aCnt += pstat.l_abortCount;
             if (pstat.l_commitCount > 0) {
-                l_cAvgTimeTotal += pstat.l_avgCommitTimeNS;
+                l_cAvgTimeTotal += pstat.l_commitMeanNS;
                 l_cCntPlaces++;
             }
             if (pstat.l_abortCount > 0) {
-                l_aAvgTimeTotal += pstat.l_avgAbortTimeNS;
+                l_aAvgTimeTotal += pstat.l_abortMeanNS;
                 l_aCntPlaces++;
             }
         }
         
-        val g_cPerPlace = g_cCntTotal / pl_stat.size();
-        val g_aPerPlace = g_aCntTotal / pl_stat.size();
+        val g_cPerPlace = g_cCnt / pl_stat.size();
+        val g_aPerPlace = g_aCnt / pl_stat.size();
         
         var g_cAvg:Double = 0.0;
         if (g_cCntPlaces > 0)
@@ -295,8 +313,8 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         if (g_aCntPlaces > 0)
             g_aAvg = g_aAvgTimeTotal / g_aCntPlaces;
         
-        val l_cPerPlace = l_cCntTotal / pl_stat.size();
-        val l_aPerPlace = l_aCntTotal / pl_stat.size();
+        val l_cPerPlace = l_cCnt / pl_stat.size();
+        val l_aPerPlace = l_aCnt / pl_stat.size();
         
         var l_cAvg:Double = 0.0;
         if (l_cCntPlaces > 0)
@@ -306,10 +324,10 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         if (l_aCntPlaces > 0)
             l_aAvg = l_aAvgTimeTotal / l_aCntPlaces;
         
-        Console.OUT.println("Summary:GLOBAL_TX:committed:"+g_cCntTotal+":commitsPerPlace:"+g_cPerPlace+":commitAvgTimeMS:"+(g_cAvg/1e6)+":committedPlaces:"+g_cCntPlaces
-                                  +":aborted:" +g_aCntTotal+":abortsPerPlace:" +g_aPerPlace+":abortAvgTimeMS:" +(g_aAvg/1e6)+":abortedPlaces:"+g_aCntPlaces);
-        Console.OUT.println("Summary:LOCAL_TX:committed:"+l_cCntTotal+":commitsPerPlace:"+l_cPerPlace+":commitAvgTimeMS:"+(l_cAvg/1e6)+":committedPlaces:"+l_cCntPlaces
-                                  +":aborted:" +l_aCntTotal+":abortsPerPlace:" +l_aPerPlace+":abortAvgTimeMS:" +(l_aAvg/1e6)+":abortedPlaces:"+l_aCntPlaces);
+        Console.OUT.println("Summary:GLOBAL_TX:committed:"+ g_cCnt + ":commitsPerPlace:" + g_cPerPlace + ":commitAvgTimeMS:" + (g_cAvg/1e6) + ":committedPlaces:" + g_cCntPlaces
+                                            +":aborted:"  + g_aCnt + ":abortsPerPlace:"  + g_aPerPlace + ":abortAvgTimeMS:"  + (g_aAvg/1e6) + ":abortedPlaces:"   + g_aCntPlaces);
+        Console.OUT.println("Summary:LOCAL_TX:committed:" + l_cCnt + ":commitsPerPlace:" + l_cPerPlace + ":commitAvgTimeMS:" + (l_cAvg/1e6) + ":committedPlaces:" + l_cCntPlaces
+                                            +":aborted:"  + l_aCnt + ":abortsPerPlace:"  + l_aPerPlace + ":abortAvgTimeMS:"  + (l_aAvg/1e6) + ":abortedPlaces:"   + l_aCntPlaces);
     }
     
     public def resetTxStatistics() {
@@ -320,13 +338,27 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         }
     }
     
+    
+    private static def calStdDev(values:ArrayList[Double], mean:Double) {
+    	var sum:Double = 0;
+        for (x in values) {
+        	sum += Math.pow( x - mean , 2);
+        }
+        return Math.sqrt(sum / values.size());
+    }
+    
 }
 
-class TxPlaceStatistics(p:Place, g_commitCount:Long, g_avgCommitTimeNS:Double, g_abortCount:Long, g_avgAbortTimeNS:Double
-		                       , l_commitCount:Long, l_avgCommitTimeNS:Double, l_abortCount:Long, l_avgAbortTimeNS:Double) {
+class TxPlaceStatistics(p:Place, g_commitCount:Long, g_commitMeanNS:Double, g_commitSTDEV:Double, g_abortCount:Long, g_abortMeanNS:Double, g_abortSTDEV:Double
+		                       , l_commitCount:Long, l_commitMeanNS:Double, l_commitSTDEV:Double, l_abortCount:Long, l_abortMeanNS:Double, l_abortSTDEV:Double) {
     public def toString() {
-        return p + ":GLOBAL_TX:commitCount:"+g_commitCount+":avgCommitTimeNS:"+g_avgCommitTimeNS+":abortCount:"+g_abortCount+":avgAbortTimeNS:"+g_avgAbortTimeNS + "\n" +
-        	   p + ":LOCAL_TX:commitCount:"+l_commitCount+":avgCommitTimeNS:"+l_avgCommitTimeNS+":abortCount:"+l_abortCount+":avgAbortTimeNS:"+l_avgAbortTimeNS ;
+        var str:Strig = "";
+    	if (g_commitCount > 0)
+    		str += p + ":GLOBAL_TX:commitCount:"+ g_commitCount +":commitMean(ns):" + g_commitMeanNS + ":commitSTDEV:" + g_commitSTDEV
+        		                +":abortCount:" + g_abortCount  +":abortMean(ns):"  + g_abortMeanNS  + ":abortSTDEV:"  + g_abortSTDEV + "\n" ;
+    	if (l_commitCount > 0)
+    		str += p + ":LOCAL_TX:commitCount:" + l_commitCount +":commitMean(ns):" + l_commitMeanNS + ":commitSTDEV:" + l_commitSTDEV
+        	               +":abortCount:"  + l_abortCount  +":abortMean(ns):"  + l_abortMeanNS  + ":abortSTDEV:"  + l_abortSTDEV ;
     }
 }
 
