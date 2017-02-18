@@ -275,7 +275,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         
         if (l_cCnt > 0) {
         	Console.OUT.println("Summary:LOCAL_TX:committed:"+ l_cCnt + ":commitMeanMS:" + l_cMean + ":commitSTDEV:" + l_cSTDEV + ":committedPlaces:" + l_cPlaces + ":commitBox:("+l_cBox+")" +
-                                           +":aborted:"  + l_aCnt + ":abortMeanMS:"  + l_aMean + ":abortSTDEV:"  + l_aSTDEV + ":abortedPlaces:"   + l_aPlaces     + ":abortBox:("+l_aBox+")");
+                                                ":aborted:"  + l_aCnt + ":abortMeanMS:"  + l_aMean + ":abortSTDEV:"  + l_aSTDEV + ":abortedPlaces:"   + l_aPlaces     + ":abortBox:("+l_aBox+")");
         }
     }
     
