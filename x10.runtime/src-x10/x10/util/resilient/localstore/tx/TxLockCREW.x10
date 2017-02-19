@@ -68,7 +68,12 @@ public class TxLockCREW extends TxLock {
         	assert(readers.size() > 0 || lockedWriter != -1);
             if (resilient)
                 checkDeadLockers();
-            if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite CONFLICT, lockedWriter["+lockedWriter+"] readers["+readersAsString(readers)+"] ");
+            if (TM_DEBUG) {
+            	readersLock.lock();
+            	val readersStr = readersAsString(readers);
+            	readersLock.unlock();
+            	Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite CONFLICT, lockedWriter["+lockedWriter+"] readers["+readersStr+"] ");
+            }
             throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] key ["+key+"] ", here);
         }
     }
