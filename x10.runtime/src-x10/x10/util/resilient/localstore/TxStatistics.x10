@@ -73,6 +73,6 @@ public class TxStatistics {
 
 class BoxPlot (min:Double, q1:Double, median:Double, q3:Double, max:Double) {
     public def toString() { 
-        return min + "," + q1 + "," + median + "," + q3 + "," + max; 
+        return min + ":" + q1 + ":" + median + ":" + q3 + ":" + max; 
     }
 }

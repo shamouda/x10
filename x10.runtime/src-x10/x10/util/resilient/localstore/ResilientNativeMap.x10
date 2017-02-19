@@ -265,13 +265,13 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         val l_aBox   = TxStatistics.boxPlot(l_allAbortList);
         
         if (g_cCnt > 0) {
-            Console.OUT.println("Summary:GLOBAL_TX:committed:"+ g_cCnt + ":commitMeanMS:" + g_cMean + ":commitSTDEV:" + g_cSTDEV + ":committedPlaces:" + g_cPlaces + ":commitBox:(" + g_cBox + ")" +
-                                                 ":aborted:"  + g_aCnt + ":abortMeanMS:"  + g_aMean + ":abortSTDEV:"  + g_aSTDEV + ":abortedPlaces:"   + g_aPlaces + ":abortBox:("  + g_aBox + ")" );
+            Console.OUT.println("Summary:GLOBAL_TX:committed:"+ g_cCnt + ":commitMeanMS:" + g_cMean + ":commitSTDEV:" + g_cSTDEV + ":committedPlaces:" + g_cPlaces + ":commitBox:(:" + g_cBox + ":)" );
+            Console.OUT.println("Summary:GLOBAL_TX:aborted:"  + g_aCnt + ":abortMeanMS:"  + g_aMean + ":abortSTDEV:"  + g_aSTDEV + ":abortedPlaces:"   + g_aPlaces + ":abortBox:(:"  + g_aBox + ":)" );
         }
         
         if (l_cCnt > 0) {
-            Console.OUT.println("Summary:LOCAL_TX:committed:"+ l_cCnt + ":commitMeanMS:" + l_cMean + ":commitSTDEV:" + l_cSTDEV + ":committedPlaces:" + l_cPlaces + ":commitBox:(" + l_cBox + ")" +
-                                                ":aborted:"  + l_aCnt + ":abortMeanMS:"  + l_aMean + ":abortSTDEV:"  + l_aSTDEV + ":abortedPlaces:"   + l_aPlaces + ":abortBox:("  + l_aBox + ")" );
+            Console.OUT.println("Summary:LOCAL_TX:committed:"+ l_cCnt + ":commitMeanMS:" + l_cMean + ":commitSTDEV:" + l_cSTDEV + ":committedPlaces:" + l_cPlaces + ":commitBox:(:" + l_cBox + ":)" );
+            Console.OUT.println("Summary:LOCAL_TX:aborted:"  + l_aCnt + ":abortMeanMS:"  + l_aMean + ":abortSTDEV:"  + l_aSTDEV + ":abortedPlaces:"   + l_aPlaces + ":abortBox:(:"  + l_aBox + ":)" );
         }
     }
     
