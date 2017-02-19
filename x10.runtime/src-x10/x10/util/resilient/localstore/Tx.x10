@@ -26,7 +26,7 @@ import x10.compiler.Immediate;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Future;
 
-import x10.util.Timer;
+
 public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
@@ -35,6 +35,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     public transient val startTime:Long = Timer.milliTime();
     public transient var commitTime:Long = -1;
     public transient var abortTime:Long = -1;
+    public transient var preCommitTime:Long = -1;
     
     private transient val excs:GrowableRail[CheckedThrowable]; 
     
@@ -87,6 +88,11 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         for (p in members)
             membersStr += p +" ";
         if (TM_DEBUG) Console.OUT.println("TX["+id+"] here["+here+"] started members["+membersStr+"]");
+    }
+    
+    /********** Setting the pre-commit time for statistical analysis **********/
+    public def setPreCommitTime(t:Long) {
+    	preCommitTime = t;
     }
     
     /***************** Get ********************/

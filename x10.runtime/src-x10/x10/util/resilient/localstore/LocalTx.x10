@@ -33,45 +33,30 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     public transient val startTime:Long = Timer.milliTime();
     public transient var commitTime:Long = -1;
     public transient var abortTime:Long = -1;   
+    public transient var preCommitTime:Long = -1;
+    
+    public def setPreCommitTime(t:Long) {
+    	preCommitTime = t;
+    }
     
     /***************** Get ********************/
     public def get(key:String):Cloneable {
-    	try {
-    		return plh().masterStore.get(mapName, id, key);
-    	}catch(e:Exception) {
-    		abortTime = Timer.milliTime();
-    		throw e;
-    	}
+   		return plh().masterStore.get(mapName, id, key);
     }
 
     /***************** PUT ********************/
     public def put(key:String, value:Cloneable):Cloneable {
-    	try {
-    		return plh().masterStore.put(mapName, id, key, value);
-    	}catch(e:Exception) {
-    		abortTime = Timer.milliTime();
-    		throw e;
-    	}
+   		return plh().masterStore.put(mapName, id, key, value);
     }
     
     /***************** Delete ********************/
     public def delete(key:String):Cloneable {
-    	try {
-    		return plh().masterStore.delete(mapName, id, key);
-    	}catch(e:Exception) {
-    		abortTime = Timer.milliTime();
-    		throw e;
-    	}
+   		return plh().masterStore.delete(mapName, id, key);
     }
     
     /***************** KeySet ********************/
     public def keySet():Set[String] {
-    	try {
-    		return plh().masterStore.keySet(mapName, id);
-    	} catch(e:Exception) {
-    		abortTime = Timer.milliTime();
-    		throw e;
-    	}
+   		return plh().masterStore.keySet(mapName, id);
     }
     
     /***********************   Abort ************************/  

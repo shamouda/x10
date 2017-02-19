@@ -39,6 +39,8 @@ public class TxStatistics {
     }
     
     public static def boxPlot(values:ArrayList[Double]) {
+    	if (values == null || values.size() == 0)
+    		return new BoxPlot(0, 0, 0, 0, 0);
         val v = values.toRail();
         RailUtils.sort(v);
         val size = values.size();
