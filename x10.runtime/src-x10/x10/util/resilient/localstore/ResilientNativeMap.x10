@@ -201,6 +201,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     }
     
     public def printTxStatistics() {
+        Console.OUT.println("Calculating execution statistics ...");
         val pl_stat = new ArrayList[TxPlaceStatistics]();
         for (p in store.activePlaces) {
             val pstat = at (p) {
