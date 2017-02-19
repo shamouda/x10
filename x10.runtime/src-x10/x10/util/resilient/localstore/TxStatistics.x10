@@ -41,24 +41,37 @@ public class TxStatistics {
     public static def boxPlot(values:ArrayList[Double]) {
     	if (values == null || values.size() == 0)
     		return new BoxPlot(0, 0, 0, 0, 0);
-        val v = values.toRail();
+    	val v = values.toRail();
         RailUtils.sort(v);
-        val size = values.size();
-        val min = v(0);
-        val max = v(size -1);
-        
-        val medianPair = medianRange (v , 0, size-1 );
-        val q1Pair = medianRange (v , 0, medianPair.first-1 );
-        val q3Pair = medianRange (v , medianPair.second+1, size-1 );
-        
-        val median = ( v(medianPair.first) + v(medianPair.second) ) / 2.0;
-        val q1 = ( v(q1Pair.first) + v(q1Pair.second) ) / 2.0;
-        val q3 = ( v(q3Pair.first) + v(q3Pair.second) ) / 2.0;
-        
-        return new BoxPlot(min, q1, median, q3, max);
+    	if (v.size == 1) {
+    		return new BoxPlot(v(0), v(0), v(0), v(0), v(0));
+    	}
+    	else if (v.size == 2) {
+    		return new BoxPlot(v(0), v(0), v(0), v(1), v(1));
+    	}
+    	else if (v.size == 3) {
+    		return new BoxPlot(v(0), v(0), v(1), v(2), v(2));
+    	}
+    	else {
+	        val size = values.size();
+	        val min = v(0);
+	        val max = v(size -1);
+	        
+	        val medianPair = medianRange (v , 0, size-1 );
+	        val q1Pair = medianRange (v , 0, medianPair.first-1 );
+	        val q3Pair = medianRange (v , medianPair.second+1, size-1 );
+	        
+	        val median = ( v(medianPair.first) + v(medianPair.second) ) / 2.0;
+	        val q1 = ( v(q1Pair.first) + v(q1Pair.second) ) / 2.0;
+	        val q3 = ( v(q3Pair.first) + v(q3Pair.second) ) / 2.0;
+	        
+	        return new BoxPlot(min, q1, median, q3, max);
+    	}
     }
     
-    public static def medianRange(rail:Rail[Double], start:Long, end:Long) {
+    public static def medianRange(rail:Rail[Double], s:Long, e:Long) {
+    	val start = (s < 0)? 0 : s;
+        val end = (e >= rail.size)? (rail.size-1) : e;
         val size = end - start;
         var medianLoc:Long = 0;
         if (size % 2 == 0) {
