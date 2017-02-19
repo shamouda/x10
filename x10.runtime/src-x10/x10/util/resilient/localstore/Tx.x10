@@ -296,8 +296,10 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         if (resilient && !DISABLE_DESC)
             deleteTxDesc();
         
-        if (abortTime == -1)
+        if (abortTime == -1) {
             abortTime = Timer.milliTime();
+            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] abortTime ["+(abortTime-startTime)+"] ms");
+        }
     }
 
     
@@ -328,15 +330,16 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             Console.OUT.println("Tx["+id+"] skip phase one");
         }
         
-        val startWhen = Timer.milliTime();
+        val startP2 = Timer.milliTime();
         commitPhaseTwo(plh, id, mapName, members, root);
-        val endWhen = Timer.milliTime();
-        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseTwo time [" + ((endWhen-startWhen)) + "] ms");
+        val endP2 = Timer.milliTime();
+        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseTwo time [" + (endP2-startP2) + "] ms");
         
         if (resilient && !DISABLE_DESC)
             deleteTxDesc();
             
         commitTime = Timer.milliTime();
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] commitTime [" + (commitTime-startTime) + "] ms");
         
         if (excs.size() > 0) {
             for (e in excs.toRail()) {
