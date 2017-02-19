@@ -102,21 +102,16 @@ public class IntSet2Sync {
 	                if (TM_DEBUG) Console.OUT.println(here + " OP["+i+"] Start{{ keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");
 	                map.executeTransaction(members, (tx:Tx) => {
 	                    tx.syncAt(p1, () => {
-	                    	var result:Any = null;
 	                    	if (read)
-	                    		result = tx.get(key1);
+	                    		tx.get(key1);
 	                    	else
-	                    		result = tx.put(key1, new CloneableLong(val1));
-	                    	
-	                    	return result;
+	                    		tx.put(key1, new CloneableLong(val1));
 	                    });
 	                    tx.syncAt(p2, () => {
-	                    	var result:Any = null;
 	                    	if (read)
-	                    		result = tx.get(key2);
+	                    		tx.get(key2);
 	                    	else
-	                    		result = tx.put(key2, new CloneableLong(-1 * val1));
-	                    	return result;
+	                    		tx.put(key2, new CloneableLong(-1 * val1));
 	                    });
 	                });
 	                if (TM_DEBUG) Console.OUT.println(here + " OP["+i+"] End}} keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");                
