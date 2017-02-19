@@ -39,7 +39,8 @@ public class TxLockCREW extends TxLock {
             if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockRead done"); 
         }
         else {
-        	assert(lockedWriter != -1);
+        	if (lockedWriter == -1)
+        		throw new Exception("Fatal semaphore exception, lockRead failed although no writers exist");
             if (resilient)
                 checkDeadLockers();
             if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockRead CONFLICT, lockedWriter["+lockedWriter+"] ");
@@ -65,7 +66,8 @@ public class TxLockCREW extends TxLock {
             if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite done");
         }
         else {
-        	assert(readers.size() > 0 || lockedWriter != -1);
+        	if (readers.size() == 0 && lockedWriter == -1)
+        		throw new Exception("Fatal semaphore exception, lockWrite failed although no writers or readers exist");
             if (resilient)
                 checkDeadLockers();
             if (TM_DEBUG) {

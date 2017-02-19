@@ -22,8 +22,10 @@ import x10.io.Unserializable;
     private val wrt = new Semaphore(1n);
     private val mutex = new Lock();
     private var readCount:Int = 0n;
-
+    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
+    
     public def tryAcquireRead() {
+    	if (TM_DEBUG) Console.OUT.println("ReadWriteSemaphore.tryAcquireRead() started");
     	mutex.lock();
         readCount ++;
         var acquired:Boolean = true;
@@ -32,22 +34,30 @@ import x10.io.Unserializable;
         if (!acquired)
             readCount --;    
         mutex.unlock();
+        if (TM_DEBUG) Console.OUT.println("ReadWriteSemaphore.tryAcquireRead() ended, acquired=" + acquired);
         return acquired;
     }
     
     public def tryAcquireWrite() {
-        return wrt.tryAcquire();
+    	if (TM_DEBUG) Console.OUT.println("ReadWriteSemaphore.tryAcquireWrite() started");
+        val acquired = wrt.tryAcquire();
+        if (TM_DEBUG) Console.OUT.println("ReadWriteSemaphore.tryAcquireWrite() ended, acquired=" + acquired);
+        return acquired;
     }
     
     public def releaseRead() {
+    	if (TM_DEBUG) Console.OUT.println("ReadWriteSemaphore.releaseRead() started");
         mutex.lock();
         readCount --;
         if (readCount == 0n) 
             wrt.release();
         mutex.unlock();
+        if (TM_DEBUG) Console.OUT.println("ReadWriteSemaphore.releaseRead() ended");
     }
     
     public def releaseWrite() {
+    	if (TM_DEBUG) Console.OUT.println("ReadWriteSemaphore.releaseWrite() started");
         wrt.release();
+        if (TM_DEBUG) Console.OUT.println("ReadWriteSemaphore.releaseWrite() ended");
     }
 }
