@@ -303,7 +303,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         
         if (abortTime == -1) {
             abortTime = Timer.milliTime();
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] abortTime ["+(abortTime-startTime)+"] ms");
+            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] aborted, allTxTime ["+(abortTime-startTime)+"] ms");
         }
     }
 
@@ -344,7 +344,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             deleteTxDesc();
             
         commitTime = Timer.milliTime();
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] commitTime [" + (commitTime-startTime) + "] ms");
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] committed, allTxTime [" + (commitTime-startTime) + "] ms");
         
         if (excs.size() > 0) {
             for (e in excs.toRail()) {
