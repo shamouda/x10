@@ -112,20 +112,19 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                 finish closure(tx);
                 tx.setPreCommitTime(Timer.milliTime()-start);
                 
-                if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} succeeded ");
+                if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} succeeded  preCommitTime["+tx.preCommitTime+"] ms");
                 commitCalled = true;
                 return tx.commit();
-            } catch(ex:Exception) {
-                if (TM_DEBUG) {
-                    Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] ");
-                    ex.printStackTrace();
-                }
-                
+            } catch(ex:Exception) {                
                 if (!commitCalled) {
                 	tx.setPreCommitTime(Timer.milliTime()-start);
                     tx.abort(excpt); // tx.commit() aborts automatically if needed
                 }
                 
+                if (TM_DEBUG) {
+                    Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] preCommitTime["+tx.preCommitTime+"] ms");
+                    ex.printStackTrace();
+                }
                 throwIfNotConflictException(ex);
             }
         }while(true);
@@ -378,7 +377,7 @@ class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_preCommitList
                                  ":abortCount:" + g_abortList.size()  + ":abortMeanMS:"     + g_abortMean     + ":abortSTDEV:"     + g_abortSTDEV     + ":abortBox:(:"  + g_abortBox  + ":)" + ":preAbortMeanMS:"  + g_preAbortMean  + ":preAbortSTDEV:"  + g_preAbortSTDEV  + ":preAbortBox:(:"  + g_preAbortBox + ":)\n";
         
         if (l_commitList.size() > 0)
-            str += p + ":GLOBAL_TX:commitCount:"+ l_commitList.size() + ":commitMeanMS:"    + l_commitMean    + ":commitSTDEV:"    + l_commitSTDEV    + ":commitBox:(:" + l_commitBox + ":)" + ":preCommitMeanMS:" + l_preCommitMean + ":preCommitSTDEV:" + l_preCommitSTDEV + ":preCommitBox:(:" + l_preCommitBox + ":)" + 
+            str += p + ":LOCAL_TX:commitCount:"+ l_commitList.size() + ":commitMeanMS:"    + l_commitMean    + ":commitSTDEV:"    + l_commitSTDEV    + ":commitBox:(:" + l_commitBox + ":)" + ":preCommitMeanMS:" + l_preCommitMean + ":preCommitSTDEV:" + l_preCommitSTDEV + ":preCommitBox:(:" + l_preCommitBox + ":)" + 
   							     ":abortCount:" + l_abortList.size()  + ":abortMeanMS:"     + l_abortMean     + ":abortSTDEV:"     + l_abortSTDEV     + ":abortBox:(:" + l_abortBox + ":)"   + ":preAbortMeanMS:"  + l_preAbortMean  + ":preAbortSTDEV:"  + l_preAbortSTDEV  + ":preAbortBox:(:"  + l_preAbortBox + ":)" ;
 
         
