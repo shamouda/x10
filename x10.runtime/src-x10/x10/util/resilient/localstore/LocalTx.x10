@@ -41,22 +41,42 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     
     /***************** Get ********************/
     public def get(key:String):Cloneable {
-   		return plh().masterStore.get(mapName, id, key);
+    	try {
+    		return plh().masterStore.get(mapName, id, key);
+    	}catch(ex:Exception){
+    		abortTime = Timer.milliTime();
+    		throw ex;
+    	}
     }
 
     /***************** PUT ********************/
     public def put(key:String, value:Cloneable):Cloneable {
-   		return plh().masterStore.put(mapName, id, key, value);
+    	try {
+    		return plh().masterStore.put(mapName, id, key, value);
+    	}catch(ex:Exception){
+    		abortTime = Timer.milliTime();
+    		throw ex;
+    	}
     }
     
     /***************** Delete ********************/
     public def delete(key:String):Cloneable {
-   		return plh().masterStore.delete(mapName, id, key);
+    	try {
+    		return plh().masterStore.delete(mapName, id, key);
+    	}catch(ex:Exception){
+    		abortTime = Timer.milliTime();
+    		throw ex;
+    	}
     }
     
     /***************** KeySet ********************/
     public def keySet():Set[String] {
-   		return plh().masterStore.keySet(mapName, id);
+    	try {
+    		return plh().masterStore.keySet(mapName, id);
+    	}catch(ex:Exception){
+    		abortTime = Timer.milliTime();
+    		throw ex;
+    	}
     }
     
     /***********************   Abort ************************/  

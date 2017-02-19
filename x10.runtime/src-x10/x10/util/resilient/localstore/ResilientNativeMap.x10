@@ -148,7 +148,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                     } catch(ex:Exception) {
                     	if (!commitCalled) {
                         	tx.setPreCommitTime(Timer.milliTime()-start);
-                            tx.abort(); // tx.commit() aborts automatically if needed
+                            //no need to call abort, abort occurs automatically in local tx all the time
                         }
                         throwIfNotConflictException(ex);
                     }
