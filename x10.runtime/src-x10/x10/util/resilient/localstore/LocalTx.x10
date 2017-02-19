@@ -25,11 +25,6 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
-    /*We can skip the validation phase in RL_EA configurations*/
-    private static val VALIDATION_REQUIRED = ! ( !TxManager.TM_DISABLED && 
-    										      TxManager.TM_READ    == TxManager.READ_LOCKING && 
-    										      TxManager.TM_ACQUIRE == TxManager.EARLY_ACQUIRE );
-    
     public transient val startTime:Long = Timer.milliTime();
     public transient var commitTime:Long = -1;
     public transient var abortTime:Long = -1;   
@@ -43,9 +38,9 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     public def get(key:String):Cloneable {
     	try {
     		return plh().masterStore.get(mapName, id, key);
-    	}catch(ex:Exception){
+    	}catch(e:Exception) {
     		abortTime = Timer.milliTime();
-    		throw ex;
+    		throw e;
     	}
     }
 
@@ -53,9 +48,9 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     public def put(key:String, value:Cloneable):Cloneable {
     	try {
     		return plh().masterStore.put(mapName, id, key, value);
-    	}catch(ex:Exception){
+    	}catch(e:Exception) {
     		abortTime = Timer.milliTime();
-    		throw ex;
+    		throw e;
     	}
     }
     
@@ -63,9 +58,9 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     public def delete(key:String):Cloneable {
     	try {
     		return plh().masterStore.delete(mapName, id, key);
-    	}catch(ex:Exception){
+    	}catch(e:Exception) {
     		abortTime = Timer.milliTime();
-    		throw ex;
+    		throw e;
     	}
     }
     
@@ -73,9 +68,9 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     public def keySet():Set[String] {
     	try {
     		return plh().masterStore.keySet(mapName, id);
-    	}catch(ex:Exception){
+    	} catch(e:Exception) {
     		abortTime = Timer.milliTime();
-    		throw ex;
+    		throw e;
     	}
     }
     
@@ -93,10 +88,9 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
         val mapName = this.mapName;
         val plh = this.plh;
         try {
-        	if (VALIDATION_REQUIRED)
-        		plh().masterStore.validate(mapName, id);
-        	
+        	plh().masterStore.validate(mapName, id);
             val log = plh().masterStore.getTxCommitLog(mapName, id);
+            
             try {
                 if (resilient && log != null && log.size() > 0) {
                     finish at (plh().slave) async {

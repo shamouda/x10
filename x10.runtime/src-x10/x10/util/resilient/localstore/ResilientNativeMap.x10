@@ -105,20 +105,17 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     public def executeTransaction(members:PlaceGroup, closure:(Tx)=>void):Int {
         do {
             val tx = startGlobalTransaction(members);
-            var excpt:Exception = null;
             var commitCalled:Boolean = false;
             val start = Timer.milliTime();
             try {
-                finish closure(tx);
+                closure(tx);
                 tx.setPreCommitTime(Timer.milliTime()-start);
-                
                 if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} succeeded  preCommitTime["+tx.preCommitTime+"] ms");
                 commitCalled = true;
                 return tx.commit();
             } catch(ex:Exception) {                
                 if (!commitCalled) {
                 	tx.setPreCommitTime(Timer.milliTime()-start);
-                    tx.abort(excpt); // tx.commit() aborts automatically if needed
                 }
                 
                 if (TM_DEBUG) {
@@ -263,7 +260,9 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         var l_aPlaces:Long = 0;
         
         for (pstat in pl_stat) {
-            Console.OUT.println(pstat);
+            val str = pstat.toString();
+            if (!str.equals(""))
+                Console.OUT.println(str);
             g_allCommitList.addAll(pstat.g_commitList);
             g_allPreCommitList.addAll(pstat.g_preCommitList);
             if (pstat.g_commitList.size() > 0)

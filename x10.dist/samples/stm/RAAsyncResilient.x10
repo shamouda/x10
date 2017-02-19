@@ -142,7 +142,6 @@ public class RAAsyncResilient {
                         });
                         if (!DISABLE_CKPT)
                             tx.put("p"+placeIndex, new CloneableLong(i));   
-                        f.force();
                     });
                     if (success == Tx.SUCCESS_RECOVER_STORE) {
                         throw new RecoverDataStoreException("RecoverDataStoreException", here);

@@ -36,6 +36,9 @@ public abstract class TxManager(data:MapData) {
     protected val abortedTxs = new ArrayList[Long](); //aborted NULL transactions 
     protected val validatedTxLogs = new HashMap[Long,TxLog]();
     
+    protected val futures = new HashMap[Long,ArrayList[Future[Any]]]();
+    protected val futuresLock = new Lock();
+    
     protected val stat = new TxManagerStatistics();
     
     public static def make(name:String) = make(new MapData(name));
@@ -106,6 +109,34 @@ public abstract class TxManager(data:MapData) {
         }
         return log;
     }
+    
+    public def addFuture(id:Long, future:Future[Any]) {
+        try {
+            futuresLock.lock();
+            var list:ArrayList[Future[Any]] = futures.getOrElse(id, null);
+            if (list == null) {
+                list = new ArrayList[Future[Any]]();
+                futures.put(id, list);
+            }
+            list.add(future);
+        }
+        finally{
+            futuresLock.unlock();
+        }
+    }
+    
+    public def waitForFutures(id:Long) {
+        var list:ArrayList[Future[Any]] = null;
+        futuresLock.lock();
+        list = futures.getOrElse(id, null);
+        futuresLock.unlock();
+        
+        if (list != null) {
+            for (future in list) {                
+                future.force();
+            }
+        }
+    }
    
     public static def checkDeadCoordinator(txId:Long) {
         //FIXME: this does not hold when a spare place replaces a dead place
@@ -129,8 +160,10 @@ public abstract class TxManager(data:MapData) {
         logsLock.lock();
         val log = txLogs.getOrElse(id, null);
         logsLock.unlock();
-        if (log == null)
+        if (log == null) {
+            waitForFutures(id);
             return;
+        }
         validate(log);
     }
     
@@ -495,10 +528,26 @@ public abstract class TxManager(data:MapData) {
     
     /********************* End of get operations  *********************/
     
+    protected def validate_RL_EA(log:TxLog) {
+        val id = log.id;
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] validate_RL_EA started");
+        try {
+            waitForFutures(id);
+            
+            //validaiton always true
+            //early acuire for write + read locking -> all impacted memory is locked
+        } catch(ex:Exception) {
+            abortAndThrowException(log, ex);
+        } finally{
+            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] validate_RL_EA completed");
+        }
+    }
+    
     protected def validate_RL_LA_WB(log:TxLog) {
         val id = log.id;
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] validate_RL_LA_WB started");
         try {
+            waitForFutures(id);
             
             val logMap = log.transLog;
             val iter = logMap.keySet().iterator();
@@ -524,6 +573,8 @@ public abstract class TxManager(data:MapData) {
         val id = log.id;
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] validate_RV_LA_WB started");
         try {
+            waitForFutures(id);
+            
             val logMap = log.transLog;
             val iter = logMap.keySet().iterator();
             while (iter.hasNext()) {
@@ -563,6 +614,7 @@ public abstract class TxManager(data:MapData) {
         val id = log.id;
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] validate_RV_EA_UL started");
         try {
+            waitForFutures(id);
             
             val logMap = log.transLog;
             val iter = logMap.keySet().iterator();

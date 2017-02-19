@@ -93,8 +93,6 @@ public class BankAsync {
                         acc2.account += amount;
                         tx.put(randAcc2, acc2);
                     });
-                    f1.force();
-                    f2.force();
                 });
             }
         }

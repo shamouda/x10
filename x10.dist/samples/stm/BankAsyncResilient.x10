@@ -140,8 +140,6 @@ public class BankAsyncResilient {
                     });
                     if (!DISABLE_CKPT)
                         tx.put("p"+placeIndex, new CloneableLong(i));
-                    f1.force();
-                    f2.force();
                 } );
                 
                 if (success == Tx.SUCCESS_RECOVER_STORE)

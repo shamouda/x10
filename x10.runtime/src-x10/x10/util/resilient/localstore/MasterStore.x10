@@ -21,12 +21,14 @@ import x10.compiler.Ifdef;
 import x10.xrx.Runtime;
 import x10.util.resilient.localstore.tx.*;
 import x10.util.resilient.localstore.Cloneable;
+import x10.util.concurrent.Future;
 
 public class MasterStore {
     /*Each map has an object of TxManager (same object even after failures)*/
     private val maps:HashMap[String,TxManager];
     private val lock:Lock;
     private val sequence:AtomicLong;
+    private val futureSequence:AtomicLong;
 
     public static val TX_FACTOR=1000000;
     
@@ -35,6 +37,7 @@ public class MasterStore {
         this.maps = new HashMap[String,TxManager]();
         this.lock = new Lock(); 
         this.sequence = new AtomicLong();
+        this.futureSequence = new AtomicLong();
     }
     
     //used when a spare place is replacing a dead one
@@ -42,6 +45,7 @@ public class MasterStore {
         this.maps = new HashMap[String,TxManager]();
         this.lock = new Lock(); 
         this.sequence = new AtomicLong();
+        this.futureSequence = new AtomicLong();
         
         if (masterMaps != null) {
             val iter = masterMaps.keySet().iterator();
@@ -51,7 +55,11 @@ public class MasterStore {
                 this.maps.put(mapName, TxManager.make(mapData));
             }
         }
-    }   
+    }
+    
+    public def addFuture(mapName:String, id:Long, future:Future[Any]) {
+        getTxManager(mapName).addFuture(id, future);
+    }
     
     private def getTxManager(mapName:String) {
         try {
@@ -112,6 +120,10 @@ public class MasterStore {
         return getTxManager(mapName).getState();
     }
     
+    public def waitForFutures(mapName:String, id:Long) {
+        getTxManager(mapName).waitForFutures(id);
+    }
+    
     public def getState():SlaveMasterState {
         var state:SlaveMasterState = null;
         try {
@@ -133,6 +145,10 @@ public class MasterStore {
     
     public def getNextTransactionId() {
         return ( (here.id + 1) * TX_FACTOR) + sequence.incrementAndGet();
+    }
+    
+    public def getNextFutureId() {
+        return futureSequence.incrementAndGet();
     }
     
     /*Lock based method*/

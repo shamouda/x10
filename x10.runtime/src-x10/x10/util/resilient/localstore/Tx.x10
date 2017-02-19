@@ -26,7 +26,6 @@ import x10.compiler.Immediate;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Future;
 
-
 public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
@@ -48,11 +47,6 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     private static val DISABLE_SLAVE = System.getenv("DISABLE_SLAVE") != null && System.getenv("DISABLE_SLAVE").equals("1");
     private static val DISABLE_DESC = System.getenv("DISABLE_DESC") != null && System.getenv("DISABLE_DESC").equals("1");
-    
-    /*In 2PC, we can skip the validation phase in RL_EA configurations*/
-    private static val VALIDATION_REQUIRED = ! ( !TxManager.TM_DISABLED && 
-    										      TxManager.TM_READ    == TxManager.READ_LOCKING && 
-    										      TxManager.TM_ACQUIRE == TxManager.EARLY_ACQUIRE );
     
     public static val SUCCESS = 0n;
     public static val SUCCESS_RECOVER_STORE = 1n;
@@ -243,14 +237,19 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                         return result;
                     }
                 );
+                plh().masterStore.addFuture(mapName, id, future);                
                 return new TxOpResult(future);
             }
         }catch (ex:Exception) {
-            if(TM_DEBUG) {
-            	Console.OUT.println("Tx["+id+"]  Failed Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] key["+key+"] value["+value+"] ...");
-            	ex.printStackTrace();
-            }
-            throw ex;  // someone must call Tx.abort
+            if(TM_DEBUG) Console.OUT.println("Tx["+id+"]  Failed Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] key["+key+"] value["+value+"] ...");
+            try {
+                val startIntAbort = Timer.milliTime();
+                internalAbort(ex, root);
+                val endIntAbort = Timer.milliTime();
+                if(TM_DEBUG) Console.OUT.println("Tx["+id+"] internal abort Op["+opDesc(op)+"] time ["+(endIntAbort - startIntAbort)+"] ms");
+            }catch(abortEx:Exception) {}
+            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here[" + here + "] after internal Abort throwing exception ["+ex.getMessage()+"] ...");
+            throw ex;
         } finally {
             val endExec = Timer.milliTime();
             if(TM_DEBUG) Console.OUT.println("Tx["+id+"] execute Op["+opDesc(op)+"] time: [" + ((endExec-startExec)) + "] ms");
@@ -258,13 +257,19 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         
     }
     /*********************** Abort ************************/  
-    @Pinned public def abort() {
-        abort(new ArrayList[Place]());
+    
+    private def internalAbort(ex:Exception, root:GlobalRef[Tx]) {
+        val abortedPlaces = new ArrayList[Place]();
+        if (ex instanceof ConflictException) {
+            abortedPlaces.add( (ex as ConflictException).place);
+        }
+        finish at (root) async {
+            root().abort(abortedPlaces);
+        }
     }
     
-    @Pinned public def abort(ex:Exception) {
-   		val list = getDeadAndConflictingPlaces(ex);
-        abort(list);
+    @Pinned public def abort() {
+        abort(new ArrayList[Place]());
     }
     
     @Pinned private def abort(abortedPlaces:ArrayList[Place]) {
@@ -390,30 +395,27 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     
     private def commitPhaseOne(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, root:GlobalRef[Tx]) {
         if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne ...");
+        
+        plh().masterStore.waitForFutures(mapName, id);
+        
         finish for (p in members) {
-        	if ((resilient && !DISABLE_SLAVE) || VALIDATION_REQUIRED) {
-	            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne going to move to ["+p+"] ...");
-	            at (p) async {
-	        
-	            	if (VALIDATION_REQUIRED) {
-	            		if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate started ...");
-	            		plh().masterStore.validate(mapName, id);
-	            		if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate done ...");
-	            	}
+	        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne going to move to ["+p+"] ...");
+	        at (p) async {
+                //check for local conflicts and remove readonly keys
+	            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate started ...");
+	            plh().masterStore.validate(mapName, id);
+	            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate done ...");
             		
-	                if (resilient && !DISABLE_SLAVE) {
-	                    val log = plh().masterStore.getTxCommitLog(mapName, id);
-	                    if (log != null && log.size() > 0) {	                        
-                            //send txLog to slave (very important to be able to tolerate failures of masters just after prepare)
-                            at (plh().slave) async {
-                                plh().slaveStore.prepare(id, mapName, log );
-                            }
-	                    }
+	            if (resilient && !DISABLE_SLAVE) {
+	                val log = plh().masterStore.getTxCommitLog(mapName, id);
+	                if (log != null && log.size() > 0) {	                        
+                        //send txLog to slave (very important to be able to tolerate failures of masters just after prepare)
+                        at (plh().slave) async {
+                            plh().slaveStore.prepare(id, mapName, log );
+                        }
 	                }
 	            }
-        	}
-        	else
-        		if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate NOT required ...");
+	        }
         }
     }
     

@@ -29,7 +29,7 @@ public class TxManager_RL_EA_WB extends TxManager {
     }
     
     public def validate(log:TxLog) {
-    	throw new Exception("validate() is not needed for TxManager_RL_EA_WB");
+        validate_RL_EA(log);
     }
     
     public def commit(log:TxLog) {

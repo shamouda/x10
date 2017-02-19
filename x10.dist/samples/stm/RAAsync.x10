@@ -95,7 +95,6 @@ public class RAAsync {
                             acc.account += amount;
                             tx.put(randAcc, acc);
                         });
-                        f1.force();
                     });
                 }
             }
