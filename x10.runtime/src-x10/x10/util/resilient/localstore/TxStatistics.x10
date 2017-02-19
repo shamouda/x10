@@ -28,7 +28,7 @@ public class TxStatistics {
     }
     
     public static def stdev(values:ArrayList[Double], mean:Double) {
-        if (values.size() == 0)
+        if (values.size() <= 1)
             return 0.0;
         
         var sum:Double = 0;

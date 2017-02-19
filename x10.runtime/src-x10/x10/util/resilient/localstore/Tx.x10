@@ -243,7 +243,6 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                         return result;
                     }
                 );
-                plh().masterStore.addFuture(mapName, id, future);                
                 return new TxOpResult(future);
             }
         }catch (ex:Exception) {

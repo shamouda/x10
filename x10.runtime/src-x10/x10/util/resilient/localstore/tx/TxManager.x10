@@ -36,9 +36,6 @@ public abstract class TxManager(data:MapData) {
     protected val abortedTxs = new ArrayList[Long](); //aborted NULL transactions 
     protected val validatedTxLogs = new HashMap[Long,TxLog]();
     
-    protected val futures = new HashMap[Long,ArrayList[Future[Any]]]();
-    protected val futuresLock = new Lock();
-    
     protected val stat = new TxManagerStatistics();
     
     public static def make(name:String) = make(new MapData(name));
@@ -108,21 +105,6 @@ public abstract class TxManager(data:MapData) {
             logsLock.unlock();
         }
         return log;
-    }
-    
-    public def addFuture(id:Long, future:Future[Any]) {
-        try {
-            futuresLock.lock();
-            var list:ArrayList[Future[Any]] = futures.getOrElse(id, null);
-            if (list == null) {
-                list = new ArrayList[Future[Any]]();
-                futures.put(id, list);
-            }
-            list.add(future);
-        }
-        finally{
-            futuresLock.unlock();
-        }
     }
    
     public static def checkDeadCoordinator(txId:Long) {
