@@ -30,7 +30,7 @@ public class TxLockCREW extends TxLock {
     private val sem = new ReadWriteSemaphore();
     
     public def lockRead(txId:Long, key:String) {
-        val acquired = sem.tryAcquireRead();
+        val acquired = sem.tryAcquireRead(txId);
         if (acquired) {
             assert(lockedWriter == -1);
             readersLock.lock();
@@ -39,8 +39,6 @@ public class TxLockCREW extends TxLock {
             if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockRead done"); 
         }
         else {
-        	if (lockedWriter == -1)
-        		throw new Exception("Fatal semaphore exception, lockRead failed although no writers exist");
             if (resilient)
                 checkDeadLockers();
             if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockRead CONFLICT, lockedWriter["+lockedWriter+"] ");
@@ -50,7 +48,7 @@ public class TxLockCREW extends TxLock {
     
     public def unlockRead(txId:Long, key:String) {
         assert(readers.contains(txId) && lockedWriter == -1);
-        sem.releaseRead();
+        sem.releaseRead(txId);
         readersLock.lock();
         readers.remove(txId);
         readersLock.unlock();
@@ -59,15 +57,13 @@ public class TxLockCREW extends TxLock {
 
     
     public def lockWrite(txId:Long, key:String) {
-        val acquired = sem.tryAcquireWrite();
+        val acquired = sem.tryAcquireWrite(txId);
         if (acquired) {
             assert(readers.size() == 0 && (lockedWriter == -1 || lockedWriter == txId));
             lockedWriter = txId;
             if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite done");
         }
         else {
-        	if (readers.size() == 0 && lockedWriter == -1)
-        		throw new Exception("Fatal semaphore exception, lockWrite failed although no writers or readers exist");
             if (resilient)
                 checkDeadLockers();
             if (TM_DEBUG) {
@@ -83,7 +79,7 @@ public class TxLockCREW extends TxLock {
     public def unlockWrite(txId:Long, key:String) {
         assert(readers.size() == 0 && lockedWriter == txId);
         lockedWriter = -1;
-        sem.releaseWrite();
+        sem.releaseWrite(txId);
         if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] unlockWrite done");
     }
     
