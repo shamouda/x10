@@ -7,6 +7,7 @@ import x10.util.resilient.localstore.Tx;
 import x10.util.resilient.localstore.ResilientStore;
 import x10.util.Set;
 import x10.xrx.Runtime;
+import x10.util.Timer;
 
 public class RAAsync {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
@@ -95,7 +96,10 @@ public class RAAsync {
                             acc.account += amount;
                             tx.put(randAcc, acc);
                         });
-                        f1.force();
+                        val startWait = Timer.milliTime();
+	                    f1.force();	                    
+	                    tx.setWaitForFuturesElapsedTime(Timer.milliTime() - startWait);
+	                    if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitForFuturesElapsedTime +"] ms");
                     });
                 }
             }

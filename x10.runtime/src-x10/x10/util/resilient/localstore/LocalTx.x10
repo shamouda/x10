@@ -33,10 +33,10 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     public transient val startTime:Long = Timer.milliTime();
     public transient var commitTime:Long = -1;
     public transient var abortTime:Long = -1;   
-    public transient var preCommitTime:Long = -1;
+    public transient var preCommitElapsedTime:Long = -1;
     
-    public def setPreCommitTime(t:Long) {
-    	preCommitTime = t;
+    public def setPreCommitElapsedTime(t:Long) {
+    	preCommitElapsedTime = t;
     }
     
     /***************** Get ********************/

@@ -9,6 +9,7 @@ import x10.xrx.Runtime;
 import x10.util.resilient.iterative.SimplePlaceHammer;
 import x10.util.resilient.localstore.CloneableLong;
 import x10.util.resilient.localstore.tx.ConflictException;
+import x10.util.Timer;
 
 public class BankAsyncResilient {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
@@ -140,8 +141,11 @@ public class BankAsyncResilient {
                     });
                     if (!DISABLE_CKPT)
                         tx.put("p"+placeIndex, new CloneableLong(i));
+                    val startWait = Timer.milliTime();
                     f1.force();
                     f2.force();
+                    tx.setWaitForFuturesElapsedTime(Timer.milliTime() - startWait);
+                    if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitForFuturesElapsedTime +"] ms");
                 } );
                 
                 if (success == Tx.SUCCESS_RECOVER_STORE)

@@ -34,7 +34,10 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     public transient val startTime:Long = Timer.milliTime();
     public transient var commitTime:Long = -1;
     public transient var abortTime:Long = -1;
-    public transient var preCommitTime:Long = -1;
+    
+    // consumed time //
+    public transient var preCommitElapsedTime:Long = -1;
+    public transient var waitForFuturesElapsedTime:Long = -1;
     
     private transient val excs:GrowableRail[CheckedThrowable]; 
     
@@ -90,8 +93,12 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     }
     
     /********** Setting the pre-commit time for statistical analysis **********/
-    public def setPreCommitTime(t:Long) {
-    	preCommitTime = t;
+    public def setPreCommitElapsedTime(t:Long) {
+    	preCommitElapsedTime = t;
+    }
+    
+    public def setWaitForFuturesElapsedTime(t:Long) {
+    	waitForFuturesElapsedTime = t;
     }
     
     /***************** Get ********************/

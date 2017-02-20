@@ -110,19 +110,19 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
             val start = Timer.milliTime();
             try {
                 finish closure(tx);
-                tx.setPreCommitTime(Timer.milliTime()-start);
+                tx.setPreCommitElapsedTime(Timer.milliTime()-start);
                 
-                if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} succeeded  preCommitTime["+tx.preCommitTime+"] ms");
+                if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} succeeded  preCommitTime["+tx.preCommitElapsedTime+"] ms");
                 commitCalled = true;
                 return tx.commit();
             } catch(ex:Exception) {                
                 if (!commitCalled) {
-                	tx.setPreCommitTime(Timer.milliTime()-start);
+                	tx.setPreCommitElapsedTime(Timer.milliTime()-start);
                     tx.abort(excpt); // tx.commit() aborts automatically if needed
                 }
                 
                 if (TM_DEBUG) {
-                    Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] preCommitTime["+tx.preCommitTime+"] ms");
+                    Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] preCommitTime["+tx.preCommitElapsedTime+"] ms");
                     ex.printStackTrace();
                 }
                 throwIfNotConflictException(ex);
@@ -141,13 +141,13 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                 	val start = Timer.milliTime();
                     try {
                         closure(tx);
-                        tx.setPreCommitTime(Timer.milliTime()-start);
+                        tx.setPreCommitElapsedTime(Timer.milliTime()-start);
                         commitCalled = true;
                         result = tx.commit();
                         break;
                     } catch(ex:Exception) {
                     	if (!commitCalled) {
-                        	tx.setPreCommitTime(Timer.milliTime()-start);
+                        	tx.setPreCommitElapsedTime(Timer.milliTime()-start);
                             //no need to call abort, abort occurs automatically in local tx all the time
                         }
                         throwIfNotConflictException(ex);
@@ -211,6 +211,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                 //####         Global TX         ####//
                 val g_commitList = new ArrayList[Double]();
                 val g_preCommitList = new ArrayList[Double]();
+                val g_waitFutureList = new ArrayList[Double]();
                 
                 val g_abortList = new ArrayList[Double]();
                 val g_preAbortList = new ArrayList[Double]();
@@ -218,11 +219,12 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                 for (tx in list().globalTx) {
                     if (tx.commitTime != -1) {
                         g_commitList.add(tx.commitTime - tx.startTime);
-                        g_preCommitList.add(tx.preCommitTime);
+                        g_preCommitList.add(tx.preCommitElapsedTime);
+                        g_waitFutureList.add(tx.waitForFuturesElapsedTime);
                     }
                     else if (tx.abortTime != -1) {
                         g_abortList.add(tx.abortTime - tx.startTime);
-                        g_preAbortList.add(tx.preCommitTime);
+                        g_preAbortList.add(tx.preCommitElapsedTime);
                     }
                 }
                 //####         Local TX         ####//
@@ -235,15 +237,15 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                 for (tx in list().localTx) {
                     if (tx.commitTime != -1) {
                         l_commitList.add(tx.commitTime - tx.startTime);
-                        l_preCommitList.add(tx.preCommitTime);
+                        l_preCommitList.add(tx.preCommitElapsedTime);
                     }
                     else if (tx.abortTime != -1) {
                         l_abortList.add(tx.abortTime - tx.startTime);
-                        l_preAbortList.add(tx.preCommitTime);
+                        l_preAbortList.add(tx.preCommitElapsedTime);
                     }
                 }
                  
-                new TxPlaceStatistics(here, g_commitList, g_preCommitList, g_abortList, g_preAbortList, 
+                new TxPlaceStatistics(here, g_commitList, g_preCommitList, g_waitFutureList, g_abortList, g_preAbortList, 
                 		                    l_commitList, l_preCommitList, l_abortList, l_preAbortList)
             };
             pl_stat.add(pstat);
@@ -251,8 +253,11 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         
         val g_allCommitList = new ArrayList[Double]();
         val g_allPreCommitList = new ArrayList[Double]();
+        val g_allWaitFutureList = new ArrayList[Double]();
+        
         val g_allAbortList = new ArrayList[Double]();
         val g_allPreAbortList = new ArrayList[Double]();
+        
         var g_cPlaces:Long = 0;
         var g_aPlaces:Long = 0;
         
@@ -269,6 +274,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                 Console.OUT.println(str);
             g_allCommitList.addAll(pstat.g_commitList);
             g_allPreCommitList.addAll(pstat.g_preCommitList);
+            g_allWaitFutureList.addAll(pstat.g_waitFutureList);
             if (pstat.g_commitList.size() > 0)
                 g_cPlaces ++;
             
@@ -295,6 +301,9 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         val g_cPreMean  = TxStatistics.mean(g_allPreCommitList);
         val g_cPreSTDEV = TxStatistics.stdev(g_allPreCommitList, g_cPreMean);
         val g_cPreBox   = TxStatistics.boxPlot(g_allPreCommitList);
+        val g_cWaitFutureMean  = TxStatistics.mean(g_allWaitFutureList);
+        val g_cWaitFutureSTDEV = TxStatistics.stdev(g_allWaitFutureList, g_cWaitFutureMean);
+        val g_cWaitFutureBox   = TxStatistics.boxPlot(g_allWaitFutureList);
         
         val g_aCnt   = g_allAbortList.size();
         val g_aMean  = TxStatistics.mean(g_allAbortList);
@@ -322,7 +331,8 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         
         
         if (g_cCnt > 0) {
-            Console.OUT.println("Summary:GLOBAL_TX:committedTxs:"+ g_cCnt + ":committedPlaces:" + g_cPlaces + ":commitMeanMS:" + g_cMean + ":commitSTDEV:" + g_cSTDEV + ":commitBox:(:" + g_cBox + ":)" + ":preCommitMeanMS:" + g_cPreMean + ":preCommitSTDEV:" + g_cPreSTDEV + ":preCommitBox:(:" + g_cPreBox + ":)");
+            Console.OUT.println("Summary:GLOBAL_TX:committedTxs:"+ g_cCnt + ":committedPlaces:" + g_cPlaces + ":commitMeanMS:" + g_cMean + ":commitSTDEV:" + g_cSTDEV + ":commitBox:(:" + g_cBox + ":)" + ":preCommitMeanMS:" + g_cPreMean + ":preCommitSTDEV:" + g_cPreSTDEV + ":preCommitBox:(:" + g_cPreBox + ":)"
+            		+ ":waitFutureMeanMS:" + g_cWaitFutureMean + ":waitFutureSTDEV:" + g_cWaitFutureSTDEV + ":waitFutureBox:(:" + g_cWaitFutureBox + ":)");
             Console.OUT.println("Summary:GLOBAL_TX:abortedTxs:"  + g_aCnt + ":abortedPlaces:"   + g_aPlaces + ":abortMeanMS:"  + g_aMean + ":abortSTDEV:"  + g_aSTDEV + ":abortBox:(:"  + g_aBox + ":)" + ":preAbortMeanMS:"  + g_aPreMean + ":preAbortSTDEV:"  + g_aPreSTDEV + ":preAbortBox:(:"  + g_aPreBox + ":)" );
         }
         
@@ -342,7 +352,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     
 }
 
-class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_preCommitList:ArrayList[Double], g_abortList:ArrayList[Double], g_preAbortList:ArrayList[Double], 
+class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_preCommitList:ArrayList[Double], g_waitFutureList:ArrayList[Double], g_abortList:ArrayList[Double], g_preAbortList:ArrayList[Double], 
 		                         l_commitList:ArrayList[Double], l_preCommitList:ArrayList[Double], l_abortList:ArrayList[Double], l_preAbortList:ArrayList[Double]) {
     public def toString() {
         
@@ -352,6 +362,9 @@ class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_preCommitList
         val g_preCommitMean  = TxStatistics.mean(g_preCommitList);
         val g_preCommitSTDEV = TxStatistics.stdev(g_preCommitList, g_preCommitMean);
         val g_preCommitBox   = TxStatistics.boxPlot(g_preCommitList);
+        val g_waitFutureMean  = TxStatistics.mean(g_waitFutureList);
+        val g_waitFutureSTDEV = TxStatistics.stdev(g_waitFutureList, g_waitFutureMean);
+        val g_waitFutureBox   = TxStatistics.boxPlot(g_waitFutureList);
         
         val g_abortMean     = TxStatistics.mean(g_abortList);
         val g_abortSTDEV    = TxStatistics.stdev(g_abortList, g_abortMean);
@@ -375,13 +388,16 @@ class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_preCommitList
         val l_preAbortBox   = TxStatistics.boxPlot(l_preAbortList);
         
         var str:String = "";
-        if (g_commitList.size() > 0)
-            str += p + ":GLOBAL_TX:commitCount:"+ g_commitList.size() + ":commitMeanMS:"    + g_commitMean    + ":commitSTDEV:"    + g_commitSTDEV    + ":commitBox:(:" + g_commitBox + ":)" + ":preCommitMeanMS:" + g_preCommitMean + ":preCommitSTDEV:" + g_preCommitSTDEV + ":preCommitBox:(:" + g_preCommitBox + ":)" + 
-                                 ":abortCount:" + g_abortList.size()  + ":abortMeanMS:"     + g_abortMean     + ":abortSTDEV:"     + g_abortSTDEV     + ":abortBox:(:"  + g_abortBox  + ":)" + ":preAbortMeanMS:"  + g_preAbortMean  + ":preAbortSTDEV:"  + g_preAbortSTDEV  + ":preAbortBox:(:"  + g_preAbortBox + ":)\n";
+        if (g_commitList.size() > 0) {
+            str += p + ":GLOBAL_TX:commitCount:"+ g_commitList.size() + ":commitMeanMS:"    + g_commitMean    + ":commitSTDEV:"    + g_commitSTDEV    + ":commitBox:(:" + g_commitBox + ":)" + ":preCommitMeanMS:" + g_preCommitMean + ":preCommitSTDEV:" + g_preCommitSTDEV + ":preCommitBox:(:" + g_preCommitBox + ":)"
+            		                                                  + ":waitFutureMeanMS:" + g_waitFutureMean + ":waitFutureSTDEV:" + g_waitFutureSTDEV + ":waitFutureBox:(:" + g_waitFutureBox + ":)\n"; 
+            str += p + ":GLOBAL_TX:abortCount:" + g_abortList.size()  + ":abortMeanMS:"     + g_abortMean     + ":abortSTDEV:"     + g_abortSTDEV     + ":abortBox:(:"  + g_abortBox  + ":)" + ":preAbortMeanMS:"  + g_preAbortMean  + ":preAbortSTDEV:"  + g_preAbortSTDEV  + ":preAbortBox:(:"  + g_preAbortBox + ":)\n";
+        }
         
-        if (l_commitList.size() > 0)
-            str += p + ":LOCAL_TX:commitCount:"+ l_commitList.size() + ":commitMeanMS:"    + l_commitMean    + ":commitSTDEV:"    + l_commitSTDEV    + ":commitBox:(:" + l_commitBox + ":)" + ":preCommitMeanMS:" + l_preCommitMean + ":preCommitSTDEV:" + l_preCommitSTDEV + ":preCommitBox:(:" + l_preCommitBox + ":)" + 
-  							     ":abortCount:" + l_abortList.size()  + ":abortMeanMS:"     + l_abortMean     + ":abortSTDEV:"     + l_abortSTDEV     + ":abortBox:(:" + l_abortBox + ":)"   + ":preAbortMeanMS:"  + l_preAbortMean  + ":preAbortSTDEV:"  + l_preAbortSTDEV  + ":preAbortBox:(:"  + l_preAbortBox + ":)" ;
+        if (l_commitList.size() > 0) {
+            str += p + ":LOCAL_TX:commitCount:"+ l_commitList.size() + ":commitMeanMS:"    + l_commitMean    + ":commitSTDEV:"    + l_commitSTDEV    + ":commitBox:(:" + l_commitBox + ":)" + ":preCommitMeanMS:" + l_preCommitMean + ":preCommitSTDEV:" + l_preCommitSTDEV + ":preCommitBox:(:" + l_preCommitBox + ":)\n" ; 
+  			str += p + ":LOCAL_TX:abortCount:" + l_abortList.size()  + ":abortMeanMS:"     + l_abortMean     + ":abortSTDEV:"     + l_abortSTDEV     + ":abortBox:(:" + l_abortBox + ":)"   + ":preAbortMeanMS:"  + l_preAbortMean  + ":preAbortSTDEV:"  + l_preAbortSTDEV  + ":preAbortBox:(:"  + l_preAbortBox + ":)\n" ;            
+        }
 
         
         return str;

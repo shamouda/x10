@@ -7,6 +7,7 @@ import x10.util.concurrent.Future;
 import x10.util.resilient.localstore.ResilientStore;
 import x10.util.Set;
 import x10.xrx.Runtime;
+import x10.util.Timer;
 
 public class BankAsync {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
@@ -93,8 +94,11 @@ public class BankAsync {
                         acc2.account += amount;
                         tx.put(randAcc2, acc2);
                     });
+                    val startWait = Timer.milliTime();
                     f1.force();
                     f2.force();
+                    tx.setWaitForFuturesElapsedTime(Timer.milliTime() - startWait);
+                    if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitForFuturesElapsedTime +"] ms");
                 });
             }
         }
