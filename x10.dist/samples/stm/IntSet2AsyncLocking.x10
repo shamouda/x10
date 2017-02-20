@@ -106,21 +106,17 @@ public class IntSet2AsyncLocking {
                     	locker.lockWrite(p1, key1, p2, key2, txId); //sort and lock
 	                
                     val f1 = locker.asyncAt(p1, () => {
-	                   	var result:Any = null;
 	                   	if (read)
-	                   		result = locker.getLocked(key1);
+	                   		locker.getLocked(key1);
 	                   	else
-	                   		result = locker.putLocked(key1, new CloneableLong(val1));
-	                   	return result;
+	                   		locker.putLocked(key1, new CloneableLong(val1));
 	                });
                     
                     val f2 = locker.asyncAt(p2, () => {
-                    	var result:Any = null;
                     	if (read)
-                    		result = locker.getLocked(key2);
+                    		locker.getLocked(key2);
                     	else
-                    		result = locker.putLocked(key2, new CloneableLong(-1 * val1));
-                    	return result;
+                    		locker.putLocked(key2, new CloneableLong(-1 * val1));
 	                });
 	                
 	                f1.force();
