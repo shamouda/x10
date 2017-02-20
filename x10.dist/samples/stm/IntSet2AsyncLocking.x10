@@ -9,6 +9,7 @@ import x10.util.Set;
 import x10.xrx.Runtime;
 import x10.util.HashMap;
 import x10.util.resilient.localstore.CloneableLong;
+import x10.util.resilient.localstore.LockManager;
 
 public class IntSet2AsyncLocking {
 	private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
@@ -46,15 +47,15 @@ public class IntSet2AsyncLocking {
             requestsMap.put(p.id, x);
         }
         val map = store.makeMap("mapA");
-        
+        val locker = map.getLockManager();
         try {
             val startProc = System.nanoTime();
-            processTransactions(map, mgr.activePlaces(), accountsPerPlace, operationsPerPlace, debugProgress, requestsMap);
+            processTransactions(locker, mgr.activePlaces(), accountsPerPlace, operationsPerPlace, debugProgress, requestsMap);
             val endProc = System.nanoTime();
             
             map.printTxStatistics();
             
-            val sum2 = STMAppUtils.sumAccounts(map, mgr.activePlaces());
+            val sum2 = STMAppUtils.sumAccountsLocking(locker, mgr.activePlaces());
             
             val end = System.nanoTime();
             if (sum2 == 0) {
@@ -76,7 +77,7 @@ public class IntSet2AsyncLocking {
         }
     }
 
-	public static def processTransactions(map:ResilientNativeMap, activePG:PlaceGroup, accountsPerPlace:Long, 
+	public static def processTransactions(locker:LockManager, activePG:PlaceGroup, accountsPerPlace:Long, 
     		operationsPerPlace:Long, debugProgress:Long, requestsMap:HashMap[Long,PlaceRandomRequests]){
         val accountsMAX = accountsPerPlace * activePG.size();
         finish for (p in activePG) {
@@ -86,8 +87,10 @@ public class IntSet2AsyncLocking {
             	for (i in 1..operationsPerPlace) {
             		if (i%debugProgress == 0)
             			Console.OUT.println(here + " progress " + i);
-            	
-	            	val key1 = "acc"+requests.keys1(i-1);
+            		
+            		val txId = ( (here.id + 1) * 1000000) + i;  //for debuging only
+ 	            	
+            		val key1 = "acc"+requests.keys1(i-1);
 	                val p1 = STMAppUtils.getPlace(requests.keys1(i-1), activePG, accountsPerPlace);
 	                val val1 = requests.values1(i-1);
 	                
@@ -96,30 +99,39 @@ public class IntSet2AsyncLocking {
 	                val val2 = requests.values2(i-1);
 	                
 	                val read = requests.isRead(i-1);
+	                if (TM_DEBUG) Console.OUT.println(here + " OP["+i+"] Start{{ keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");
+                    if (read)
+                    	locker.lockRead(p1, key1, p2, key2, txId); //sort and lock
+                    else
+                    	locker.lockWrite(p1, key1, p2, key2, txId); //sort and lock
 	                
-	                val members = STMAppUtils.createGroup(p1, p2);
-	                map.executeTransaction(members, (tx:Tx) => {
-	                    if (TM_DEBUG) Console.OUT.println(here + " Tx["+tx.id+"] TXSTARTED keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");
-	                    val f1 = tx.asyncAt(p1, () => {
-	                    	var result:Any = null;
-	                    	if (read)
-	                    		result = tx.get(key1);
-	                    	else
-	                    		result = tx.put(key1, new CloneableLong(val1));
-	                    	
-	                    	return result;
-	                    });
-	                    val f2 = tx.asyncAt(p2, () => {
-	                    	var result:Any = null;
-	                    	if (read)
-	                    		result = tx.get(key2);
-	                    	else
-	                    		result = tx.put(key2, new CloneableLong(-1 * val1));
-	                    	return result;
-	                    });
-	                    f1.force();
-	                    f2.force();
+                    val f1 = locker.asyncAt(p1, () => {
+	                   	var result:Any = null;
+	                   	if (read)
+	                   		result = locker.getLocked(key1);
+	                   	else
+	                   		result = locker.putLocked(key1, new CloneableLong(val1));
+	                   	return result;
 	                });
+                    
+                    val f2 = locker.asyncAt(p2, () => {
+                    	var result:Any = null;
+                    	if (read)
+                    		result = locker.getLocked(key2);
+                    	else
+                    		result = locker.putLocked(key2, new CloneableLong(-1 * val1));
+                    	return result;
+	                });
+	                
+	                f1.force();
+	                f2.force();
+	                
+	                if (read)
+	                	locker.unlockRead(p1, key1, p2, key2, txId);
+                    else
+                    	locker.unlockWrite(p1, key1, p2, key2, txId);
+	                
+	                if (TM_DEBUG) Console.OUT.println(here + " OP["+i+"] End}} keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");                
 	            }
             }
         }

@@ -76,7 +76,7 @@ public class STMAppUtils {
 	                    val accId  = iter.next();
 	                    val obj = tx.get(accId);
 	                    if (obj != null  && obj instanceof BankAccount) {
-	                        localSum += (obj as BankAccount).account;
+	                    	localSum += (obj as BankAccount).account;
 	                    }
 	                }
 	                return localSum;
@@ -100,12 +100,10 @@ public class STMAppUtils {
                 val iter = set.iterator();
                 while (iter.hasNext()) {
                     val accId  = iter.next();
-                    val obj = locker.getLocked(accId) as BankAccount;
-                    var value:Long = 0;
-                    if (obj != null) {
-                        value = obj.account;
+                    val obj = locker.getLocked(accId);
+                    if (obj != null  && obj instanceof BankAccount) {
+                    	localSum += (obj as BankAccount).account;
                     }
-                    localSum += value;
                 }
                 return localSum;
             });
