@@ -23,28 +23,21 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
      * Get the value of key k in the resilient map.
      */
     public def get(k:String) {
-        val trans = startLocalTransaction();
-        val v = trans.get(k);
-        trans.commit();
-        return v;
+        return executeLocalTransaction((tx:LocalTx) => tx.get(k) );
     }
 
     /**
      * Associate value v with key k in the resilient map.
      */
     public def set(k:String, v:Cloneable) {
-        val trans = startLocalTransaction();
-        trans.put(k, v);
-        trans.commit();
+    	return executeLocalTransaction((tx:LocalTx) => tx.put(k,v) );
     }
 
     /**
      * Remove any value associated with key k from the resilient map.
      */
     public def delete(k:String) {
-        val trans = startLocalTransaction();
-        trans.delete(k);
-        trans.commit();
+    	return executeLocalTransaction((tx:LocalTx) => tx.delete(k) );
     }
 
     public def keySet():Set[String] {
@@ -67,15 +60,23 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     }
     
     public def set2(key:String, value:Cloneable, place:Place, key2:String, value2:Cloneable) {
-        assert(here.id != place.id);
-        val rail = new Rail[Place](2);
-        rail(0) = here; 
-        rail(1) = place;
-        val members = new SparsePlaceGroup(rail);
-        executeTransaction (members, (tx:Tx)=>{
-            tx.asyncAt(place, ()=> {tx.put(key2, value2);});
-            tx.put(key, value);
-        });
+    	if (here.id == place.id) {
+    		set2(key, value, key2, value2);
+    	}
+    	else {
+    		val rail = new Rail[Place](2);
+            rail(0) = here;
+            rail(1) = place;
+    		val members = new SparsePlaceGroup(rail);
+        	executeTransaction (members, (tx:Tx)=>{
+            	tx.asyncAt(place, ()=> {tx.put(key2, value2);});
+            	tx.put(key, value);
+        	});
+    	}
+    }
+    
+    public def set2(key:String, value:Cloneable, key2:String, value2:Cloneable) {        
+    	return executeLocalTransaction((tx:LocalTx) => { tx.put(key, value); tx.put(key2, value2) });
     }
     
     public def startLocalTransaction():LocalTx {
@@ -128,6 +129,36 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                 throwIfNotConflictException(ex);
             }
         }while(true);
+    }
+    
+    
+    public def executeLocalTransaction(closure:(LocalTx)=>Cloneable):Cloneable {
+        var result:Cloneable = null;
+        try {
+            Runtime.increaseParallelism();
+            while(true) {
+            	val tx = startLocalTransaction();
+            	var commitCalled:Boolean = false;
+            	val start = Timer.milliTime();
+                try {
+                	result = closure(tx);
+                    tx.setPreCommitElapsedTime(Timer.milliTime()-start);
+                    commitCalled = true;
+                    tx.commit();
+                    break;
+                } catch(ex:Exception) {
+                	if (!commitCalled) {
+                    	tx.setPreCommitElapsedTime(Timer.milliTime()-start);
+                        //no need to call abort, abort occurs automatically in local tx all the time
+                    }
+                    throwIfNotConflictException(ex);
+                }
+                System.threadSleep(0);
+            }
+        }finally {
+            Runtime.decreaseParallelism(1n);
+        }
+        return result;
     }
     
     public def executeLocalTransaction(target:Place, closure:(LocalTx)=>void):Int {
@@ -411,7 +442,6 @@ class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_preCommitList
             str += x + ",";
         return str;
     }
-    
 }
 
 class TransactionsList {
