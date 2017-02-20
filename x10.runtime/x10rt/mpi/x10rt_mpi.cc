@@ -708,18 +708,23 @@ x10rt_place x10rt_net_ndead (void) {
 
 bool x10rt_net_is_place_dead (x10rt_place p) {
 #ifdef OPEN_MPI_ULFM
-	if (p >= global_state.nprocs) return true;
-    bool found = false;
-    get_lock(&global_state.lock);
-    //deadPlaces is not sorted, can't use binary search
-	for (int i=0; i<global_state.deadPlacesSize; i++){
-		if (global_state.deadPlaces[i] == p){
-			found = true;
-			break;
+	char* resilientmode = getenv(X10_RESILIENT_MODE);
+    if (resilientmode && atoi(resilientmode) > 0){
+		if (p >= global_state.nprocs) return true;
+    	bool found = false;
+    	get_lock(&global_state.lock);
+    	//deadPlaces is not sorted, can't use binary search
+		for (int i=0; i<global_state.deadPlacesSize; i++){
+			if (global_state.deadPlaces[i] == p){
+				found = true;
+				break;
+			}
 		}
+		release_lock(&global_state.lock);
+		return found;
 	}
-	release_lock(&global_state.lock);
-	return found;
+	else
+		return false;
 #else
 	return false; // place failure is not handled by this implementation.
 #endif
