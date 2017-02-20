@@ -12,7 +12,7 @@
 
 package x10.util.resilient.localstore.tx;
 
-import x10.util.concurrent.ReadWriteSemaphoreBlocking;
+import x10.util.concurrent.Lock;
 import x10.util.resilient.localstore.Cloneable;
 
 public class MemoryUnit {
@@ -22,7 +22,7 @@ public class MemoryUnit {
     private var value:Cloneable;
     private val txLock:TxLock;
 
-    private val sem = new ReadWriteSemaphoreBlocking();
+    private val internalLock = new Lock();
     
     public def this(v:Cloneable) {
         value = v;
@@ -31,39 +31,10 @@ public class MemoryUnit {
         else
             txLock = new TxLockCREW();
     }
-    /*
-    public def getAtomicValue(copy:Boolean, key:String, txId:Long) {
-        atomic {
-            var v:Cloneable = value;
-            if (copy) {
-                v = value == null?null:value.clone();
-            }
-            if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] getvv key["+key+"] ver["+version+"] val["+v+"]");
-            return new AtomicValue(version, v);
-        }
-    }
     
-    public def setValue(v:Cloneable, key:String, txId:Long) {
-    	atomic {
-            val oldValue = value;
-            version++;
-            value = v;
-            if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] setvv key["+key+"] ver["+version+"] val["+value+"]");
-            return oldValue;
-    	}
-    }
-    
-    public def rollbackValue(oldValue:Cloneable, oldVersion:Int, key:String, txId:Long) {
-    	atomic {
-            version = oldVersion; 
-            value = oldValue;
-            if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] rollsetvv key["+key+"] ver["+version+"] val["+value+"]");
-        }
-    }
-    */
     public def getAtomicValue(copy:Boolean, key:String, txId:Long) {
         try {
-        	sem.acquireRead(); //lock is used to ensure that value/version are always in sync as a composite value 
+        	internalLock.lock(); //lock is used to ensure that value/version are always in sync as a composite value 
             var v:Cloneable = value;
             if (copy) {
                 v = value == null?null:value.clone();
@@ -72,31 +43,31 @@ public class MemoryUnit {
             return new AtomicValue(version, v);
         }
         finally {
-        	sem.releaseRead();
+        	internalLock.unlock();
         }
     }
     
     public def setValue(v:Cloneable, key:String, txId:Long) {
     	try {
-    		sem.acquireWrite();
+    		internalLock.lock();
             val oldValue = value;
             version++;
             value = v;
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] setvv key["+key+"] ver["+version+"] val["+value+"]");
             return oldValue;
     	}finally {
-    		sem.releaseWrite();
+    		internalLock.unlock();
     	}
     }
     
     public def rollbackValue(oldValue:Cloneable, oldVersion:Int, key:String, txId:Long) {
     	try {
-    		sem.acquireWrite();
+    		internalLock.lock();
             version = oldVersion; 
             value = oldValue;
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] rollsetvv key["+key+"] ver["+version+"] val["+value+"]");
         }finally {
-        	sem.releaseWrite();
+        	internalLock.unlock();
         }
     }
        
