@@ -26,7 +26,6 @@ import x10.compiler.Immediate;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Future;
 
-
 public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     

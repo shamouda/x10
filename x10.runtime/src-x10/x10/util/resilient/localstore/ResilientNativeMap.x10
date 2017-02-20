@@ -204,6 +204,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     }
     
     public def printTxStatistics() {
+        Console.OUT.println("Calculating execution statistics ...");
         val pl_stat = new ArrayList[TxPlaceStatistics]();
         for (p in store.activePlaces) {
             val pstat = at (p) {
@@ -263,7 +264,9 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         var l_aPlaces:Long = 0;
         
         for (pstat in pl_stat) {
-            Console.OUT.println(pstat);
+            val str = pstat.toString();
+            if (!str.equals(""))
+                Console.OUT.println(str);
             g_allCommitList.addAll(pstat.g_commitList);
             g_allPreCommitList.addAll(pstat.g_preCommitList);
             if (pstat.g_commitList.size() > 0)
