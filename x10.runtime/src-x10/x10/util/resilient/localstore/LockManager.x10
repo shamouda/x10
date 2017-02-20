@@ -52,6 +52,27 @@ public class LockManager (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Str
         }
     }
     
+    public def lockRead(p1:Place, key1:String, p2:Place, key2:String, id:Long) {
+        if (key1.hashCode() < key2.hashCode()) {
+            at (p1) plh().masterStore.lockRead(mapName, id, key1);
+            at (p2) plh().masterStore.lockRead(mapName, id, key2);
+        }
+        else {
+            at (p2) plh().masterStore.lockRead(mapName, id, key2);
+            at (p1) plh().masterStore.lockRead(mapName, id, key1);
+        }
+    }
+    public def unlockRead(p1:Place, key1:String, p2:Place, key2:String, id:Long) {
+        if (key1.hashCode() < key2.hashCode()) {
+            at (p1) plh().masterStore.unlockRead(mapName, id, key1);
+            at (p2) plh().masterStore.unlockRead(mapName, id, key2);
+        }
+        else {
+            at (p2) plh().masterStore.unlockRead(mapName, id, key2);
+            at (p1) plh().masterStore.unlockRead(mapName, id, key1);
+        }
+    }
+    
     public def lockWrite(key:String) {
         plh().masterStore.lockWrite(mapName, id, key);
     }
