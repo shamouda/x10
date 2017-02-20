@@ -9,6 +9,7 @@ import x10.util.Set;
 import x10.xrx.Runtime;
 import x10.util.HashMap;
 import x10.util.resilient.localstore.CloneableLong;
+import x10.util.Timer;
 
 public class IntSet2Sync {
 	private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
@@ -113,6 +114,7 @@ public class IntSet2Sync {
 	                    	else
 	                    		tx.put(key2, new CloneableLong(-1 * val1));
 	                    });
+	                    if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitForFuturesElapsedTime +"] ms");
 	                });
 	                if (TM_DEBUG) Console.OUT.println(here + " OP["+i+"] End}} keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");                
 	            }
