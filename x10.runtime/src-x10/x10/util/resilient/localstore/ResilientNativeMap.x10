@@ -89,7 +89,6 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         return tx;
     }
     
-    
     private def startGlobalTransaction(members:PlaceGroup):Tx {
         assert(store.plh().virtualPlaceId != -1);
         val id = store.plh().masterStore.getNextTransactionId();
@@ -104,6 +103,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         list().addGlobalTx(tx);
         return tx;
     }
+    
     
     public def executeTransaction(members:PlaceGroup, closure:(Tx)=>void):Int {
         while(true) {
@@ -234,8 +234,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     
     public def getLockManager():LockManager {
         assert(store.plh().virtualPlaceId != -1);
-        val id = store.plh().masterStore.getNextTransactionId();
-        return new LockManager(store.plh, id, name);
+        return new LockManager(store, name, list);
     }
     
     public def printTxStatistics() {
@@ -436,26 +435,20 @@ class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_preCommitList
 
         
         return str;
-    }
-    
-    public static def listToString[T](r:ArrayList[T]):String {
-        if (r == null)
-            return "";
-        var str:String = "";
-        for (x in r)
-            str += x + ",";
-        return str;
-    }
+    }    
 }
 
 class TransactionsList {
     val globalTx:ArrayList[Tx];
     val localTx:ArrayList[LocalTx];
+	val blockingTx:ArrayList[BlockingTx];
+
     private val listLock = new Lock();
 
     public def this(){
         globalTx = new ArrayList[Tx]();
         localTx = new ArrayList[LocalTx]();
+        blockingTx = new ArrayList[BlockingTx]();
     }
     
     public def addLocalTx(tx:LocalTx) {
@@ -466,6 +459,11 @@ class TransactionsList {
     public def addGlobalTx(tx:Tx) {
         listLock.lock();
         globalTx.add(tx);
+        listLock.unlock();
+    }
+    public def addBlockingTx(tx:BlockingTx) {
+        listLock.lock();
+        blockingTx.add(tx);
         listLock.unlock();
     }
 }

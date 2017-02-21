@@ -8,6 +8,7 @@ import x10.util.resilient.localstore.ResilientStore;
 import x10.util.Set;
 import x10.xrx.Runtime;
 import x10.util.HashMap;
+import x10.util.Timer;
 import x10.util.resilient.localstore.CloneableLong;
 import x10.util.resilient.localstore.LockManager;
 
@@ -53,7 +54,7 @@ public class IntSet2AsyncLocking {
             processTransactions(locker, mgr.activePlaces(), accountsPerPlace, operationsPerPlace, debugProgress, requestsMap);
             val endProc = System.nanoTime();
             
-            map.printTxStatistics();
+            locker.printTxStatistics();
             
             val sum2 = STMAppUtils.sumAccountsLocking(locker, mgr.activePlaces());
             
@@ -87,9 +88,6 @@ public class IntSet2AsyncLocking {
             	for (i in 1..operationsPerPlace) {
             		if (i%debugProgress == 0)
             			Console.OUT.println(here + " progress " + i);
-            		
-            		val txId = ( (here.id + 1) * 1000000) + i;  //for debuging only
- 	            	
             		val key1 = "acc"+requests.keys1(i-1);
 	                val p1 = STMAppUtils.getPlace(requests.keys1(i-1), activePG, accountsPerPlace);
 	                val val1 = requests.values1(i-1);
@@ -99,33 +97,46 @@ public class IntSet2AsyncLocking {
 	                val val2 = requests.values2(i-1);
 	                
 	                val read = requests.isRead(i-1);
+	                
+	                val startLock = Timer.milliTime();
+	                val tx = locker.startBlockingTransaction();
+            		val txId = tx.id;
 	                if (TM_DEBUG) Console.OUT.println(here + " OP["+i+"] Start{{ keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");
                     if (read)
                     	locker.lockRead(p1, key1, p2, key2, txId); //sort and lock
                     else
                     	locker.lockWrite(p1, key1, p2, key2, txId); //sort and lock
-	                
+                    tx.lockingElapsedTime = Timer.milliTime() - startLock;
+                    
+                    val startProc = Timer.milliTime();
                     val f1 = locker.asyncAt(p1, () => {
 	                   	if (read)
-	                   		locker.getLocked(key1);
+	                   		locker.getLocked(key1, txId);
 	                   	else
-	                   		locker.putLocked(key1, new CloneableLong(val1));
+	                   		locker.putLocked(key1, new CloneableLong(val1), txId);
 	                });
                     
                     val f2 = locker.asyncAt(p2, () => {
                     	if (read)
-                    		locker.getLocked(key2);
+                    		locker.getLocked(key2, txId);
                     	else
-                    		locker.putLocked(key2, new CloneableLong(-1 * val1));
+                    		locker.putLocked(key2, new CloneableLong(-1 * val1), txId);
 	                });
-	                
+                    tx.processingElapsedTime = Timer.milliTime() - startProc;
+                    
+                    val startWait = Timer.milliTime();
 	                f1.force();
 	                f2.force();
+	                tx.waitElapsedTime = Timer.milliTime() - startWait;
 	                
+	                val startUnlock = Timer.milliTime();
 	                if (read)
 	                	locker.unlockRead(p1, key1, p2, key2, txId);
                     else
                     	locker.unlockWrite(p1, key1, p2, key2, txId);
+	                tx.unlockingElapsedTime = Timer.milliTime() - startUnlock;
+	                
+	                tx.totalElapsedTime = Timer.milliTime() - startLock;
 	                
 	                if (TM_DEBUG) Console.OUT.println(here + " OP["+i+"] End}} keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");                
 	            }

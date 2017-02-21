@@ -7,6 +7,7 @@ import x10.util.resilient.localstore.ResilientStore;
 import x10.util.concurrent.Future;
 import x10.util.Set;
 import x10.xrx.Runtime;
+import x10.util.Timer;
 
 public class BankAsyncLocking {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
@@ -35,6 +36,8 @@ public class BankAsyncLocking {
             val startTransfer = System.nanoTime();
             randomTransfer(locker, mgr.activePlaces(), accountsPerPlace, transfersPerPlace, debugProgress);
             val endTransfer = System.nanoTime();
+            
+            locker.printTxStatistics();
             
             val sum2 = STMAppUtils.sumAccountsLocking(locker, mgr.activePlaces());
             
@@ -76,33 +79,42 @@ public class BankAsyncLocking {
                 val randAcc2 = "acc"+rand2;
                 val amount = Math.abs(rand.nextLong()%100);
 
-                val txId = ( (here.id + 1) * 1000000) + i;
-                
+                val startLock = Timer.milliTime();
+                val tx = locker.startBlockingTransaction();
+        		val txId = tx.id;
                 locker.lockWrite(p1, randAcc1, p2, randAcc2, txId); //sort and lock
-                
-                
+                tx.lockingElapsedTime = Timer.milliTime() - startLock;
+
+                val startProc = Timer.milliTime();
                 val f1 = locker.asyncAt(p1, () => {
-                    var acc1:BankAccount = locker.getLocked(randAcc1) as BankAccount;
+                    var acc1:BankAccount = locker.getLocked(randAcc1, txId) as BankAccount;
                     if (acc1 == null) {
                         acc1 = new BankAccount(0);
                     }
                     acc1.account -= amount;
-                    locker.putLocked(randAcc1, acc1);
+                    locker.putLocked(randAcc1, acc1, txId);
                 });
                 
                 val f2 = locker.asyncAt(p2, () => {
-                    var acc2:BankAccount = locker.getLocked(randAcc2) as BankAccount;
+                    var acc2:BankAccount = locker.getLocked(randAcc2, txId) as BankAccount;
                     if (acc2 == null) {
                         acc2 = new BankAccount(0);
                     }
                     acc2.account += amount;
-                    locker.putLocked(randAcc2, acc2);
+                    locker.putLocked(randAcc2, acc2, txId);
                 });
+                tx.processingElapsedTime = Timer.milliTime() - startProc;
                 
+                val startWait = Timer.milliTime();
                 f1.force();
                 f2.force();
+                tx.waitElapsedTime = Timer.milliTime() - startWait;
                 
+                val startUnlock = Timer.milliTime();
                 locker.unlockWrite(p1, randAcc1, p2, randAcc2, txId);
+                tx.unlockingElapsedTime = Timer.milliTime() - startUnlock;
+                
+                tx.totalElapsedTime = Timer.milliTime() - startLock;
             }
         }
     }

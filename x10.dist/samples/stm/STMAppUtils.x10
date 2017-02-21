@@ -96,11 +96,11 @@ public class STMAppUtils {
         for (p in activePG) {
             val f = locker.asyncAt(p, () => {
                 var localSum:Long = 0;
-                val set = locker.keySet();
+                val set = locker.keySet(-1);
                 val iter = set.iterator();
                 while (iter.hasNext()) {
                     val accId  = iter.next();
-                    val obj = locker.getLocked(accId);
+                    val obj = locker.getLocked(accId, -1);
                     if (obj != null  && obj instanceof BankAccount) {
                     	localSum += (obj as BankAccount).account;
                     }
