@@ -11,6 +11,8 @@ import x10.util.Timer;
 
 public class ResilientNativeMap (name:String, store:ResilientStore) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
+    private static val TM_SLEEP = System.getenv("TM_SLEEP") == null ? 0 : Long.parseLong(System.getenv("TM_SLEEP"));
+    
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     public val list:PlaceLocalHandle[TransactionsList];
     
@@ -104,7 +106,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     }
     
     public def executeTransaction(members:PlaceGroup, closure:(Tx)=>void):Int {
-        do {
+        while(true) {
             val tx = startGlobalTransaction(members);
             var excpt:Exception = null;
             var commitCalled:Boolean = false;
@@ -116,7 +118,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                 if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} succeeded  preCommitTime["+tx.preCommitElapsedTime+"] ms");
                 commitCalled = true;
                 return tx.commit();
-            } catch(ex:Exception) {                
+            } catch(ex:Exception) {
                 if (!commitCalled) {
                 	tx.setPreCommitElapsedTime(Timer.milliTime()-start);
                     tx.abort(excpt); // tx.commit() aborts automatically if needed
@@ -127,8 +129,9 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                     ex.printStackTrace();
                 }
                 throwIfNotConflictException(ex);
+                System.threadSleep(TM_SLEEP);
             }
-        }while(true);
+        }
     }
     
     
@@ -152,8 +155,9 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                         //no need to call abort, abort occurs automatically in local tx all the time
                     }
                     throwIfNotConflictException(ex);
+                    
+                    System.threadSleep(TM_SLEEP);
                 }
-                System.threadSleep(0);
             }
         }finally {
             Runtime.decreaseParallelism(1n);
