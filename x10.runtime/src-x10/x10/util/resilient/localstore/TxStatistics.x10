@@ -40,17 +40,17 @@ public class TxStatistics {
     
     public static def boxPlot(values:ArrayList[Double]) {
     	if (values == null || values.size() == 0)
-    		return new BoxPlot(0, 0, 0, 0, 0, 0);
+    		return new BoxPlot(0, 0, 0, 0, 0, 0, new Rail[Double](0));
     	val v = values.toRail();
         RailUtils.sort(v);
     	if (v.size == 1) {
-    		return new BoxPlot(v(0), v(0), v(0), v(0), v(0), v(0));
+    		return new BoxPlot(v(0), v(0), v(0), v(0), v(0), v(0), v);
     	}
     	else if (v.size == 2) {
-    		return new BoxPlot(v(0), v(0), v(0), v(1), v(1), v(1));
+    		return new BoxPlot(v(0), v(0), v(0), v(1), v(1), v(1), v);
     	}
     	else if (v.size == 3) {
-    		return new BoxPlot(v(0), v(0), v(1), v(2), v(2), v(2));
+    		return new BoxPlot(v(0), v(0), v(1), v(2), v(2), v(2), v);
     	}
     	else {
 	        val size = values.size();
@@ -69,7 +69,7 @@ public class TxStatistics {
 	        val ninetyUnit = ninetyPer as Long;
 	        val ninetyPercentile = (ninetyPer - ninetyUnit == 0.0) ? ninetyUnit : ninetyUnit+1;
 	        val ninetyV = (ninetyPercentile <= size-1) ? v(ninetyPercentile) : max;
-	        return new BoxPlot(min, q1, median, q3, ninetyV, max);
+	        return new BoxPlot(min, q1, median, q3, ninetyV, max, v);
     	}
     }
     
@@ -90,7 +90,7 @@ public class TxStatistics {
     }
 }
 
-class BoxPlot (min:Double, q1:Double, median:Double, q3:Double, ninetyP:Double, max:Double) {
+class BoxPlot (min:Double, q1:Double, median:Double, q3:Double, ninetyP:Double, max:Double, sorted:Rail[Double]) {
     public def toString() { 
         return min + ":" + q1 + ":" + median + ":" + q3 + ":" + ninetyP +":"+ max; 
     }

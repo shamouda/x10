@@ -365,6 +365,8 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         
         
         if (g_cCnt > 0) {
+        	Console.OUT.println ( railToString(g_cBox.sorted, "COMMITTED_TX_LIST") );
+        	Console.OUT.println ( railToString(g_aBox.sorted, "ABORTED_TX_LIST") );
             Console.OUT.println("Summary:GLOBAL_TX:committedTxs:"+ g_cCnt + ":committedPlaces:" + g_cPlaces + ":commitMeanMS:" + g_cMean + ":commitSTDEV:" + g_cSTDEV + ":commitBox:(:" + g_cBox + ":)" + ":preCommitMeanMS:" + g_cPreMean + ":preCommitSTDEV:" + g_cPreSTDEV + ":preCommitBox:(:" + g_cPreBox + ":)"
             		+ ":waitFutureMeanMS:" + g_cWaitFutureMean + ":waitFutureSTDEV:" + g_cWaitFutureSTDEV + ":waitFutureBox:(:" + g_cWaitFutureBox + ":)");
             Console.OUT.println("Summary:GLOBAL_TX:abortedTxs:"  + g_aCnt + ":abortedPlaces:"   + g_aPlaces + ":abortMeanMS:"  + g_aMean + ":abortSTDEV:"  + g_aSTDEV + ":abortBox:(:"  + g_aBox + ":)" + ":preAbortMeanMS:"  + g_aPreMean + ":preAbortSTDEV:"  + g_aPreSTDEV + ":preAbortBox:(:"  + g_aPreBox + ":)" );
@@ -382,6 +384,14 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
             list().globalTx.clear();
             list().localTx.clear();
         }
+    }
+    
+    private static def railToString(sorted:Rail[Double], name:String) {
+    	var str:String = name + ":";
+        for (v in sorted) {
+        	str += v + ":";
+        }
+        return str;
     }
     
 }
@@ -436,6 +446,7 @@ class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_preCommitList
         
         return str;
     }    
+    
 }
 
 class TransactionsList {
