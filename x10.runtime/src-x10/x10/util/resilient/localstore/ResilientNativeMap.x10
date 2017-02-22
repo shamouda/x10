@@ -12,7 +12,8 @@ import x10.util.Timer;
 public class ResilientNativeMap (name:String, store:ResilientStore) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     private static val TM_SLEEP = System.getenv("TM_SLEEP") == null ? 0 : Long.parseLong(System.getenv("TM_SLEEP"));
-    private static val TM_PRINT_TIMES = System.getenv("TM_PRINT_TIMES") == null ? 0 : Long.parseLong(System.getenv("TM_PRINT_TIMES"));
+    private static val TM_PRINT_TIMES = System.getenv("TM_PRINT_TIMES") != null && System.getenv("TM_PRINT_TIMES").equals("1");
+    
     
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     public val list:PlaceLocalHandle[TransactionsList];
