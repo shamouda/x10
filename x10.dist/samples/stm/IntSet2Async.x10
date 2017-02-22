@@ -1,4 +1,3 @@
-import x10.util.Random;
 import x10.util.ArrayList;
 import x10.util.resilient.PlaceManager;
 import x10.util.resilient.localstore.ResilientNativeMap;
@@ -43,7 +42,8 @@ public class IntSet2Async {
         val requestsMap = new HashMap[Long,PlaceRandomRequests]();
         for (p in activePG) {
             val x = new PlaceRandomRequests(operationsPerPlace, 2, readPercentage);
-            x.initRandom(accountsMAX, accountsPerPlace);
+            Console.OUT.println("randoms for " + p);
+            x.initRandom(accountsMAX, accountsPerPlace, p.id);
             requestsMap.put(p.id, x);
         }
         val map = store.makeMap("mapA");

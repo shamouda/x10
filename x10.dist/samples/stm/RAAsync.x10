@@ -37,7 +37,7 @@ public class RAAsync {
         var expectedSum:Long = 0;
         for (p in activePG) {
             val x = new PlaceRandomRequests(updatesPerPlace, 1, -1F);
-            x.initRandom(accountsMAX, accountsPerPlace);
+            x.initRandom(accountsMAX, accountsPerPlace, p.id);
             requestsMap.put(p.id, x);
             expectedSum += x.valuesSum1;
         }

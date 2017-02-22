@@ -43,7 +43,7 @@ public class IntSet2Sync {
         val requestsMap = new HashMap[Long,PlaceRandomRequests]();
         for (p in activePG) {
             val x = new PlaceRandomRequests(operationsPerPlace, 2, readPercentage);
-            x.initRandom(accountsMAX, accountsPerPlace);
+            x.initRandom(accountsMAX, accountsPerPlace, p.id);
             requestsMap.put(p.id, x);
         }
         val map = store.makeMap("mapA");

@@ -35,7 +35,7 @@ public class RASync {
         var expectedSum:Long = 0;
         for (p in activePG) {
             val x = new PlaceRandomRequests(updatesPerPlace, 1, -1F);
-            x.initRandom(accountsMAX, accountsPerPlace);
+            x.initRandom(accountsMAX, accountsPerPlace, p.id);
             requestsMap.put(p.id, x);
             expectedSum += x.valuesSum1;
         }
@@ -73,7 +73,7 @@ public class RASync {
         finish for (p in activePG) {
             val requests = requestsMap.getOrThrow(p.id);
             at (p) async {
-                val rand = new Random(System.nanoTime());
+                val rand = new Random(p.id);
                 for (i in 1..updatesPerPlace) {
                     if (i%debugProgress == 0)
                         Console.OUT.println(here + " progress " + i);

@@ -26,12 +26,12 @@ public class PlaceRandomRequests(size:Long, num:Long,readPercent:Float)
         }
     }
 
-	public def initRandom(accountsMAX:Long, accountPerPlace:Long) {
-        val rand = new Random(System.nanoTime());
+	public def initRandom(accountsMAX:Long, accountPerPlace:Long, pid:Long) {
+        val rand = new Random(pid);
         for (var i:Long = 0; i < size; i++) {
-        	keys1(i) = Math.abs(rand.nextLong()% accountsMAX);
+        	keys1(i) = Math.abs(rand.nextLong()% accountsMAX);        	
         	values1(i) = Math.abs(rand.nextLong()%1000);
-            valuesSum1+= values1(i);
+            valuesSum1+= values1(i);            
         }
         
         if (num == 2) {
@@ -41,7 +41,7 @@ public class PlaceRandomRequests(size:Long, num:Long,readPercent:Float)
         			keys2(i) = Math.abs(rand.nextLong()% accountsMAX);
         		}while(keys2(i)/accountPerPlace == p1);
         		values2(i) = Math.abs(rand.nextLong()%1000);
-            	valuesSum2 += values2(i);
+            	valuesSum2 += values2(i);            	
         	}
         }
         

@@ -45,7 +45,7 @@ public class RAAsyncResilient {
         var expectedSum:Long = 0;
         for (p in activePG) {
             val x = new PlaceRandomRequests(updatesPerPlace, 1, -1F);
-            x.initRandom(accountsMAX, accountsPerPlace);
+            x.initRandom(accountsMAX, accountsPerPlace, p.id);
             requestsMap.put(p.id, x);
             expectedSum += x.valuesSum1;
         }
@@ -113,7 +113,7 @@ public class RAAsyncResilient {
                     start = STMAppUtils.restoreProgress(map, placeIndex, 0)+1;
                     Console.OUT.println(here + " continue transfering from " + start + "   slave:" + map.store.plh().slave);
                 }
-                val rand = new Random(System.nanoTime());
+                val rand = new Random(placeIndex);
                 for (i in start..updatesPerPlace) {
                 	if (i%debugProgress == 0)
                         Console.OUT.println(here + " progress " + i);

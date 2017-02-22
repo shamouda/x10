@@ -60,7 +60,7 @@ public class BankAsync {
     public static def randomTransfer(map:ResilientNativeMap, activePG:PlaceGroup, accountsPerPlace:Long, transfersPerPlace:Long, debugProgress:Long){
         val accountsMAX = accountsPerPlace * activePG.size();
         finish for (p in activePG) at (p) async {
-            val rand = new Random(System.nanoTime());
+            val rand = new Random(p.id);
             for (i in 1..transfersPerPlace) {
                 if (i%debugProgress == 0)
                     Console.OUT.println(here + " progress " + i);
