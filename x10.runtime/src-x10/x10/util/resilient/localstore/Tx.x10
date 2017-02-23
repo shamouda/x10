@@ -101,6 +101,10 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     	waitForFuturesElapsedTime = t;
     }
     
+    public def noop(key:String):Cloneable {
+        return null;
+    }
+    
     /***************** Get ********************/
     public def get(key:String):Cloneable {
         return execute(GET_LOCAL, here, key, null, null, null, plh, id, mapName, members, root).value as Cloneable;
