@@ -14,7 +14,6 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     private static val TM_SLEEP = System.getenv("TM_SLEEP") == null ? 0 : Long.parseLong(System.getenv("TM_SLEEP"));
     private static val TM_PRINT_TIMES = System.getenv("TM_PRINT_TIMES") != null && System.getenv("TM_PRINT_TIMES").equals("1");
     
-    
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     public val list:PlaceLocalHandle[TransactionsList];
     
@@ -108,32 +107,37 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     
     
     public def executeTransaction(members:PlaceGroup, closure:(Tx)=>void):Int {
-        while(true) {
-            val tx = startGlobalTransaction(members);
-            var excpt:Exception = null;
-            var commitCalled:Boolean = false;
-            val start = Timer.milliTime();
-            try {
-                finish closure(tx);
-                tx.setPreCommitElapsedTime(Timer.milliTime()-start);
-                
-                if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} succeeded  preCommitTime["+tx.preCommitElapsedTime+"] ms");
-                commitCalled = true;
-                return tx.commit();
-            } catch(ex:Exception) {
-                if (!commitCalled) {
-                	tx.setPreCommitElapsedTime(Timer.milliTime()-start);
-                    tx.abort(excpt); // tx.commit() aborts automatically if needed
-                }
-                
-                if (TM_DEBUG) {
-                    Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] preCommitTime["+tx.preCommitElapsedTime+"] ms");
-                    ex.printStackTrace();
-                }
-                throwIfNotConflictException(ex);
-                System.threadSleep(TM_SLEEP);
-            }
-        }
+    	try {
+    		Runtime.increaseParallelism();
+	        while(true) {
+	            val tx = startGlobalTransaction(members);
+	            var excpt:Exception = null;
+	            var commitCalled:Boolean = false;
+	            val start = Timer.milliTime();
+	            try {
+	                finish closure(tx);
+	                tx.setPreCommitElapsedTime(Timer.milliTime()-start);
+	                
+	                if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} succeeded  preCommitTime["+tx.preCommitElapsedTime+"] ms");
+	                commitCalled = true;
+	                return tx.commit();
+	            } catch(ex:Exception) {
+	                if (!commitCalled) {
+	                	tx.setPreCommitElapsedTime(Timer.milliTime()-start);
+	                    tx.abort(excpt); // tx.commit() aborts automatically if needed
+	                }
+	                
+	                if (TM_DEBUG) {
+	                    Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] preCommitTime["+tx.preCommitElapsedTime+"] ms");
+	                    ex.printStackTrace();
+	                }
+	                throwIfNotConflictException(ex);
+	                System.threadSleep(TM_SLEEP);
+	            }
+	        }
+    	}finally {
+    		Runtime.decreaseParallelism(1n);
+    	}
     }
     
     
