@@ -12,7 +12,9 @@ import x10.util.Timer;
 
 public class IntSet2AsyncTHRD {
 	private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-
+	private static val NTHREADS = System.getenv("X10_NTHREADS");
+	
+	
 	public static def main(args:Rail[String]) {
         if (args.size != 4) {
             Console.OUT.println("Parameters missing: exp_accounts_per_place(2^N) exp_operations_per_place(2^N) debugProgress read_percentage(float)");
@@ -28,7 +30,7 @@ public class IntSet2AsyncTHRD {
         }
         val accountsPerPlace = Math.ceil(Math.pow(2, expAccounts)) as Long;
         //multiply by the number of threads
-        val operationsPerPlace = Math.ceil(Math.pow(2, expOperations)) as Long * x10.xrx.Configuration.nthreads();
+        val operationsPerPlace = Math.ceil(Math.pow(2, expOperations)) as Long * NTHREADS;
         val sparePlaces = 0;
         
         STMAppUtils.printBenchmarkStartingMessage("IntSet2AsyncTHRD", accountsPerPlace, operationsPerPlace, debugProgress, sparePlaces, readPercentage);       
