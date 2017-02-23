@@ -12,7 +12,7 @@ import x10.util.Timer;
 
 public class IntSet2AsyncTHRD {
 	private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-	private static val NTHREADS = System.getenv("X10_NTHREADS");
+	private static val NTHREADS = Long.parseLong(System.getenv("X10_NTHREADS"));
 	
 	
 	public static def main(args:Rail[String]) {
