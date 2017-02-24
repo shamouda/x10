@@ -10,7 +10,7 @@
  *  (C) Copyright Sara Salem Hamouda 2014-2016.
  */
 
-package x10.util.resilient.localstore.tx;
+package x10.util.resilient.localstore;
 
 import x10.util.Timer;
 

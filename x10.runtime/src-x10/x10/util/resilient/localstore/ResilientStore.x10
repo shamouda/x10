@@ -19,6 +19,7 @@ import x10.util.concurrent.SimpleLatch;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.tx.TxDesc;
+import x10.util.resilient.localstore.tx.TransactionsList;
 
 /**
  * A store that maintains a master + 1 backup (slave) copy

@@ -1,3 +1,4 @@
+import x10.util.Random;
 import x10.util.ArrayList;
 import x10.util.resilient.PlaceManager;
 import x10.util.resilient.localstore.ResilientNativeMap;
@@ -7,33 +8,31 @@ import x10.util.resilient.localstore.ResilientStore;
 import x10.util.Set;
 import x10.xrx.Runtime;
 import x10.util.HashMap;
-import x10.util.resilient.localstore.CloneableLong;
 import x10.util.Timer;
+import x10.util.resilient.localstore.CloneableLong;
+import x10.util.resilient.localstore.LockManager;
 
-public class IntSet2AsyncTHRD {
+public class Noop2AsyncLocking {
 	private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-	private static val NTHREADS = Long.parseLong(System.getenv("X10_NTHREADS"));
-	
-	
+
 	public static def main(args:Rail[String]) {
-        if (args.size != 4) {
-            Console.OUT.println("Parameters missing: exp_accounts_per_place(2^N) exp_operations_per_place(2^N) debugProgress read_percentage(float)");
+        if (args.size != 3) {
+            Console.OUT.println("Parameters missing: exp_accounts_per_place(2^N) exp_operations_per_place(2^N) debugProgress");
             return;
         }
         val expAccounts = Long.parseLong(args(0));
         val expOperations = Long.parseLong(args(1));
         val debugProgress = Long.parseLong(args(2));
-        val readPercentage = Float.parseFloat(args(3));
+        val readPercentage = 0.0;
         if (readPercentage < 0 || readPercentage > 1.0) {
         	Console.OUT.println("read_percentage must have a value between 0.0 and 1.0");
             return;
         }
         val accountsPerPlace = Math.ceil(Math.pow(2, expAccounts)) as Long;
-        //multiply by the number of threads
-        val operationsPerPlace = Math.ceil(Math.pow(2, expOperations)) as Long * NTHREADS;
+        val operationsPerPlace = Math.ceil(Math.pow(2, expOperations)) as Long;
         val sparePlaces = 0;
         
-        STMAppUtils.printBenchmarkStartingMessage("IntSet2AsyncTHRD", accountsPerPlace, operationsPerPlace, debugProgress, sparePlaces, readPercentage);       
+        STMAppUtils.printBenchmarkStartingMessage("Noop2AsyncLocking", accountsPerPlace, operationsPerPlace, debugProgress, sparePlaces, readPercentage);       
         val start = System.nanoTime();
 
         val supportShrinking = false;
@@ -49,15 +48,15 @@ public class IntSet2AsyncTHRD {
             requestsMap.put(p.id, x);
         }
         val map = store.makeMap("mapA");
-        
+        val locker = map.getLockManager();
         try {
             val startProc = System.nanoTime();
-            processTransactions(map, mgr.activePlaces(), accountsPerPlace, operationsPerPlace, debugProgress, requestsMap);
+            processTransactions(locker, mgr.activePlaces(), accountsPerPlace, operationsPerPlace, debugProgress, requestsMap);
             val endProc = System.nanoTime();
             
-            map.printTxStatistics();
+            locker.printTxStatistics();
             
-            val sum2 = STMAppUtils.sumAccounts(map, mgr.activePlaces());
+            val sum2 = STMAppUtils.sumAccountsLocking(locker, mgr.activePlaces());
             
             val end = System.nanoTime();
             if (sum2 == 0) {
@@ -79,7 +78,7 @@ public class IntSet2AsyncTHRD {
         }
     }
 
-	public static def processTransactions(map:ResilientNativeMap, activePG:PlaceGroup, accountsPerPlace:Long, 
+	public static def processTransactions(locker:LockManager, activePG:PlaceGroup, accountsPerPlace:Long, 
     		operationsPerPlace:Long, debugProgress:Long, requestsMap:HashMap[Long,PlaceRandomRequests]){
         val accountsMAX = accountsPerPlace * activePG.size();
         finish for (p in activePG) {
@@ -89,8 +88,7 @@ public class IntSet2AsyncTHRD {
             	for (i in 1..operationsPerPlace) {
             		if (i%debugProgress == 0)
             			Console.OUT.println(here + " progress " + i);
-            	
-	            	val key1 = "acc"+requests.keys1(i-1);
+            		val key1 = "acc"+requests.keys1(i-1);
 	                val p1 = STMAppUtils.getPlace(requests.keys1(i-1), activePG, accountsPerPlace);
 	                val val1 = requests.values1(i-1);
 	                
@@ -100,28 +98,36 @@ public class IntSet2AsyncTHRD {
 	                
 	                val read = requests.isRead(i-1);
 	                
-	                val members = STMAppUtils.createGroup(p1, p2);
-	                
+	                val startLock = Timer.milliTime();
+	                val tx = locker.startBlockingTransaction();
+            		val txId = tx.id;
 	                if (TM_DEBUG) Console.OUT.println(here + " OP["+i+"] Start{{ keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");
-	                map.executeTransaction(members, (tx:Tx) => {
-	                    val f1 = tx.asyncAt(p1, () => {
-	                    	if (read)
-	                    		tx.get(key1);
-	                    	else
-	                    		tx.put(key1, new CloneableLong(val1));
-	                    });
-	                    val f2 = tx.asyncAt(p2, () => {
-	                    	if (read)
-	                    		tx.get(key2);
-	                    	else
-	                    		tx.put(key2, new CloneableLong(-1 * val1));
-	                    });
-	                    val startWait = Timer.milliTime();
-	                    f1.force();
-	                    f2.force();
-	                    tx.setWaitForFuturesElapsedTime(Timer.milliTime() - startWait);
-	                    if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitForFuturesElapsedTime +"] ms");
+                   
+                    locker.noopLockUnlock(p1, key1, p2, key2, txId);
+                    
+                    tx.lockingElapsedTime = Timer.milliTime() - startLock;
+                    
+                    val startProc = Timer.milliTime();
+                    val f1 = locker.asyncAt(p1, () => {
+	                   	locker.noop(key1, txId);
 	                });
+                    
+                    val f2 = locker.asyncAt(p2, () => {
+                    	locker.noop(key2, txId);
+	                });
+                    tx.processingElapsedTime = Timer.milliTime() - startProc;
+                    
+                    val startWait = Timer.milliTime();
+	                f1.force();
+	                f2.force();
+	                tx.waitElapsedTime = Timer.milliTime() - startWait;
+	                
+	                val startUnlock = Timer.milliTime();
+	                locker.noopLockUnlock(p1, key1, p2, key2, txId);
+	                tx.unlockingElapsedTime = Timer.milliTime() - startUnlock;
+	                
+	                tx.totalElapsedTime = Timer.milliTime() - startLock;
+	                
 	                if (TM_DEBUG) Console.OUT.println(here + " OP["+i+"] End}} keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");                
 	            }
             }

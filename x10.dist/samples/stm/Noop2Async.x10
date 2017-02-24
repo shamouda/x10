@@ -14,14 +14,14 @@ public class Noop2Async {
 	private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
 
 	public static def main(args:Rail[String]) {
-        if (args.size != 4) {
-            Console.OUT.println("Parameters missing: exp_accounts_per_place(2^N) exp_operations_per_place(2^N) debugProgress read_percentage(float)");
+        if (args.size != 3) {
+            Console.OUT.println("Parameters missing: exp_accounts_per_place(2^N) exp_operations_per_place(2^N) debugProgress");
             return;
         }
         val expAccounts = Long.parseLong(args(0));
         val expOperations = Long.parseLong(args(1));
         val debugProgress = Long.parseLong(args(2));
-        val readPercentage = Float.parseFloat(args(3));
+        val readPercentage = 0.0;
         if (readPercentage < 0 || readPercentage > 1.0) {
         	Console.OUT.println("read_percentage must have a value between 0.0 and 1.0");
             return;
@@ -30,7 +30,7 @@ public class Noop2Async {
         val operationsPerPlace = Math.ceil(Math.pow(2, expOperations)) as Long;
         val sparePlaces = 0;
         
-        STMAppUtils.printBenchmarkStartingMessage("IntSet2Async", accountsPerPlace, operationsPerPlace, debugProgress, sparePlaces, readPercentage);       
+        STMAppUtils.printBenchmarkStartingMessage("Noop2Async", accountsPerPlace, operationsPerPlace, debugProgress, sparePlaces, readPercentage);       
         val start = System.nanoTime();
 
         val supportShrinking = false;
@@ -42,7 +42,6 @@ public class Noop2Async {
         val requestsMap = new HashMap[Long,PlaceRandomRequests]();
         for (p in activePG) {
             val x = new PlaceRandomRequests(operationsPerPlace, 2, readPercentage);
-            Console.OUT.println("randoms for " + p);
             x.initRandom(accountsMAX, accountsPerPlace, p.id);
             requestsMap.put(p.id, x);
         }

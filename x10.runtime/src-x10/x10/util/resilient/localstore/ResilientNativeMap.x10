@@ -451,33 +451,3 @@ class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_preCommitList
     }    
     
 }
-
-class TransactionsList {
-    val globalTx:ArrayList[Tx];
-    val localTx:ArrayList[LocalTx];
-	val blockingTx:ArrayList[BlockingTx];
-
-    private val listLock = new Lock();
-
-    public def this(){
-        globalTx = new ArrayList[Tx]();
-        localTx = new ArrayList[LocalTx]();
-        blockingTx = new ArrayList[BlockingTx]();
-    }
-    
-    public def addLocalTx(tx:LocalTx) {
-        listLock.lock();
-        localTx.add(tx);
-        listLock.unlock();
-    }
-    public def addGlobalTx(tx:Tx) {
-        listLock.lock();
-        globalTx.add(tx);
-        listLock.unlock();
-    }
-    public def addBlockingTx(tx:BlockingTx) {
-        listLock.lock();
-        blockingTx.add(tx);
-        listLock.unlock();
-    }
-}

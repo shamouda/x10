@@ -21,6 +21,7 @@ import x10.compiler.Pinned;
 import x10.util.GrowableRail;
 import x10.util.Timer;
 import x10.util.resilient.localstore.tx.*;
+import x10.util.resilient.localstore.*;
 import x10.compiler.Uncounted;
 import x10.compiler.Immediate;
 import x10.util.resilient.localstore.Cloneable;
@@ -36,7 +37,14 @@ public class LockManager (store:ResilientStore, mapName:String, list:PlaceLocalH
         list().addBlockingTx(tx);
         return tx;
     }
-    
+    public def noop(key1:String) { }
+    public def noop(key:String, id:Long):Cloneable {
+        return null;
+    }
+    public def noopLockUnlock(p1:Place, key1:String, p2:Place, key2:String, id:Long) {
+        at (p1) { noop(key1); }
+        at (p2) { noop(key2); }
+    }
     /***************** Locking ********************/
     
     public def lockWrite(p1:Place, key1:String, p2:Place, key2:String, id:Long) {
