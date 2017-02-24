@@ -23,7 +23,7 @@ public class Noop2AsyncLocking {
         val expAccounts = Long.parseLong(args(0));
         val expOperations = Long.parseLong(args(1));
         val debugProgress = Long.parseLong(args(2));
-        val readPercentage = 0.0;
+        val readPercentage = 0.0F;
         if (readPercentage < 0 || readPercentage > 1.0) {
         	Console.OUT.println("read_percentage must have a value between 0.0 and 1.0");
             return;
