@@ -25,7 +25,6 @@ import x10.io.Unserializable;
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     public def tryAcquireRead(txId:Long) {
-    	if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXLOCK.ReadWriteSemaphore.tryAcquireRead() started");
     	mutex.lock();
         readCount ++;
         var acquired:Boolean = true;
@@ -34,30 +33,23 @@ import x10.io.Unserializable;
         if (!acquired)
             readCount --;    
         mutex.unlock();
-        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXLOCK.ReadWriteSemaphore.tryAcquireRead() ended, acquired=" + acquired);
         return acquired;
     }
     
     public def tryAcquireWrite(txId:Long) {
-    	if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXLOCK.ReadWriteSemaphore.tryAcquireWrite() started");
         val acquired = wrt.tryAcquire();
-        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXLOCK.ReadWriteSemaphore.tryAcquireWrite() ended, acquired=" + acquired);
         return acquired;
     }
     
     public def releaseRead(txId:Long) {
-    	if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXLOCK.ReadWriteSemaphore.releaseRead() started");
         mutex.lock();
         readCount --;
         if (readCount == 0n) 
             wrt.release();
         mutex.unlock();
-        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXLOCK.ReadWriteSemaphore.releaseRead() ended");
     }
     
     public def releaseWrite(txId:Long) {
-    	if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXLOCK.ReadWriteSemaphore.releaseWrite() started");
         wrt.release();
-        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXLOCK.ReadWriteSemaphore.releaseWrite() ended");
     }
 }
