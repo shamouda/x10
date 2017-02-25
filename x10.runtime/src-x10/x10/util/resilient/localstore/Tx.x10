@@ -351,9 +351,10 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         val endP2 = Timer.milliTime();
         if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseTwo time [" + (endP2-startP2) + "] ms");
         
-        if (resilient && !DISABLE_DESC)
+        
+        if (resilient && !DISABLE_DESC && !TM_REPLICATION.equals("lazy") )
             deleteTxDesc();
-            
+
         commitTime = Timer.milliTime();
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] committed, allTxTime [" + (commitTime-startTime) + "] ms");
         

@@ -223,6 +223,13 @@ public class ResilientStore {
     				else
     					committedList = plh().slaveStore.filterCommitted(txList);
     				
+    				if (TM_DEBUG) {
+                        var str:String = "";
+                        for (tty in committedList)
+                            str += tty + ",";
+                        Console.OUT.println("result for place " + here + " : committed tx list{" + str + "}");
+                    }
+    				
     				val cList = committedList;
     				at (root) {
     					committedLock().lock();
