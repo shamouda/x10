@@ -247,12 +247,6 @@ public class LinearRegression implements SPMDResilientIterativeApp {
         	return new AppTempData(norm_r2, norm_r2_initial, norm_r2_target, iter);
         }
         
-        public def asyncRemoteCopySupported() = false;
-        
-        public def asyncRemoteCopy(id:Long, mapName:String, key:String, plh:PlaceLocalHandle[LocalStore]) {
-            throw new Exception("CloneableLong.asyncRemoteCopy  not supported ...");
-        }
-        
         public def makeSnapshot_local() = this;
         
         public def restoreSnapshot_local(o:Cloneable) {

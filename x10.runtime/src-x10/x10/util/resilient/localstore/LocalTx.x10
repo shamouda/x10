@@ -92,6 +92,7 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
         val id = this.id;
         val mapName = this.mapName;
         val plh = this.plh;
+        val placeIndex = plh().virtualPlaceId;
         try {
         	if (VALIDATION_REQUIRED)
         		plh().masterStore.validate(mapName, id);
@@ -100,7 +101,7 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
             try {
                 if (resilient && log != null && log.size() > 0) {
                     finish at (plh().slave) async {
-                        plh().slaveStore.commit(id, mapName, log);
+                        plh().slaveStore.commit(id, mapName, log, placeIndex);
                     }
                 }
             }catch(exSl:Exception) {

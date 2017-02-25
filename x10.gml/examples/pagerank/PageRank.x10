@@ -332,12 +332,6 @@ public class PageRank implements SPMDResilientIterativeApp {
         	return new AppTempData(iter, maxDelta);
         }
         
-        public def asyncRemoteCopySupported() = false;
-        
-        public def asyncRemoteCopy(id:Long, mapName:String, key:String, plh:PlaceLocalHandle[LocalStore]) {
-            throw new Exception("CloneableLong.asyncRemoteCopy  not supported ...");
-        }
-        
         public def makeSnapshot_local() = this;
         
         public def restoreSnapshot_local(o:Cloneable) {        

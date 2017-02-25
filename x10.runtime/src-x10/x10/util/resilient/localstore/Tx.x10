@@ -28,6 +28,7 @@ import x10.util.concurrent.Future;
 
 public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
+    private static val TM_REPLICATION = System.getenv("TM_REPLICATION") == null ? "lazy" : System.getenv("TM_REPLICATION");
     
     private val root = GlobalRef[Tx](this);
 
@@ -399,6 +400,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     }
     
     private def commitPhaseOne(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, root:GlobalRef[Tx]) {
+    	val placeIndex = plh().virtualPlaceId;
         if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne ...");
         finish for (p in members) {
         	if ((resilient && !DISABLE_SLAVE) || VALIDATION_REQUIRED) {
@@ -416,7 +418,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
 	                    if (log != null && log.size() > 0) {	                        
                             //send txLog to slave (very important to be able to tolerate failures of masters just after prepare)
                             at (plh().slave) async {
-                                plh().slaveStore.prepare(id, mapName, log );
+                                plh().slaveStore.prepare(id, mapName, log, placeIndex);
                             }
 	                    }
 	                }
@@ -462,7 +464,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     private def finalize(commit:Boolean, abortedPlaces:ArrayList[Place], 
             plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, root:GlobalRef[Tx]) {
         if(TM_DEBUG) Console.OUT.println("Tx["+id+"]  here["+here+"] " + ( commit? " Commit Started ": " Abort Started " ) + " ...");
-        
+        val placeIndex = plh().virtualPlaceId;
         //if one of the masters die, let the exception be thrown to the caller, but hide dying slves
         finish for (p in members) {
             /*skip aborted places*/
@@ -471,7 +473,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             
             at (p) async {
                 var ex:Exception = null;
-                if (resilient && !DISABLE_SLAVE) {
+                if (resilient && !TM_REPLICATION.equals("lazy") && !DISABLE_SLAVE) {
                     val log = plh().masterStore.getTxCommitLog(mapName, id);
                     if (log != null && log.size() > 0) {
                         //ask slave to commit, slave's death is not fatal

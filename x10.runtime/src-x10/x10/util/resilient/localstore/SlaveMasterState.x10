@@ -1,6 +1,7 @@
 package x10.util.resilient.localstore;
 
 import x10.util.HashMap;
+import x10.util.ArrayList;
 import x10.util.resilient.localstore.Cloneable;
 
 /*Master state as stored at the slave*/
@@ -19,4 +20,5 @@ class SlaveMasterState {
         }
         return data;
     }
+    
 }

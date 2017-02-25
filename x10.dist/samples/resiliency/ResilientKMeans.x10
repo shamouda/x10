@@ -119,11 +119,6 @@ public class ResilientKMeans {
         public def clone():Cloneable {
             return new LocalStateSnapshot(points, numPoints, dim, numClusters);
         }
-        public def asyncRemoteCopySupported() = false;
-        
-        public def asyncRemoteCopy(id:Long, mapName:String, key:String, plh:PlaceLocalHandle[LocalStore]) {
-            throw new Exception("CloneableLong.asyncRemoteCopy  not supported ...");
-        }
     }
 
     static class DistState implements Snapshottable {

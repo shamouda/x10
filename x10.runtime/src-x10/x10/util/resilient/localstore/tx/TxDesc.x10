@@ -40,12 +40,6 @@ public class TxDesc(id:Long, mapName:String, members:Rail[Long]) implements Clon
         return "";
     }
     
-    public def asyncRemoteCopySupported() = false;
-    
-    public def asyncRemoteCopy(id:Long, mapName:String, key:String, plh:PlaceLocalHandle[LocalStore]) {
-        throw new Exception("TxDesc.asyncRemoteCopy  not supported ...");
-    }
-    
     public def toString() {
         var str:String = "";
         for ( p in members )

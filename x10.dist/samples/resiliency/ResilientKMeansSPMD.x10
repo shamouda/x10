@@ -157,22 +157,11 @@ public class ResilientKMeansSPMD {
         public def clone() {
             return new ImmutableState(points, numPoints, numClusters, epsilon, dim);
         }
-        public def asyncRemoteCopySupported() = false;
-        
-        public def asyncRemoteCopy(id:Long, mapName:String, key:String, plh:PlaceLocalHandle[LocalStore]) {
-            throw new Exception("CloneableLong.asyncRemoteCopy  not supported ...");
-        }
     }
 
     static class MutableState(clusters:Rail[Float]) implements Cloneable {
         public def clone() {
             return new MutableState(clusters);
-        }
-        
-        public def asyncRemoteCopySupported() = false;
-        
-        public def asyncRemoteCopy(id:Long, mapName:String, key:String, plh:PlaceLocalHandle[LocalStore]) {
-            throw new Exception("CloneableLong.asyncRemoteCopy  not supported ...");
         }
     }
 

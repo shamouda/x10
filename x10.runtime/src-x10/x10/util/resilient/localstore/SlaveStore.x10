@@ -26,19 +26,19 @@ public class SlaveStore {
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     private var masterState:SlaveMasterState;
-    private var logs:HashMap[Long, TxSlaveLog];
+    private var logs:ArrayList[TxSlaveLog];
     private transient val lock:Lock = new Lock(); 
     
     public def this() {
         assert(resilient);
         masterState = new SlaveMasterState(new HashMap[String,HashMap[String,Cloneable]]());
-        logs = new HashMap[Long, TxSlaveLog]();
+        logs = new ArrayList[TxSlaveLog]();
     }
     
     /******* Recovery functions (called by one place) , no risk of race condition *******/
     public def addMasterPlace(masterVirtualId:Long, state:SlaveMasterState) {
         masterState = state;
-        logs = new HashMap[Long, TxSlaveLog]();
+        logs = new ArrayList[TxSlaveLog]();
     }
     
     public def getSlaveMasterState():SlaveMasterState {
@@ -46,11 +46,11 @@ public class SlaveStore {
     }
     
     /******* Prepare/Commit/Abort functions *******/
-    public def commit(id:Long, mapName:String, transLog:HashMap[String,Cloneable]) {
+    public def commit(id:Long, mapName:String, transLog:HashMap[String,Cloneable], placeIndex:Long) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit1() started ...");
         try {
             lock.lock();
-            commitLockAcquired(new TxSlaveLog(id, mapName, transLog));
+            commitLockAcquired(new TxSlaveLog(id, mapName, transLog, placeIndex));
         }
         finally {
             lock.unlock();
@@ -62,7 +62,7 @@ public class SlaveStore {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit2() started ...");
         try {
             lock.lock();
-            val txLog = logs.getOrElse(id, null);
+            val txLog = getLog(id);
             if (txLog != null)
                 commitLockAcquired(txLog);
         } finally {
@@ -80,21 +80,21 @@ public class SlaveStore {
                 val value = txLog.transLog.getOrThrow(key);
                 data.put(key, value);
             }
-            logs.delete(txLog.id);
+            logs.remove(txLog);
         }catch(ex:Exception){
             if (TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] here["+here+"] SlaveStore.commitLockAcquired() exception["+ex.getMessage()+"] ...");
             throw ex;
         }
     }
     
-    public def prepare(id:Long, mapName:String, remainingEntries:HashMap[String,Cloneable]) {
+    public def prepare(id:Long, mapName:String, remainingEntries:HashMap[String,Cloneable], placeIndex:Long) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() started ...");
         try {
             lock.lock();
-            var txSlaveLog:TxSlaveLog = logs.getOrElse(id, null );
+            var txSlaveLog:TxSlaveLog = getLog(id);
             if (txSlaveLog == null) {
-                txSlaveLog = new TxSlaveLog( id, mapName, new HashMap[String,Cloneable]());
-                logs.put(id, txSlaveLog);
+                txSlaveLog = new TxSlaveLog( id, mapName, new HashMap[String,Cloneable](), placeIndex);
+                logs.add(txSlaveLog);
             }
             val iter = remainingEntries.keySet().iterator();
             while (iter.hasNext()) {
@@ -110,29 +110,92 @@ public class SlaveStore {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() completed ...");
     }
     
-    public def addEntry(id:Long, mapName:String, key:String, value:Cloneable) {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.addEntry() started ...");
-        try {
-            lock.lock();
-            val txSlaveLog = logs.getOrElse(id, new TxSlaveLog( id, mapName, new HashMap[String,Cloneable]()) );
-            txSlaveLog.transLog.put(key, value);
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.addEntry() logs.put(id="+id+") ...");
-        }
-        finally {
-            lock.unlock();
-        }
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.addEntry() completed ...");
-    }
-
     public def abort(id:Long) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.abort() started ...");
         try {
             lock.lock();
-            logs.delete(id);
+            val log = getLog(id);
+            logs.remove(log);
         }
         finally {
             lock.unlock();
         }
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.abort() completed ...");
+    }
+    
+    public def filterCommitted(txList:ArrayList[Long]) {
+    	val list = new ArrayList[Long]();
+    	try {
+    		lock.lock();
+	        val txDescMap = masterState.maps.getOrElse("_TxDesc_", null);
+	        if (txDescMap != null) {
+	        	for (txId in txList) {
+	        		val obj = txDescMap.getOrElse("tx"+txId, null);
+	        		if (obj != null && (obj as TxDesc).status == TxDesc.COMMITTING) {
+	        			list.add(txId);
+	        		}
+	        	}
+	        }
+    	} 
+    	finally {
+    		lock.unlock();
+        }
+    	return list;
+    }
+    
+    public def clusterTransactions() {
+    	val map = new HashMap[Long,ArrayList[Long]]();
+    	try {
+    		lock.lock();
+    		for (log in logs) {    			
+    			var list:ArrayList[Long] = map.getOrElse(log.placeIndex, null);
+    			if (list == null){
+    				list = new ArrayList[Long]();
+    				map.put(log.placeIndex, list);
+    			}
+    			list.add(log.id);
+    		}
+    	} 
+    	finally {
+    		lock.unlock();
+        }
+    	return map;
+    }
+    
+    public def getPendingTransactions() {
+    	val list = new ArrayList[Long]();
+    	try {
+    		lock.lock();
+    		for (log in logs)
+    			list.add(log.id);
+    	} 
+    	finally {
+    		lock.unlock();
+        }
+    	return list;
+    }
+    
+    public def commitAll(committed:ArrayList[Long]) {
+    	try {
+    		lock.lock();
+
+    		for (log in logs){
+    			if (committed.contains(log.id)) {
+    				commitLockAcquired(log);
+    			}
+    		}
+    		logs.clear();
+    	}
+    	finally {
+    		lock.unlock();
+    	}
+    }
+    
+    private def getLog(id:Long) {
+    	for (log in logs){
+    		if (log.id == id)
+    			return log;
+    	}
+    	return null;
     }
 }

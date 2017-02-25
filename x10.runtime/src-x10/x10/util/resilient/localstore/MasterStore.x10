@@ -52,7 +52,7 @@ public class MasterStore {
             }
         }
     }   
-    
+       
     private def getTxManager(mapName:String) {
         try {
             lock.lock();
@@ -162,5 +162,19 @@ public class MasterStore {
     
     public def putLocked(mapName:String, id:Long, key:String, value:Cloneable):Cloneable {
         return getTxManager(mapName).put(id, key, value);
+    }
+    
+    public def filterCommitted(txList:ArrayList[Long]) {
+    	val list = new ArrayList[Long]();
+        val txDescMap = maps.getOrElse("_TxDesc_", null);
+        if (txDescMap != null) {
+        	for (txId in txList) {
+        		val obj = txDescMap.get(-1, "tx"+txId);
+        		if (obj != null && (obj as TxDesc).status == TxDesc.COMMITTING) {
+        			list.add(txId);
+        		}
+        	}
+        }
+    	return list;
     }
 }

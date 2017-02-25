@@ -180,12 +180,6 @@ final class UTS implements Cloneable {
   public def clone() {
       return trim();
   }
-  
-  public def asyncRemoteCopySupported() = false;
-  
-  public def asyncRemoteCopy(id:Long, mapName:String, key:String, plh:PlaceLocalHandle[LocalStore]) {
-      throw new Exception("CloneableLong.asyncRemoteCopy  not supported ...");
-  }
 
   static def sub(str:String, start:Int, end:Int):String {
     return str.substring(start, Math.min(end, str.length()));
