@@ -30,6 +30,8 @@ public class MapData(name:String) {
         lock = new Lock();
     }
     
+    public def getMap() = metadata;
+    
     public def getKeyValueMap() {
         try {
             lock.lock();

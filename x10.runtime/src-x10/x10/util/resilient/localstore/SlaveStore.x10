@@ -26,7 +26,9 @@ public class SlaveStore {
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     private var masterState:SlaveMasterState;
-    private var logs:ArrayList[TxSlaveLog];
+    // the order of the transactions in this list is important for recovery
+    // TODO: change to a HashMap[place index, list]
+    private var logs:ArrayList[TxSlaveLog]; 
     private transient val lock:Lock = new Lock(); 
     
     public def this() {

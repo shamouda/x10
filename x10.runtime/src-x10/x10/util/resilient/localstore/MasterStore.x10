@@ -166,15 +166,14 @@ public class MasterStore {
     
     public def filterCommitted(txList:ArrayList[Long]) {
     	val list = new ArrayList[Long]();
-        val txDescMap = maps.getOrElse("_TxDesc_", null);
-        if (txDescMap != null) {
-        	for (txId in txList) {
-        		val obj = txDescMap.get(-1, "tx"+txId);
-        		if (obj != null && (obj as TxDesc).status == TxDesc.COMMITTING) {
-        			list.add(txId);
-        		}
-        	}
-        }
+    	val metadata = maps.getOrThrow("_TxDesc_").data.getMap();
+    	
+    	for (txId in txList) {
+    		val obj = metadata.getOrThrow("tx"+txId).getAtomicValue(false, "tx"+txId, -1).value;
+    		if (obj != null && (obj as TxDesc).status == TxDesc.COMMITTING) {
+    		    list.add(txId);
+    		}
+    	}
     	return list;
     }
 }
