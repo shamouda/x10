@@ -1,0 +1,125 @@
+Tx[8000262] startGlobalTransaction localTx[8000263] started ...
+Tx[8000263] getvv key[tx8000262] ver[0] val[null]
+Tx[8000263] here[Place(7)] key[tx8000262] getLockedWrite?[false]
+Tx[8000263] here[Place(7)] key[tx8000262] getLockedRead?[false]
+Tx[8000263] TXLOCK key[tx8000262] lockWrite done
+Tx[8000263] getvv key[tx8000262] ver[0] val[null]
+Tx[8000263] here[Place(7)] key[tx8000262] setLockedWrite(true) 
+Tx[8000263] setvv key[tx8000262] ver[1] val[TxDesc id[8000262] mapName[mapA] status[STARTED] members[7 3 2 ]]
+Tx[8000263] getvv key[tx8000262] ver[1] val[TxDesc id[8000262] mapName[mapA] status[STARTED] members[7 3 2 ]]
+Tx[8000263] TXLOCK key[tx8000262] unlockWrite done
+Tx[8000262] startGlobalTransaction localTx[8000263] completed ...
+TX[8000262] here[Place(7)] started members[Place(7) Place(3) Place(2) ]
+Tx[8000262] here[Place(7)] TXSTART accounts[acc254,acc168] places[Place(3),Place(2)]
+Tx[8000262] Start Op[ASYNC_AT_VOID] here[Place(7)] dest[Place(3)] key[null] value[null] ...
+Tx[8000262] execute Op[ASYNC_AT_VOID] time: [0] ms
+Tx[8000262] Start Op[ASYNC_AT_VOID] here[Place(7)] dest[Place(2)] key[null] value[null] ...
+Tx[8000262] execute Op[ASYNC_AT_VOID] time: [0] ms
+Tx[8000262] Start Op[PUT_LOCAL] here[Place(7)] dest[Place(7)] key[p7] value[CloneableLong[64]] ...
+Tx[8000262] here[Place(7)] put_RL_EA_UL started
+Tx[8000262] here[Place(7)] abortedTxs.contains(id) = false
+Tx[8000262] getvv key[p7] ver[63] val[CloneableLong[63]]
+Tx[8000262] initial read ver[63] val[CloneableLong[63]]
+Tx[8000262] here[Place(7)] key[p7] getLockedWrite?[false]
+Tx[8000262] here[Place(7)] key[p7] getLockedRead?[false]
+Tx[8000262] TXLOCK key[p7] lockWrite done
+Tx[8000262] getvv key[p7] ver[63] val[CloneableLong[63]]
+Tx[8000262] here[Place(7)] key[p7] setLockedWrite(true) 
+Tx[8000262] setvv key[p7] ver[64] val[CloneableLong[64]]
+Tx[8000262] here[Place(7)] put_RL_EA_UL completed
+Tx[8000262] execute Op[PUT_LOCAL] time: [0] ms
+Tx[8000262] Start Op[GET_LOCAL] here[Place(3)] dest[Place(3)] key[acc254] value[null] ...
+Tx[8000262] here[Place(3)] get_RL_UL started
+Tx[8000262] here[Place(3)] abortedTxs.contains(id) = false
+Tx[8000262] TXLOCK key[acc254] lockRead done
+Tx[8000262] getvv key[acc254] ver[6] val[account:17000938]
+Tx[8000262] initial read ver[6] val[account:17000938]
+Tx[8000262] getvv key[acc254] ver[6] val[account:17000938]
+Tx[8000262] getvv  ver[6] value[account:17000938]
+Tx[8000262] here[Place(3)] get_RL_UL completed
+Tx[8000262] execute Op[GET_LOCAL] time: [0] ms
+Tx[8000262] Start Op[PUT_LOCAL] here[Place(3)] dest[Place(3)] key[acc254] value[account:9000676] ...
+Tx[8000262] here[Place(3)] put_RL_EA_UL started
+Tx[8000262] here[Place(3)] abortedTxs.contains(id) = false
+Tx[8000262] getvv key[acc254] ver[6] val[account:17000938]
+Tx[8000262] here[Place(3)] key[acc254] getLockedWrite?[false]
+Tx[8000262] here[Place(3)] key[acc254] getLockedRead?[true]
+Tx[8000262] TXLOCK key[acc254] unlockRead done
+Tx[8000262] here[Place(3)] key[acc254] setLockedRead(false) 
+Tx[8000262] TXLOCK key[acc254] lockWrite done
+Tx[8000262] getvv key[acc254] ver[6] val[account:17000938]
+Tx[8000262] here[Place(3)] key[acc254] setLockedWrite(true) 
+Tx[8000262] setvv key[acc254] ver[7] val[account:9000676]
+Tx[8000262] here[Place(3)] put_RL_EA_UL completed
+Tx[8000262] execute Op[PUT_LOCAL] time: [1] ms
+Tx[8000262] Start Op[GET_LOCAL] here[Place(2)] dest[Place(2)] key[acc168] value[null] ...
+Tx[8000262] here[Place(2)] get_RL_UL started
+Tx[8000262] here[Place(2)] abortedTxs.contains(id) = false
+Tx[8000262] TXLOCK key[acc168] lockRead done
+Tx[8000262] getvv key[acc168] ver[3] val[account:7000084]
+Tx[8000262] initial read ver[3] val[account:7000084]
+Tx[8000262] getvv key[acc168] ver[3] val[account:7000084]
+Tx[8000262] getvv  ver[3] value[account:7000084]
+Tx[8000262] here[Place(2)] get_RL_UL completed
+Tx[8000262] execute Op[GET_LOCAL] time: [1] ms
+Tx[8000262] Start Op[PUT_LOCAL] here[Place(2)] dest[Place(2)] key[acc168] value[account:15000346] ...
+Tx[8000262] here[Place(2)] put_RL_EA_UL started
+Tx[8000262] here[Place(2)] abortedTxs.contains(id) = false
+Tx[8000262] getvTx[1000339] TXLOCK key[tx1000337] unlockWrite done
+Tx[8000262] here[Place(2)] key[acc168] getLockedWrite?[false]
+Tx[8000262] here[Place(2)] key[acc168] getLockedRead?[true]
+Tx[8000262] TXLOCK key[acc168] unlockRead done
+Tx[8000262] here[Place(2)] key[acc168] setLockedRead(false) 
+Tx[8000262] TXLOCK key[acc168] lockWrite done
+Tx[8000262] getvv key[acc168] ver[3] val[account:7000084]
+Tx[8000262] here[Place(2)] key[acc168] setLockedWrite(true) 
+Tx[8000262] setvv key[acc168] ver[4] val[account:15000346]
+Tx[8000262] here[Place(2)] put_RL_EA_UL completed
+Tx[8000262] execute Op[PUT_LOCAL] time: [0] ms
+Tx[8000262] waitForFutures [13] ms
+Tx[8000262] executeTransaction  {finish closure();} succeeded  preCommitTime[13] ms
+Tx[8000262] commitPhaseOne ...
+Tx[8000262] commitPhaseOne going to move to [Place(7)] ...
+Tx[8000262] commitPhaseOne going to move to [Place(3)] ...
+Tx[8000262] getvv key[p7] ver[64] val[CloneableLong[64]]
+Tx[8000262] commitPhaseOne going to move to [Place(2)] ...
+Tx[8000262] getvv key[acc168] ver[4] val[account:15000346]
+Tx[8000262] here[Place(8)] SlaveStore.prepare() started ...
+Tx[8000262] here[Place(8)] SlaveStore.prepare() logs.put(id=8000262) ...
+Tx[8000262] here[Place(8)] SlaveStore.prepare() completed ...
+Tx[8000262] getvv key[acc254] ver[7] val[account:9000676]
+Tx[8000262] here[Place(3)] SlaveStore.prepare() started ...
+Tx[8000262] here[Place(3)] SlaveStore.prepare() logs.put(id=8000262) ...
+Tx[8000262] here[Place(3)] SlaveStore.prepare() completed ...
+Tx[8000262] here[Place(4)] SlaveStore.prepare() started ...
+Tx[8000262] here[Place(4)] SlaveStore.prepare() logs.put(id=8000262) ...
+Tx[8000262] here[Place(4)] SlaveStore.prepare() completed ...
+Tx[8000262] abort   (abortPlaces.size = 1) alreadyAborted = false
+Tx[8000262]  here[Place(7)]  Abort Started  ...
+Tx[8000262] here[Place(7)] added to abortedTxs ...
+Tx[8000262] here[Place(7)] abort_UL started
+Tx[8000262] rollsetvv key[p7] ver[63] val[CloneableLong[63]]
+Tx[8000262] TXLOCK key[p7] unlockWrite done
+Tx[8000262] here[Place(7)] abort_UL completed
+Tx[8000262] here[Place(2)] added to abortedTxs ...
+Tx[8000262] here[Place(2)] abort_UL started
+Tx[8000262] rollsetvv key[acc168] ver[3] val[account:7000084]
+Tx[8000262] TXLOCK key[acc168] unlockWrite done
+Tx[8000262] here[Place(2)] abort_UL completed
+Tx[8000262] deleteTxDesc localTx[8000264] started ...
+Tx[8000264] getvv key[tx8000262] ver[1] val[TxDesc id[8000262] mapName[mapA] status[STARTED] members[7 3 2 ]]
+Tx[8000264] initial read ver[1] val[TxDesc id[8000262] mapName[mapA] status[STARTED] members[7 3 2 ]]
+Tx[8000264] here[Place(7)] key[tx8000262] getLockedWrite?[false]
+Tx[8000264] here[Place(7)] key[tx8000262] getLockedRead?[false]
+Tx[8000264] TXLOCK key[tx8000262] lockWrite done
+Tx[8000264] getvv key[tx8000262] ver[1] val[TxDesc id[8000262] mapName[mapA] status[STARTED] members[7 3 2 ]]
+Tx[8000264] here[Place(7)] key[tx8000262] setLockedWrite(true) 
+Tx[8000264] setvv key[tx8000262] ver[2] val[null]
+Tx[8000264] getvv key[tx8000262] ver[2] val[null]
+Tx[8000264] TXLOCK key[tx8000262] unlockWrite done
+Tx[8000262] deleteTxDesc localTx[8000264] completed ...
+Tx[8000262] aborted, allTxTime [62] ms
+Tx[8000262] executeTransaction  {finish closure();} failed with Error [null] commitCalled[true] preCommitTime[13] ms
+Tx[8000262] here[Place(4)] SlaveStore.commitLockAcquired() started ...
+Tx[8000262] here[Place(4)] SlaveStore.commitLockAcquired() completed ...
+ ! Test Failed ! sum2[-8000262] != 0

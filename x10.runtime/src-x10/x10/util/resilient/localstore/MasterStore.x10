@@ -170,7 +170,7 @@ public class MasterStore {
     	
     	for (txId in txList) {
     		val obj = metadata.getOrThrow("tx"+txId).getAtomicValue(false, "tx"+txId, -1).value;
-    		if (obj != null && (obj as TxDesc).status == TxDesc.COMMITTING) {
+    		if (obj != null && ( (obj as TxDesc).status == TxDesc.COMMITTED || (obj as TxDesc).status == TxDesc.COMMITTING) ) {
     		    list.add(txId);
     		}
     	}

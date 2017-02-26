@@ -20,7 +20,7 @@ public class TxDesc(id:Long, mapName:String, members:Rail[Long]) implements Clon
     
     public static val STARTED=1;
     public static val COMMITTING=2;
-    public static val ABORTING=3;
+    public static val COMMITTED=3;
 
     public def this(id:Long, mapName:String, members:Rail[Long], status:Long) {
         property (id, mapName, members);
@@ -35,8 +35,8 @@ public class TxDesc(id:Long, mapName:String, members:Rail[Long]) implements Clon
             return "STARTED";
         else if (status == COMMITTING)
             return "COMMITTING";
-        else if (status == ABORTING)
-            return "ABORTING";
+        else if (status == COMMITTED)
+            return "COMMITTED";
         return "";
     }
     

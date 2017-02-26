@@ -18,6 +18,7 @@ import x10.util.HashMap;
 import x10.util.concurrent.SimpleLatch;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
+import x10.util.resilient.localstore.tx.TxManager;
 import x10.util.resilient.localstore.tx.TxDesc;
 import x10.util.resilient.localstore.tx.TransactionsList;
 import x10.util.concurrent.Lock;
@@ -30,7 +31,7 @@ import x10.util.concurrent.Lock;
  */
 public class ResilientStore {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-    private static val TM_REPLICATION = System.getenv("TM_REPLICATION") == null ? "lazy" : System.getenv("TM_REPLICATION");
+    private static val TM_REP = System.getenv("TM_REP") == null ? "lazy" : System.getenv("TM_REP");
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     public val plh:PlaceLocalHandle[LocalStore];
@@ -176,7 +177,7 @@ public class ResilientStore {
                                     if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] commit it");
                                     tx.commit(true); //ignore phase one
                                 }
-                                else {
+                                else if (txDesc.status == TxDesc.STARTED) {
                                     if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] abort it");
                                     tx.abort();
                                 }
@@ -184,7 +185,7 @@ public class ResilientStore {
                         }
                     }
                     
-                    if (TM_REPLICATION.equals("lazy"))
+                    if (TM_REP.equals("lazy"))
                     	applySlaveTransactions(plh, changes);
                 }
             }
@@ -197,56 +198,49 @@ public class ResilientStore {
     	val committedLock = GlobalRef(new Lock());
     	val root = here;
     	
-    	val placeTxsMap = plh().slaveStore.clusterTransactions();
-    	finish {
-    		val iter = placeTxsMap.keySet().iterator();
-    		while (iter.hasNext()) {
-    			val placeIndex = iter.next();
-    			val txList = placeTxsMap.getOrThrow(placeIndex);
-    		    var pl:Place = changes.oldActivePlaces(placeIndex);
-    			var master:Boolean = true;
-    			if (pl.isDead()){
-    				pl = changes.oldActivePlaces.next(pl);
-    				master = false;
-    			}
-    			val isMaster = master;
-    			if (TM_DEBUG) {
-    				var str:String = "";
-    			    for (tty in txList)
-    			    	str += tty + ",";
-    				Console.OUT.println("check committed transactions for place " + pl + " : tx list{" + str + "}");
-    			}
-    			at (pl) async {
-    				var committedList:ArrayList[Long]; 
-    				if (isMaster)
-    					committedList = plh().masterStore.filterCommitted(txList);
-    				else
-    					committedList = plh().slaveStore.filterCommitted(txList);
-    				
-    				if (TM_DEBUG) {
-                        var str:String = "";
-                        for (tty in committedList)
-                            str += tty + ",";
-                        Console.OUT.println("result for place " + here + " : committed tx list{" + str + "}");
-                    }
-    				
-    				val cList = committedList;
-    				at (root) {
-    					committedLock().lock();
-    					committed().addAll(cList);
-    					committedLock().unlock();
-    				}
-    			}
-    		}
+    	if (TxManager.VALIDATION_REQUIRED) {
+	    	val placeTxsMap = plh().slaveStore.clusterTransactions();
+	    	finish {
+	    		val iter = placeTxsMap.keySet().iterator();
+	    		while (iter.hasNext()) {
+	    			val placeIndex = iter.next();
+	    			val txList = placeTxsMap.getOrThrow(placeIndex);
+	    		    var pl:Place = changes.oldActivePlaces(placeIndex);
+	    			var master:Boolean = true;
+	    			if (pl.isDead()){
+	    				pl = changes.oldActivePlaces.next(pl);
+	    				master = false;
+	    			}
+	    			val isMaster = master;
+	    			at (pl) async {
+	    				var committedList:ArrayList[Long]; 
+	    				if (isMaster)
+	    					committedList = plh().masterStore.filterCommitted(txList);
+	    				else
+	    					committedList = plh().slaveStore.filterCommitted(txList);
+	    				
+	    				val cList = committedList;
+	    				at (root) {
+	    					committedLock().lock();
+	    					committed().addAll(cList);
+	    					committedLock().unlock();
+	    				}
+	    			}
+	    		}
+	    	}
     	}
     	
     	val orderedTx = plh().slaveStore.getPendingTransactions();
-    	val commitTxOrdered = new ArrayList[Long]();
-    	for (val tx in orderedTx){
-    		if (committed().contains(tx))
-    			commitTxOrdered.add(tx);
+    	if (TxManager.VALIDATION_REQUIRED) {
+    		val commitTxOrdered = new ArrayList[Long]();
+    		for (val tx in orderedTx){
+    			if (committed().contains(tx))
+    				commitTxOrdered.add(tx);
+    		}
+    		plh().slaveStore.commitAll(commitTxOrdered);
     	}
-    	plh().slaveStore.commitAll(commitTxOrdered);
+    	else
+    		plh().slaveStore.commitAll(orderedTx);
     }
     
 }

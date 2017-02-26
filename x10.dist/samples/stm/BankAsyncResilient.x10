@@ -115,7 +115,7 @@ public class BankAsyncResilient {
                 val p2 = tmpP2;
                 val randAcc1 = "acc"+rand1;
                 val randAcc2 = "acc"+rand2;
-                val amount = Math.abs(rand.nextLong()%100);
+                //val amount = Math.abs(rand.nextLong()%100);
                 var pg:PlaceGroup;
                 if (DISABLE_CKPT)
                     pg = STMAppUtils.createGroup(p1, p2);
@@ -124,7 +124,8 @@ public class BankAsyncResilient {
                 
                 val members = pg;
                 val success = map.executeTransaction( members, (tx:Tx) => {
-                    if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] here["+here+"] TXSTART"+ (recovered?"RECOVER":"")+" accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"] amounts["+amount+"]");
+                    if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] here["+here+"] TXSTART"+ (recovered?"RECOVER":"")+" accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"]");
+                    val amount = tx.id;
                     val f1 = tx.asyncAt(p1, () => {
                         var acc1:BankAccount = tx.get(randAcc1) as BankAccount;
                         if (acc1 == null)
@@ -147,7 +148,7 @@ public class BankAsyncResilient {
                     tx.setWaitForFuturesElapsedTime(Timer.milliTime() - startWait);
                     if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitForFuturesElapsedTime +"] ms");
                 } );
-                
+                //Console.OUT.println(here + ":" + randAcc1 + ":" + randAcc2 + ":"+ amount);
                 if (success == Tx.SUCCESS_RECOVER_STORE)
                     throw new RecoverDataStoreException("RecoverDataStoreException", here);
             }

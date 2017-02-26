@@ -65,8 +65,10 @@ public class SlaveStore {
         try {
             lock.lock();
             val txLog = getLog(id);
-            if (txLog != null)
+            if (txLog != null) {
                 commitLockAcquired(txLog);
+                logs.remove(txLog);
+            }
         } finally {
             lock.unlock();
         }
@@ -74,6 +76,7 @@ public class SlaveStore {
     }
     
     private def commitLockAcquired(txLog:TxSlaveLog) {
+    	if (TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] here["+here+"] SlaveStore.commitLockAcquired() started ...");
         try {
             val data = masterState.getMapData(txLog.mapName);
             val iter = txLog.transLog.keySet().iterator();
@@ -82,7 +85,7 @@ public class SlaveStore {
                 val value = txLog.transLog.getOrThrow(key);
                 data.put(key, value);
             }
-            logs.remove(txLog);
+            if (TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] here["+here+"] SlaveStore.commitLockAcquired() completed ...");
         }catch(ex:Exception){
             if (TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] here["+here+"] SlaveStore.commitLockAcquired() exception["+ex.getMessage()+"] ...");
             throw ex;
@@ -133,7 +136,7 @@ public class SlaveStore {
 	        if (txDescMap != null) {
 	        	for (txId in txList) {
 	        		val obj = txDescMap.getOrElse("tx"+txId, null);
-	        		if (obj != null && (obj as TxDesc).status == TxDesc.COMMITTING) {
+	        		if (obj != null && ((obj as TxDesc).status == TxDesc.COMMITTED || (obj as TxDesc).status == TxDesc.COMMITTING)) {
 	        			list.add(txId);
 	        		}
 	        	}
@@ -149,7 +152,7 @@ public class SlaveStore {
     	val map = new HashMap[Long,ArrayList[Long]]();
     	try {
     		lock.lock();
-    		for (log in logs) {    			
+    		for (log in logs) {
     			var list:ArrayList[Long] = map.getOrElse(log.placeIndex, null);
     			if (list == null){
     				list = new ArrayList[Long]();
@@ -168,8 +171,9 @@ public class SlaveStore {
     	val list = new ArrayList[Long]();
     	try {
     		lock.lock();
-    		for (log in logs)
+    		for (log in logs){
     			list.add(log.id);
+    		}
     	} 
     	finally {
     		lock.unlock();
@@ -182,9 +186,8 @@ public class SlaveStore {
     		lock.lock();
 
     		for (log in logs){
-    			if (committed.contains(log.id)) {
+    			if (committed.contains(log.id))
     				commitLockAcquired(log);
-    			}
     		}
     		logs.clear();
     	}

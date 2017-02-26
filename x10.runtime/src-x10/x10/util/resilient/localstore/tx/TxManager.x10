@@ -31,6 +31,11 @@ public abstract class TxManager(data:MapData) {
     
     public static val TM = System.getenv("TM") == null? "RL_EA_UL":System.getenv("TM");
     
+    /*We can skip the validation phase in RL_EA configurations*/
+    public static val VALIDATION_REQUIRED = ! ( !TM_DISABLED && 
+    										      TM_READ    == READ_LOCKING && 
+    										      TM_ACQUIRE == EARLY_ACQUIRE );
+    
     protected val logsLock = new Lock();
     protected val txLogs = new HashMap[Long,TxLog]();
     protected val abortedTxs = new ArrayList[Long](); //aborted NULL transactions 
@@ -138,9 +143,17 @@ public abstract class TxManager(data:MapData) {
         logsLock.lock();
         val log = txLogs.getOrElse(id, null);
         logsLock.unlock();
+        
         if (log == null)
             return;
-        commit(log); 
+        
+        commit(log);
+        
+        //delete log to avoid repeated commit if a recovery commit is called
+        logsLock.lock();
+        txLogs.delete(id);
+        logsLock.unlock();
+        
     }
     
     public def abort(id:Long) {

@@ -28,7 +28,7 @@ import x10.util.concurrent.Future;
 
 public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-    private static val TM_REPLICATION = System.getenv("TM_REPLICATION") == null ? "lazy" : System.getenv("TM_REPLICATION");
+    private static val TM_REP = System.getenv("TM_REP") == null ? "lazy" : System.getenv("TM_REP");
     
     private val root = GlobalRef[Tx](this);
 
@@ -52,10 +52,6 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     private static val DISABLE_SLAVE = System.getenv("DISABLE_SLAVE") != null && System.getenv("DISABLE_SLAVE").equals("1");
     private static val DISABLE_DESC = System.getenv("DISABLE_DESC") != null && System.getenv("DISABLE_DESC").equals("1");
     
-    /*In 2PC, we can skip the validation phase in RL_EA configurations*/
-    private static val VALIDATION_REQUIRED = ! ( !TxManager.TM_DISABLED && 
-    										      TxManager.TM_READ    == TxManager.READ_LOCKING && 
-    										      TxManager.TM_ACQUIRE == TxManager.EARLY_ACQUIRE );
     
     public static val SUCCESS = 0n;
     public static val SUCCESS_RECOVER_STORE = 1n;
@@ -347,18 +343,23 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         }
         
         val startP2 = Timer.milliTime();
-        commitPhaseTwo(plh, id, mapName, members, root);
+        val p2success = commitPhaseTwo(plh, id, mapName, members, root);
         val endP2 = Timer.milliTime();
         if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseTwo time [" + (endP2-startP2) + "] ms");
         
         
-        if (resilient && !DISABLE_DESC && !TM_REPLICATION.equals("lazy") )
-            deleteTxDesc();
+        if (resilient && !DISABLE_DESC ){
+        	if (!TM_REP.equals("lazy"))
+        		deleteTxDesc();
+        	else
+        		updateTxDesc(TxDesc.COMMITTED);
+        }
+            
 
         commitTime = Timer.milliTime();
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] committed, allTxTime [" + (commitTime-startTime) + "] ms");
         
-        if (excs.size() > 0) {
+        if (excs.size() > 0 || p2success == SUCCESS_RECOVER_STORE) {
             for (e in excs.toRail()) {
                 Console.OUT.println("Tx["+id+"] excs>0  msg["+e.getMessage()+"]");
                 e.printStackTrace();
@@ -374,8 +375,11 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         try {
             if(TM_DEBUG) Console.OUT.println("Tx["+id+"] updateTxDesc localTx["+localTx.id+"] started ...");
             val desc = localTx.get("tx"+id) as TxDesc;
-            desc.status = status;
-            localTx.put("tx"+id, desc);
+            //while recovering a transaction, the current place will not have the TxDesc stored, NPE can be thrown
+            if (desc != null) {
+            	desc.status = status;
+            	localTx.put("tx"+id, desc);
+            }
             localTx.commit();
             if(TM_DEBUG) Console.OUT.println("Tx["+id+"] updateTxDesc localTx["+localTx.id+"] completed ...");
     
@@ -404,11 +408,11 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     	val placeIndex = plh().virtualPlaceId;
         if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne ...");
         finish for (p in members) {
-        	if ((resilient && !DISABLE_SLAVE) || VALIDATION_REQUIRED) {
+        	if ((resilient && !DISABLE_SLAVE) || TxManager.VALIDATION_REQUIRED) {
 	            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne going to move to ["+p+"] ...");
 	            at (p) async {
 	        
-	            	if (VALIDATION_REQUIRED) {
+	            	if (TxManager.VALIDATION_REQUIRED) {
 	            		if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate started ...");
 	            		plh().masterStore.validate(mapName, id);
 	            		if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate done ...");
@@ -435,6 +439,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         try {
             //ask masters and slaves to commit
             finalize(true, null, plh, id, mapName, members, root);
+            return SUCCESS;
         }
         catch(ex:MultipleExceptions) {
             if (TM_DEBUG) {
@@ -457,8 +462,8 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                 //FATAL Exception
                 throw new Exception("FATAL ERROR: Master and Slave died together, Exception["+ex2.getMessage()+"] ");
             }
-            
         }
+        return SUCCESS_RECOVER_STORE;
     }
     
     //used for both commit and abort
@@ -474,7 +479,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             
             at (p) async {
                 var ex:Exception = null;
-                if (resilient && !TM_REPLICATION.equals("lazy") && !DISABLE_SLAVE) {
+                if (resilient && !TM_REP.equals("lazy") && !DISABLE_SLAVE) {
                     val log = plh().masterStore.getTxCommitLog(mapName, id);
                     if (log != null && log.size() > 0) {
                         //ask slave to commit, slave's death is not fatal
@@ -514,20 +519,24 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         if (DISABLE_SLAVE)
             return;
         
-        //ask slaves to commit (their master died, 
-        //and we need to resolve the slave's pending transactions)
-        finish for (p in deadMasters) {
-            assert(members.contains(p));
-            val slave = activePlaces.next(p);
-            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalizeSlaves here["+here+"] moving to slave["+plh().slave+"] to " + ( commit? "commit": "abort" ));
-            at (slave) async {
-                if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalizeSlaves here["+here+"] moved to slave["+here+"] to " + ( commit? "commit": "abort" ));
-                if (commit)
-                    plh().slaveStore.commit(id);
-                else
-                    plh().slaveStore.abort(id);
-            }
+        if (!TM_REP.equals("lazy")) {
+	        //ask slaves to commit (their master died, 
+	        //and we need to resolve the slave's pending transactions)
+	        finish for (p in deadMasters) {
+	            assert(members.contains(p));
+	            val slave = activePlaces.next(p);
+	            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalizeSlaves here["+here+"] moving to slave["+plh().slave+"] to " + ( commit? "commit": "abort" ));
+	            at (slave) async {
+	                if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalizeSlaves here["+here+"] moved to slave["+here+"] to " + ( commit? "commit": "abort" ));
+	                if (commit)
+	                    plh().slaveStore.commit(id);
+	                else
+	                    plh().slaveStore.abort(id);
+	            }
+	        }
         }
+        else if (TM_DEBUG)
+        	Console.OUT.println("Tx["+id+"] LazyRep, IGNORE finalize slave ...");
     }
     
     public static def opDesc(op:Int) {

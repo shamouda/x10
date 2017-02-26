@@ -47,9 +47,9 @@ public class TxLockCREW extends TxLock {
     }
     
     public def unlockRead(txId:Long, key:String) {
+    	readersLock.lock();
         assert(readers.contains(txId) && lockedWriter == -1);
         sem.releaseRead(txId);
-        readersLock.lock();
         readers.remove(txId);
         readersLock.unlock();
         if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] unlockRead done");
