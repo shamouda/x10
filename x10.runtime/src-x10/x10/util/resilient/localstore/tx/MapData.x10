@@ -1,86 +1,69 @@
 package x10.util.resilient.localstore.tx;
 
 import x10.util.concurrent.Lock;
+
+import com.sun.javafx.css.StyleCacheEntry.Key;
+
 import x10.util.HashMap;
 import x10.util.resilient.localstore.Cloneable;
 
 /*
  * MapData may be accessed by different transactions at the same time.
- * We use a lock to synchronize access to the shared metadata hashmap.
+ * We use a lock per MapBucket to synchronize access to the shared metadata hashmap.
  **/
 public class MapData(name:String) {
-    val metadata:HashMap[String,MemoryUnit];
-    val lock:Lock;
-
+	val BUCKETS = System.getenv("BUCKETS") == null? 1024 : Long.parseLong(System.getenv("BUCKETS"));
+	val bucketsLocks:Rail[Lock];
+	val buckets:Rail[MapBucket];
+	
     public def this(name:String) {
         property(name);
-        metadata = new HashMap[String,MemoryUnit]();
-        lock = new Lock();
+        buckets = new Rail[MapBucket](BUCKETS, (i:Long) => new MapBucket(i));
+        bucketsLocks = new Rail[Lock](BUCKETS, (i:Long) => new Lock());
     }
     
-    public def this(name:String, values:HashMap[String,Cloneable]) {
+    public def this(name:String, serBuckets:Rail[MapBucket]) {
         property(name);
-        metadata = new HashMap[String,MemoryUnit]();
-        val iter = values.keySet().iterator();
-        while (iter.hasNext()) {
-            val k = iter.next();
-            val v = values.getOrThrow(k);
-            metadata.put(k, new MemoryUnit(v));
-        }
-        lock = new Lock();
+        buckets = new Rail[MapBucket](BUCKETS, (i:Long) => new MapBucket(i, serBuckets(i)));
+        bucketsLocks = new Rail[Lock](BUCKETS, (i:Long) => new Lock());
     }
+
     
-    public def getMap() = metadata;
-    
-    public def getKeyValueMap() {
-        try {
-            lock.lock();
-            val values = new HashMap[String,Cloneable]();
-            val iter = metadata.keySet().iterator();
-            while (iter.hasNext()) {
-                val k = iter.next();
-                val v = metadata.getOrThrow(k).getAtomicValue(false, k, -1).value;
-                values.put(k, v);
-            }
-            return values;
-            
-        }finally {
-            lock.unlock();
-        }
+    public def getSerializableBuckets() {
+    	val serBuckets = new Rail[MapBucket](BUCKETS);
+    	for (var i:Int = 0; i < BUCKETS; i++) {
+    		bucketsLocks(i).lock();
+    		serBuckets(i) = buckets(i).getSerializableBucket();
+    		bucketsLocks(i).unlock();
+    	}
+        return serBuckets;
     }
     
     public def getMemoryUnit(k:String):MemoryUnit {
+    	val indx=getBucketIndex(k);
     	var res:MemoryUnit = null;
         try {
-            lock.lock();
+        	bucketsLocks(indx).lock();
             res = metadata.getOrElse(k, null);
             if (res == null) {
                 res = new MemoryUnit(null);
                 metadata.put(k, res);
             }
         }finally {
-            lock.unlock();
+        	bucketsLocks(indx).unlock();
         }
         return res;
     }
     
+    
     public def keySet() {
-        try {
-            lock.lock();
-            return metadata.keySet();
-        }finally {
-            lock.unlock();
-        }
+        throw new Exception("TODO implement MapData.keySet() ...");
     }
     
     public def toString() {
-        var str:String = here+"--->\n";
-        val iter = metadata.keySet().iterator();
-        while (iter.hasNext()) {
-            val key = iter.next();
-            val value = metadata.getOrThrow(key);
-            str += "Key["+key+"] Value["+value.toString()+"]\n";
-        }
-        return str;
+    	throw new Exception("TODO implement MapData.toString() ...");
     }
+    
+    private def getBucketIndex(key:String) = key.hashCode() % BUCKETS ;
+
 }

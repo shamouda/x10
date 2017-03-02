@@ -9,57 +9,37 @@ import x10.util.resilient.localstore.MasterStore;
 import x10.xrx.Runtime;
 import x10.util.concurrent.Future;
 
-public abstract class TxManager(data:MapData) {
+public abstract class TxManager(data:MapData, validationRequired:Boolean, concurrencyMode:Int, WB:Boolean) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
-    public static val EARLY_ACQUIRE= 1;
-    public static val LATE_ACQUIRE = 2; //CAN NOT BE USED WITH UNDO LOGGING
+    public static val LOCK_BLOCKING = 0N;
+    public static val LOCK_FREE = 1N;
+    public static val LOCK_NON_BLOCKING = 2N;
     
-    public static val UNDO_LOGGING= 1;
-    public static val WRITE_BUFFERING = 2;
-    
-    public static val READ_LOCKING= 1;
-    public static val READ_VALIDATION = 2;
-    
-    
-    public static val TM_DISABLED = System.getenv("TM_DISABLED") != null && Long.parseLong(System.getenv("TM_DISABLED")) == 1;
-    
-    //Default TM=RL_EA_UL
-    public static val TM_READ = System.getenv("TM") == null || System.getenv("TM").contains("RL") ? READ_LOCKING :  READ_VALIDATION;
-    public static val TM_ACQUIRE = System.getenv("TM") == null || System.getenv("TM").contains("EA") ? EARLY_ACQUIRE :  LATE_ACQUIRE;
-    public static val TM_RECOVER = System.getenv("TM") == null || System.getenv("TM").contains("UL") ? UNDO_LOGGING :  WRITE_BUFFERING;
-    
-    public static val TM = System.getenv("TM") == null? "RL_EA_UL":System.getenv("TM");
-    
-    /*We can skip the validation phase in RL_EA configurations*/
-    public static val VALIDATION_REQUIRED = ! ( !TM_DISABLED && 
-    										      TM_READ    == READ_LOCKING && 
-    										      TM_ACQUIRE == EARLY_ACQUIRE );
     
     protected val logsLock = new Lock();
     protected val txLogs = new HashMap[Long,TxLog]();
     protected val abortedTxs = new ArrayList[Long](); //aborted NULL transactions 
-    protected val validatedTxLogs = new HashMap[Long,TxLog]();
-    
-    protected val stat = new TxManagerStatistics();
     
     public static def make(name:String) = make(new MapData(name));
     
-    public static def make(data:MapData):TxManager {
-        if (TM_DISABLED)
-            return new TxManager_LockBased(data);
-        else if (     TM_READ == READ_LOCKING    &&  TM_ACQUIRE == EARLY_ACQUIRE && TM_RECOVER == UNDO_LOGGING)
-            return new TxManager_RL_EA_UL(data);
-        else if (TM_READ == READ_LOCKING    &&  TM_ACQUIRE == EARLY_ACQUIRE && TM_RECOVER == WRITE_BUFFERING)
-            return new TxManager_RL_EA_WB(data);
-        else if (TM_READ == READ_LOCKING    &&  TM_ACQUIRE == LATE_ACQUIRE  && TM_RECOVER == WRITE_BUFFERING)
-            return new TxManager_RL_LA_WB(data);
-        else if (TM_READ == READ_VALIDATION &&  TM_ACQUIRE == EARLY_ACQUIRE && TM_RECOVER == UNDO_LOGGING)
-            return new TxManager_RV_EA_UL(data);
-        else if (TM_READ == READ_VALIDATION &&  TM_ACQUIRE == EARLY_ACQUIRE && TM_RECOVER == WRITE_BUFFERING)
-            return new TxManager_RV_EA_WB(data);
-        else if (TM_READ == READ_VALIDATION &&  TM_ACQUIRE == LATE_ACQUIRE  && TM_RECOVER == WRITE_BUFFERING)
-            return new TxManager_RV_LA_WB(data);
+    public static def make(data:MapData, algorithm:String):TxManager {
+        if (algorithm.equals("locking"))
+            return new TxManager_LockBased(data, false, LOCK_BLOCKING, false);
+        else if (algorithm.equals("lockfree"))
+        	return new TxManager_LockFree(data, false, LOCK_FREE, false);
+        else if (algorithm.equals("RL_EA_UL"))
+            return new TxManager_RL_EA_UL(data, false, LOCK_NON_BLOCKING, false);
+        else if (algorithm.equals("RL_EA_WB"))
+            return new TxManager_RL_EA_WB(data, false, LOCK_NON_BLOCKING, true);
+        else if (algorithm.equals("RL_LA_WB"))
+            return new TxManager_RL_LA_WB(data, true, LOCK_NON_BLOCKING, true);
+        else if (algorithm.equals("RV_EA_UL"))
+            return new TxManager_RV_EA_UL(data, true, LOCK_NON_BLOCKING, false);
+        else if (algorithm.equals("RV_EA_WB"))
+            return new TxManager_RV_EA_WB(data, true, LOCK_NON_BLOCKING, true);
+        else if (algorithm.equals("RV_LA_WB"))
+            return new TxManager_RV_LA_WB(data, true, LOCK_NON_BLOCKING, true);
         else
             throw new Exception("Wrong Tx Manager Configuration (undo logging can not be selected with late acquire");
     }
@@ -74,7 +54,7 @@ public abstract class TxManager(data:MapData) {
         
         try {
             log.lock();
-            if (TM_RECOVER == WRITE_BUFFERING) {
+            if (WB) {
                 return log.removeReadOnlyKeys();
             }
             else {
@@ -625,7 +605,6 @@ public abstract class TxManager(data:MapData) {
                 memory.unlockWrite(log.id, key);
             }
         }
-        stat.commitCount++;
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commit_WB completed");
     }
     
@@ -643,7 +622,6 @@ public abstract class TxManager(data:MapData) {
             else 
                 memory.unlockWrite(log.id, key);
         }
-        stat.commitCount++;
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commit_UL completed");
     }
     
@@ -674,7 +652,6 @@ public abstract class TxManager(data:MapData) {
                 if (TM_DEBUG) Console.OUT.println("Tx["+log.id+"]  abort_UL key "+key+" is NOT locked !!!!");
             }
         }
-        stat.abortCount++;
         log.aborted = true;
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] abort_UL completed");
     }
@@ -698,20 +675,12 @@ public abstract class TxManager(data:MapData) {
             else if (kLog.getLockedWrite()) 
                 memory.unlockWrite(log.id, key);
         }
-        stat.abortCount++;
         log.aborted = true;
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] abort_WB completed");
     }
     
     /********************* End of abort operations  *********************/
-    
-    public def getState() = stat;
-    
-    public def resetState() {
-        stat.commitCount = 0;
-        stat.abortCount = 0;
-    }    
-    
+   
     
     /*******   Blocking Lock methods *********/
     public def lockWrite_LockBased(id:Long, key:String) {
