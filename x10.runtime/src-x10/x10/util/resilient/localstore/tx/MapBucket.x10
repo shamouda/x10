@@ -12,7 +12,7 @@
 
 package x10.util.resilient.localstore.tx;
 
-public class MapBucket(id:Long) implements x10.io.Unserializable {
+public class MapBucket(id:Long, lockMode:Int) implements x10.io.Unserializable {
 	public val map = new HashMap[String,MemoryUnit]();
 	public val locks = new HashMap[String,TxLock]();
 	
@@ -31,5 +31,36 @@ public class MapBucket(id:Long) implements x10.io.Unserializable {
 	public def getSerializableBucket() {
 		return new SerializableMapBucket(id, map);
 	}
+	
+	public def get(k:String) {
+		
+		if (locks.getOrElse)
+	}
+	
+	
+	private def getOrAddLock(k:String) {
+		var lock:TxLock = locks.getOrElse(k, null);
+	    if (lock == null){
+	        if (lockMode == TxManager.LOCK_BLOCKING) 
+	        	lock = new TxLockCREWBlocking();
+	        else if (lockMode == TxManager.LOCK_NON_BLOCKING)
+	        	lock = new TxLockCREW();
+	        else
+	        	lock = null;
+	        
+	        if (lock != null)
+	        	locks.put(k, lock);
+	    }
+	    return lock;
+	}
+	
+	public def tryLockRead(k:String) {
+		
+	}
+	
+	public def tryLockWrite(k:String) {
+		
+	}
+	
 	
 }

@@ -41,18 +41,14 @@ public class MapData(name:String) {
     
     public def getMemoryUnit(k:String):MemoryUnit {
     	val indx=getBucketIndex(k);
-    	var res:MemoryUnit = null;
+    	var m:MemoryUnit = null;
         try {
         	bucketsLocks(indx).lock();
-            res = metadata.getOrElse(k, null);
-            if (res == null) {
-                res = new MemoryUnit(null);
-                metadata.put(k, res);
-            }
-        }finally {
+        	m =  
+        } finally {
         	bucketsLocks(indx).unlock();
         }
-        return res;
+        return m;
     }
     
     

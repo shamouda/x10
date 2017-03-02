@@ -22,14 +22,6 @@ public class MemoryUnit {
     
     public def this(v:Cloneable) {
         value = v;
-        /*
-        if (lockMode == TxManager.LOCK_BLOCKING) 
-            txLock = new TxLockCREWBlocking();
-        else if (lockMode == TxManager.LOCK_NON_BLOCKING)
-            txLock = new TxLockCREW();
-        else
-        	txLock = null;
-        */
     }
     
     public def this(v:Cloneable, ver:Int) {
@@ -60,8 +52,6 @@ public class MemoryUnit {
         value = oldValue;
         if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] rollsetvv key["+key+"] ver["+version+"] val["+value+"]");
     }
-    
-    public def getLock() = txLock;
     
     public def toString() {
         return "version:"+version+":value:"+value;
