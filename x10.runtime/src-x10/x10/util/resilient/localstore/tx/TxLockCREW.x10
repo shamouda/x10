@@ -15,6 +15,7 @@ package x10.util.resilient.localstore.tx;
 import x10.util.concurrent.Lock;
 import x10.util.concurrent.ReadWriteSemaphore;
 import x10.util.HashSet;
+import x10.xrx.Runtime;
 
 /*
  * A non-blocking concurrent read exclusive write lock for transactional management.
@@ -23,63 +24,106 @@ import x10.util.HashSet;
  * */
 public class TxLockCREW extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
+    private static val WRITER_WAIT_MS = System.getenv("WRITER_WAIT_MS") == null ? 10 : Long.parseLong(System.getenv("WRITER_WAIT_MS"));
+    private static val WRITER_WAIT_ITER = System.getenv("WRITER_WAIT_ITER") == null ? 3 : Long.parseLong(System.getenv("WRITER_WAIT_ITER"));
+    
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
+    private val lock = new Lock();
     private val readers = new HashSet[Long]();
-    private val readersLock = new Lock();
+    private var waitingWriters:Long = 0;
     private var lockedWriter:Long = -1;
-    private val sem = new ReadWriteSemaphore();
     
     public def lockRead(txId:Long, key:String) {
-        val acquired = sem.tryAcquireRead(txId);
-        if (acquired) {
-            assert(lockedWriter == -1);
-            readersLock.lock();
-            readers.add(txId);
-            readersLock.unlock();
-            if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockRead done"); 
-        }
-        else {
-            if (resilient)
-                checkDeadLockers();
-            if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockRead CONFLICT, lockedWriter["+lockedWriter+"] ");
-            throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] key ["+key+"] ", here);
-        }
+    	try {
+    		lock.lock();
+    		if (lockedWriter == -1 && waitingWriters == 0) {
+    			assert(!readers.contains(txId)) : "lockRead bug, locking an already locked key";
+    			readers.add(txId);
+    			if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockRead done"); 
+    		}
+    		else {
+    			 if (resilient)
+   	                checkDeadLockers();
+    			assert (lockedWriter != txId) : "lockRead bug, downgrade is not supported ";
+   	            if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockRead CONFLICT, lockedWriter["+lockedWriter+"] waitingWriters["+waitingWriters+"] ");
+   	            throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] key ["+key+"] ", here);
+    		}
+    			
+    	}
+    	finally {
+    		lock.unlock();
+    	}
+    }
+    
+    public def lockWrite(txId:Long, key:String) {
+    	try {
+    		lock.lock();
+    		assert (lockedWriter != txId) : "lockWrite bug, locking an already locked key";
+    		
+    		var conflict:Boolean = false;
+    		if (readers.size() == 0 && lockedWriter == -1) {
+    			lockedWriter = txId;
+    		}
+    		else if (readers.size() == 1 && readers.iterator().next() == txId) { //ready to upgrade
+				readers.remove(txId);
+    			lockedWriter = txId;
+    		}
+    		else if (!readers.contains(txId) || lockedWriter != -1) {  //locked by another reader or another writer
+    			conflict = true;
+    		}
+    		else { //locked by me and other readers
+ 				waitingWriters++;
+				
+ 				Runtime.increaseParallelism();
+				for (var i:Int = 0n; i < WRITER_WAIT_ITER && readers.size() > 1; i++) {
+					if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite WAIT("+i+") lockedWriter["+lockedWriter+"] readers["+readersAsString(readers)+"] waitingWriters["+waitingWriters+"]");
+					lock.unlock();
+					System.threadSleep(WRITER_WAIT_MS);   				
+					lock.lock();
+				}
+				Runtime.decreaseParallelism(1n);
+				
+				waitingWriters--;
+				
+				if (lockedWriter == -1 && readers.size() == 1 && readers.iterator().next() == txId ) { //ready to upgrade
+					assert(readers.iterator().next() == txId) : "lockWrite bug, wrong reader found";
+					readers.remove(txId);
+        			lockedWriter = txId;
+				}
+				else {
+					conflict = true;
+					readers.remove(txId);
+					if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite CONFLICT AFTERWAIT, lockedWriter["+lockedWriter+"] readers["+readersAsString(readers)+"] waitingWriters["+waitingWriters+"]");
+				}
+    		}
+    		
+    		if (conflict) {
+    			if (resilient)
+                	checkDeadLockers();
+            	if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite CONFLICT, lockedWriter["+lockedWriter+"] readers["+readersAsString(readers)+"] ");
+            	throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] key ["+key+"] ", here);
+    		}
+    		else
+    			if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite done");
+    	}
+    	finally {
+    		lock.unlock();
+    	}
     }
     
     public def unlockRead(txId:Long, key:String) {
-    	readersLock.lock();
+    	lock.lock();
         assert(readers.contains(txId) && lockedWriter == -1);
-        sem.releaseRead(txId);
         readers.remove(txId);
-        readersLock.unlock();
+        lock.unlock();
         if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] unlockRead done");
-    }
-
-    
-    public def lockWrite(txId:Long, key:String) {
-        val acquired = sem.tryAcquireWrite(txId);
-        if (acquired) {
-            assert(readers.size() == 0 && (lockedWriter == -1 || lockedWriter == txId));
-            lockedWriter = txId;
-            if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite done");
-        }
-        else {
-            if (resilient)
-                checkDeadLockers();
-            if (TM_DEBUG) {
-            	readersLock.lock();
-            	val readersStr = readersAsString(readers);
-            	readersLock.unlock();
-            	Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite CONFLICT, lockedWriter["+lockedWriter+"] readers["+readersStr+"] ");
-            }
-            throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] key ["+key+"] ", here);
-        }
     }
     
     public def unlockWrite(txId:Long, key:String) {
+    	lock.lock();
         assert(readers.size() == 0 && lockedWriter == txId);
         lockedWriter = -1;
-        sem.releaseWrite(txId);
+        lock.unlock();
         if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] unlockWrite done");
     }
     
