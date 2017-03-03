@@ -285,14 +285,14 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     	
         try {
             //ask masters to abort (a master will abort slave first, then abort itself)
-            finalize(false, abortedPlaces, plh, id, mapName, members, root);
+            finalize(false, abortedPlaces, plh, id, members, root);
         }
         catch(ex:MultipleExceptions) {
             if (resilient) {
                 try {
                     val deadMasters = getDeadPlaces(ex, members);
                     //some masters died while rolling back,ask slaves to abort
-                    finalizeSlaves(false, deadMasters, plh, id, mapName, members, root);
+                    finalizeSlaves(false, deadMasters, plh, id, members, root);
                 }
                 catch(ex2:Exception) {
                     Console.OUT.println("Warning: ignoring exception during finalizeSlaves(false): " + ex2.getMessage());
@@ -325,7 +325,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         if (!skipPhaseOne) {
             try {
                 val start = Timer.milliTime();
-                commitPhaseOne(plh, id, mapName, members, root); // failures are fatal
+                commitPhaseOne(plh, id, members, root); // failures are fatal
                 val end = Timer.milliTime();
                 if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne time [" + ((end-start)) + "] ms");
                 
@@ -343,7 +343,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         }
         
         val startP2 = Timer.milliTime();
-        val p2success = commitPhaseTwo(plh, id, mapName, members, root);
+        val p2success = commitPhaseTwo(plh, id, members, root);
         val endP2 = Timer.milliTime();
         if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseTwo time [" + (endP2-startP2) + "] ms");
         
@@ -404,7 +404,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         }
     }
     
-    private def commitPhaseOne(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, root:GlobalRef[Tx]) {
+    private def commitPhaseOne(plh:PlaceLocalHandle[LocalStore], id:Long, members:PlaceGroup, root:GlobalRef[Tx]) {
     	val placeIndex = plh().virtualPlaceId;
         if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne ...");
         finish for (p in members) {
@@ -414,16 +414,16 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
 	        
 	            	if (TxManager.VALIDATION_REQUIRED) {
 	            		if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate started ...");
-	            		plh().masterStore.validate(mapName, id);
+	            		plh().masterStore.validate(id);
 	            		if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate done ...");
 	            	}
             		
 	                if (resilient && !DISABLE_SLAVE) {
-	                    val log = plh().masterStore.getTxCommitLog(mapName, id);
+	                    val log = plh().masterStore.getTxCommitLog(id);
 	                    if (log != null && log.size() > 0) {	                        
                             //send txLog to slave (very important to be able to tolerate failures of masters just after prepare)
                             at (plh().slave) async {
-                                plh().slaveStore.prepare(id, mapName, log, placeIndex);
+                                plh().slaveStore.prepare(id, log, placeIndex);
                             }
 	                    }
 	                }
@@ -434,11 +434,11 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         }
     }
     
-    private def commitPhaseTwo(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, root:GlobalRef[Tx]) {
+    private def commitPhaseTwo(plh:PlaceLocalHandle[LocalStore], id:Long, members:PlaceGroup, root:GlobalRef[Tx]) {
         if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseTwo ...");
         try {
             //ask masters and slaves to commit
-            finalize(true, null, plh, id, mapName, members, root);
+            finalize(true, null, plh, id, members, root);
             return SUCCESS;
         }
         catch(ex:MultipleExceptions) {
@@ -455,7 +455,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             //some masters have died, after validation
             //ask slaves to commit
             try {
-                finalizeSlaves(true, deadMasters, plh, id, mapName, members, root);
+                finalizeSlaves(true, deadMasters, plh, id, members, root);
             }
             catch(ex2:Exception) {
                 ex2.printStackTrace();
@@ -468,7 +468,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     
     //used for both commit and abort
     private def finalize(commit:Boolean, abortedPlaces:ArrayList[Place], 
-            plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, root:GlobalRef[Tx]) {
+            plh:PlaceLocalHandle[LocalStore], id:Long, members:PlaceGroup, root:GlobalRef[Tx]) {
         if(TM_DEBUG) Console.OUT.println("Tx["+id+"]  here["+here+"] " + ( commit? " Commit Started ": " Abort Started " ) + " ...");
         val placeIndex = plh().virtualPlaceId;
         //if one of the masters die, let the exception be thrown to the caller, but hide dying slves
@@ -480,7 +480,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             at (p) async {
                 var ex:Exception = null;
                 if (resilient && !TM_REP.equals("lazy") && !DISABLE_SLAVE) {
-                    val log = plh().masterStore.getTxCommitLog(mapName, id);
+                    val log = plh().masterStore.getTxCommitLog(id);
                     if (log != null && log.size() > 0) {
                         //ask slave to commit, slave's death is not fatal
                         try {
@@ -499,9 +499,9 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                 }
                     
                 if (commit)
-                    plh().masterStore.commit(mapName, id);
+                    plh().masterStore.commit(id);
                 else
-                    plh().masterStore.abort(mapName, id);
+                    plh().masterStore.abort(id);
                     
                 if (resilient && ex != null) {
                     val slaveEx = ex;
@@ -514,7 +514,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     }
     
     private def finalizeSlaves(commit:Boolean, deadMasters:ArrayList[Place], 
-            plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, root:GlobalRef[Tx]) {
+            plh:PlaceLocalHandle[LocalStore], id:Long, members:PlaceGroup, root:GlobalRef[Tx]) {
         
         if (DISABLE_SLAVE)
             return;

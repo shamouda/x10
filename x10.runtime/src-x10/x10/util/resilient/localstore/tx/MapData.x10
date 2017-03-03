@@ -3,23 +3,22 @@ package x10.util.resilient.localstore.tx;
 import x10.util.concurrent.Lock;
 import x10.util.HashMap;
 import x10.util.resilient.localstore.Cloneable;
+import x10.util.HashSet;
 
 /*
  * MapData may be accessed by different transactions at the same time.
  * We use a lock to synchronize access to the shared metadata hashmap.
  **/
-public class MapData(name:String) {
+public class MapData {
     val metadata:HashMap[String,MemoryUnit];
     val lock:Lock;
 
-    public def this(name:String) {
-        property(name);
+    public def this() {
         metadata = new HashMap[String,MemoryUnit]();
         lock = new Lock();
     }
     
-    public def this(name:String, values:HashMap[String,Cloneable]) {
-        property(name);
+    public def this(values:HashMap[String,Cloneable]) {
         metadata = new HashMap[String,MemoryUnit]();
         val iter = values.keySet().iterator();
         while (iter.hasNext()) {
@@ -64,10 +63,17 @@ public class MapData(name:String) {
         return res;
     }
     
-    public def keySet() {
+    public def keySet(mapName:String) {
         try {
             lock.lock();
-            return metadata.keySet();
+            val set = new HashSet[String]();
+            val iter = metadata.keySet().iterator();
+            while (iter.hasNext()) {
+            	val key = iter.next();
+            	if (key.startsWith(mapName))
+            		set.add(key);
+            }
+            return set;
         }finally {
             lock.unlock();
         }

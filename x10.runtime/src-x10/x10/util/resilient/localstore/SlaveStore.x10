@@ -25,7 +25,7 @@ public class SlaveStore {
     static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
-    private var masterState:SlaveMasterState;
+    private var masterState:HashMap[String,Cloneable];
     // the order of the transactions in this list is important for recovery
     // TODO: change to a HashMap[place index, list]
     private var logs:ArrayList[TxSlaveLog]; 
@@ -33,26 +33,26 @@ public class SlaveStore {
     
     public def this() {
         assert(resilient);
-        masterState = new SlaveMasterState(new HashMap[String,HashMap[String,Cloneable]]());
+        masterState = new HashMap[String,Cloneable]();
         logs = new ArrayList[TxSlaveLog]();
     }
     
     /******* Recovery functions (called by one place) , no risk of race condition *******/
-    public def addMasterPlace(masterVirtualId:Long, state:SlaveMasterState) {
+    public def addMasterPlace(masterVirtualId:Long, state:HashMap[String,Cloneable]) {
         masterState = state;
         logs = new ArrayList[TxSlaveLog]();
     }
     
-    public def getSlaveMasterState():SlaveMasterState {
+    public def getSlaveMasterState():HashMap[String,Cloneable] {
         return masterState;
     }
     
     /******* Prepare/Commit/Abort functions *******/
-    public def commit(id:Long, mapName:String, transLog:HashMap[String,Cloneable], placeIndex:Long) {
+    public def commit(id:Long, transLog:HashMap[String,Cloneable], placeIndex:Long) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit1() started ...");
         try {
             lock.lock();
-            commitLockAcquired(new TxSlaveLog(id, mapName, transLog, placeIndex));
+            commitLockAcquired(new TxSlaveLog(id, transLog, placeIndex));
         }
         finally {
             lock.unlock();
@@ -78,7 +78,7 @@ public class SlaveStore {
     private def commitLockAcquired(txLog:TxSlaveLog) {
     	if (TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] here["+here+"] SlaveStore.commitLockAcquired() started ...");
         try {
-            val data = masterState.getMapData(txLog.mapName);
+            val data = masterState;
             val iter = txLog.transLog.keySet().iterator();
             while (iter.hasNext()) {
                 val key = iter.next();
@@ -92,19 +92,19 @@ public class SlaveStore {
         }
     }
     
-    public def prepare(id:Long, mapName:String, remainingEntries:HashMap[String,Cloneable], placeIndex:Long) {
+    public def prepare(id:Long, entries:HashMap[String,Cloneable], placeIndex:Long) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() started ...");
         try {
             lock.lock();
             var txSlaveLog:TxSlaveLog = getLog(id);
             if (txSlaveLog == null) {
-                txSlaveLog = new TxSlaveLog( id, mapName, new HashMap[String,Cloneable](), placeIndex);
+                txSlaveLog = new TxSlaveLog( id, new HashMap[String,Cloneable](), placeIndex);
                 logs.add(txSlaveLog);
             }
-            val iter = remainingEntries.keySet().iterator();
+            val iter = entries.keySet().iterator();
             while (iter.hasNext()) {
                 val key = iter.next();
-                val value = remainingEntries.getOrThrow(key);
+                val value = entries.getOrThrow(key);
                 txSlaveLog.transLog.put(key, value);
             }
             if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() logs.put(id="+id+") ...");
@@ -130,21 +130,12 @@ public class SlaveStore {
     
     public def filterCommitted(txList:ArrayList[Long]) {
     	val list = new ArrayList[Long]();
-    	try {
-    		lock.lock();
-	        val txDescMap = masterState.maps.getOrElse("_TxDesc_", null);
-	        if (txDescMap != null) {
-	        	for (txId in txList) {
-	        		val obj = txDescMap.getOrElse("tx"+txId, null);
-	        		if (obj != null && ((obj as TxDesc).status == TxDesc.COMMITTED || (obj as TxDesc).status == TxDesc.COMMITTING)) {
-	        			list.add(txId);
-	        		}
-	        	}
-	        }
-    	} 
-    	finally {
-    		lock.unlock();
-        }
+    	for (txId in txList) {
+    		val obj = masterState.getOrElse("_TxDesc_"+"tx"+txId, null);
+    		if (obj != null && ((obj as TxDesc).status == TxDesc.COMMITTED || (obj as TxDesc).status == TxDesc.COMMITTING)) {
+    			list.add(txId);
+    		}
+    	}
     	return list;
     }
     

@@ -383,7 +383,6 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     
     public def resetTxStatistics() {
         finish for (p in store.activePlaces) at (p) async {
-            store.plh().masterStore.resetState(name);
             list().globalTx.clear();
             list().localTx.clear();
         }

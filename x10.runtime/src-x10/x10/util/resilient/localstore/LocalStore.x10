@@ -32,7 +32,7 @@ public class LocalStore {
     
     public def this(virtualPlaceId:Long, slave:Place) {
         this.virtualPlaceId = virtualPlaceId;
-        masterStore = new MasterStore();
+        masterStore = new MasterStore(new HashMap[String,Cloneable]());
         if (resilient) {
             slaveStore = new SlaveStore();
             this.slave = slave;
@@ -43,7 +43,7 @@ public class LocalStore {
     public def this() { }
 
     /*used when a spare place joins*/
-    public def joinAsMaster (virtualPlaceId:Long, slave:Place, data:HashMap[String,HashMap[String,Cloneable]]) {
+    public def joinAsMaster (virtualPlaceId:Long, slave:Place, data:HashMap[String,Cloneable]) {
         assert(resilient);
         this.virtualPlaceId = virtualPlaceId;
         masterStore = new MasterStore(data);

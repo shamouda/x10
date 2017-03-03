@@ -24,112 +24,53 @@ import x10.util.resilient.localstore.Cloneable;
 
 public class MasterStore {
     /*Each map has an object of TxManager (same object even after failures)*/
-    private val maps:HashMap[String,TxManager];
-    private val lock:Lock;
+    private val txManager:TxManager;
     private val sequence:AtomicLong;
 
     public static val TX_FACTOR=1000000;
     
-    //used for original active places joined before any failured
-    public def this() {
-        this.maps = new HashMap[String,TxManager]();
-        this.lock = new Lock(); 
+    public def this(masterMap:HashMap[String,Cloneable]) { 
         this.sequence = new AtomicLong();
-    }
-    
-    //used when a spare place is replacing a dead one
-    public def this(masterMaps:HashMap[String,HashMap[String,Cloneable]]) {
-        this.maps = new HashMap[String,TxManager]();
-        this.lock = new Lock(); 
-        this.sequence = new AtomicLong();
-        
-        if (masterMaps != null) {
-            val iter = masterMaps.keySet().iterator();
-            while (iter.hasNext()) {
-                val mapName = iter.next();
-                val mapData = new MapData(mapName, masterMaps.getOrThrow(mapName));
-                this.maps.put(mapName, TxManager.make(mapData));
-            }
-        }
+        this.txManager = TxManager.make(new MapData(masterMap));
     }   
-       
-    private def getTxManager(mapName:String) {
-        try {
-            lock.lock();
-            var mgr:TxManager = maps.getOrElse(mapName, null);
-            if (mgr == null) {
-                mgr = TxManager.make(mapName);
-                maps.put(mapName, mgr);
-            }
-            return mgr;
-        }
-        finally {
-            lock.unlock();
-        }
-    }
     
-    public def getTxCommitLog(mapName:String, id:Long) {
-        return getTxManager(mapName).getTxCommitLog(id);
+    public def getTxCommitLog(id:Long) {
+        return txManager.getTxCommitLog(id);
     }
     
     public def get(mapName:String, id:Long, key:String):Cloneable {
-        return getTxManager(mapName).get(id, key);
+        return txManager.get(id, mapName+key);
     }
     
     public def put(mapName:String, id:Long, key:String, value:Cloneable):Cloneable {
-        return getTxManager(mapName).put(id, key, value);
+        return txManager.put(id, mapName+key, value);
     }
     
     public def delete(mapName:String, id:Long, key:String):Cloneable {
-        return getTxManager(mapName).delete(id, key);
+        return txManager.delete(id, mapName+key);
     }
     
-    public def validate(mapName:String, id:Long) {
-        getTxManager(mapName).validate(id);
+    public def validate(id:Long) {
+        txManager.validate(id);
     }
     
-    public def commit(mapName:String, id:Long) {
-        getTxManager(mapName).commit(id);
+    public def commit(id:Long) {
+        txManager.commit(id);
     }
     
     public def commit(log:TxLog) {
-        getTxManager(log.mapName).commit(log);
+    	txManager.commit(log);
     }
     
-    public def abort(mapName:String, id:Long) {
-        getTxManager(mapName).abort(id);
+    public def abort(id:Long) {
+        txManager.abort(id);
     }
     
     public def keySet(mapName:String, id:Long) {
-        return getTxManager(mapName).keySet(id);
+        return txManager.keySet(mapName, id);
     }
     
-    public def resetState(mapName:String) {
-        getTxManager(mapName).resetState();
-    }
-    
-    public def getState(mapName:String) {
-        return getTxManager(mapName).getState();
-    }
-    
-    public def getState():SlaveMasterState {
-        var state:SlaveMasterState = null;
-        try {
-            lock.lock();
-            val tmp = new HashMap[String,HashMap[String,Cloneable]]();            
-            val iter = maps.keySet().iterator();
-            while (iter.hasNext()) {
-                val mapName = iter.next();
-                val mapData = maps.getOrThrow(mapName).data;
-                tmp.put(mapName, mapData.getKeyValueMap());
-            }            
-            state = new SlaveMasterState(tmp);
-        }
-        finally {
-            lock.unlock();
-        }
-        return state;
-    }
+    public def getState() = txManager.data;
     
     public def getNextTransactionId() {
         return ( (here.id + 1) * TX_FACTOR) + sequence.incrementAndGet();
@@ -137,39 +78,39 @@ public class MasterStore {
     
     /*Lock based method*/
     public def lockRead(mapName:String, id:Long, key:String) {
-         (getTxManager(mapName) as TxManager_LockBased).lockRead(id, key);
+         (txManager as TxManager_LockBased).lockRead(id, mapName+key);
     }
     
     public def lockWrite(mapName:String, id:Long, key:String) {
-        (getTxManager(mapName) as TxManager_LockBased).lockWrite(id, key);
+        (txManager as TxManager_LockBased).lockWrite(id, mapName+key);
     }
     
     public def unlockRead(mapName:String, id:Long, key:String) {
-        (getTxManager(mapName) as TxManager_LockBased).unlockRead(id, key);
+        (txManager as TxManager_LockBased).unlockRead(id, mapName+key);
     }
     
     public def unlockWrite(mapName:String, id:Long, key:String) {
-        (getTxManager(mapName) as TxManager_LockBased).unlockWrite(id, key);
+        (txManager as TxManager_LockBased).unlockWrite(id, mapName+key);
     }
     
     public def getLocked(mapName:String, id:Long, key:String):Cloneable {
-        return getTxManager(mapName).get(id, key);
+        return txManager.get(id, mapName+key);
     }
     
     public def deleteLocked(mapName:String, id:Long, key:String):Cloneable {
-        return getTxManager(mapName).delete(id, key);
+        return txManager.delete(id, mapName+key);
     }
     
     public def putLocked(mapName:String, id:Long, key:String, value:Cloneable):Cloneable {
-        return getTxManager(mapName).put(id, key, value);
+        return txManager.put(id, mapName+key, value);
     }
     
     public def filterCommitted(txList:ArrayList[Long]) {
     	val list = new ArrayList[Long]();
-    	val metadata = maps.getOrThrow("_TxDesc_").data.getMap();
+    	val metadata = txManager.data.getMap();
     	
     	for (txId in txList) {
-    		val obj = metadata.getOrThrow("tx"+txId).getAtomicValue(false, "tx"+txId, -1).value;
+    		val obj = metadata.getOrThrow("_TxDesc_"+"tx"+txId).getAtomicValue(false, "_TxDesc_"+"tx"+txId, -1).value;
     		if (obj != null && ( (obj as TxDesc).status == TxDesc.COMMITTED || (obj as TxDesc).status == TxDesc.COMMITTING) ) {
     		    list.add(txId);
     		}

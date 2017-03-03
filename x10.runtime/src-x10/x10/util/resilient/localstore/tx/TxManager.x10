@@ -39,11 +39,10 @@ public abstract class TxManager(data:MapData) {
     protected val logsLock = new Lock();
     protected val txLogs = new HashMap[Long,TxLog]();
     protected val abortedTxs = new ArrayList[Long](); //aborted NULL transactions 
-    protected val validatedTxLogs = new HashMap[Long,TxLog]();
     
-    protected val stat = new TxManagerStatistics();
-    
-    public static def make(name:String) = make(new MapData(name));
+    public def this(data:MapData) {
+    	property(data);
+    }
     
     public static def make(data:MapData):TxManager {
         if (TM_DISABLED)
@@ -102,7 +101,7 @@ public abstract class TxManager(data:MapData) {
                 throw new AbortedTransactionException("AbortedTransactionException");
             log = txLogs.getOrElse(id, null);
             if (log == null) {
-                log = new TxLog(id, data.name);
+                log = new TxLog(id);
                 txLogs.put(id, log);
             }
         }
@@ -179,8 +178,8 @@ public abstract class TxManager(data:MapData) {
         }
     }
     
-    public def keySet(id:Long):Set[String] {
-        return data.keySet();
+    public def keySet(mapName:String, id:Long):Set[String] {
+        return data.keySet(mapName);
     }
     
     /********************** Utils ***************************/
@@ -248,25 +247,13 @@ public abstract class TxManager(data:MapData) {
         val log = cont.log;
         
         if (!log.getLockedWrite(key)) {
-        	if (log.getLockedRead(key)) {
-                memory.unlockRead(id, key);
+        	
+        	if (log.getLockedRead(key))
                 log.setLockedRead(key, false);
-            }
-            /*another writer may write during this gap, need to check the version again*/
         	
-        	memory.lockWrite(id, key); 
+        	memory.lockWrite(id, key); //lockWrite unlockRead if upgrading fails 
         	
-            val atomicV = memory.getAtomicValue(false, key, id);
-            val curVer = atomicV.version;
-            val initVer = log.getInitVersion(key);
-            if (curVer != initVer) {
-                /*another transaction have modified it and committed since we read the initial value*/
-                memory.unlockWrite(id, key);
-                //don't mark it as locked, because at abort time we return the old value for locked variables. our old value is wrong.
-                throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
-            }
-            
-            log.setLockedWrite(key, true);
+        	log.setLockedWrite(key, true);
             log.setReadOnly(key, false);
         }
     }
@@ -625,7 +612,6 @@ public abstract class TxManager(data:MapData) {
                 memory.unlockWrite(log.id, key);
             }
         }
-        stat.commitCount++;
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commit_WB completed");
     }
     
@@ -643,7 +629,6 @@ public abstract class TxManager(data:MapData) {
             else 
                 memory.unlockWrite(log.id, key);
         }
-        stat.commitCount++;
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commit_UL completed");
     }
     
@@ -674,7 +659,6 @@ public abstract class TxManager(data:MapData) {
                 if (TM_DEBUG) Console.OUT.println("Tx["+log.id+"]  abort_UL key "+key+" is NOT locked !!!!");
             }
         }
-        stat.abortCount++;
         log.aborted = true;
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] abort_UL completed");
     }
@@ -698,20 +682,12 @@ public abstract class TxManager(data:MapData) {
             else if (kLog.getLockedWrite()) 
                 memory.unlockWrite(log.id, key);
         }
-        stat.abortCount++;
         log.aborted = true;
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] abort_WB completed");
     }
     
     /********************* End of abort operations  *********************/
-    
-    public def getState() = stat;
-    
-    public def resetState() {
-        stat.commitCount = 0;
-        stat.abortCount = 0;
-    }    
-    
+        
     
     /*******   Blocking Lock methods *********/
     public def lockWrite_LockBased(id:Long, key:String) {

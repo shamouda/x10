@@ -123,9 +123,9 @@ public class ResilientStore {
                 val slave = changes.newActivePlaces.next(newMaster);
                 Console.OUT.println("recovering masters: newMaster["+newMaster+"] slave["+slave+"] ");
                 at (slave) async {                    
-                    val maps = plh().slaveStore.getSlaveMasterState().maps;
+                    val map = plh().slaveStore.getSlaveMasterState();
                     at (newMaster) async {
-                        plh().joinAsMaster(virtualId, slave, maps);
+                        plh().joinAsMaster(virtualId, slave, map);
                     }
                 }
             }
@@ -140,7 +140,7 @@ public class ResilientStore {
                 Console.OUT.println("recovering slaves: master["+master+"] newSlave["+newSlave+"] ");
                 val masterVirtualId = changes.newActivePlaces.indexOf(master);
                 at (master) async {
-                    val masterState = plh().masterStore.getState();
+                    val masterState = plh().masterStore.getState().getKeyValueMap();
                     at (newSlave) {
                         plh().slaveStore.addMasterPlace(masterVirtualId, masterState);
                     }
@@ -149,7 +149,6 @@ public class ResilientStore {
             }
         }
     }
-    
     
     private def recoverTransactions(changes:ChangeDescription) {
         Console.OUT.println("recoverTransactions started");
@@ -160,27 +159,28 @@ public class ResilientStore {
                 val slave = oldActivePlaces.next(deadPlace);
                 Console.OUT.println("recoverTransactions deadPlace["+deadPlace+"] moving to its slave["+slave+"] ");
                 at (slave) async {
-                    val masterState = plh().slaveStore.getSlaveMasterState();
-                    val txDescMap = masterState.maps.getOrElse("_TxDesc_", null);
+                    val txDescMap = plh().slaveStore.getSlaveMasterState();
                     if (txDescMap != null) {
                         val set = txDescMap.keySet();
                         val iter = set.iterator();
                         while (iter.hasNext()) {
                             val txId = iter.next();
-                            val obj = txDescMap.get(txId);
-                            if (obj != null) {
-                                val txDesc = obj as TxDesc;
-                                val map = appMaps.getOrThrow(txDesc.mapName);
-                                if (TM_DEBUG) Console.OUT.println(here + " recovering txdesc " + txDesc);
-                                val tx = map.restartGlobalTransaction(txDesc);
-                                if (txDesc.status == TxDesc.COMMITTING) {
-                                    if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] commit it");
-                                    tx.commit(true); //ignore phase one
-                                }
-                                else if (txDesc.status == TxDesc.STARTED) {
-                                    if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] abort it");
-                                    tx.abort();
-                                }
+                            if (txId.contains("_TxDesc_")) {
+                            	val obj = txDescMap.get(txId);
+                            	if (obj != null) {
+                            		val txDesc = obj as TxDesc;
+                            		val map = appMaps.getOrThrow(txDesc.mapName);
+                            		if (TM_DEBUG) Console.OUT.println(here + " recovering txdesc " + txDesc);
+                            		val tx = map.restartGlobalTransaction(txDesc);
+                            		if (txDesc.status == TxDesc.COMMITTING) {
+                            			if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] commit it");
+                            			tx.commit(true); //ignore phase one
+                            		}
+                            		else if (txDesc.status == TxDesc.STARTED) {
+                            			if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] abort it");
+                            			tx.abort();
+                            		}
+                            	}
                             }
                         }
                     }

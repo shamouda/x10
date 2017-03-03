@@ -77,7 +77,7 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     /***********************   Abort ************************/  
     
     public def abort() {
-        plh().masterStore.abort(mapName, id);
+        plh().masterStore.abort(id);
         abortTime = Timer.milliTime();
     }
     
@@ -90,13 +90,13 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
         val placeIndex = plh().virtualPlaceId;
         try {
         	if (TxManager.VALIDATION_REQUIRED)
-        		plh().masterStore.validate(mapName, id);
+        		plh().masterStore.validate(id);
         	
-            val log = plh().masterStore.getTxCommitLog(mapName, id);
+            val log = plh().masterStore.getTxCommitLog(id);
             try {
                 if (resilient && log != null && log.size() > 0) {
                     finish at (plh().slave) async {
-                        plh().slaveStore.commit(id, mapName, log, placeIndex);
+                        plh().slaveStore.commit(id, log, placeIndex);
                     }
                 }
             }catch(exSl:Exception) {
@@ -105,7 +105,7 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
             
             if (log != null) {
                 //master commit
-                plh().masterStore.commit(mapName, id);
+                plh().masterStore.commit(id);
             }
             commitTime = Timer.milliTime();
             return success;

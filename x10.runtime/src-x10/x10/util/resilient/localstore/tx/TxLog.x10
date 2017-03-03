@@ -25,15 +25,15 @@ import x10.util.concurrent.Lock;
  * However, an abort request may occur concurrenctly with other requests, that is why we have a lock to prevent
  * interleaving between abort and other operations.
  **/
-public class TxLog (id:Long, mapName:String) {
+public class TxLog (id:Long) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     public val transLog:HashMap[String,TxKeyChange];
     public var aborted:Boolean = false;
     private val lock = new Lock();
     
-    public def this(id:Long, mapName:String) {
-        property(id, mapName);
+    public def this(id:Long) {
+        property(id);
         transLog = new HashMap[String,TxKeyChange]();
     } 
     
