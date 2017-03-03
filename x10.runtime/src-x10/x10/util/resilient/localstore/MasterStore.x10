@@ -27,16 +27,14 @@ public class MasterStore {
     private val maps:HashMap[String,TxManager];
     private val lock:Lock;
     private val sequence:AtomicLong;
-    private val algorithm:String;
 
     public static val TX_FACTOR=1000000;
     
     //used for original active places joined before any failured
-    public def this(algorithm:String) {
+    public def this() {
         this.maps = new HashMap[String,TxManager]();
         this.lock = new Lock(); 
         this.sequence = new AtomicLong();
-        this.algorithm = algorithm;
     }
     
     //used when a spare place is replacing a dead one
@@ -50,7 +48,7 @@ public class MasterStore {
             while (iter.hasNext()) {
                 val mapName = iter.next();
                 val mapData = new MapData(mapName, masterMaps.getOrThrow(mapName));
-                this.maps.put(mapName, TxManager.make(mapData, algorithm));
+                this.maps.put(mapName, TxManager.make(mapData));
             }
         }
     }   
