@@ -40,7 +40,7 @@ public class MapData {
     
     public def getKeyValueMap() {
         try {
-            lock.lock();
+            lockWholeMap();
             val values = new HashMap[String,Cloneable]();
             val iter = metadata.keySet().iterator();
             while (iter.hasNext()) {
@@ -51,7 +51,7 @@ public class MapData {
             return values;
             
         }finally {
-            lock.unlock();
+            unlockWholeMap();
         }
     }
     

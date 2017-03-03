@@ -50,8 +50,8 @@ public class STMBench {
 		initMap(map, i);
 		
 		val producers = getTxProducers(mgr.activePlaces(), p);
-		val threads = 
-		val algorithm = 
+		//val threads = 
+		//val algorithm = 
 	
     }
 	
