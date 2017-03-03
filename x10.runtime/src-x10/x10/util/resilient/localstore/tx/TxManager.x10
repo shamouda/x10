@@ -97,8 +97,10 @@ public abstract class TxManager(data:MapData) {
         try {
             logsLock.lock();
             if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] abortedTxs.contains(id) = " + abortedTxs.contains(id));
-            if (abortedTxs.contains(id))
+            if (abortedTxs.contains(id)) {
+            	abortedTxs.remove(id);
                 throw new AbortedTransactionException("AbortedTransactionException");
+            }
             log = txLogs.getOrElse(id, null);
             if (log == null) {
                 log = new TxLog(id);
@@ -152,7 +154,6 @@ public abstract class TxManager(data:MapData) {
         logsLock.lock();
         txLogs.delete(id);
         logsLock.unlock();
-        
     }
     
     public def abort(id:Long) {
