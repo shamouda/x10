@@ -39,4 +39,17 @@ public class TxManager_RL_EA_UL extends TxManager {
     public def validate(log:TxLog) {
     	throw new Exception("validate() is not needed for TxManager_RL_EA_UL");
     }
+    
+    public def lockRead(id:Long, key:String) {
+        throw new Exception("lockRead not supported");
+    }
+    public def lockWrite(id:Long, key:String) {
+        throw new Exception("lockWrite not supported for lock based tx manager");
+    }
+    public def unlockRead(id:Long, key:String) {
+        throw new Exception("unlockRead not supported for lock based tx manager");
+    }
+    public def unlockWrite(id:Long, key:String) {
+        throw new Exception("unlockWrite not supported for lock based tx manager");
+    }
 }

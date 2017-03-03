@@ -1,47 +1,38 @@
 package x10.util.resilient.localstore.tx;
 
 import x10.util.Set;
-import x10.util.HashMap;
-import x10.util.concurrent.Lock;
 import x10.util.resilient.localstore.Cloneable;
 
-/*
- * Concurrent Transaction Implementation with the following algorithms:
- * Read: Read Validation
- * Acquire: Late Acquire
- * Write: Write Buffering
- **/
-public class TxManager_RV_LA_WB extends TxManager {
+public class TxManager_LockFree extends TxManager {
 
-    public def this(data:MapData) {
-        super(data);
-        if (here.id == 0) Console.OUT.println("TxManager_RV_LA_WB");
+    public def this(map:MapData) {
+        super(map);
+        if (here.id == 0) Console.OUT.println("TxManager_LockFree");
     }
     
     public def get(id:Long, key:String):Cloneable {
-        return get_RV_WB(id, key);
+        return get_LockFree(id, key);
     }
     
     public def put(id:Long, key:String, value:Cloneable):Cloneable {
-        return put_LA_WB(id, key, value);
+        return put_LockFree(id, key, value);
     }
     
     public def delete(id:Long, key:String):Cloneable {
-        return put_LA_WB(id, key, null);
-    }
-    
-    public def validate(log:TxLog) {
-        validate_RV_LA_WB(log);
+        return put_LockFree(id, key, null);
     }
     
     public def commit(log:TxLog) {
-        commit_WB(log);
+        throw new Exception("commit not supported for lock based tx manager");
     }
     
     public def abort(log:TxLog) {
-        abort_WB(log);
+        throw new Exception("abort not supported for lock based tx manager");
     }
     
+    public def validate(log:TxLog) {
+        throw new Exception("validate not supported for lock based tx manager");
+    }
     public def lockRead(id:Long, key:String) {
         throw new Exception("lockRead not supported");
     }

@@ -14,6 +14,7 @@ package x10.util.resilient.localstore.tx;
 
 import x10.util.concurrent.Lock;
 import x10.util.resilient.localstore.Cloneable;
+import x10.util.resilient.localstore.TxConfig;
 
 public class MemoryUnit {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
@@ -22,19 +23,26 @@ public class MemoryUnit {
     private var value:Cloneable;
     private val txLock:TxLock;
 
-    private val internalLock = new Lock();
+    private val internalLock:Lock;
     
     public def this(v:Cloneable) {
         value = v;
-        if (TxManager.TM_DISABLED) 
+        if (TxConfig.getInstance().LOCKING_MODE == TxConfig.LOCKING_MODE_BLOCKING) {
             txLock = new TxLockCREWBlocking();
-        else
+            internalLock = new Lock();
+        }
+        else if (TxConfig.getInstance().LOCKING_MODE == TxConfig.LOCKING_MODE_NON_BLOCKING)  {
             txLock = new TxLockCREW();
+            internalLock = new Lock();
+        } else  {
+            txLock = null;
+            internalLock = null;
+        }
     }
     
     public def getAtomicValue(copy:Boolean, key:String, txId:Long) {
         try {
-        	internalLock.lock(); //lock is used to ensure that value/version are always in sync as a composite value 
+            lockExclusive(); //lock is used to ensure that value/version are always in sync as a composite value 
             var v:Cloneable = value;
             if (copy) {
                 v = value == null?null:value.clone();
@@ -43,31 +51,31 @@ public class MemoryUnit {
             return new AtomicValue(version, v);
         }
         finally {
-        	internalLock.unlock();
+            unlockExclusive();
         }
     }
     
     public def setValue(v:Cloneable, key:String, txId:Long) {
     	try {
-    		internalLock.lock();
+    	    lockExclusive();
             val oldValue = value;
             version++;
             value = v;
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] setvv key["+key+"] ver["+version+"] val["+value+"]");
             return oldValue;
     	}finally {
-    		internalLock.unlock();
+    	    unlockExclusive();
     	}
     }
     
     public def rollbackValue(oldValue:Cloneable, oldVersion:Int, key:String, txId:Long) {
     	try {
-    		internalLock.lock();
+    	    lockExclusive();
             version = oldVersion; 
             value = oldValue;
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] rollsetvv key["+key+"] ver["+version+"] val["+value+"]");
-        }finally {
-        	internalLock.unlock();
+        } finally {
+            unlockExclusive();
         }
     }
        
@@ -108,6 +116,17 @@ public class MemoryUnit {
         value = v;
         if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] setvv key["+key+"] ver["+version+"] val["+value+"]");
         return oldValue;
+    }
+    
+    /**************************************/
+    private def lockExclusive() {
+        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+            internalLock.lock();
+    }
+    
+    private def unlockExclusive() {
+        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+            internalLock.unlock();
     }
     
 }

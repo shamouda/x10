@@ -408,11 +408,11 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     	val placeIndex = plh().virtualPlaceId;
         if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne ...");
         finish for (p in members) {
-        	if ((resilient && !DISABLE_SLAVE) || TxManager.VALIDATION_REQUIRED) {
+        	if ((resilient && !DISABLE_SLAVE) || TxConfig.getInstance().VALIDATION_REQUIRED) {
 	            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne going to move to ["+p+"] ...");
 	            at (p) async {
 	        
-	            	if (TxManager.VALIDATION_REQUIRED) {
+	            	if (TxConfig.getInstance().VALIDATION_REQUIRED) {
 	            		if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate started ...");
 	            		plh().masterStore.validate(id);
 	            		if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate done ...");

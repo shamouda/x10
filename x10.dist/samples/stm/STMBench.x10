@@ -11,7 +11,7 @@ import x10.util.resilient.localstore.CloneableLong;
 import x10.util.Timer;
 import x10.util.Option;
 import x10.util.OptionsParser;
-
+import x10.xrx.Runtime;
 
 public class STMBench {
 	private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
@@ -30,8 +30,7 @@ public class STMBench {
             Option("d","iterationDuration","Single iteration duration"),
             Option("h","txParticipants","number of transaction participants (default 2)"),
             Option("o","TxParticipantOperations","number of operations per transaction participant"),
-            Option("s","spare","Spare places (default 0)"),
-            Option("a","algorithm","concurrency algorithm (locking|lockfree|RL_EA_UL|RL_EA_WB|RL_LA_WB|..."),
+            Option("s","spare","Spare places (default 0)")
         ]);
 		
 		val i = opts("i", 16*1024);
@@ -51,7 +50,8 @@ public class STMBench {
 		initMap(map, i);
 		
 		val producers = getTxProducers(mgr.activePlaces(), p);
-		
+		val threads = 
+		val algorithm = 
 	
     }
 	

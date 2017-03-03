@@ -8,56 +8,45 @@ import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.MasterStore;
 import x10.xrx.Runtime;
 import x10.util.concurrent.Future;
+import x10.util.resilient.localstore.TxConfig;
 
 public abstract class TxManager(data:MapData) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-    
-    public static val EARLY_ACQUIRE= 1;
-    public static val LATE_ACQUIRE = 2; //CAN NOT BE USED WITH UNDO LOGGING
-    
-    public static val UNDO_LOGGING= 1;
-    public static val WRITE_BUFFERING = 2;
-    
-    public static val READ_LOCKING= 1;
-    public static val READ_VALIDATION = 2;
-    
-    
-    public static val TM_DISABLED = System.getenv("TM_DISABLED") != null && Long.parseLong(System.getenv("TM_DISABLED")) == 1;
-    
-    //Default TM=RL_EA_UL
-    public static val TM_READ = System.getenv("TM") == null || System.getenv("TM").contains("RL") ? READ_LOCKING :  READ_VALIDATION;
-    public static val TM_ACQUIRE = System.getenv("TM") == null || System.getenv("TM").contains("EA") ? EARLY_ACQUIRE :  LATE_ACQUIRE;
-    public static val TM_RECOVER = System.getenv("TM") == null || System.getenv("TM").contains("UL") ? UNDO_LOGGING :  WRITE_BUFFERING;
-    
-    public static val TM = System.getenv("TM") == null? "RL_EA_UL":System.getenv("TM");
-    
-    /*We can skip the validation phase in RL_EA configurations*/
-    public static val VALIDATION_REQUIRED = ! ( !TM_DISABLED && 
-    										      TM_READ    == READ_LOCKING && 
-    										      TM_ACQUIRE == EARLY_ACQUIRE );
-    
-    protected val logsLock = new Lock();
-    protected val txLogs = new HashMap[Long,TxLog]();
-    protected val abortedTxs = new ArrayList[Long](); //aborted NULL transactions 
+
+    protected val logsLock:Lock;
+    protected val txLogs:HashMap[Long,TxLog];
+    protected val abortedTxs:ArrayList[Long]; //aborted NULL transactions 
     
     public def this(data:MapData) {
     	property(data);
+    	if (TxConfig.getInstance().LOCKING_MODE == TxConfig.LOCKING_MODE_NON_BLOCKING){
+    	    logsLock = new Lock();
+    	    txLogs = new HashMap[Long,TxLog]();
+    	    abortedTxs = new ArrayList[Long]();
+    	}
+    	else {
+    	    logsLock = null;
+    	    txLogs = null;
+    	    abortedTxs = null;
+    	}
     }
     
     public static def make(data:MapData):TxManager {
-        if (TM_DISABLED)
+        if (TxConfig.getInstance().LOCKING_MODE == TxConfig.getInstance().LOCKING_MODE_FREE)
+            return new TxManager_LockFree(data);
+        else if (TxConfig.getInstance().LOCKING_MODE == TxConfig.getInstance().LOCKING_MODE_BLOCKING)
             return new TxManager_LockBased(data);
-        else if (     TM_READ == READ_LOCKING    &&  TM_ACQUIRE == EARLY_ACQUIRE && TM_RECOVER == UNDO_LOGGING)
+        else if (TxConfig.getInstance().TM_READ == TxConfig.READ_LOCKING    &&  TxConfig.getInstance().TM_ACQUIRE == TxConfig.EARLY_ACQUIRE && TxConfig.getInstance().TM_RECOVER == TxConfig.UNDO_LOGGING)
             return new TxManager_RL_EA_UL(data);
-        else if (TM_READ == READ_LOCKING    &&  TM_ACQUIRE == EARLY_ACQUIRE && TM_RECOVER == WRITE_BUFFERING)
+        else if (TxConfig.getInstance().TM_READ == TxConfig.READ_LOCKING    &&  TxConfig.getInstance().TM_ACQUIRE == TxConfig.EARLY_ACQUIRE && TxConfig.getInstance().TM_RECOVER == TxConfig.WRITE_BUFFERING)
             return new TxManager_RL_EA_WB(data);
-        else if (TM_READ == READ_LOCKING    &&  TM_ACQUIRE == LATE_ACQUIRE  && TM_RECOVER == WRITE_BUFFERING)
+        else if (TxConfig.getInstance().TM_READ == TxConfig.READ_LOCKING    &&  TxConfig.getInstance().TM_ACQUIRE == TxConfig.LATE_ACQUIRE  && TxConfig.getInstance().TM_RECOVER == TxConfig.WRITE_BUFFERING)
             return new TxManager_RL_LA_WB(data);
-        else if (TM_READ == READ_VALIDATION &&  TM_ACQUIRE == EARLY_ACQUIRE && TM_RECOVER == UNDO_LOGGING)
+        else if (TxConfig.getInstance().TM_READ == TxConfig.READ_VERSIONING &&  TxConfig.getInstance().TM_ACQUIRE == TxConfig.EARLY_ACQUIRE && TxConfig.getInstance().TM_RECOVER == TxConfig.UNDO_LOGGING)
             return new TxManager_RV_EA_UL(data);
-        else if (TM_READ == READ_VALIDATION &&  TM_ACQUIRE == EARLY_ACQUIRE && TM_RECOVER == WRITE_BUFFERING)
+        else if (TxConfig.getInstance().TM_READ == TxConfig.READ_VERSIONING &&  TxConfig.getInstance().TM_ACQUIRE == TxConfig.EARLY_ACQUIRE && TxConfig.getInstance().TM_RECOVER == TxConfig.WRITE_BUFFERING)
             return new TxManager_RV_EA_WB(data);
-        else if (TM_READ == READ_VALIDATION &&  TM_ACQUIRE == LATE_ACQUIRE  && TM_RECOVER == WRITE_BUFFERING)
+        else if (TxConfig.getInstance().TM_READ == TxConfig.READ_VERSIONING &&  TxConfig.getInstance().TM_ACQUIRE == TxConfig.LATE_ACQUIRE  && TxConfig.getInstance().TM_RECOVER == TxConfig.WRITE_BUFFERING)
             return new TxManager_RV_LA_WB(data);
         else
             throw new Exception("Wrong Tx Manager Configuration (undo logging can not be selected with late acquire");
@@ -73,7 +62,7 @@ public abstract class TxManager(data:MapData) {
         
         try {
             log.lock();
-            if (TM_RECOVER == WRITE_BUFFERING) {
+            if (TxConfig.getInstance().TM_RECOVER == TxConfig.WRITE_BUFFERING) {
                 return log.removeReadOnlyKeys();
             }
             else {
@@ -129,6 +118,10 @@ public abstract class TxManager(data:MapData) {
     public abstract def validate(log:TxLog):void ;
     public abstract def commit(log:TxLog):void ;
     public abstract def abort(log:TxLog):void; //log must be locked
+    public abstract def lockRead(id:Long, key:String):void;
+    public abstract def lockWrite(id:Long, key:String):void;
+    public abstract def unlockRead(id:Long, key:String):void;
+    public abstract def unlockWrite(id:Long, key:String):void;
     /*************************************************/
     
     public def validate(id:Long) {
@@ -719,6 +712,15 @@ public abstract class TxManager(data:MapData) {
     public def  put_LockBased(id:Long, key:String, value:Cloneable):Cloneable{
         val memory = data.getMemoryUnit(key);        
         return memory.setValueLocked(value, key, id);
+    }
+    
+    /*******   Blocking Lock Free methods *********/
+    public def get_LockFree(id:Long, key:String):Cloneable {
+        throw new Exception("implement get_LockFree");
+    }
+    
+    public def  put_LockFree(id:Long, key:String, value:Cloneable):Cloneable{
+        throw new Exception("implement get_LockFree");
     }
 }
 

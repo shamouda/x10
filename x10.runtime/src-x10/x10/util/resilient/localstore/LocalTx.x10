@@ -89,7 +89,7 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
         val plh = this.plh;
         val placeIndex = plh().virtualPlaceId;
         try {
-        	if (TxManager.VALIDATION_REQUIRED)
+        	if (TxConfig.getInstance().VALIDATION_REQUIRED)
         		plh().masterStore.validate(id);
         	
             val log = plh().masterStore.getTxCommitLog(id);

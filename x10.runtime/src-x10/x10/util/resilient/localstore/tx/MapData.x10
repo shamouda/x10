@@ -4,6 +4,7 @@ import x10.util.concurrent.Lock;
 import x10.util.HashMap;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.HashSet;
+import x10.util.resilient.localstore.TxConfig;
 
 /*
  * MapData may be accessed by different transactions at the same time.
@@ -15,7 +16,10 @@ public class MapData {
 
     public def this() {
         metadata = new HashMap[String,MemoryUnit]();
-        lock = new Lock();
+        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+            lock = new Lock();
+        else
+            lock = null;
     }
     
     public def this(values:HashMap[String,Cloneable]) {
@@ -26,7 +30,10 @@ public class MapData {
             val v = values.getOrThrow(k);
             metadata.put(k, new MemoryUnit(v));
         }
-        lock = new Lock();
+        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+            lock = new Lock();
+        else
+            lock = null;
     }
     
     public def getMap() = metadata;
@@ -51,21 +58,21 @@ public class MapData {
     public def getMemoryUnit(k:String):MemoryUnit {
     	var res:MemoryUnit = null;
         try {
-            lock.lock();
+            lockWholeMap();
             res = metadata.getOrElse(k, null);
             if (res == null) {
                 res = new MemoryUnit(null);
                 metadata.put(k, res);
             }
         }finally {
-            lock.unlock();
+            unlockWholeMap();
         }
         return res;
     }
     
     public def keySet(mapName:String) {
         try {
-            lock.lock();
+            lockWholeMap();
             val set = new HashSet[String]();
             val iter = metadata.keySet().iterator();
             while (iter.hasNext()) {
@@ -75,10 +82,19 @@ public class MapData {
             }
             return set;
         }finally {
-            lock.unlock();
+            unlockWholeMap();
         }
     }
     
+    private def lockWholeMap(){
+        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+            lock.lock();
+    }
+    
+    private def unlockWholeMap() {
+        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+            lock.unlock();
+    }
     public def toString() {
         var str:String = here+"--->\n";
         val iter = metadata.keySet().iterator();

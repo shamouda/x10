@@ -198,7 +198,7 @@ public class ResilientStore {
     	val committedLock = GlobalRef(new Lock());
     	val root = here;
     	
-    	if (TxManager.VALIDATION_REQUIRED) {
+    	if (TxConfig.getInstance().VALIDATION_REQUIRED) {
 	    	val placeTxsMap = plh().slaveStore.clusterTransactions();
 	    	finish {
 	    		val iter = placeTxsMap.keySet().iterator();
@@ -231,7 +231,7 @@ public class ResilientStore {
     	}
     	
     	val orderedTx = plh().slaveStore.getPendingTransactions();
-    	if (TxManager.VALIDATION_REQUIRED) {
+    	if (TxConfig.getInstance().VALIDATION_REQUIRED) {
     		val commitTxOrdered = new ArrayList[Long]();
     		for (val tx in orderedTx){
     			if (committed().contains(tx))

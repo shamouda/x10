@@ -40,7 +40,8 @@ public class LocalStore {
     }
 
     /* used to initialize elastically added or spare places */
-    public def this() { }
+    public def this() { 
+    }
 
     /*used when a spare place joins*/
     public def joinAsMaster (virtualPlaceId:Long, slave:Place, data:HashMap[String,Cloneable]) {
