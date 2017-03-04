@@ -40,7 +40,7 @@ public class MapData {
     
     public def getKeyValueMap() {
         try {
-            lockWholeMap();
+            lockMap();
             val values = new HashMap[String,Cloneable]();
             val iter = metadata.keySet().iterator();
             while (iter.hasNext()) {
@@ -51,28 +51,28 @@ public class MapData {
             return values;
             
         }finally {
-            unlockWholeMap();
+            unlockMap();
         }
     }
     
     public def getMemoryUnit(k:String):MemoryUnit {
     	var res:MemoryUnit = null;
         try {
-            lockWholeMap();
+            lockMap();
             res = metadata.getOrElse(k, null);
             if (res == null) {
                 res = new MemoryUnit(null);
                 metadata.put(k, res);
             }
         }finally {
-            unlockWholeMap();
+            unlockMap();
         }
         return res;
     }
     
     public def keySet(mapName:String) {
         try {
-            lockWholeMap();
+            lockMap();
             val set = new HashSet[String]();
             val iter = metadata.keySet().iterator();
             while (iter.hasNext()) {
@@ -82,16 +82,16 @@ public class MapData {
             }
             return set;
         }finally {
-            unlockWholeMap();
+            unlockMap();
         }
     }
     
-    private def lockWholeMap(){
+    private def lockMap(){
         if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
             lock.lock();
     }
     
-    private def unlockWholeMap() {
+    private def unlockMap() {
         if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
             lock.unlock();
     }

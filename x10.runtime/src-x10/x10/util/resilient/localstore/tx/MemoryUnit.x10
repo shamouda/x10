@@ -31,7 +31,7 @@ public class MemoryUnit {
             txLock = new TxLockCREWBlocking();
             internalLock = new Lock();
         }
-        else if (TxConfig.getInstance().LOCKING_MODE == TxConfig.LOCKING_MODE_NON_BLOCKING)  {
+        else if (TxConfig.getInstance().LOCKING_MODE == TxConfig.LOCKING_MODE_STM)  {
             txLock = new TxLockCREW();
             internalLock = new Lock();
         } else  {
@@ -80,25 +80,28 @@ public class MemoryUnit {
     }
        
     public def lockRead(txId:Long, key:String) {
-        txLock.lockRead(txId, key);
+    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    		txLock.lockRead(txId, key);
     }
     
     public def unlockRead(txId:Long, key:String) {
-        txLock.unlockRead(txId, key);
+    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    		txLock.unlockRead(txId, key);
     }
     
     public def lockWrite(txId:Long, key:String) {
-        txLock.lockWrite(txId, key);
+    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    		txLock.lockWrite(txId, key);
     }
     
     public def unlockWrite(txId:Long, key:String) {
-        txLock.unlockWrite(txId, key);
+    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    		txLock.unlockWrite(txId, key);
     }
 
     public def toString() {
         return "version:"+version+":value:"+value;
     }
-    
     
     /********  Lock based methods *********/
     public def getValueLocked(copy:Boolean, key:String, txId:Long) {

@@ -15,6 +15,7 @@ package x10.util.resilient.localstore.tx;
 import x10.util.HashMap;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Lock;
+import x10.util.resilient.localstore.TxConfig;
 
 /*
  * The log to track actions done on a key. 
@@ -30,11 +31,16 @@ public class TxLog (id:Long) {
     
     public val transLog:HashMap[String,TxKeyChange];
     public var aborted:Boolean = false;
-    private val lock = new Lock();
+    private val lock:Lock;
+    
     
     public def this(id:Long) {
         property(id);
         transLog = new HashMap[String,TxKeyChange]();
+        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+        	lock = new Lock();
+        else
+        	lock = null;
     } 
     
     public def getChangeLog(key:String) {
@@ -124,10 +130,12 @@ public class TxLog (id:Long) {
     }
     
     public def lock() {
-        lock.lock();
+    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    		lock.lock();
     }
     
     public def unlock() {
-        lock.unlock();
+    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    		lock.unlock();
     }
 }

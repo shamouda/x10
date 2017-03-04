@@ -19,7 +19,7 @@ public abstract class TxManager(data:MapData) {
     
     public def this(data:MapData) {
     	property(data);
-    	if (TxConfig.getInstance().LOCKING_MODE == TxConfig.LOCKING_MODE_NON_BLOCKING){
+    	if (TxConfig.getInstance().LOCKING_MODE == TxConfig.LOCKING_MODE_STM){
     	    logsLock = new Lock();
     	    txLogs = new HashMap[Long,TxLog]();
     	    abortedTxs = new ArrayList[Long]();
@@ -32,9 +32,7 @@ public abstract class TxManager(data:MapData) {
     }
     
     public static def make(data:MapData):TxManager {
-        if (TxConfig.getInstance().LOCKING_MODE == TxConfig.getInstance().LOCKING_MODE_FREE)
-            return new TxManager_LockFree(data);
-        else if (TxConfig.getInstance().LOCKING_MODE == TxConfig.getInstance().LOCKING_MODE_BLOCKING)
+        if (TxConfig.getInstance().LOCKING_MODE == TxConfig.getInstance().LOCKING_MODE_BLOCKING)
             return new TxManager_LockBased(data);
         else if (TxConfig.getInstance().TM_READ == TxConfig.READ_LOCKING    &&  TxConfig.getInstance().TM_ACQUIRE == TxConfig.EARLY_ACQUIRE && TxConfig.getInstance().TM_RECOVER == TxConfig.UNDO_LOGGING)
             return new TxManager_RL_EA_UL(data);
@@ -53,9 +51,9 @@ public abstract class TxManager(data:MapData) {
     }
     
     public def getTxCommitLog(id:Long):HashMap[String,Cloneable] {
-        logsLock.lock();
+    	lockLogsMap();
         val log = txLogs.getOrElse(id, null);
-        logsLock.unlock();
+        unlockLogsMap();
         
         if (log == null)
             return null;
@@ -84,7 +82,7 @@ public abstract class TxManager(data:MapData) {
     public def getOrAddTxLog(id:Long) {
         var log:TxLog = null;
         try {
-            logsLock.lock();
+        	lockLogsMap();
             if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] abortedTxs.contains(id) = " + abortedTxs.contains(id));
             if (abortedTxs.contains(id)) {
             	abortedTxs.remove(id);
@@ -97,7 +95,7 @@ public abstract class TxManager(data:MapData) {
             }
         }
         finally{
-            logsLock.unlock();
+        	unlockLogsMap();
         }
         return log;
     }
@@ -125,18 +123,18 @@ public abstract class TxManager(data:MapData) {
     /*************************************************/
     
     public def validate(id:Long) {
-        logsLock.lock();
+    	lockLogsMap();
         val log = txLogs.getOrElse(id, null);
-        logsLock.unlock();
+        unlockLogsMap();
         if (log == null)
             return;
         validate(log);
     }
     
     public def commit(id:Long) {
-        logsLock.lock();
+    	lockLogsMap();
         val log = txLogs.getOrElse(id, null);
-        logsLock.unlock();
+        unlockLogsMap();
         
         if (log == null)
             return;
@@ -144,16 +142,16 @@ public abstract class TxManager(data:MapData) {
         commit(log);
         
         //delete log to avoid repeated commit if a recovery commit is called
-        logsLock.lock();
+        lockLogsMap();
         txLogs.delete(id);
-        logsLock.unlock();
+        unlockLogsMap();
     }
     
     public def abort(id:Long) {
         var log:TxLog = null;
         try {
             /*Abort may reach before normal Tx operations, wait until we have a txLog to abort*/
-            logsLock.lock();
+        	lockLogsMap();
             log = txLogs.getOrElse(id, null);
             abortedTxs.add(id);
             if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] added to abortedTxs ...");
@@ -162,7 +160,7 @@ public abstract class TxManager(data:MapData) {
             }
         }
         finally {
-            logsLock.unlock();
+        	unlockLogsMap();
         }
         try {
             log.lock();
@@ -714,13 +712,15 @@ public abstract class TxManager(data:MapData) {
         return memory.setValueLocked(value, key, id);
     }
     
-    /*******   Blocking Lock Free methods *********/
-    public def get_LockFree(id:Long, key:String):Cloneable {
-        throw new Exception("implement get_LockFree");
-    }
+    /************************************************/
     
-    public def  put_LockFree(id:Long, key:String, value:Cloneable):Cloneable{
-        throw new Exception("implement get_LockFree");
+    private def lockLogsMap() {
+    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    		logsLock.lock();
+    }
+    private def unlockLogsMap() {
+    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    		logsLock.unlock();
     }
 }
 

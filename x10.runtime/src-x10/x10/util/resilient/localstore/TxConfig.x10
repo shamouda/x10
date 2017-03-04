@@ -23,10 +23,10 @@ public class TxConfig {
     /*locking modes*/
     public static val LOCKING_MODE_FREE = 0n;
     public static val LOCKING_MODE_BLOCKING = 1n;
-    public static val LOCKING_MODE_NON_BLOCKING = 2n; //STM
+    public static val LOCKING_MODE_STM = 2n;
     
     /*STM algorithm dimensions*/
-    public static val INVALID= -1n;
+    public static val INVALID = -1n;
     public static val EARLY_ACQUIRE= 1n;
     public static val LATE_ACQUIRE = 2n;
     public static val UNDO_LOGGING= 1n;
@@ -38,24 +38,25 @@ public class TxConfig {
     
     private def this(){
         val algorithm = System.getenv("TM");
-        assert (algorithm != null) : "you must specify the TM environment variable";
+        val lockfree = (System.getenv("LOCK_FREE") == null || System.getenv("LOCK_FREE").equals("")) ? false : Long.parseLong(System.getenv("LOCK_FREE")) == 1;
+        assert (algorithm != null && !algorithm.equals("")) : "you must specify the TM environment variable, allowed values = locking|RL_EA_UL|RL_EA_WB|...";
         
-        if (algorithm.equals("lockfree")) {
-            LOCKING_MODE = LOCKING_MODE_FREE;
-            VALIDATION_REQUIRED = false;
-            TM_READ = INVALID;
-            TM_ACQUIRE = INVALID;
-            TM_RECOVER = INVALID;
-        }
-        else if (algorithm.equals("locking")) {
-            LOCKING_MODE = LOCKING_MODE_BLOCKING;
+        	
+        if (algorithm.equals("locking")) {
+        	if (lockfree)
+        		LOCKING_MODE = LOCKING_MODE_FREE;
+        	else
+        		LOCKING_MODE = LOCKING_MODE_BLOCKING;
             VALIDATION_REQUIRED = false;
             TM_READ = INVALID;
             TM_ACQUIRE = INVALID;
             TM_RECOVER = INVALID;
         }
         else {
-            LOCKING_MODE = LOCKING_MODE_NON_BLOCKING;
+        	if (lockfree)
+        		LOCKING_MODE = LOCKING_MODE_FREE;
+        	else
+        		LOCKING_MODE = LOCKING_MODE_STM;
             if (algorithm.contains("RL"))
                 TM_READ = READ_LOCKING;
             else
