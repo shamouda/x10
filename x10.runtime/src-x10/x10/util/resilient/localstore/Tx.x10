@@ -602,18 +602,3 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     }
     
 }
-
-class TxOpResult {
-    var set:Set[String];
-    var value:Any;
-    var future:Future[Any];
-    public def this(s:Set[String]) {
-        set = s;
-    }
-    public def this(v:Any) {
-        value = v;
-    }
-    public def this(f:Future[Any]) {
-        future = f;
-    }
-}

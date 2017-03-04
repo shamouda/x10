@@ -30,10 +30,10 @@ public class TxBlocking (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Stri
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     public transient val startTime:Long = Timer.milliTime();
-	public transient var lockingElapsedTime:Long = -1;
+	public transient var lockingElapsedTime:Long = -1;  //////
 	public transient var processingElapsedTime:Long = -1;
 	public transient var waitElapsedTime:Long = -1;
-    public transient var unlockingElapsedTime:Long = -1;
+    public transient var unlockingElapsedTime:Long = -1; ///////
     public transient var totalElapsedTime:Long = -1;
    
     /* Constants */
@@ -81,11 +81,11 @@ public class TxBlocking (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Stri
     }
 
     public def lock(requests:ArrayList[LockingRequest]) {
-        execute(LOCK, dest, key, null, null, null, plh, id, mapName, members, requests);
+        execute(LOCK, here, null, null, null, null, plh, id, mapName, members, requests);
     }
-    
-    public def unlock(dest:Place,keys:Rail[String], rw:Rail[Boolean]):Cloneable {
-        execute(UNLOCK, dest, key, null, null, null, plh, id, mapName, members, requests);
+
+    public def unlock(requests:ArrayList[LockingRequest]) {
+        execute(UNLOCK, here, null, null, null, null, plh, id, mapName, members, requests);
     }
     
     /***************** Get ********************/
@@ -211,6 +211,37 @@ public class TxBlocking (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Stri
             else if (op == AT_RETURN) {
                 return new TxOpResult(at (dest) closure_return());
             }
+            else if (op == LOCK) {
+                val startLock = Timer.milliTime();
+                finish for (req in requests) {
+                    at (req.dest) async {
+                        for (var i:Long = 0; i < req.keys.size ; i++) {
+                            if (req.rw(i))
+                                plh().masterStore.lockRead(mapName, id, req.keys(i));
+                            else
+                                plh().masterStore.lockWrite(mapName, id, req.keys(i));
+                        }
+                    }
+                }
+                lockingElapsedTime = Timer.milliTime() - startLock;
+                return null;
+            }
+            else if (op == UNLOCK) {
+                val startUnlock = Timer.milliTime();
+                finish for (req in requests) {
+                    at (req.dest) async {
+                        for (var i:Long = 0; i < req.keys.size ; i++) {
+                            if (req.rw(i))
+                                plh().masterStore.unlockRead(mapName, id, req.keys(i));
+                            else
+                                plh().masterStore.unlockWrite(mapName, id, req.keys(i));
+                        }
+                    }
+                }
+                unlockingElapsedTime = Timer.milliTime() - startUnlock;
+                totalElapsedTime = Timer.milliTime() - startTime;
+                return null;
+            }
             else {  /*Remote Async Operations*/
                 val future = Future.make[Any](() => 
                     at (dest) {
@@ -254,6 +285,8 @@ public class TxBlocking (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Stri
     
     public static def opDesc(op:Int) {
         switch(op) {
+            case LOCK: return "LOCK";
+            case UNLOCK: return "UNLOCK";
             case GET_LOCAL: return "GET_LOCAL";
             case GET_REMOTE: return "GET_REMOTE";
             case PUT_LOCAL: return "PUT_LOCAL";
