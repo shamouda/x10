@@ -268,11 +268,11 @@ public class STMBench {
 	    for ( producer in throughputList) {
 	    	allOperations += producer.txCount * h * o;
 	    	allTime += producer.elapsedTimeMS;
-	    	val localThroughput = producer.txCount * h * o / producer.elapsedTimeMS;
-	    	Console.OUT.println("iteration:" + iteration +":producer:"+producer.placeId+"x"+producer.threadId+ ":throughput:"+localThroughput);
+	    	val localThroughput = (producer.txCount as Double ) * h * o / producer.elapsedTimeMS;
+	    	Console.OUT.println("iteration:" + iteration +":producer:"+producer.placeId+"x"+producer.threadId+ ":localthroughput:"+localThroughput);
 	    }
 	    val throughput = (allOperations as Double) / allTime * producers;
-	    Console.OUT.println("iteration:" + iteration + ":throughput:"+throughput);
+	    Console.OUT.println("iteration:" + iteration + ":globalthroughput:"+throughput);
 	}
 	
 	
