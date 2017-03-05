@@ -387,7 +387,7 @@ public class STMBench {
 	
 	public static def printRunConfigurations(param:STMBenchParameters) {
 		Console.OUT.println("STMBench starting with the following parameters:");
-		Console.OUT.println("X10_NPLACES=" + System.getenv("X10_NPLACES"));
+		Console.OUT.println("X10_NPLACES=" + Place.numPlaces());
 		Console.OUT.println("X10_NTHREADS=" + Runtime.NTHREADS);
 		Console.OUT.println("TM=" + System.getenv("TM"));
 		Console.OUT.println("LOCK_FREE=" + System.getenv("LOCK_FREE"));
