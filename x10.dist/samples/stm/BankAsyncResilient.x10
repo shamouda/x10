@@ -145,7 +145,7 @@ public class BankAsyncResilient {
                     val startWait = Timer.milliTime();
                     f1.force();
                     f2.force();
-                    tx.setWaitForFuturesElapsedTime(Timer.milliTime() - startWait);
+                    tx.setWaitElapsedTime(Timer.milliTime() - startWait);
                     if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitForFuturesElapsedTime +"] ms");
                 } );
                 //Console.OUT.println(here + ":" + randAcc1 + ":" + randAcc2 + ":"+ amount);

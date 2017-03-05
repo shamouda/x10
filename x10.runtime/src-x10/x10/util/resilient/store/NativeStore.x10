@@ -17,6 +17,7 @@ import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.Tx;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.HashMap;
+import x10.util.resilient.localstore.TxResult;
 
 public class NativeStore[V]{V haszero, V <: Cloneable} extends Store[V] {
   val store:ResilientStore;
@@ -55,7 +56,7 @@ public class NativeStore[V]{V haszero, V <: Cloneable} extends Store[V] {
     store.updateForChangedPlaces(changes);
   }
   
-  public def executeTransaction(members:PlaceGroup, closure:(Tx)=>void):Int {
+  public def executeTransaction(members:PlaceGroup, closure:(Tx)=>Any):TxResult {
 	  return map.executeTransaction(members, closure);
   }
   

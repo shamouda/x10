@@ -19,7 +19,7 @@ public abstract class TxManager(data:MapData) {
     
     public def this(data:MapData) {
     	property(data);
-    	if (TxConfig.getInstance().LOCKING_MODE == TxConfig.LOCKING_MODE_STM){
+    	if (!TxConfig.getInstance().TM.equals("locking")){
     	    logsLock = new Lock();
     	    txLogs = new HashMap[Long,TxLog]();
     	    abortedTxs = new ArrayList[Long]();
@@ -32,7 +32,7 @@ public abstract class TxManager(data:MapData) {
     }
     
     public static def make(data:MapData):TxManager {
-        if (TxConfig.getInstance().LOCKING_MODE == TxConfig.getInstance().LOCKING_MODE_BLOCKING)
+        if (TxConfig.getInstance().TM.equals("locking"))
             return new TxManager_LockBased(data);
         else if (TxConfig.getInstance().TM_READ == TxConfig.READ_LOCKING    &&  TxConfig.getInstance().TM_ACQUIRE == TxConfig.EARLY_ACQUIRE && TxConfig.getInstance().TM_RECOVER == TxConfig.UNDO_LOGGING)
             return new TxManager_RL_EA_UL(data);
@@ -184,14 +184,18 @@ public abstract class TxManager(data:MapData) {
                 throw new AbortedTransactionException("AbortedTransactionException");
             }
             val memory = data.getMemoryUnit(key);
+            var flagRead:Boolean = lockRead;
             if (lockRead) {
-                memory.lockRead(id, key);
+            	if (!log.getLockedRead(key) && !log.getLockedWrite(key))
+            		memory.lockRead(id, key);
+            	else
+            		flagRead = false;
             }
             val atomicV = memory.getAtomicValue(true, key, id);
             val copy1 = atomicV.value;
             val ver = atomicV.version;
-            log.logInitialValue(key, copy1, ver, id, lockRead);
-            
+            log.logInitialValue(key, copy1, ver, id, flagRead);
+            //FIXME: abort if locking failed and we throwed an exception without returning a log object to the caller (log = null, no abort)
             return new LogContainer(memory, log);
         }catch(ex:Exception) {
             log.unlock();
@@ -682,32 +686,32 @@ public abstract class TxManager(data:MapData) {
         
     
     /*******   Blocking Lock methods *********/
-    public def lockWrite_LockBased(id:Long, key:String) {
+    public def lockWrite_Locking(id:Long, key:String) {
         val memory = data.getMemoryUnit(key);
         memory.lockWrite(id, key);
     }
     
-    public def lockRead_LockBased(id:Long, key:String) {
+    public def lockRead_Locking(id:Long, key:String) {
         val memory = data.getMemoryUnit(key);
         memory.lockRead(id, key);
     }
     
-    public def unlockWrite_LockBased(id:Long, key:String) {
+    public def unlockWrite_Locking(id:Long, key:String) {
         val memory = data.getMemoryUnit(key);
         memory.unlockWrite(id, key);
     }
     
-    public def unlockRead_LockBased(id:Long, key:String) {
+    public def unlockRead_Locking(id:Long, key:String) {
         val memory = data.getMemoryUnit(key);
         memory.unlockRead(id, key);
     }
     
-    public def get_LockBased(id:Long, key:String):Cloneable {
+    public def getLocked(id:Long, key:String):Cloneable {
         val memory = data.getMemoryUnit(key);
         return memory.getValueLocked(true, key, id);
     }
     
-    public def  put_LockBased(id:Long, key:String, value:Cloneable):Cloneable{
+    public def  putLocked(id:Long, key:String, value:Cloneable):Cloneable{
         val memory = data.getMemoryUnit(key);        
         return memory.setValueLocked(value, key, id);
     }

@@ -116,7 +116,7 @@ public class IntSet2Async {
 	                    val startWait = Timer.milliTime();
 	                    f1.force();
 	                    f2.force();
-	                    tx.setWaitForFuturesElapsedTime(Timer.milliTime() - startWait);
+	                    tx.setWaitElapsedTime(Timer.milliTime() - startWait);
 	                    if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitForFuturesElapsedTime +"] ms");
 	                });
 	                if (TM_DEBUG) Console.OUT.println(here + " OP["+i+"] End}} keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");                

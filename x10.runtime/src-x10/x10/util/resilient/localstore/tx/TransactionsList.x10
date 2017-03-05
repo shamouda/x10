@@ -16,34 +16,49 @@ import x10.util.ArrayList;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.localstore.LocalTx;
 import x10.util.resilient.localstore.Tx;
-import x10.util.resilient.localstore.BlockingTx;
+import x10.util.resilient.localstore.LockingTx;
+import x10.util.resilient.localstore.TxConfig;
 
 public class TransactionsList {
     public val globalTx:ArrayList[Tx];
 	public val localTx:ArrayList[LocalTx];
-	public val blockingTx:ArrayList[BlockingTx];
+	public val lockingTx:ArrayList[LockingTx];
 
-    private val listLock = new Lock();
+    private val listLock:Lock;
 
     public def this(){
         globalTx = new ArrayList[Tx]();
         localTx = new ArrayList[LocalTx]();
-        blockingTx = new ArrayList[BlockingTx]();
+        lockingTx = new ArrayList[LockingTx]();
+        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+        	listLock = new Lock();
+        else
+        	listLock = null;
     }
     
     public def addLocalTx(tx:LocalTx) {
-        listLock.lock();
+        lock();
         localTx.add(tx);
-        listLock.unlock();
+        unlock();
     }
     public def addGlobalTx(tx:Tx) {
-        listLock.lock();
+    	lock();
         globalTx.add(tx);
-        listLock.unlock();
+        unlock();
     }
-    public def addBlockingTx(tx:BlockingTx) {
-        listLock.lock();
-        blockingTx.add(tx);
-        listLock.unlock();
+    public def addLockingTx(tx:LockingTx) {
+    	lock();
+        lockingTx.add(tx);
+        unlock();
+    }
+    
+    private def lock() {
+    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    		listLock.lock();
+    }
+    
+    private def unlock() {
+    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    		listLock.unlock();
     }
 }

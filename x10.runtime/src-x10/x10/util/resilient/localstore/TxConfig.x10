@@ -13,7 +13,8 @@
 package x10.util.resilient.localstore;
 
 public class TxConfig {
-    
+	public val TM:String; //locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB
+	
     public val LOCKING_MODE:Int;
     public val VALIDATION_REQUIRED:Boolean;
     public val TM_READ:Int;
@@ -25,7 +26,7 @@ public class TxConfig {
     public static val LOCKING_MODE_BLOCKING = 1n;
     public static val LOCKING_MODE_STM = 2n;
     
-    /*STM algorithm dimensions*/
+    /*STM TM dimensions*/
     public static val INVALID = -1n;
     public static val EARLY_ACQUIRE= 1n;
     public static val LATE_ACQUIRE = 2n;
@@ -37,12 +38,12 @@ public class TxConfig {
     private static val instance = new TxConfig();
     
     private def this(){
-        val algorithm = System.getenv("TM");
+        TM = System.getenv("TM");
         val lockfree = (System.getenv("LOCK_FREE") == null || System.getenv("LOCK_FREE").equals("")) ? false : Long.parseLong(System.getenv("LOCK_FREE")) == 1;
-        assert (algorithm != null && !algorithm.equals("")) : "you must specify the TM environment variable, allowed values = locking|RL_EA_UL|RL_EA_WB|...";
+        assert (TM != null && !TM.equals("")) : "you must specify the TM environment variable, allowed values = locking|RL_EA_UL|RL_EA_WB|...";
         
         	
-        if (algorithm.equals("locking")) {
+        if (TM.equals("locking")) {
         	if (lockfree)
         		LOCKING_MODE = LOCKING_MODE_FREE;
         	else
@@ -57,17 +58,17 @@ public class TxConfig {
         		LOCKING_MODE = LOCKING_MODE_FREE;
         	else
         		LOCKING_MODE = LOCKING_MODE_STM;
-            if (algorithm.contains("RL"))
+            if (TM.contains("RL"))
                 TM_READ = READ_LOCKING;
             else
                 TM_READ = READ_VERSIONING;
             
-            if (algorithm.contains("EA"))
+            if (TM.contains("EA"))
                 TM_ACQUIRE = EARLY_ACQUIRE;
             else
                 TM_ACQUIRE = LATE_ACQUIRE;
             
-            if (algorithm.contains("UL"))
+            if (TM.contains("UL"))
                 TM_RECOVER = UNDO_LOGGING;
             else 
                 TM_RECOVER = WRITE_BUFFERING;

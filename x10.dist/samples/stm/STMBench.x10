@@ -6,6 +6,10 @@ import x10.util.resilient.localstore.Tx;
 import x10.util.resilient.localstore.ResilientStore;
 import x10.util.resilient.localstore.CloneableLong;
 import x10.util.resilient.localstore.TxConfig;
+import x10.util.resilient.localstore.LockingRequest;
+import x10.util.resilient.localstore.LockingRequest.KeyInfo;
+import x10.util.resilient.localstore.LockingTx;
+import x10.util.resilient.localstore.LocalTx;
 
 import x10.util.concurrent.Future;
 import x10.xrx.Runtime;
@@ -23,7 +27,7 @@ public class STMBench {
 	
 	public static def main(args:Rail[String]) {
 		val opts = new OptionsParser(args, [
-            Option("h","help","this information"),
+            Option("help","help","this information"),
             Option("v","verify","verify the result")
 		], [
 			Option("r","keysRange","The range of possible keys (default 32K)"),
@@ -58,6 +62,10 @@ public class STMBench {
 		
 		assert (h <= activePlaces.size()) : "invalid value for parameter h, h should not exceed the number of active places" ;
 
+		if (TxConfig.getInstance().LOCKING_MODE == TxConfig.LOCKING_MODE_FREE) {
+			assert (p * t == 1): "lock free mode can only be used with only 1 producer thread";
+		}
+		
 		val store = ResilientStore.make(activePlaces);
 		val map = store.makeMap("map");
 		
@@ -78,47 +86,54 @@ public class STMBench {
 		finish for (pl in producers) at (pl) async {
 			for (thrd in 1..t) async {
 				
-				val throughput = produce(map, activePlaces, thrd, d, r, u, t, h, o, g);
+				val throughput = produce(map, activePlaces, producers, thrd, d, r, u, t, h, o, g);
 				
 				at (root) async {
 					atomic statGR().add(throughput);
 				}
 			}
 		}
+		map.printTxStatistics();
+		map.resetTxStatistics();
 		return statGR();
 	}
 
-	public static def produce(map:ResilientNativeMap, activePlaces:PlaceGroup, producerId:Long, d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long) {
+	public static def produce(map:ResilientNativeMap, activePlaces:PlaceGroup, producers:PlaceGroup, producerId:Long, d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long) {
 		val startMS = Timer.milliTime();
 		var txCount:Long = 0;
 		val activePlacesCount = activePlaces.size();
-		val rand = new Random(here.id * producerId);
+		val rand = new Random((here.id+1) * producerId);
 		
 		while (Timer.milliTime() - startMS < d) {
 			val members = nextTransactionMembers(rand, activePlaces, h);
 			val membersOperations = nextRandomeOperations(rand, activePlacesCount, members, r, u, o);
-			
-			if (TxConfig.getInstance().LOCKING_MODE == TxConfig.LOCKING_MODE_STM) {
+			var str:String = "members = ";
+			for (ee in members) {
+				str += ee + " ";
+			}
+			Console.OUT.println(str);
+			if (members.size() > 1 && !TxConfig.getInstance().TM.equals("locking")) {
+				Console.OUT.println("globalSTM ");
 				map.executeTransaction(members, (tx:Tx) => {
 					val futuresList = new ArrayList[Future[Any]]();
 					
 					for (var m:Long = 0; m < members.size(); m++) {
 						val operations = membersOperations.get(m);
-						
-						val f1 = tx.asyncAt(members(m), () => {
+						//Console.OUT.println(operations);
+						val f1 = tx.asyncAt(operations.dest, () => {
 							
 							for (var x:Long = 0; x < o; x++) {
-								val key = operations.keys(x);
-								val read = operations.rw(x);
+								val key = operations.keys(x).key;
+								val read = operations.keys(x).rw;
 								val value = operations.values(x);
 								
 								if (read) {
 									tx.get(key);
-									Console.OUT.println(here.id + "x" + producerId + ":read");
+									//Console.OUT.println(here.id + "x" + producerId + ":read:"+key);
 								}
 								else {
 									tx.put(key, new CloneableLong(value));
-									Console.OUT.println(here.id + "x" + producerId + ":write");
+									//Console.OUT.println(here.id + "x" + producerId + ":write:"+key);
 								}
 							}
 		                });
@@ -127,16 +142,102 @@ public class STMBench {
 	                val startWait = Timer.milliTime();
 	                for (f in futuresList)
 	                	f.force();
-	                tx.setWaitForFuturesElapsedTime(Timer.milliTime() - startWait);
+	                tx.setWaitElapsedTime(Timer.milliTime() - startWait);
+	                return null;
 	            });
 			}
-			else if (TxConfig.getInstance().LOCKING_MODE == TxConfig.LOCKING_MODE_BLOCKING) { //locking
-				
+			else if (members.size() == 1 && producers.size() == 1 && !TxConfig.getInstance().TM.equals("locking")) {
+				Console.OUT.println("localSTM ");
+				//local transaction
+				assert (members(0) == here) : "local transactions are not supported at remote places for this benchmark" ;
+				map.executeLocalTransaction((tx:LocalTx) => {
+					val operations = membersOperations.get(0);
+					//Console.OUT.println(operations);
+					for (var x:Long = 0; x < o; x++) {
+						val key = operations.keys(x).key;
+						val read = operations.keys(x).rw;
+						val value = operations.values(x);
+						
+						if (read) {
+							tx.get(key);
+							//Console.OUT.println(here.id + "x" + producerId + ":read:"+key);
+						}
+						else {
+							tx.put(key, new CloneableLong(value));
+							//Console.OUT.println(here.id + "x" + producerId + ":write:"+key);
+						}
+					}
+	                return null;
+	            });
 			}
-			else { //lockfree
+			else if (members.size() > 1 && TxConfig.getInstance().TM.equals("locking")) { //locking
+				Console.OUT.println("globalLocking ");
+				val lockRequests = new ArrayList[LockingRequest]();
+				for (memReq in membersOperations) {
+					lockRequests.add(new LockingRequest(memReq.dest, memReq.keys));
+				}
 				
+				map.executeLockingTransaction(members, lockRequests, (tx:LockingTx) => {
+					val futuresList = new ArrayList[Future[Any]]();
+					
+					for (var m:Long = 0; m < members.size(); m++) {
+						val operations = membersOperations.get(m);
+						//Console.OUT.println(operations);
+						val f1 = tx.asyncAt(operations.dest, () => {
+							for (var x:Long = 0; x < o; x++) {
+								val key = operations.keys(x).key;
+								val read = operations.keys(x).rw;
+								val value = operations.values(x);
+								
+								if (read) {
+									tx.get(key);
+									//Console.OUT.println(here.id + "x" + producerId + ":read:"+key);
+								}
+								else {
+									tx.put(key, new CloneableLong(value));
+									//Console.OUT.println(here.id + "x" + producerId + ":write:"+key);
+								}
+							}
+		                });
+						futuresList.add(f1);
+					}
+	                val startWait = Timer.milliTime();
+	                for (f in futuresList)
+	                	f.force();
+	                tx.setWaitElapsedTime(Timer.milliTime() - startWait);
+	                return null;
+				});
 			}
-			
+			else if (members.size() == 1 && producers.size() == 1 && TxConfig.getInstance().TM.equals("locking")) { //locking
+				Console.OUT.println("localLocking ");
+				val lockRequests = new ArrayList[LockingRequest]();
+				for (memReq in membersOperations) {
+					lockRequests.add(new LockingRequest(memReq.dest, memReq.keys));
+				}
+				
+				map.executeLockingTransaction(members, lockRequests, (tx:LockingTx) => {
+					val operations = membersOperations.get(0);
+					//Console.OUT.println(operations);
+					for (var x:Long = 0; x < o; x++) {
+						val key = operations.keys(x).key;
+						val read = operations.keys(x).rw;
+						val value = operations.values(x);
+						
+						if (read) {
+							tx.get(key);
+							//Console.OUT.println(here.id + "x" + producerId + ":read:"+key);
+						}
+						else {
+							tx.put(key, new CloneableLong(value));
+							//Console.OUT.println(here.id + "x" + producerId + ":write:"+key);
+						}
+					}
+	                return null;
+				});
+			}
+			else
+				assert (false) : "wrong or unsupported configurations, members= " + members.size();
+				
 			if (g != -1 && txCount%g == 0)
 				Console.OUT.println("progress "+here.id+"x"+producerId + ":" + txCount );
 			txCount++;
@@ -183,18 +284,21 @@ public class STMBench {
 		val keysPerPlace = r / activePlacesCount;
 		
 		for (pl in members) {
-			val rw = new Rail[Boolean](o);
-			val keys = new Rail[String](o);
+			val keys = new Rail[KeyInfo](o);
 			val values = new Rail[Long](o);
 			
 			val baseKey = pl.id * keysPerPlace;
-			
+			val uniqueKeys = new HashSet[String]();
 			for (var x:Long = 0; x < o; x++) {
-				rw(x) = rand.nextFloat() >= u;
-				keys(x) = "key" + (baseKey + Math.abs(rand.nextLong())% keysPerPlace);
+				val rw = rand.nextFloat() >= u;
+				var k:String = "key" + (baseKey + (Math.abs(rand.nextLong()% keysPerPlace)));
+				while (uniqueKeys.contains(k))
+					k = "key" + (baseKey + (Math.abs(rand.nextLong()% keysPerPlace)));
+				uniqueKeys.add(k);
+				keys(x) = new KeyInfo(k, rw); 
 				values(x) = Math.abs(rand.nextLong())%1000;
 			}
-			list.add(new MemberOperations(pl, rw, keys, values));
+			list.add(new MemberOperations(pl, keys, values));
 		}
 		
 		return list;
@@ -202,15 +306,19 @@ public class STMBench {
 	
 	/*********************  Structs ********************/
 	public static struct MemberOperations {
-		val member:Place;
-		val rw:Rail[Boolean];//true = read, false = write
-	    val keys:Rail[String];
+		val dest:Place;
+	    val keys:Rail[KeyInfo];
 	    val values:Rail[Long];
-	    public def this(member:Place, rw:Rail[Boolean], keys:Rail[String], values:Rail[Long]) {
-	    	this.member = member;
-	    	this.rw = rw;
+	    public def this(dest:Place, keys:Rail[KeyInfo], values:Rail[Long]) {
+	    	this.dest = dest;
 	    	this.keys = keys;
 	    	this.values = values;
+	    }
+	    public def toString() {
+	    	var str:String = "memberOperations:" + dest + ":";
+	        for (k in keys)
+	        	str += "("+k.key+","+k.rw+")" ;
+	    	return str;
 	    }
 	}
 	

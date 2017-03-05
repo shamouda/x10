@@ -103,13 +103,23 @@ public class TxLog (id:Long) {
     }
     
     public def getLockedRead(key:String) {
-        val result = transLog.getOrThrow(key).getLockedRead();
+    	var result:Boolean = false;
+    	val keyLog = transLog.getOrElse(key, null);
+    	if (keyLog == null)
+    		result = false;
+    	else
+    		result = keyLog.getLockedRead();
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] key["+key+"] getLockedRead?["+result+"]");
         return result;
     }
     
     public def getLockedWrite(key:String) {
-        val result = transLog.getOrThrow(key).getLockedWrite();
+    	var result:Boolean = false;
+    	val keyLog = transLog.getOrElse(key, null);
+    	if (keyLog == null)
+    		result = false;
+    	else
+    		result = keyLog.getLockedWrite();
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] key["+key+"] getLockedWrite?["+result+"]");
         return result;
     }

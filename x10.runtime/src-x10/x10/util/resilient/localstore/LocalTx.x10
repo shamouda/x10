@@ -28,11 +28,8 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     public transient val startTime:Long = Timer.milliTime();
     public transient var commitTime:Long = -1;
     public transient var abortTime:Long = -1;   
-    public transient var preCommitElapsedTime:Long = -1;
-    
-    public def setPreCommitElapsedTime(t:Long) {
-    	preCommitElapsedTime = t;
-    }
+    public transient var processingElapsedTime:Long = -1;
+       
     
     /***************** Get ********************/
     public def get(key:String):Cloneable {

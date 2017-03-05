@@ -4,6 +4,7 @@ import x10.util.Set;
 import x10.util.HashMap;
 import x10.util.ArrayList;
 import x10.util.resilient.localstore.tx.*;
+import x10.util.resilient.localstore.LockingRequest;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Lock;
 import x10.xrx.Runtime;
@@ -11,8 +12,8 @@ import x10.util.Timer;
 
 public class ResilientNativeMap (name:String, store:ResilientStore) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
+    private static val TM_STAT_ALL = System.getenv("TM_STAT_ALL") != null && System.getenv("TM_STAT_ALL").equals("1");
     private static val TM_SLEEP = System.getenv("TM_SLEEP") == null ? 0 : Long.parseLong(System.getenv("TM_SLEEP"));
-    private static val TM_PRINT_TIMES = System.getenv("TM_PRINT_TIMES") != null && System.getenv("TM_PRINT_TIMES").equals("1");
     
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     public val list:PlaceLocalHandle[TransactionsList];
@@ -26,21 +27,21 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
      * Get the value of key k in the resilient map.
      */
     public def get(k:String) {
-        return executeLocalTransaction((tx:LocalTx) => tx.get(k) );
+        return executeLocalTransaction((tx:LocalTx) => tx.get(k) ).output as Cloneable;
     }
 
     /**
      * Associate value v with key k in the resilient map.
      */
     public def set(k:String, v:Cloneable) {
-    	return executeLocalTransaction((tx:LocalTx) => tx.put(k,v) );
+    	return executeLocalTransaction((tx:LocalTx) => tx.put(k,v) ).output as Cloneable;
     }
 
     /**
      * Remove any value associated with key k from the resilient map.
      */
     public def delete(k:String) {
-    	return executeLocalTransaction((tx:LocalTx) => tx.delete(k) );
+    	return executeLocalTransaction((tx:LocalTx) => tx.delete(k) ).output as Cloneable;
     }
 
     public def keySet():Set[String] {
@@ -74,6 +75,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         	executeTransaction (members, (tx:Tx)=>{
             	tx.asyncAt(place, ()=> {tx.put(key2, value2);});
             	tx.put(key, value);
+            	return null;
         	});
     	}
     }
@@ -105,39 +107,66 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         return tx;
     }
     
-    
-    public def executeTransaction(members:PlaceGroup, closure:(Tx)=>void):Int {
-        while(true) {
-            val tx = startGlobalTransaction(members);
-            var excpt:Exception = null;
-            var commitCalled:Boolean = false;
-            val start = Timer.milliTime();
-            try {
-                finish closure(tx);
-                tx.setPreCommitElapsedTime(Timer.milliTime()-start);
-                
-                if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} succeeded  preCommitTime["+tx.preCommitElapsedTime+"] ms");
-                commitCalled = true;
-                return tx.commit();
-            } catch(ex:Exception) {
-                if (!commitCalled) {
-                	tx.setPreCommitElapsedTime(Timer.milliTime()-start);
-                    tx.abort(excpt); // tx.commit() aborts automatically if needed
-                }
-                
-                if (TM_DEBUG) {
-                    Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] preCommitTime["+tx.preCommitElapsedTime+"] ms");
-                    ex.printStackTrace();
-                }
-                throwIfNotConflictException(ex);
-                System.threadSleep(TM_SLEEP);
-            }
-        }
+    private def startLockingTransaction(members:PlaceGroup, requests:ArrayList[LockingRequest]):LockingTx {
+        assert(store.plh().virtualPlaceId != -1);
+        val id = store.plh().masterStore.getNextTransactionId();
+        val tx = new LockingTx(store.plh, id, name, members, requests);
+        list().addLockingTx(tx);
+        return tx;
+    }
+      
+    public def executeTransaction(members:PlaceGroup, closure:(Tx)=>Any):TxResult {
+    	try {
+	    	Runtime.increaseParallelism();
+	        while(true) {
+	            val tx = startGlobalTransaction(members);
+	            var excpt:Exception = null;
+	            var commitCalled:Boolean = false;
+	            val start = Timer.milliTime();
+	            try {
+	            	val out:Any;
+	                finish {
+	                	out = closure(tx);
+	                }
+	                tx.processingElapsedTime = Timer.milliTime() - start ;
+	                
+	                if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} succeeded  preCommitTime["+tx.processingElapsedTime+"] ms");
+	                commitCalled = true;
+	                return new TxResult(tx.commit(), out);
+	            } catch(ex:Exception) {
+	                if (!commitCalled) {
+	                	tx.processingElapsedTime = Timer.milliTime() - start;
+	                    tx.abort(excpt); // tx.commit() aborts automatically if needed
+	                }
+	                
+	                if (TM_DEBUG) {
+	                    Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] preCommitTime["+tx.processingElapsedTime+"] ms");
+	                    ex.printStackTrace();
+	                }
+	                throwIfNotConflictException(ex);
+	                System.threadSleep(TM_SLEEP);
+	            }
+	        }
+    	}finally {
+    		Runtime.decreaseParallelism(1n);
+    	}
     }
     
+    public def executeLockingTransaction(members:PlaceGroup, lockRequests:ArrayList[LockingRequest], closure:(LockingTx)=>Any) {
+        val tx = startLockingTransaction(members, lockRequests);
+        tx.lock();
+        
+        val start = Timer.milliTime();
+        val out = closure(tx);
+        tx.processingElapsedTime = Timer.milliTime() - start;
+        
+        tx.unlock();
+        return new TxResult(Tx.SUCCESS, out);
+    }
     
-    public def executeLocalTransaction(closure:(LocalTx)=>Cloneable):Cloneable {
-        var result:Cloneable = null;
+    public def executeLocalTransaction(closure:(LocalTx)=>Any) {
+    	var out:Any;
+        var commitStatus:Int = -1n;
         try {
             Runtime.increaseParallelism();
             while(true) {
@@ -145,14 +174,14 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
             	var commitCalled:Boolean = false;
             	val start = Timer.milliTime();
                 try {
-                	result = closure(tx);
-                    tx.setPreCommitElapsedTime(Timer.milliTime()-start);
+                	out = closure(tx);
+                    tx.processingElapsedTime = Timer.milliTime() - start ;
                     commitCalled = true;
-                    tx.commit();
+                    commitStatus = tx.commit();
                     break;
                 } catch(ex:Exception) {
                 	if (!commitCalled) {
-                    	tx.setPreCommitElapsedTime(Timer.milliTime()-start);
+                    	tx.processingElapsedTime = Timer.milliTime() - start;
                         //no need to call abort, abort occurs automatically in local tx all the time
                     }
                     throwIfNotConflictException(ex);
@@ -163,12 +192,13 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         }finally {
             Runtime.decreaseParallelism(1n);
         }
-        return result;
+        return new TxResult(commitStatus, out);
     }
     
-    public def executeLocalTransaction(target:Place, closure:(LocalTx)=>void):Int {
+    public def executeLocalTransaction(target:Place, closure:(LocalTx)=>Any) {
         val txResult = at (target) {
-            var result:Int = -1n;
+            var out:Any;
+            var commitStatus:Int = -1n;
             try {
                 Runtime.increaseParallelism();
                 while(true) {
@@ -176,14 +206,16 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                 	var commitCalled:Boolean = false;
                 	val start = Timer.milliTime();
                     try {
-                        closure(tx);
-                        tx.setPreCommitElapsedTime(Timer.milliTime()-start);
+                    	out = closure(tx);
+                        tx.processingElapsedTime = Timer.milliTime() - start;
+                        
                         commitCalled = true;
-                        result = tx.commit();
+                        
+                        commitStatus = tx.commit();
                         break;
                     } catch(ex:Exception) {
                     	if (!commitCalled) {
-                        	tx.setPreCommitElapsedTime(Timer.milliTime()-start);
+                        	tx.processingElapsedTime = Timer.milliTime() - start;
                             //no need to call abort, abort occurs automatically in local tx all the time
                         }
                         throwIfNotConflictException(ex);
@@ -193,7 +225,8 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
             }finally {
                 Runtime.decreaseParallelism(1n);
             }
-            result
+            
+            new TxResult(commitStatus, out)
         };
         return txResult;
     }
@@ -233,11 +266,6 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         return new SparsePlaceGroup(list.toRail());
     }
     
-    public def getLockManager():LockManager {
-        assert(store.plh().virtualPlaceId != -1);
-        return new LockManager(store, name, list);
-    }
-    
     public def printTxStatistics() {
         Console.OUT.println("Calculating execution statistics ...");
         val pl_stat = new ArrayList[TxPlaceStatistics]();
@@ -245,139 +273,223 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
             val pstat = at (p) {
                 //####         Global TX         ####//
                 val g_commitList = new ArrayList[Double]();
-                val g_preCommitList = new ArrayList[Double]();
-                val g_waitFutureList = new ArrayList[Double]();
+                val g_commitProcList = new ArrayList[Double]();
+                val g_waitList = new ArrayList[Double]();
+                val g_commitPH1List = new ArrayList[Double]();
+                val g_commitPH2List = new ArrayList[Double]();
+                val g_txLoggingList = new ArrayList[Double]();
                 
                 val g_abortList = new ArrayList[Double]();
-                val g_preAbortList = new ArrayList[Double]();
+                val g_abortProcList = new ArrayList[Double]();
                 
                 for (tx in list().globalTx) {
                     if (tx.commitTime != -1) {
                         g_commitList.add(tx.commitTime - tx.startTime);
-                        g_preCommitList.add(tx.preCommitElapsedTime);
-                        g_waitFutureList.add(tx.waitForFuturesElapsedTime);
+                        g_commitProcList.add(tx.processingElapsedTime);
+                        g_waitList.add(tx.waitElapsedTime);
+                        g_commitPH1List.add(tx.phase1ElapsedTime);
+                        g_commitPH2List.add(tx.phase2ElapsedTime);
+                        g_txLoggingList.add(tx.txLoggingElapsedTime);
                     }
                     else if (tx.abortTime != -1) {
                         g_abortList.add(tx.abortTime - tx.startTime);
-                        g_preAbortList.add(tx.preCommitElapsedTime);
+                        g_abortProcList.add(tx.processingElapsedTime);
                     }
                 }
                 //####         Local TX         ####//
                 val l_commitList = new ArrayList[Double]();
-                val l_preCommitList = new ArrayList[Double]();
+                val l_commitProcList = new ArrayList[Double]();
                 
                 val l_abortList = new ArrayList[Double]();
-                val l_preAbortList = new ArrayList[Double]();
+                val l_abortProcList = new ArrayList[Double]();
                 
                 for (tx in list().localTx) {
                     if (tx.commitTime != -1) {
                         l_commitList.add(tx.commitTime - tx.startTime);
-                        l_preCommitList.add(tx.preCommitElapsedTime);
+                        l_commitProcList.add(tx.processingElapsedTime);
                     }
                     else if (tx.abortTime != -1) {
                         l_abortList.add(tx.abortTime - tx.startTime);
-                        l_preAbortList.add(tx.preCommitElapsedTime);
+                        l_abortProcList.add(tx.processingElapsedTime);
                     }
                 }
+                
+              //####         Locking TX         ####//
+                val lk_totalList = new ArrayList[Double]();
+                val lk_lockList = new ArrayList[Double]();
+                val lk_procList = new ArrayList[Double]();
+                val lk_waitList = new ArrayList[Double]();
+                val lk_unlockList = new ArrayList[Double]();
+                
+                for (tx in list().lockingTx) {
+                	lk_totalList.add(tx.totalElapsedTime);
+                	lk_lockList.add(tx.lockingElapsedTime);
+                	lk_procList.add(tx.processingElapsedTime);
+                	lk_waitList.add(tx.waitElapsedTime);
+                	lk_unlockList.add(tx.unlockingElapsedTime);
+                }
                  
-                new TxPlaceStatistics(here, g_commitList, g_preCommitList, g_waitFutureList, g_abortList, g_preAbortList, 
-                		                    l_commitList, l_preCommitList, l_abortList, l_preAbortList)
+                new TxPlaceStatistics(here, g_commitList, g_commitProcList, g_waitList,  g_commitPH1List, g_commitPH2List, g_txLoggingList, g_abortList, g_abortProcList, 
+                		                    l_commitList, l_commitProcList, l_abortList, l_abortProcList,
+                		                    lk_totalList, lk_lockList, lk_procList, lk_waitList, lk_unlockList)
             };
             pl_stat.add(pstat);
         }
         
         val g_allCommitList = new ArrayList[Double]();
-        val g_allPreCommitList = new ArrayList[Double]();
-        val g_allWaitFutureList = new ArrayList[Double]();
-        
+        val g_allCommitProcList = new ArrayList[Double]();
+        val g_allWaitList = new ArrayList[Double]();
+        val g_allPH1List = new ArrayList[Double]();
+        val g_allPH2List = new ArrayList[Double]();
+        val g_allTxLoggingList = new ArrayList[Double]();
         val g_allAbortList = new ArrayList[Double]();
-        val g_allPreAbortList = new ArrayList[Double]();
-        
+        val g_allAbortProcList = new ArrayList[Double]();
         var g_cPlaces:Long = 0;
         var g_aPlaces:Long = 0;
         
         val l_allCommitList = new ArrayList[Double]();
-        val l_allPreCommitList = new ArrayList[Double]();
+        val l_allCommitProcList = new ArrayList[Double]();
         val l_allAbortList = new ArrayList[Double]();
-        val l_allPreAbortList = new ArrayList[Double]();
+        val l_allAbortProcList = new ArrayList[Double]();
         var l_cPlaces:Long = 0;
         var l_aPlaces:Long = 0;
         
+        val lk_allTotalList = new ArrayList[Double]();
+        val lk_allLockList = new ArrayList[Double]();
+        val lk_allProcList = new ArrayList[Double]();
+        val lk_allWaitList = new ArrayList[Double]();
+        val lk_allUnlockList = new ArrayList[Double]();
+        var lk_Places:Long = 0;
+        
         for (pstat in pl_stat) {
             val str = pstat.toString();
-            if (!str.equals(""))
+            if (TM_STAT_ALL && !str.equals(""))
                 Console.OUT.println(str);
             g_allCommitList.addAll(pstat.g_commitList);
-            g_allPreCommitList.addAll(pstat.g_preCommitList);
-            g_allWaitFutureList.addAll(pstat.g_waitFutureList);
+            g_allCommitProcList.addAll(pstat.g_commitProcList);
+            g_allWaitList.addAll(pstat.g_waitList);
+            g_allPH1List.addAll(pstat.g_ph1List);
+            g_allPH2List.addAll(pstat.g_ph2List);
+            g_allTxLoggingList.addAll(pstat.g_txLoggingList);
+            
             if (pstat.g_commitList.size() > 0)
                 g_cPlaces ++;
             
             g_allAbortList.addAll(pstat.g_abortList);
-            g_allPreAbortList.addAll(pstat.g_preAbortList);
+            g_allAbortProcList.addAll(pstat.g_abortProcList);
             if (pstat.g_abortList.size() > 0)
                 g_aPlaces ++;
             
             l_allCommitList.addAll(pstat.l_commitList);
-            l_allPreCommitList.addAll(pstat.l_preCommitList);
+            l_allCommitProcList.addAll(pstat.l_commitProcList);
             if (pstat.l_commitList.size() > 0)
                 l_cPlaces ++;
             
             l_allAbortList.addAll(pstat.l_abortList);
-            l_allPreAbortList.addAll(pstat.l_preAbortList);
+            l_allAbortProcList.addAll(pstat.l_abortProcList);
             if (pstat.l_abortList.size() > 0)
                 l_aPlaces ++;
+            
+            
+            lk_allTotalList.addAll(pstat.lk_totalList);
+            lk_allLockList.addAll(pstat.lk_lockList);
+            lk_allProcList.addAll(pstat.lk_procList);
+            lk_allWaitList.addAll(pstat.lk_waitList);
+            lk_allUnlockList.addAll(pstat.lk_unlockList);
+            
+            if (pstat.lk_totalList.size() > 0)
+            	lk_Places ++;
         }
         
-        val g_cCnt   = g_allCommitList.size();
-        val g_cMean  = TxStatistics.mean(g_allCommitList);
-        val g_cSTDEV = TxStatistics.stdev(g_allCommitList, g_cMean);
-        val g_cBox   = TxStatistics.boxPlot(g_allCommitList);
-        val g_cPreMean  = TxStatistics.mean(g_allPreCommitList);
-        val g_cPreSTDEV = TxStatistics.stdev(g_allPreCommitList, g_cPreMean);
-        val g_cPreBox   = TxStatistics.boxPlot(g_allPreCommitList);
-        val g_cWaitFutureMean  = TxStatistics.mean(g_allWaitFutureList);
-        val g_cWaitFutureSTDEV = TxStatistics.stdev(g_allWaitFutureList, g_cWaitFutureMean);
-        val g_cWaitFutureBox   = TxStatistics.boxPlot(g_allWaitFutureList);
+        val g_cCnt       = g_allCommitList.size();
+        val g_cMean      = TxStatistics.mean(g_allCommitList);
+        val g_cSTDEV     = TxStatistics.stdev(g_allCommitList, g_cMean);
+        val g_cBox       = TxStatistics.boxPlot(g_allCommitList);
+        val g_cProcMean  = TxStatistics.mean(g_allCommitProcList);
+        val g_cProcSTDEV = TxStatistics.stdev(g_allCommitProcList, g_cProcMean);
+        val g_cProcBox   = TxStatistics.boxPlot(g_allCommitProcList);
+        val g_cWaitMean  = TxStatistics.mean(g_allWaitList);
+        val g_cWaitSTDEV = TxStatistics.stdev(g_allWaitList, g_cWaitMean);
+        val g_cWaitBox   = TxStatistics.boxPlot(g_allWaitList);
+        val g_cPH1Mean   = TxStatistics.mean(g_allPH1List);
+        val g_cPH1STDEV  = TxStatistics.stdev(g_allPH1List, g_cPH1Mean);
+        val g_cPH1Box    = TxStatistics.boxPlot(g_allPH1List);
+        val g_cPH2Mean   = TxStatistics.mean(g_allPH2List);
+        val g_cPH2STDEV  = TxStatistics.stdev(g_allPH2List, g_cPH2Mean);
+        val g_cPH2Box    = TxStatistics.boxPlot(g_allPH2List);
+        val g_cLogMean   = TxStatistics.mean(g_allTxLoggingList);
+        val g_cLogSTDEV  = TxStatistics.stdev(g_allTxLoggingList, g_cLogMean);
+        val g_cLogBox    = TxStatistics.boxPlot(g_allTxLoggingList);
+        val g_aCnt       = g_allAbortList.size();
+        val g_aMean      = TxStatistics.mean(g_allAbortList);
+        val g_aSTDEV     = TxStatistics.stdev(g_allAbortList, g_aMean);
+        val g_aBox       = TxStatistics.boxPlot(g_allAbortList);
+        val g_aProcMean  = TxStatistics.mean(g_allAbortProcList);
+        val g_aProcSTDEV = TxStatistics.stdev(g_allAbortProcList, g_aProcMean);
+        val g_aProcBox   = TxStatistics.boxPlot(g_allAbortProcList);
         
-        val g_aCnt   = g_allAbortList.size();
-        val g_aMean  = TxStatistics.mean(g_allAbortList);
-        val g_aSTDEV = TxStatistics.stdev(g_allAbortList, g_aMean);
-        val g_aBox   = TxStatistics.boxPlot(g_allAbortList);
-        val g_aPreMean  = TxStatistics.mean(g_allPreAbortList);
-        val g_aPreSTDEV = TxStatistics.stdev(g_allPreAbortList, g_aPreMean);
-        val g_aPreBox   = TxStatistics.boxPlot(g_allPreAbortList);
+        val l_cCnt       = l_allCommitList.size();
+        val l_cMean      = TxStatistics.mean(l_allCommitList);
+        val l_cSTDEV     = TxStatistics.stdev(l_allCommitList, l_cMean);
+        val l_cBox       = TxStatistics.boxPlot(l_allCommitList);
+        val l_cProcMean  = TxStatistics.mean(l_allCommitProcList);
+        val l_cProcSTDEV = TxStatistics.stdev(l_allCommitProcList, l_cProcMean);
+        val l_cProcBox   = TxStatistics.boxPlot(l_allCommitProcList);
+        val l_aCnt       = l_allAbortList.size();
+        val l_aMean      = TxStatistics.mean(l_allAbortList);
+        val l_aSTDEV     = TxStatistics.stdev(l_allAbortList, l_aMean);
+        val l_aBox       = TxStatistics.boxPlot(l_allAbortList);
+        val l_aProcMean  = TxStatistics.mean(l_allAbortProcList);
+        val l_aProcSTDEV = TxStatistics.stdev(l_allAbortProcList, l_aProcMean);
+        val l_aProcBox   = TxStatistics.boxPlot(l_allAbortProcList);
+                
         
-        val l_cCnt   = l_allCommitList.size();
-        val l_cMean  = TxStatistics.mean(l_allCommitList);
-        val l_cSTDEV = TxStatistics.stdev(l_allCommitList, l_cMean);
-        val l_cBox   = TxStatistics.boxPlot(l_allCommitList);
-        val l_cPreMean  = TxStatistics.mean(l_allPreCommitList);
-        val l_cPreSTDEV = TxStatistics.stdev(l_allPreCommitList, l_cPreMean);
-        val l_cPreBox   = TxStatistics.boxPlot(l_allPreCommitList);
+        val lk_Cnt        = lk_allTotalList.size();
+        val lk_totalMean  = TxStatistics.mean(lk_allTotalList);
+        val lk_totalSTDEV = TxStatistics.stdev(lk_allTotalList, lk_totalMean);
+        val lk_totalBox   = TxStatistics.boxPlot(lk_allTotalList);
+        val lk_lockMean  = TxStatistics.mean(lk_allLockList);
+        val lk_lockSTDEV = TxStatistics.stdev(lk_allLockList, lk_lockMean);
+        val lk_lockBox   = TxStatistics.boxPlot(lk_allLockList);
+        val lk_procMean  = TxStatistics.mean(lk_allProcList);
+        val lk_procSTDEV = TxStatistics.stdev(lk_allProcList, lk_procMean);
+        val lk_procBox   = TxStatistics.boxPlot(lk_allProcList);
+        val lk_waitMean  = TxStatistics.mean(lk_allWaitList);
+        val lk_waitSTDEV = TxStatistics.stdev(lk_allWaitList, lk_waitMean);
+        val lk_waitBox   = TxStatistics.boxPlot(lk_allWaitList);
+        val lk_unlockMean  = TxStatistics.mean(lk_allUnlockList);
+        val lk_unlockSTDEV = TxStatistics.stdev(lk_allUnlockList, lk_unlockMean);
+        val lk_unlockBox   = TxStatistics.boxPlot(lk_allUnlockList);
         
-        val l_aCnt   = l_allAbortList.size();
-        val l_aMean  = TxStatistics.mean(l_allAbortList);
-        val l_aSTDEV = TxStatistics.stdev(l_allAbortList, l_aMean);
-        val l_aBox   = TxStatistics.boxPlot(l_allAbortList);
-        val l_aPreMean  = TxStatistics.mean(l_allPreAbortList);
-        val l_aPreSTDEV = TxStatistics.stdev(l_allPreAbortList, l_aPreMean);
-        val l_aPreBox   = TxStatistics.boxPlot(l_allPreAbortList);
-        
-        
-        if (g_cCnt > 0) {
-        	if (TM_PRINT_TIMES) {
-        		Console.OUT.println ( railToString(g_cBox.sorted, "COMMITTED_TX_LIST") );
-        		Console.OUT.println ( railToString(g_aBox.sorted, "ABORTED_TX_LIST") );
-        	}
-            Console.OUT.println("Summary:GLOBAL_TX:committedTxs:"+ g_cCnt + ":committedPlaces:" + g_cPlaces + ":commitMeanMS:" + g_cMean + ":commitSTDEV:" + g_cSTDEV + ":commitBox:(:" + g_cBox + ":)" + ":preCommitMeanMS:" + g_cPreMean + ":preCommitSTDEV:" + g_cPreSTDEV + ":preCommitBox:(:" + g_cPreBox + ":)"
-            		+ ":waitFutureMeanMS:" + g_cWaitFutureMean + ":waitFutureSTDEV:" + g_cWaitFutureSTDEV + ":waitFutureBox:(:" + g_cWaitFutureBox + ":)");
-            Console.OUT.println("Summary:GLOBAL_TX:abortedTxs:"  + g_aCnt + ":abortedPlaces:"   + g_aPlaces + ":abortMeanMS:"  + g_aMean + ":abortSTDEV:"  + g_aSTDEV + ":abortBox:(:"  + g_aBox + ":)" + ":preAbortMeanMS:"  + g_aPreMean + ":preAbortSTDEV:"  + g_aPreSTDEV + ":preAbortBox:(:"  + g_aPreBox + ":)" );
+        if (g_cCnt > 0) {        	
+            Console.OUT.println("Summary:GLOBAL_TX:committedTxs:"     + g_cCnt       + ":committedPlaces:" + g_cPlaces ); 
+            Console.OUT.println("Summary:GLOBAL_TX:commitMeanMS:"     + g_cMean      + ":commitSTDEV:"     + g_cSTDEV     + ":commitBox:(:"     + g_cBox + ":)" ); 
+            Console.OUT.println("Summary:GLOBAL_TX:commitProcMeanMS:" + g_cProcMean  + ":commitProcSTDEV:" + g_cProcSTDEV + ":commitProcBox:(:" + g_cProcBox + ":)" );
+            Console.OUT.println("Summary:GLOBAL_TX:waitMeanMS:"       + g_cWaitMean  + ":waitSTDEV:"       + g_cWaitSTDEV + ":waitBox:(:"       + g_cWaitBox + ":)" );
+            Console.OUT.println("Summary:GLOBAL_TX:ph1MeanMS:"        + g_cPH1Mean   + ":ph1STDEV:"        + g_cPH1STDEV  + ":ph1Box:(:"        + g_cPH1Box + ":)" );
+            Console.OUT.println("Summary:GLOBAL_TX:ph2MeanMS:"        + g_cPH2Mean   + ":ph2STDEV:"        + g_cPH2STDEV  + ":ph2Box:(:"        + g_cPH2Box + ":)" );
+            Console.OUT.println("Summary:GLOBAL_TX:logMeanMS:"        + g_cLogMean   + ":logSTDEV:"        + g_cLogSTDEV  + ":logBox:(:"        + g_cLogBox + ":)" );
+            Console.OUT.println("Summary:GLOBAL_TX:abortedTxs:"       + g_aCnt       + ":abortedPlaces:"   + g_aPlaces );
+            Console.OUT.println("Summary:GLOBAL_TX:abortMeanMS:"      + g_aMean      + ":abortSTDEV:"      + g_aSTDEV     + ":abortBox:(:"      + g_aBox + ":)" );
+            Console.OUT.println("Summary:GLOBAL_TX:abortProcMeanMS:"  + g_aProcMean  + ":abortProcSTDEV:"  + g_aProcSTDEV + ":abortProcBox:(:"  + g_aProcBox + ":)" );
         }
         
         if (l_cCnt > 0) {
-        	Console.OUT.println("Summary:LOCAL_TX:committedTxs:"+ l_cCnt + ":committedPlaces:" + l_cPlaces + ":commitMeanMS:" + l_cMean + ":commitSTDEV:" + l_cSTDEV + ":commitBox:(:" + l_cBox + ":)" + ":preCommitMeanMS:" + l_cPreMean + ":preCommitSTDEV:" + l_cPreSTDEV + ":preCommitBox:(:" + l_cPreBox + ":)");
-            Console.OUT.println("Summary:LOCAL_TX:abortedTxs:"  + l_aCnt + ":abortedPlaces:"   + l_aPlaces + ":abortMeanMS:"  + l_aMean + ":abortSTDEV:"  + l_aSTDEV + ":abortBox:(:"  + l_aBox + ":)" + ":preAbortMeanMS:"  + l_aPreMean + ":preAbortSTDEV:"  + l_aPreSTDEV + ":preAbortBox:(:"  + l_aPreBox + ":)" );
+        	Console.OUT.println("Summary:LOCAL_TX:committedTxs:"      + l_cCnt       + ":committedPlaces:" + l_cPlaces );
+        	Console.OUT.println("Summary:LOCAL_TX:commitMeanMS:"      + l_cMean      + ":commitSTDEV:"     + l_cSTDEV     + ":commitBox:(:"     + l_cBox + ":)" );
+        	Console.OUT.println("Summary:LOCAL_TX:commitProcMeanMS:"  + l_cProcMean  + ":commitProcSTDEV:" + l_cProcSTDEV + ":commitProcBox:(:" + l_cProcBox + ":)" );
+            Console.OUT.println("Summary:LOCAL_TX:abortedTxs:"        + l_aCnt       + ":abortedPlaces:"   + l_aPlaces );
+            Console.OUT.println("Summary:LOCAL_TX:abortMeanMS:"       + l_aMean      + ":abortSTDEV:"      + l_aSTDEV     + ":abortBox:(:"      + l_aBox + ":)" );
+            Console.OUT.println("Summary:LOCAL_TX:abortProcMeanMS:"   + l_aProcMean  + ":abortProcSTDEV:"  + l_aProcSTDEV + ":abortProcBox:(:"  + l_aProcBox + ":)" );
+        }
+        
+        if (lk_Cnt > 0) {
+        	Console.OUT.println("Summary:LOCKING_TX:count:"       + lk_Cnt            + ":Places:"     + lk_Places );
+        	Console.OUT.println("Summary:LOCKING_TX:totalMeanMS:"  + lk_totalMean  + ":totalSTDEV:"  + lk_totalSTDEV    + ":totalBox:(:"    + lk_totalBox + ":)" );
+        	Console.OUT.println("Summary:LOCKING_TX:lockMeanMS:"   + lk_lockMean   + ":lockSTDEV:"   + lk_lockSTDEV     + ":lockBox:(:"     + lk_lockBox + ":)" );
+        	Console.OUT.println("Summary:LOCKING_TX:procMeanMS:"   + lk_procMean   + ":procSTDEV:"   + lk_procSTDEV     + ":procBox:(:"     + lk_procBox + ":)" );
+        	Console.OUT.println("Summary:LOCKING_TX:waitMeanMS:"   + lk_waitMean   + ":waitSTDEV:"   + lk_waitSTDEV     + ":waitBox:(:"     + lk_waitBox + ":)" );
+        	Console.OUT.println("Summary:LOCKING_TX:unlockMeanMS:" + lk_unlockMean + ":unlockSTDEV:" + lk_unlockSTDEV   + ":unlockBox:(:"   + lk_unlockBox + ":)" );
         }
     }
     
@@ -385,6 +497,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         finish for (p in store.activePlaces) at (p) async {
             list().globalTx.clear();
             list().localTx.clear();
+            list().lockingTx.clear();
         }
     }
     
@@ -398,51 +511,93 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     
 }
 
-class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_preCommitList:ArrayList[Double], g_waitFutureList:ArrayList[Double], g_abortList:ArrayList[Double], g_preAbortList:ArrayList[Double], 
-		                         l_commitList:ArrayList[Double], l_preCommitList:ArrayList[Double], l_abortList:ArrayList[Double], l_preAbortList:ArrayList[Double]) {
+class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_commitProcList:ArrayList[Double], g_waitList:ArrayList[Double], 
+								 g_ph1List:ArrayList[Double], g_ph2List:ArrayList[Double], g_txLoggingList:ArrayList[Double], 
+		                         g_abortList:ArrayList[Double], g_abortProcList:ArrayList[Double], 
+		                         l_commitList:ArrayList[Double], l_commitProcList:ArrayList[Double], l_abortList:ArrayList[Double], l_abortProcList:ArrayList[Double],
+		                         lk_totalList:ArrayList[Double], lk_lockList:ArrayList[Double], lk_procList:ArrayList[Double], lk_waitList:ArrayList[Double], lk_unlockList:ArrayList[Double]) {
     public def toString() {
         
-        val g_commitMean     = TxStatistics.mean(g_commitList);
-        val g_commitSTDEV    = TxStatistics.stdev(g_commitList, g_commitMean);
-        val g_commitBox      = TxStatistics.boxPlot(g_commitList);        
-        val g_preCommitMean  = TxStatistics.mean(g_preCommitList);
-        val g_preCommitSTDEV = TxStatistics.stdev(g_preCommitList, g_preCommitMean);
-        val g_preCommitBox   = TxStatistics.boxPlot(g_preCommitList);
-        val g_waitFutureMean  = TxStatistics.mean(g_waitFutureList);
-        val g_waitFutureSTDEV = TxStatistics.stdev(g_waitFutureList, g_waitFutureMean);
-        val g_waitFutureBox   = TxStatistics.boxPlot(g_waitFutureList);
+        val g_commitMean      = TxStatistics.mean(g_commitList);
+        val g_commitSTDEV     = TxStatistics.stdev(g_commitList, g_commitMean);
+        val g_commitBox       = TxStatistics.boxPlot(g_commitList);        
+        val g_commitProcMean  = TxStatistics.mean(g_commitProcList);
+        val g_commitProcSTDEV = TxStatistics.stdev(g_commitProcList, g_commitProcMean);
+        val g_commitProcBox   = TxStatistics.boxPlot(g_commitProcList);
+        val g_waitMean        = TxStatistics.mean(g_waitList);
+        val g_waitSTDEV       = TxStatistics.stdev(g_waitList, g_waitMean);
+        val g_waitBox         = TxStatistics.boxPlot(g_waitList);
+        val g_ph1Mean         = TxStatistics.mean(g_ph1List);
+        val g_ph1STDEV        = TxStatistics.stdev(g_ph1List, g_ph1Mean);
+        val g_ph1Box          = TxStatistics.boxPlot(g_ph1List);
+        val g_ph2Mean         = TxStatistics.mean(g_ph2List);
+        val g_ph2STDEV        = TxStatistics.stdev(g_ph2List, g_ph2Mean);
+        val g_ph2Box          = TxStatistics.boxPlot(g_ph2List);
+        val g_logMean         = TxStatistics.mean(g_txLoggingList);
+        val g_logSTDEV        = TxStatistics.stdev(g_txLoggingList, g_logMean);
+        val g_logBox          = TxStatistics.boxPlot(g_txLoggingList);
+        val g_abortMean       = TxStatistics.mean(g_abortList);
+        val g_abortSTDEV      = TxStatistics.stdev(g_abortList, g_abortMean);
+        val g_abortBox        = TxStatistics.boxPlot(g_abortList);
+        val g_abortProcMean   = TxStatistics.mean(g_abortProcList);
+        val g_abortProcSTDEV  = TxStatistics.stdev(g_abortProcList, g_abortProcMean);
+        val g_abortProcBox    = TxStatistics.boxPlot(g_abortProcList);
         
-        val g_abortMean     = TxStatistics.mean(g_abortList);
-        val g_abortSTDEV    = TxStatistics.stdev(g_abortList, g_abortMean);
-        val g_abortBox      = TxStatistics.boxPlot(g_abortList);
-        val g_preAbortMean  = TxStatistics.mean(g_preAbortList);
-        val g_preAbortSTDEV = TxStatistics.stdev(g_preAbortList, g_preAbortMean);
-        val g_preAbortBox   = TxStatistics.boxPlot(g_preAbortList);
+        val l_commitMean      = TxStatistics.mean(l_commitList);
+        val l_commitSTDEV     = TxStatistics.stdev(l_commitList, l_commitMean);
+        val l_commitBox       = TxStatistics.boxPlot(l_commitList);        
+        val l_commitProcMean  = TxStatistics.mean(l_commitProcList);
+        val l_commitProcSTDEV = TxStatistics.stdev(l_commitProcList, l_commitProcMean);
+        val l_commitProcBox   = TxStatistics.boxPlot(l_commitProcList);
+        val l_abortMean       = TxStatistics.mean(l_abortList);
+        val l_abortSTDEV      = TxStatistics.stdev(l_abortList, l_abortMean);
+        val l_abortBox        = TxStatistics.boxPlot(l_abortList);
+        val l_abortProcMean   = TxStatistics.mean(l_abortProcList);
+        val l_abortProcSTDEV  = TxStatistics.stdev(l_abortProcList, l_abortProcMean);
+        val l_abortProcBox    = TxStatistics.boxPlot(l_abortProcList);
         
-        val l_commitMean     = TxStatistics.mean(l_commitList);
-        val l_commitSTDEV    = TxStatistics.stdev(l_commitList, l_commitMean);
-        val l_commitBox      = TxStatistics.boxPlot(l_commitList);        
-        val l_preCommitMean  = TxStatistics.mean(l_preCommitList);
-        val l_preCommitSTDEV = TxStatistics.stdev(l_preCommitList, l_preCommitMean);
-        val l_preCommitBox   = TxStatistics.boxPlot(l_preCommitList);
-        
-        val l_abortMean     = TxStatistics.mean(l_abortList);
-        val l_abortSTDEV    = TxStatistics.stdev(l_abortList, l_abortMean);
-        val l_abortBox      = TxStatistics.boxPlot(l_abortList);
-        val l_preAbortMean  = TxStatistics.mean(l_preAbortList);
-        val l_preAbortSTDEV = TxStatistics.stdev(l_preAbortList, l_preAbortMean);
-        val l_preAbortBox   = TxStatistics.boxPlot(l_preAbortList);
+        val lk_totalMean      = TxStatistics.mean(lk_totalList);
+        val lk_totalSTDEV     = TxStatistics.stdev(lk_totalList, lk_totalMean);
+        val lk_totalBox       = TxStatistics.boxPlot(lk_totalList);
+        val lk_lockMean      = TxStatistics.mean(lk_lockList);
+        val lk_lockSTDEV     = TxStatistics.stdev(lk_lockList, lk_lockMean);
+        val lk_lockBox       = TxStatistics.boxPlot(lk_lockList);
+        val lk_procMean      = TxStatistics.mean(lk_procList);
+        val lk_procSTDEV     = TxStatistics.stdev(lk_procList, lk_procMean);
+        val lk_procBox       = TxStatistics.boxPlot(lk_procList);
+        val lk_waitMean      = TxStatistics.mean(lk_waitList);
+        val lk_waitSTDEV     = TxStatistics.stdev(lk_waitList, lk_waitMean);
+        val lk_waitBox       = TxStatistics.boxPlot(lk_waitList);
+        val lk_unlockMean      = TxStatistics.mean(lk_unlockList);
+        val lk_unlockSTDEV     = TxStatistics.stdev(lk_unlockList, lk_unlockMean);
+        val lk_unlockBox       = TxStatistics.boxPlot(lk_unlockList);
         
         var str:String = "";
         if (g_commitList.size() > 0) {
-            str += p + ":GLOBAL_TX:commitCount:"+ g_commitList.size() + ":commitMeanMS:"    + g_commitMean    + ":commitSTDEV:"    + g_commitSTDEV    + ":commitBox:(:" + g_commitBox + ":)" + ":preCommitMeanMS:" + g_preCommitMean + ":preCommitSTDEV:" + g_preCommitSTDEV + ":preCommitBox:(:" + g_preCommitBox + ":)"
-            		                                                  + ":waitFutureMeanMS:" + g_waitFutureMean + ":waitFutureSTDEV:" + g_waitFutureSTDEV + ":waitFutureBox:(:" + g_waitFutureBox + ":)\n"; 
-            str += p + ":GLOBAL_TX:abortCount:" + g_abortList.size()  + ":abortMeanMS:"     + g_abortMean     + ":abortSTDEV:"     + g_abortSTDEV     + ":abortBox:(:"  + g_abortBox  + ":)" + ":preAbortMeanMS:"  + g_preAbortMean  + ":preAbortSTDEV:"  + g_preAbortSTDEV  + ":preAbortBox:(:"  + g_preAbortBox + ":)\n";
+            str += p + ":GLOBAL_TX:commitCount:"+ g_commitList.size() + ":commitMeanMS:"     + g_commitMean    + ":commitSTDEV:"    + g_commitSTDEV    + ":commitBox:(:" + g_commitBox + ":)" 
+                                                                      + ":commitProcMeanMS:" + g_commitProcMean + ":commitProcSTDEV:" + g_commitProcSTDEV + ":commitProcBox:(:" + g_commitProcBox + ":)"
+                                                                      + ":waitMeanMS:"       + g_waitMean      + ":waitSTDEV:"  + g_waitSTDEV   + ":waitBox:(:" + g_waitBox + ":)"
+                                                                      + ":ph1MeanMS:"        + g_ph1Mean       + ":ph1STDEV:"   + g_ph1STDEV    + ":ph1Box:(:" + g_ph1Box + ":)"
+                                                                      + ":ph2MeanMS:"        + g_ph2Mean       + ":ph2STDEV:"   + g_ph2STDEV    + ":ph2Box:(:" + g_ph2Box + ":)"
+            														  + ":logMeanMS:"        + g_logMean       + ":logSTDEV:"   + g_logSTDEV    + ":logBox:(:" + g_logBox + ":)\n";
+            str += p + ":GLOBAL_TX:abortCount:" + g_abortList.size()  + ":abortMeanMS:"      + g_abortMean     + ":abortSTDEV:" + g_abortSTDEV  + ":abortBox:(:"  + g_abortBox  + ":)" 
+            		                                                  + ":abortProcMeanMS:"  + g_abortProcMean + ":abortProcSTDEV:"  + g_abortProcSTDEV  + ":abortProcBox:(:"  + g_abortProcBox + ":)\n";
         }
         
         if (l_commitList.size() > 0) {
-            str += p + ":LOCAL_TX:commitCount:"+ l_commitList.size() + ":commitMeanMS:"    + l_commitMean    + ":commitSTDEV:"    + l_commitSTDEV    + ":commitBox:(:" + l_commitBox + ":)" + ":preCommitMeanMS:" + l_preCommitMean + ":preCommitSTDEV:" + l_preCommitSTDEV + ":preCommitBox:(:" + l_preCommitBox + ":)\n" ; 
-  			str += p + ":LOCAL_TX:abortCount:" + l_abortList.size()  + ":abortMeanMS:"     + l_abortMean     + ":abortSTDEV:"     + l_abortSTDEV     + ":abortBox:(:" + l_abortBox + ":)"   + ":preAbortMeanMS:"  + l_preAbortMean  + ":preAbortSTDEV:"  + l_preAbortSTDEV  + ":preAbortBox:(:"  + l_preAbortBox + ":)\n" ;            
+            str += p + ":LOCAL_TX:commitCount:"+ l_commitList.size() + ":commitMeanMS:"    + l_commitMean    + ":commitSTDEV:"    + l_commitSTDEV    + ":commitBox:(:" + l_commitBox + ":)" 
+                                                                     + ":commitProcMeanMS:" + l_commitProcMean + ":commitProcSTDEV:" + l_commitProcSTDEV + ":commitProcBox:(:" + l_commitProcBox + ":)\n" ; 
+  			str += p + ":LOCAL_TX:abortCount:" + l_abortList.size()  + ":abortMeanMS:"     + l_abortMean     + ":abortSTDEV:"     + l_abortSTDEV     + ":abortBox:(:" + l_abortBox + ":)"   
+                                                                     + ":abortProcMeanMS:"  + l_abortProcMean  + ":abortProcSTDEV:"  + l_abortProcSTDEV  + ":abortProcBox:(:"  + l_abortProcBox + ":)\n" ;            
+        }
+        
+        if (lk_totalList.size() > 0) {
+        	str += p + ":LOCKING_TX:count:"+ lk_totalList.size() 
+        		+ ":totalMeanMS:"    + lk_totalMean    + ":totalSTDEV:"    + lk_totalSTDEV    + ":totalBox:(:" + lk_totalBox + ":)"
+        		+ ":lockMeanMS:"    + lk_lockMean    + ":lockSTDEV:"    + lk_lockSTDEV    + ":lockBox:(:" + lk_lockBox + ":)" 
+        		+ ":procMeanMS:"    + lk_procMean    + ":procSTDEV:"    + lk_procSTDEV    + ":procBox:(:" + lk_procBox + ":)" 
+        		+ ":waitMeanMS:"    + lk_waitMean    + ":waitSTDEV:"    + lk_waitSTDEV    + ":waitBox:(:" + lk_waitBox + ":)" 
+        		+ ":unlockMeanMS:" + lk_unlockMean + ":unlockSTDEV:" + lk_unlockSTDEV + ":unlockBox:(:" + lk_unlockBox + ":)\n" ; 
         }
 
         

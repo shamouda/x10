@@ -145,7 +145,7 @@ public class RAAsyncResilient {
                             tx.put("p"+placeIndex, new CloneableLong(i));   
                         val startWait = Timer.milliTime();
 	                    f.force();	                    
-	                    tx.setWaitForFuturesElapsedTime(Timer.milliTime() - startWait);
+	                    tx.setWaitElapsedTime(Timer.milliTime() - startWait);
 	                    if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitForFuturesElapsedTime +"] ms");
                     });
                     if (success == Tx.SUCCESS_RECOVER_STORE) {

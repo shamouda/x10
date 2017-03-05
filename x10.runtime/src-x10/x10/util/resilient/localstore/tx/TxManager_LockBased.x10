@@ -11,31 +11,31 @@ public class TxManager_LockBased extends TxManager {
     }
     
     public def get(id:Long, key:String):Cloneable {
-        return get_LockBased(id, key);
+        return getLocked(id, key);
     }
     
     public def put(id:Long, key:String, value:Cloneable):Cloneable {
-        return put_LockBased(id, key, value);
+        return putLocked(id, key, value);
     }
     
     public def delete(id:Long, key:String):Cloneable {
-        return put_LockBased(id, key, null);
+        return putLocked(id, key, null);
     }
     
     public def lockRead(id:Long, key:String) {
-        lockRead_LockBased(id, key);
+        lockRead_Locking(id, key);
     }
         
     public def lockWrite(id:Long, key:String) {
-        lockWrite_LockBased(id, key);
+        lockWrite_Locking(id, key);
     }
     
     public def unlockRead(id:Long, key:String) {
-        unlockRead_LockBased(id, key);
+        unlockRead_Locking(id, key);
     }
     
     public def unlockWrite(id:Long, key:String) {
-        unlockWrite_LockBased(id, key);
+        unlockWrite_Locking(id, key);
     }
     
     public def commit(log:TxLog) {
