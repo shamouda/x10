@@ -103,17 +103,22 @@ public class STMBench {
 		var txCount:Long = 0;
 		val activePlacesCount = activePlaces.size();
 		val rand = new Random((here.id+1) * producerId);
+		var flag:Boolean = true;
 		
 		while (Timer.milliTime() - startMS < d) {
 			val members = nextTransactionMembers(rand, activePlaces, h);
 			val membersOperations = nextRandomeOperations(rand, activePlacesCount, members, r, u, o);
-			var str:String = "members = ";
+			
+			/*var str:String = "members = ";
 			for (ee in members) {
 				str += ee + " ";
 			}
-			Console.OUT.println(str);
+			Console.OUT.println(str);*/
 			if (members.size() > 1 && !TxConfig.getInstance().TM.equals("locking")) {
-				Console.OUT.println("globalSTM ");
+				if (flag) {
+				    Console.OUT.println("globalSTM ");
+				    flag = false;
+				}
 				map.executeTransaction(members, (tx:Tx) => {
 					val futuresList = new ArrayList[Future[Any]]();
 					
@@ -147,7 +152,10 @@ public class STMBench {
 	            });
 			}
 			else if (members.size() == 1 && producers.size() == 1 && !TxConfig.getInstance().TM.equals("locking")) {
-				Console.OUT.println("localSTM ");
+			    if (flag) {
+			        Console.OUT.println("localSTM ");
+			        flag = false;
+			    }
 				//local transaction
 				assert (members(0) == here) : "local transactions are not supported at remote places for this benchmark" ;
 				map.executeLocalTransaction((tx:LocalTx) => {
@@ -171,7 +179,10 @@ public class STMBench {
 	            });
 			}
 			else if (members.size() > 1 && TxConfig.getInstance().TM.equals("locking")) { //locking
-				Console.OUT.println("globalLocking ");
+			    if (flag) {
+			        Console.OUT.println("globalLocking ");
+			        flag = false;
+			    }
 				val lockRequests = new ArrayList[LockingRequest]();
 				for (memReq in membersOperations) {
 					lockRequests.add(new LockingRequest(memReq.dest, memReq.keys));
@@ -209,7 +220,10 @@ public class STMBench {
 				});
 			}
 			else if (members.size() == 1 && producers.size() == 1 && TxConfig.getInstance().TM.equals("locking")) { //locking
-				Console.OUT.println("localLocking ");
+				if (flag) {
+				    Console.OUT.println("localLocking ");
+				    flag = false;
+				}
 				val lockRequests = new ArrayList[LockingRequest]();
 				for (memReq in membersOperations) {
 					lockRequests.add(new LockingRequest(memReq.dest, memReq.keys));
