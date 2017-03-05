@@ -197,7 +197,8 @@ public abstract class TxManager(data:MapData) {
             log.logInitialValue(key, copy1, ver, id, flagRead);
             //FIXME: abort if locking failed and we throwed an exception without returning a log object to the caller (log = null, no abort)
             return new LogContainer(memory, log);
-        }catch(ex:Exception) {
+        } catch(ex:Exception) {
+        	abortAndThrowException(log, ex);
             log.unlock();
             throw ex;
         }
