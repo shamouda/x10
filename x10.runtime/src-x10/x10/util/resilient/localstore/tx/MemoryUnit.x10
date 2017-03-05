@@ -82,29 +82,21 @@ public class MemoryUnit {
     public def lockRead(txId:Long, key:String) {
     	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
     		txLock.lockRead(txId, key);
-    	else
-    		Console.OUT.println("free locking read");
     }
     
     public def unlockRead(txId:Long, key:String) {
     	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
     		txLock.unlockRead(txId, key);
-    	else
-    		Console.OUT.println("free unlocking read");
     }
     
     public def lockWrite(txId:Long, key:String) {
     	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
     		txLock.lockWrite(txId, key);
-    	else
-    		Console.OUT.println("free locking write");
     }
     
     public def unlockWrite(txId:Long, key:String) {
     	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
     		txLock.unlockWrite(txId, key);
-    	else
-    		Console.OUT.println("free unlocking write");
     }
 
     public def toString() {
