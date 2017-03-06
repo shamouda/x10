@@ -357,7 +357,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         commitTime = Timer.milliTime();
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] committed, allTxTime [" + (commitTime-startTime) + "] ms");
         
-        if (excs.size() > 0 || p2success == SUCCESS_RECOVER_STORE) {
+        if (resilient && excs.size() > 0 || p2success == SUCCESS_RECOVER_STORE) {
             for (e in excs.toRail()) {
                 Console.OUT.println("Tx["+id+"] excs>0  msg["+e.getMessage()+"]");
                 e.printStackTrace();
