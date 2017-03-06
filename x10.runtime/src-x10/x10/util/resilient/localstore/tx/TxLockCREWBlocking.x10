@@ -25,28 +25,110 @@ import x10.xrx.Runtime;
  * */
 public class TxLockCREWBlocking extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-    private val sem = new ReadWriteSemaphoreBlocking();
+    private static val BUSY_WAIT = System.getenv("LOCK_BW") == null? false : Long.parseLong(System.getenv("LOCK_BW")) == 1;
+    private static val LOCK_BW_SLEEP = System.getenv("LOCK_BW_SLEEP") == null? 10 : Long.parseLong(System.getenv("LOCK_BW_SLEEP"));
     
+    private var sem:ReadWriteSemaphoreBlocking;
+    private var readers:Int; // 0 ... N
+    private var writer:Int; //0 or 1
+    private var lock:Lock;
+    
+    public def this() {
+        if (BUSY_WAIT) {
+            lock = new Lock();
+            readers = 0n;
+            writer = 0n;
+        }
+        else {
+            sem = new ReadWriteSemaphoreBlocking();
+        }
+    }
     public def lockRead(txId:Long, key:String) {
+        if (BUSY_WAIT) 
+            lockReadBW(txId, key);
+        else
+            lockReadSem(txId, key);
+    }
+    
+    public def unlockRead(txId:Long, key:String) {
+        if (BUSY_WAIT) 
+            unlockReadBW(txId, key);
+        else
+            unlockReadSem(txId, key);
+    }
+    
+    public def lockWrite(txId:Long, key:String) {
+        if (BUSY_WAIT)
+            lockWriteBW(txId, key);
+        else
+            lockWriteSem(txId, key);
+    }
+  
+    public def unlockWrite(txId:Long, key:String) {
+        if (BUSY_WAIT)
+            unlockWriteBW(txId, key);
+        else
+            unlockWriteSem(txId, key);
+    }
+
+    private def lockReadBW(txId:Long, key:String) {
+        Runtime.increaseParallelism();
+        lock.lock();
+        while (writer > 0n) {
+            lock.unlock();
+            System.threadSleep(LOCK_BW_SLEEP);
+            lock.lock();
+        }
+        readers++;
+        lock.unlock();
+        Runtime.decreaseParallelism(1n);
+    }
+    
+    private def unlockReadBW(txId:Long, key:String) {
+        lock.lock();
+        readers--;
+        lock.unlock();
+    }
+    
+    private def lockWriteBW(txId:Long, key:String) {
+        Runtime.increaseParallelism();
+        lock.lock();
+        while (readers > 0n) {
+            lock.unlock();
+            System.threadSleep(LOCK_BW_SLEEP);
+            lock.lock();
+        }
+        writer++;
+        lock.unlock();
+        Runtime.decreaseParallelism(1n);
+    }
+  
+    private def unlockWriteBW(txId:Long, key:String) {
+        lock.lock();
+        writer--;
+        lock.unlock();
+    }
+    
+    private def lockReadSem(txId:Long, key:String) {
         Runtime.increaseParallelism();
         sem.acquireRead();
         Runtime.decreaseParallelism(1n);
     }
     
-    public def unlockRead(txId:Long, key:String) {
+    private def unlockReadSem(txId:Long, key:String) {
         sem.releaseRead();
     }
     
-    public def lockWrite(txId:Long, key:String) {
+    private def lockWriteSem(txId:Long, key:String) {
         Runtime.increaseParallelism();
         sem.acquireWrite();
         Runtime.decreaseParallelism(1n);
     }
   
-    public def unlockWrite(txId:Long, key:String) {
+    private def unlockWriteSem(txId:Long, key:String) {
         sem.releaseWrite();
     }
-
+    
     public def tryLockRead(txId:Long, key:String):Boolean {
         throw new UnsupportedOperationException("TxLockCREWBlocking.tryLockRead() not supported ...");
     }
