@@ -120,7 +120,6 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
 	    	Runtime.increaseParallelism();
 	        while(true) {
 	            val tx = startGlobalTransaction(members);
-	            var excpt:Exception = null;
 	            var commitCalled:Boolean = false;
 	            val start = Timer.milliTime();
 	            try {
@@ -136,7 +135,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
 	            } catch(ex:Exception) {
 	                if (!commitCalled) {
 	                	tx.processingElapsedTime = Timer.milliTime() - start;
-	                    tx.abort(excpt); // tx.commit() aborts automatically if needed
+	                    tx.abort(ex); // tx.commit() aborts automatically if needed
 	                }
 	                
 	                if (TM_DEBUG) {
