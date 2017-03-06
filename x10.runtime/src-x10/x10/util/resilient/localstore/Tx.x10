@@ -25,6 +25,7 @@ import x10.compiler.Uncounted;
 import x10.compiler.Immediate;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Future;
+import x10.util.concurrent.Lock;
 
 public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
@@ -43,7 +44,8 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     public transient var phase2ElapsedTime:Long = -1;
     public transient var txLoggingElapsedTime:Long = -1;
     
-    private transient val excs:GrowableRail[CheckedThrowable]; 
+    private transient var excs:GrowableRail[CheckedThrowable];
+    private transient var excsLock:Lock;
     
     /* resilient mode variables */
     private transient var aborted:Boolean = false;
@@ -81,10 +83,12 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         property(plh, id, mapName, members);
         if (!DISABLE_DESC) //enable desc requires enable slave
             assert(!DISABLE_SLAVE);
-        excs = new GrowableRail[CheckedThrowable]();
+        
         if (resilient) {
             this.activePlaces = activePlaces;
             this.txDescMap = txDescMap;
+            this.excs = new GrowableRail[CheckedThrowable]();
+            this.excsLock = new Lock();
         }
         var membersStr:String = "";
         for (p in members)
@@ -275,12 +279,10 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     
     @Pinned private def abort(abortedPlaces:ArrayList[Place]) {
     	if (TM_DEBUG) Console.OUT.println("Tx["+id+"] abort   (abortPlaces.size = " + abortedPlaces.size() + ") alreadyAborted = " + aborted);
-    	atomic {
-    		if (!aborted)
-    			aborted = true;
-    		else 
-    			return;
-    	}
+		if (!aborted)
+			aborted = true;
+		else 
+			return;
     	
         try {
             //ask masters to abort (a master will abort slave first, then abort itself)
@@ -492,7 +494,9 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             at (p) async {
                 var ex:Exception = null;
                 if (resilient && !TM_REP.equals("lazy") && !DISABLE_SLAVE) {
+                	try {
                     val log = plh().masterStore.getTxCommitLog(id);
+                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] getTxCommitLog  returned: " + log);
                     if (log != null && log.size() > 0) {
                         //ask slave to commit, slave's death is not fatal
                         try {
@@ -508,6 +512,10 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                             ex = e;
                         }
                     }
+                	}catch(tm:Exception) {
+                		tm.printStackTrace();
+                		throw tm;
+                	}
                 }
                     
                 if (commit)
@@ -518,7 +526,9 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                 if (resilient && ex != null) {
                     val slaveEx = ex;
                     at (root) async {
-                        atomic root().excs.add(slaveEx as CheckedThrowable);
+                    	excsLock.lock();
+                        root().excs.add(slaveEx as CheckedThrowable);
+                        excsLock.unlock();
                     }
                 }
             }
