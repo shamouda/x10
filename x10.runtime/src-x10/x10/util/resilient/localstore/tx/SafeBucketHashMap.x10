@@ -41,72 +41,79 @@ public class SafeBucketHashMap[K,V] {V haszero} implements x10.io.Unserializable
     
     /***************************Safe methods**********************************/
     public def containsKeySafe(k:K):Boolean {
+        var indx:Long = -1;
     	try {
-    		val indx = lock(k);
+    		indx = lock(k);
     		return buckets(indx).bucketMap.containsKey(k);
     	}
     	finally {
-    		unlock(k);
+    	    unlockInternal(indx);
     	}
     }
 
     public def getSafe(k:K):V {
-    	try {
-    		val indx = lock(k);
+        var indx:Long = -1;
+        try {
+            indx = lock(k);
     		return buckets(indx).bucketMap.get(k);
     	}
     	finally {
-    		unlock(k);
+    	    unlockInternal(indx);
     	}
     }
 
     public def getOrElseSafe(k:K, orelse:V):V {
-    	try {
-    		val indx = lock(k);
+        var indx:Long = -1;
+        try {
+            indx = lock(k);
     		return buckets(indx).bucketMap.getOrElse(k, orelse);
     	}
     	finally {
-    		unlock(k);
+    	    unlockInternal(indx);
     	}
     }
 
     public def getOrThrowSafe(k:K):V {
-    	try {
-    		val indx = lock(k);
+        var indx:Long = -1;
+        try {
+            indx = lock(k);
     		return buckets(indx).bucketMap.getOrThrow(k);
     	}
     	finally {
-    		unlock(k);
+    	    unlockInternal(indx);
     	}
     }
 
     public def putSafe(k:K, v:V):V {
-    	try {
-    		val indx = lock(k);
+        var indx:Long = -1;
+        try {
+            indx = lock(k);
     		return buckets(indx).bucketMap.put(k, v);
     	}
     	finally {
-    		unlock(k);
+    	    unlockInternal(indx);
     	}
     }
 
     public def deleteSafe(k:K):boolean {
-    	try {
-    		val indx = lock(k);
+        var indx:Long = -1;
+        try {
+            indx = lock(k);
     		return buckets(indx).bucketMap.delete(k);
     	}
     	finally {
-    		unlock(k);
+    	    unlockInternal(indx);
     	}
     }
 
     public def removeSafe(k:K):V {
-    	try {
-    		val indx = lock(k);
+        var indx:Long = -1;
+        try {
+            indx = lock(k);
     		return buckets(indx).bucketMap.remove(k);
     	}
     	finally {
-    		unlock(k);
+    	    unlockInternal(indx);
     	}
     }
 
@@ -240,6 +247,14 @@ public class SafeBucketHashMap[K,V] {V haszero} implements x10.io.Unserializable
     		bucketsLocks(indx).unlock();
     	}
     }
+    
+    
+    private def unlockInternal(indx:Long) {
+        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE) {
+            bucketsLocks(indx).unlock();
+        }
+    }
+    
     
     @NonEscaping protected final def hashInternal(k:K):Int {
         return Math.abs(k.hashCode() * 17n);
