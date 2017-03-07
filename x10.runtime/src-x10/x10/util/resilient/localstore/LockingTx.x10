@@ -206,6 +206,7 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
                 val startLock = Timer.milliTime();
                 finish for (req in requests) {                	
                     at (req.dest) async {
+                    	Runtime.increaseParallelism();
                         for (var i:Long = 0; i < req.keys.size ; i++) {
                         	//Console.OUT.println("locking " + req.keys(i).key + "  rw: " + req.keys(i).rw);
                             if (req.keys(i).rw)
@@ -213,6 +214,7 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
                             else
                                 plh().masterStore.lockWrite(mapName, id, req.keys(i).key);
                         }
+                        Runtime.decreaseParallelism(1n);
                     }
                 }
                 lockingElapsedTime = Timer.milliTime() - startLock;

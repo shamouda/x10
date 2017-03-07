@@ -72,7 +72,6 @@ public class TxLockCREWBlocking extends TxLock {
     }
 
     private def lockReadBW(txId:Long, key:String) {
-        Runtime.increaseParallelism();
         lock.lock();
         while (writer > 0n) {
             lock.unlock();
@@ -81,7 +80,6 @@ public class TxLockCREWBlocking extends TxLock {
         }
         readers++;
         lock.unlock();
-        Runtime.decreaseParallelism(1n);
     }
     
     private def unlockReadBW(txId:Long, key:String) {
@@ -91,7 +89,6 @@ public class TxLockCREWBlocking extends TxLock {
     }
     
     private def lockWriteBW(txId:Long, key:String) {
-        Runtime.increaseParallelism();
         lock.lock();
         while (readers > 0n) {
             lock.unlock();
@@ -100,7 +97,6 @@ public class TxLockCREWBlocking extends TxLock {
         }
         writer++;
         lock.unlock();
-        Runtime.decreaseParallelism(1n);
     }
   
     private def unlockWriteBW(txId:Long, key:String) {
@@ -110,9 +106,7 @@ public class TxLockCREWBlocking extends TxLock {
     }
     
     private def lockReadSem(txId:Long, key:String) {
-        Runtime.increaseParallelism();
         sem.acquireRead();
-        Runtime.decreaseParallelism(1n);
     }
     
     private def unlockReadSem(txId:Long, key:String) {
@@ -120,9 +114,7 @@ public class TxLockCREWBlocking extends TxLock {
     }
     
     private def lockWriteSem(txId:Long, key:String) {
-        Runtime.increaseParallelism();
         sem.acquireWrite();
-        Runtime.decreaseParallelism(1n);
     }
   
     private def unlockWriteSem(txId:Long, key:String) {
