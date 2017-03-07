@@ -15,21 +15,21 @@ package x10.util.resilient.localstore.tx;
 import x10.util.concurrent.Lock;
 import x10.util.HashMap;
 
-public class BucketHashMap[K,V] {V haszero} /*extends HashMap[K,V]*/ {
-/*	
-	private static val BUCKETS_COUNT = System.getenv("BUCKETS_COUNT") == null? 256 : Long.parseLong(System.getenv("BUCKETS_COUNT"));
-
-	private val buckets = new Rail[Bucket[K,V]](BUCKETS_COUNT);
-	private val bucketsLocks = new Rail[Lock](BUCKETS_COUNT);
+public class BucketHashMap[K,V] {V haszero} /* extends HashMap[K,V] */{
+	/*
+	private val buckets:Rail[Bucket[K,V]];
+	private val bucketsLocks:Rail[Lock];
+	private val bucketsSize:Long;
 	
     static class Bucket[Key,Value] {Value haszero} {
         val bucketMap = new HashMap[Key,Value]();
     }
     
-    public def this() {
+    public def this(bucketsSize:Long) {
         super();
         buckets = new Rail[Bucket[K,V]](BUCKETS_COUNT, (i:Long)=> new Bucket[K,V]());
         bucketsLocks = new Rail[Lock](BUCKETS_COUNT, (i:Long)=> new Lock());
+        this.bucketsSize = bucketsSize;
     }
     
     public def containsKey(k:K):Boolean;

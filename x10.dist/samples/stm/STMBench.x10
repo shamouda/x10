@@ -114,7 +114,7 @@ public class STMBench {
 				str += ee + " ";
 			}
 			Console.OUT.println(str);*/
-			if (members.size() > 1 && !TxConfig.getInstance().TM.equals("locking")) {
+			if (members.size() > 1 && !TxConfig.getInstance().TM.contains("locking")) {
 				if (flag) {
 				    Console.OUT.println("globalSTM ");
 				    flag = false;
@@ -151,7 +151,7 @@ public class STMBench {
 	                return null;
 	            });
 			}
-			else if (members.size() == 1 && producers.size() == 1 && !TxConfig.getInstance().TM.equals("locking")) {
+			else if (members.size() == 1 && producers.size() == 1 && !TxConfig.getInstance().TM.contains("locking")) {
 			    if (flag) {
 			        Console.OUT.println("localSTM ");
 			        flag = false;
@@ -178,7 +178,7 @@ public class STMBench {
 	                return null;
 	            });
 			}
-			else if (members.size() > 1 && TxConfig.getInstance().TM.equals("locking")) { //locking
+			else if (members.size() > 1 && TxConfig.getInstance().TM.contains("locking")) { //locking
 			    if (flag) {
 			        Console.OUT.println("globalLocking ");
 			        flag = false;
@@ -219,7 +219,7 @@ public class STMBench {
 	                return null;
 				});
 			}
-			else if (members.size() == 1 && producers.size() == 1 && TxConfig.getInstance().TM.equals("locking")) { //locking
+			else if (members.size() == 1 && producers.size() == 1 && TxConfig.getInstance().TM.contains("locking")) { //locking
 				if (flag) {
 				    Console.OUT.println("localLocking ");
 				    flag = false;

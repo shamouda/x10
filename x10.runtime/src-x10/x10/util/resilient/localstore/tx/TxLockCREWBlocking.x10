@@ -12,6 +12,7 @@
 
 package x10.util.resilient.localstore.tx;
 
+import x10.util.resilient.localstore.TxConfig;
 import x10.util.concurrent.ReadWriteSemaphoreBlocking;
 import x10.util.concurrent.Lock;
 import x10.xrx.Runtime;
@@ -25,47 +26,51 @@ import x10.xrx.Runtime;
  * */
 public class TxLockCREWBlocking extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-    private static val BUSY_WAIT = System.getenv("LOCK_BW") == null? false : Long.parseLong(System.getenv("LOCK_BW")) == 1;
-    private static val LOCK_BW_SLEEP = System.getenv("LOCK_BW_SLEEP") == null? 10 : Long.parseLong(System.getenv("LOCK_BW_SLEEP"));
     
     private var sem:ReadWriteSemaphoreBlocking;
     private var readers:Int; // 0 ... N
     private var writer:Int; //0 or 1
     private var lock:Lock;
+    private var BWSleepTime:Long;
+    private val BWEnabled:Boolean;
     
     public def this() {
-        if (BUSY_WAIT) {
+        if (TxConfig.getInstance().TM.startsWith("lockingBW")) {
             lock = new Lock();
             readers = 0n;
             writer = 0n;
+            val mode = TxConfig.getInstance().TM;
+            BWSleepTime = Long.parseLong(mode.substring(9n, mode.length()));
+            BWEnabled = true;
         }
         else {
             sem = new ReadWriteSemaphoreBlocking();
+            BWEnabled = false;
         }
     }
     public def lockRead(txId:Long, key:String) {
-        if (BUSY_WAIT) 
+        if (BWEnabled) 
             lockReadBW(txId, key);
         else
             lockReadSem(txId, key);
     }
     
     public def unlockRead(txId:Long, key:String) {
-        if (BUSY_WAIT) 
+        if (BWEnabled) 
             unlockReadBW(txId, key);
         else
             unlockReadSem(txId, key);
     }
     
     public def lockWrite(txId:Long, key:String) {
-        if (BUSY_WAIT)
+        if (BWEnabled)
             lockWriteBW(txId, key);
         else
             lockWriteSem(txId, key);
     }
   
     public def unlockWrite(txId:Long, key:String) {
-        if (BUSY_WAIT)
+        if (BWEnabled)
             unlockWriteBW(txId, key);
         else
             unlockWriteSem(txId, key);
@@ -75,7 +80,7 @@ public class TxLockCREWBlocking extends TxLock {
         lock.lock();
         while (writer > 0n) {
             lock.unlock();
-            System.threadSleep(LOCK_BW_SLEEP);
+            System.threadSleep(BWSleepTime);
             lock.lock();
         }
         readers++;
@@ -92,7 +97,7 @@ public class TxLockCREWBlocking extends TxLock {
         lock.lock();
         while (readers > 0n) {
             lock.unlock();
-            System.threadSleep(LOCK_BW_SLEEP);
+            System.threadSleep(BWSleepTime);
             lock.lock();
         }
         writer++;

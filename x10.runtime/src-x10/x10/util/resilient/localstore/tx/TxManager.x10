@@ -22,7 +22,7 @@ public abstract class TxManager(data:MapData) {
     
     public def this(data:MapData) {
     	property(data);
-    	if (!TxConfig.getInstance().TM.equals("locking")){
+    	if (!TxConfig.getInstance().TM.contains("locking")){
     	    logsLock = new Lock();
     	    txLogs = new HashMap[Long,TxLog]();
     	    abortedTxs = new ArrayList[Long]();
@@ -37,7 +37,7 @@ public abstract class TxManager(data:MapData) {
     }
     
     public static def make(data:MapData):TxManager {
-        if (TxConfig.getInstance().TM.equals("locking"))
+        if (TxConfig.getInstance().TM.contains("locking"))
             return new TxManager_LockBased(data);
         else if (TxConfig.getInstance().TM_READ == TxConfig.READ_LOCKING    &&  TxConfig.getInstance().TM_ACQUIRE == TxConfig.EARLY_ACQUIRE && TxConfig.getInstance().TM_RECOVER == TxConfig.UNDO_LOGGING)
             return new TxManager_RL_EA_UL(data);

@@ -43,7 +43,7 @@ public class TxConfig {
         assert (TM != null && !TM.equals("")) : "you must specify the TM environment variable, allowed values = locking|RL_EA_UL|RL_EA_WB|...";
         
         	
-        if (TM.equals("locking")) {
+        if (TM.contains("locking")) {
         	if (lockfree)
         		LOCKING_MODE = LOCKING_MODE_FREE;
         	else
