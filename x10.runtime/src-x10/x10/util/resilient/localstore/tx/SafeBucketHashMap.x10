@@ -23,114 +23,130 @@ import x10.compiler.NonEscaping;
 public class SafeBucketHashMap[K,V] {V haszero} implements x10.io.Unserializable  {
 	
 	private val buckets:Rail[Bucket[K,V]];
-	private val bucketsLocks:Rail[Lock];
 	private val bucketsCnt:Long;
 	
     static class Bucket[Key,Value] {Value haszero} {
         val bucketMap = new HashMap[Key,Value]();
+        val lock:Lock;
+        public def this(initLock:Boolean) {
+        	if (initLock)
+        		lock = new Lock();
+        	else
+        		lock = null;
+        }
+        public def lock() {
+        	lock.lock();
+        }
+        public def unlock() {
+        	lock.unlock();
+        }
     }
     
     public def this(bucketsCnt:Long) {
-        buckets = new Rail[Bucket[K,V]](bucketsCnt, (i:Long)=> new Bucket[K,V]());
-        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
-        	bucketsLocks = new Rail[Lock](bucketsCnt, (i:Long)=> new Lock());
-        else
-        	bucketsLocks = null;
+        val initLock = TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE;
+        buckets = new Rail[Bucket[K,V]](bucketsCnt, (i:Long)=> new Bucket[K,V](initLock));
         this.bucketsCnt = bucketsCnt;
     }
     
     /***************************Safe methods**********************************/
     public def containsKeySafe(k:K):Boolean {
-        var indx:Long = -1;
-    	try {
-    		indx = lock(k);
-    		return buckets(indx).bucketMap.containsKey(k);
+        var bucket:Bucket[K,V] = null;
+        try {
+        	bucket = lockInternal(k);
+    		return bucket.bucketMap.containsKey(k);
     	}
     	finally {
-    	    unlockInternal(indx);
+    		if (bucket != null)
+    			unlockInternal(bucket);
     	}
     }
-
+    
     public def getSafe(k:K):V {
-        var indx:Long = -1;
+        var bucket:Bucket[K,V] = null;
         try {
-            indx = lock(k);
-    		return buckets(indx).bucketMap.get(k);
+        	bucket = lockInternal(k);
+    		return bucket.bucketMap.get(k);
     	}
     	finally {
-    	    unlockInternal(indx);
+    		if (bucket != null)
+    			unlockInternal(bucket);
     	}
     }
 
     public def getOrElseSafe(k:K, orelse:V):V {
-        var indx:Long = -1;
+        var bucket:Bucket[K,V] = null;
         try {
-            indx = lock(k);
-    		return buckets(indx).bucketMap.getOrElse(k, orelse);
+        	bucket = lockInternal(k);
+    		return bucket.bucketMap.getOrElse(k, orelse);
     	}
     	finally {
-    	    unlockInternal(indx);
+    		if (bucket != null)
+    			unlockInternal(bucket);
     	}
     }
-
+    
     public def getOrThrowSafe(k:K):V {
-        var indx:Long = -1;
+        var bucket:Bucket[K,V] = null;
         try {
-            indx = lock(k);
-    		return buckets(indx).bucketMap.getOrThrow(k);
+        	bucket = lockInternal(k);
+    		return bucket.bucketMap.getOrThrow(k);
     	}
     	finally {
-    	    unlockInternal(indx);
+    		if (bucket != null)
+    			unlockInternal(bucket);
     	}
     }
 
     public def putSafe(k:K, v:V):V {
-        var indx:Long = -1;
+        var bucket:Bucket[K,V] = null;
         try {
-            indx = lock(k);
-    		return buckets(indx).bucketMap.put(k, v);
+        	bucket = lockInternal(k);
+    		return bucket.bucketMap.put(k, v);
     	}
     	finally {
-    	    unlockInternal(indx);
+    		if (bucket != null)
+    			unlockInternal(bucket);
     	}
     }
 
     public def deleteSafe(k:K):boolean {
-        var indx:Long = -1;
+        var bucket:Bucket[K,V] = null;
         try {
-            indx = lock(k);
-    		return buckets(indx).bucketMap.delete(k);
+        	bucket = lockInternal(k);
+    		return bucket.bucketMap.delete(k);
     	}
     	finally {
-    	    unlockInternal(indx);
+    		if (bucket != null)
+    			unlockInternal(bucket);
     	}
     }
-
+    
     public def removeSafe(k:K):V {
-        var indx:Long = -1;
+        var bucket:Bucket[K,V] = null;
         try {
-            indx = lock(k);
-    		return buckets(indx).bucketMap.remove(k);
+        	bucket = lockInternal(k);
+    		return bucket.bucketMap.remove(k);
     	}
     	finally {
-    	    unlockInternal(indx);
+    		if (bucket != null)
+    			unlockInternal(bucket);
     	}
     }
 
     public def clearSafe():void {
     	for (var i:Long = 0; i < bucketsCnt; i++) {
-    		bucketsLocks(i).lock();
+    		buckets(i).lock();
     		buckets(i).bucketMap.clear();
-    		bucketsLocks(i).unlock();
+    		buckets(i).unlock();
     	}
     }
     
     public def keySetSafe():Set[K] {
     	val set = new HashSet[K]();
     	for (var i:Long = 0; i < bucketsCnt; i++) {
-    		bucketsLocks(i).lock();
+    		buckets(i).lock();
     		set.addAll(buckets(i).bucketMap.keySet());
-    		bucketsLocks(i).unlock();
+    		buckets(i).unlock();
     	}
     	return set;
     }
@@ -138,9 +154,9 @@ public class SafeBucketHashMap[K,V] {V haszero} implements x10.io.Unserializable
     public def entriesSafe():Set[Entry[K,V]] {
     	val set = new HashSet[Entry[K,V]]();
     	for (var i:Long = 0; i < bucketsCnt; i++) {
-    		bucketsLocks(i).lock();
+    		buckets(i).lock();
     		set.addAll(buckets(i).bucketMap.entries());
-    		bucketsLocks(i).unlock();
+    		buckets(i).unlock();
     	}
     	return set;
     }
@@ -148,9 +164,9 @@ public class SafeBucketHashMap[K,V] {V haszero} implements x10.io.Unserializable
     public def sizeSafe():Long {
     	var s:Long = 0;
     	for (var i:Long = 0; i < bucketsCnt; i++) {
-    		bucketsLocks(i).lock();
+    		buckets(i).lock();
     		s += buckets(i).bucketMap.size();
-    		bucketsLocks(i).unlock();
+    		buckets(i).unlock();
     	}
     	return s;
     }
@@ -223,36 +239,45 @@ public class SafeBucketHashMap[K,V] {V haszero} implements x10.io.Unserializable
     
     /**************** Locking Methods ****************/
     public def lockAll() {
-    	for (var i:Long = 0; i < bucketsCnt; i++) {
-    		bucketsLocks(i).lock();
+    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE) {
+	    	for (var i:Long = 0; i < bucketsCnt; i++) {
+	    		buckets(i).lock();
+	    	}
     	}
     }
     
     public def unlockAll() {
-    	for (var i:Long = 0; i < bucketsCnt; i++) {
-    		bucketsLocks(i).unlock();
+    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE) {
+	    	for (var i:Long = 0; i < bucketsCnt; i++) {
+	    		buckets(i).unlock();
+	    	}
     	}
     }
 
-    public def lock(k:K) {
+    public def lock(k:K):void {
     	val indx = hashInternal(k) % bucketsCnt;
     	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
-    		bucketsLocks(indx).lock();
-    	return indx;
+    		buckets(indx).lock();
     }
     
-    public def unlock(k:K) {
+    public def unlock(k:K):void {
     	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE) {
     		val indx = hashInternal(k) % bucketsCnt;
-    		bucketsLocks(indx).unlock();
+    		buckets(indx).unlock();
     	}
     }
     
+    private def lockInternal(k:K):Bucket[K,V] {
+    	val indx = hashInternal(k) % bucketsCnt;
+    	val bucket = buckets(indx); 
+    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    		bucket.lock();
+    	return bucket;
+    }
     
-    private def unlockInternal(indx:Long) {
-        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE) {
-            bucketsLocks(indx).unlock();
-        }
+    private def unlockInternal(bucket:Bucket[K,V]):void {
+        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+        	bucket.unlock();
     }
     
     
