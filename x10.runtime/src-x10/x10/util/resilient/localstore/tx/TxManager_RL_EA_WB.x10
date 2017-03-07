@@ -2,6 +2,7 @@ package x10.util.resilient.localstore.tx;
 
 import x10.util.Set;
 import x10.util.resilient.localstore.Cloneable;
+import x10.util.ArrayList;
 
 /*
  * Concurrent Transaction Implementation with the following algorithms:
@@ -51,5 +52,17 @@ public class TxManager_RL_EA_WB extends TxManager {
     }
     public def unlockWrite(id:Long, key:String) {
         throw new Exception("unlockWrite not supported for lock based tx manager");
+    }
+    public def lockRead(id:Long, keys:ArrayList[String]) {
+    	throw new Exception("operation not supported");
+    }
+    public def lockWrite(id:Long, keys:ArrayList[String]) {
+    	throw new Exception("operation not supported");
+    }
+    public def unlockRead(id:Long, keys:ArrayList[String]) {
+    	throw new Exception("operation not supported");
+    }
+    public def unlockWrite(id:Long, keys:ArrayList[String]) {
+    	throw new Exception("operation not supported");
     }
 }

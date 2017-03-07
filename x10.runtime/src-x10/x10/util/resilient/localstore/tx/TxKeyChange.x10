@@ -35,21 +35,25 @@ public class TxKeyChange {
     private var lockedRead:Boolean = false;
     private var lockedWrite:Boolean = false;
 
-    public def this(initValue:Cloneable, initVersion:Int, initTxId:Long, lockedRead:Boolean) {
+    private val memU:MemoryUnit;
+
+    public def this(initValue:Cloneable, initVersion:Int, initTxId:Long, lockedRead:Boolean, memU:MemoryUnit) {
         this.value = initValue;
         this.initVersion = initVersion;
         this.initTxId = initTxId;
         this.lockedRead = lockedRead;
+        this.memU = memU;
     }
     
     public def this (value:Cloneable, initVersion:Int, initTxId:Long,
-            readOnly:Boolean, lockedRead:Boolean, lockedWrite:Boolean) {
+            readOnly:Boolean, lockedRead:Boolean, lockedWrite:Boolean, memU:MemoryUnit) {
         this.value = value;
         this.initVersion = initVersion;
         this.initTxId = initTxId;
         this.readOnly = readOnly;
         this.lockedRead = lockedRead;
         this.lockedWrite = lockedWrite;
+        this.memU = memU;
     }
     
     public def update(n:Cloneable) {
@@ -72,10 +76,13 @@ public class TxKeyChange {
         lockedWrite = lw;
     }
     
+    /*
     public def clone() {
-        return new TxKeyChange(value, initVersion, initTxId, readOnly, lockedRead, lockedWrite);
+        return new TxKeyChange(value, initVersion, initTxId, readOnly, lockedRead, lockedWrite, memU);
     }
+    */
     
+    public def getMemoryUnit() = memU;
     public def getValue() = value;
     public def getReadOnly() = readOnly;
     public def getInitVersion() = initVersion;

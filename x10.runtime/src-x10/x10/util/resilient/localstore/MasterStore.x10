@@ -78,19 +78,19 @@ public class MasterStore {
     
     /*Lock based method*/
     public def lockRead(mapName:String, id:Long, key:String) {
-         (txManager as TxManager_LockBased).lockRead(id, mapName+key);
+         txManager.lockRead(id, mapName+key);
     }
     
     public def lockWrite(mapName:String, id:Long, key:String) {
-        (txManager as TxManager_LockBased).lockWrite(id, mapName+key);
+    	txManager.lockWrite(id, mapName+key);
     }
     
     public def unlockRead(mapName:String, id:Long, key:String) {
-        (txManager as TxManager_LockBased).unlockRead(id, mapName+key);
+    	txManager.unlockRead(id, mapName+key);
     }
     
     public def unlockWrite(mapName:String, id:Long, key:String) {
-        (txManager as TxManager_LockBased).unlockWrite(id, mapName+key);
+    	txManager.unlockWrite(id, mapName+key);
     }
     
     public def getLocked(mapName:String, id:Long, key:String):Cloneable {

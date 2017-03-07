@@ -33,7 +33,6 @@ public class TxLog (id:Long) {
     public var aborted:Boolean = false;
     private val lock:Lock;
     
-    
     public def this(id:Long) {
         property(id);
         transLog = new HashMap[String,TxKeyChange]();
@@ -66,12 +65,20 @@ public class TxLog (id:Long) {
     public def getInitTxId(key:String) {
         return transLog.getOrThrow(key).getInitTxId();
     }
+       
+    public def getMemoryUnit(key:String) {
+    	var log:TxKeyChange = transLog.getOrElse(key, null);
+        if (log == null)
+        	return null;
+        else
+        	return log.getMemoryUnit();
+    }
     
     /*MUST be called before logPut and logDelete*/
-    public def logInitialValue(key:String, copiedValue:Cloneable, version:Int, txId:Long, lockedRead:Boolean) {
+    public def logInitialValue(key:String, copiedValue:Cloneable, version:Int, txId:Long, lockedRead:Boolean, memU:MemoryUnit) {
         var log:TxKeyChange = transLog.getOrElse(key, null);
         if (log == null) {
-            log = new TxKeyChange(copiedValue, version, txId, lockedRead);
+            log = new TxKeyChange(copiedValue, version, txId, lockedRead, memU);
             transLog.put(key, log);
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] initial read ver["+version+"] val["+copiedValue+"]");
         }

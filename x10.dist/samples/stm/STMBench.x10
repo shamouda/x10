@@ -107,7 +107,7 @@ public class STMBench {
 		
 		while (Timer.milliTime() - startMS < d) {
 			val members = nextTransactionMembers(rand, activePlaces, h);
-			val membersOperations = nextRandomeOperations(rand, activePlacesCount, members, r, u, o);
+			val membersOperations = nextRandomOperations(rand, activePlacesCount, members, r, u, o);
 			
 			/*var str:String = "members = ";
 			for (ee in members) {
@@ -129,7 +129,7 @@ public class STMBench {
 							
 							for (var x:Long = 0; x < o; x++) {
 								val key = operations.keys(x).key;
-								val read = operations.keys(x).rw;
+								val read = operations.keys(x).read;
 								val value = operations.values(x);
 								
 								if (read) {
@@ -163,7 +163,7 @@ public class STMBench {
 					//Console.OUT.println(operations);
 					for (var x:Long = 0; x < o; x++) {
 						val key = operations.keys(x).key;
-						val read = operations.keys(x).rw;
+						val read = operations.keys(x).read;
 						val value = operations.values(x);
 						
 						if (read) {
@@ -197,7 +197,7 @@ public class STMBench {
 						val f1 = tx.asyncAt(operations.dest, () => {
 							for (var x:Long = 0; x < o; x++) {
 								val key = operations.keys(x).key;
-								val read = operations.keys(x).rw;
+								val read = operations.keys(x).read;
 								val value = operations.values(x);
 								
 								if (read) {
@@ -234,7 +234,7 @@ public class STMBench {
 					//Console.OUT.println(operations);
 					for (var x:Long = 0; x < o; x++) {
 						val key = operations.keys(x).key;
-						val read = operations.keys(x).rw;
+						val read = operations.keys(x).read;
 						val value = operations.values(x);
 						
 						if (read) {
@@ -292,7 +292,7 @@ public class STMBench {
 		return new SparsePlaceGroup(new Rail[Place](h, (i:Long) => activePlaces(rail(i))));
 	}
 	
-	public static def nextRandomeOperations(rand:Random, activePlacesCount:Long, members:PlaceGroup, r:Long, u:Float, o:Long) {
+	public static def nextRandomOperations(rand:Random, activePlacesCount:Long, members:PlaceGroup, r:Long, u:Float, o:Long) {
 		val list = new ArrayList[MemberOperations]();
 		
 		val keysPerPlace = r / activePlacesCount;
@@ -304,12 +304,12 @@ public class STMBench {
 			val baseKey = pl.id * keysPerPlace;
 			val uniqueKeys = new HashSet[String]();
 			for (var x:Long = 0; x < o; x++) {
-				val rw = rand.nextFloat() >= u;
+				val read = rand.nextFloat() > u;
 				var k:String = "key" + (baseKey + (Math.abs(rand.nextLong()% keysPerPlace)));
 				while (uniqueKeys.contains(k))
 					k = "key" + (baseKey + (Math.abs(rand.nextLong()% keysPerPlace)));
 				uniqueKeys.add(k);
-				keys(x) = new KeyInfo(k, rw); 
+				keys(x) = new KeyInfo(k, read); 
 				values(x) = Math.abs(rand.nextLong())%1000;
 			}
 			list.add(new MemberOperations(pl, keys, values));
@@ -331,7 +331,7 @@ public class STMBench {
 	    public def toString() {
 	    	var str:String = "memberOperations:" + dest + ":";
 	        for (k in keys)
-	        	str += "("+k.key+","+k.rw+")" ;
+	        	str += "("+k.key+","+k.read+")" ;
 	    	return str;
 	    }
 	}

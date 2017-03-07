@@ -23,7 +23,7 @@ public class LockingRequest {
 		this.keys = keys;
 	}
 	
-	public static struct KeyInfo(key:String, rw:Boolean) implements Comparable[KeyInfo] {
+	public static struct KeyInfo(key:String, read:Boolean) implements Comparable[KeyInfo] {
 		public def compareTo(that:KeyInfo) {
 			return key.compareTo(that.key);
 		}

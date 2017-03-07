@@ -2,6 +2,7 @@ package x10.util.resilient.localstore.tx;
 
 import x10.util.Set;
 import x10.util.resilient.localstore.Cloneable;
+import x10.util.ArrayList;
 
 public class TxManager_LockBased extends TxManager {
 
@@ -36,6 +37,19 @@ public class TxManager_LockBased extends TxManager {
     
     public def unlockWrite(id:Long, key:String) {
         unlockWrite_Locking(id, key);
+    }
+    
+    public def lockRead(id:Long, keys:ArrayList[String]) {
+    	lockRead_Locking(id, keys);
+    }
+    public def lockWrite(id:Long, keys:ArrayList[String]) {
+    	lockWrite_Locking(id, keys);
+    }
+    public def unlockRead(id:Long, keys:ArrayList[String]) {
+    	unlockRead_Locking(id, keys);
+    }
+    public def unlockWrite(id:Long, keys:ArrayList[String]) {
+    	unlockWrite_Locking(id, keys);
     }
     
     public def commit(log:TxLog) {

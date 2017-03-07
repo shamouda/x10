@@ -42,7 +42,8 @@ public class MemoryUnit {
     
     public def getAtomicValue(copy:Boolean, key:String, txId:Long) {
         try {
-            lockExclusive(); //lock is used to ensure that value/version are always in sync as a composite value 
+        	
+        	lockExclusive(); //lock is used to ensure that value/version are always in sync as a composite value 
             var v:Cloneable = value;
             if (copy) {
                 v = value == null?null:value.clone();
@@ -51,32 +52,39 @@ public class MemoryUnit {
             return new AtomicValue(version, v);
         }
         finally {
-            unlockExclusive();
+        	unlockExclusive();
         }
     }
     
-    public def setValue(v:Cloneable, key:String, txId:Long) {
+    public def getAtomicValueLocked(copy:Boolean, key:String, txId:Long) {
+        var v:Cloneable = value;
+        if (copy) {
+            v = value == null?null:value.clone();
+        }
+        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] getvv key["+key+"] ver["+version+"] val["+v+"]");
+        return new AtomicValue(version, v);
+    }
+    /*
+    public def setValue(v:Cloneable, key:String, txId:Long, alreadyLocked:Boolean) {
     	try {
-    	    lockExclusive();
+    		if (!alreadyLocked)
+    			lockExclusive();
             val oldValue = value;
             version++;
             value = v;
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] setvv key["+key+"] ver["+version+"] val["+value+"]");
             return oldValue;
     	}finally {
-    	    unlockExclusive();
+    		if (!alreadyLocked)
+    			unlockExclusive();
     	}
     }
+    */
     
-    public def rollbackValue(oldValue:Cloneable, oldVersion:Int, key:String, txId:Long) {
-    	try {
-    	    lockExclusive();
-            version = oldVersion; 
-            value = oldValue;
-            if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] rollsetvv key["+key+"] ver["+version+"] val["+value+"]");
-        } finally {
-            unlockExclusive();
-        }
+    public def rollbackValueLocked(oldValue:Cloneable, oldVersion:Int, key:String, txId:Long) {
+        version = oldVersion; 
+        value = oldValue;
+        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] rollsetvv key["+key+"] ver["+version+"] val["+value+"]");
     }
        
     public def lockRead(txId:Long, key:String) {
