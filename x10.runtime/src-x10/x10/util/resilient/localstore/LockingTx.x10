@@ -12,7 +12,6 @@
 
 package x10.util.resilient.localstore;
 
-import x10.util.HashMap;
 import x10.util.ArrayList;
 import x10.util.Set;
 import x10.compiler.Ifdef;
@@ -208,7 +207,7 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
                 if (requests.size() == 1 && requests.get(0).dest.id == here.id) {//local locking
                 	val req = requests.get(0);
                 	
-                	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+                	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
                 		Runtime.increaseParallelism();
                 	
                     for (var i:Long = 0; i < req.keys.size ; i++) {
@@ -219,13 +218,13 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
                             plh().masterStore.lockWrite(mapName, id, req.keys(i).key);
                     }
                     
-                    if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+                    if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
                     	Runtime.decreaseParallelism(1n);
                 }
                 else {
 	                finish for (req in requests) {
 	                    at (req.dest) async {
-	                    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+	                    	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
 	                    		Runtime.increaseParallelism();
 	                        
 	                    	for (var i:Long = 0; i < req.keys.size ; i++) {
@@ -236,7 +235,7 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
 	                                plh().masterStore.lockWrite(mapName, id, req.keys(i).key);
 	                        }
 	                        
-	                        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+	                        if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
 	                        	Runtime.decreaseParallelism(1n);
 	                    }
 	                }

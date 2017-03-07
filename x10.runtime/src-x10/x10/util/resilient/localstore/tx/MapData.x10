@@ -19,7 +19,7 @@ public class MapData {
     }
     
     public def this(values:HashMap[String,Cloneable]) {
-        metadata = new SafeBucketHashMap[String,MemoryUnit]();
+        metadata = new SafeBucketHashMap[String,MemoryUnit](TxConfig.getInstance().BUCKETS_COUNT);
         if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
         	metadata.lockAll();
         
@@ -43,7 +43,7 @@ public class MapData {
             val iter = metadata.keySetUnsafe().iterator();
             while (iter.hasNext()) {
                 val k = iter.next();
-                val v = metadata.getOrThrowUnsafe(k).getAtomicValue(false, k, -1).value;
+                val v = metadata.getOrThrowUnsafe(k).getAtomicValueLocked(false, k, -1).value;
                 values.put(k, v);
             }
             return values;

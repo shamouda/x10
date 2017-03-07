@@ -13,26 +13,20 @@ import x10.util.resilient.localstore.TxConfig;
 public abstract class TxManager(data:MapData) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
 
-    protected val logsLock:Lock;
-    protected val txLogs:HashMap[Long,TxLog];
-    protected val abortedTxs:ArrayList[Long]; //aborted NULL transactions 
+    protected val txLogs:SafeBucketHashMap[Long,TxLog];
     
     //locking
-    protected val lockingTxLogs:HashMap[Long,LockingTxLog];
+    protected val lockingTxLogs:SafeBucketHashMap[Long,LockingTxLog];
     
     public def this(data:MapData) {
     	property(data);
     	if (!TxConfig.getInstance().TM.contains("locking")){
-    	    logsLock = new Lock();
-    	    txLogs = new HashMap[Long,TxLog]();
-    	    abortedTxs = new ArrayList[Long]();
+    	    txLogs = new SafeBucketHashMap[Long,TxLog](TxConfig.getInstance().BUCKETS_COUNT);
     	    lockingTxLogs = null;
     	}
     	else {
-    		logsLock = new Lock();
     	    txLogs = null;
-    	    abortedTxs = null;
-    	    lockingTxLogs = new HashMap[Long,LockingTxLog]();
+    	    lockingTxLogs = new SafeBucketHashMap[Long,LockingTxLog](TxConfig.getInstance().BUCKETS_COUNT);
     	}
     }
     
@@ -56,9 +50,7 @@ public abstract class TxManager(data:MapData) {
     }
     
     public def getTxCommitLog(id:Long):HashMap[String,Cloneable] {
-    	lockLogsMap();
-        val log = txLogs.getOrElse(id, null);
-        unlockLogsMap();
+        val log = txLogs.getOrElseSafe(id, null);
         
         if (log == null)
             return null;
@@ -87,20 +79,16 @@ public abstract class TxManager(data:MapData) {
     public def getOrAddTxLog(id:Long) {
         var log:TxLog = null;
         try {
-        	lockLogsMap();
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] abortedTxs.contains(id) = " + abortedTxs.contains(id));
-            if (abortedTxs.contains(id)) {
-            	abortedTxs.remove(id);
-                throw new AbortedTransactionException("AbortedTransactionException");
-            }
-            log = txLogs.getOrElse(id, null);
+            txLogs.lock(id);
+            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] ");
+            log = txLogs.getOrElseUnsafe(id, null);
             if (log == null) {
                 log = new TxLog(id);
-                txLogs.put(id, log);
+                txLogs.putUnsafe(id, log);
             }
         }
         finally{
-        	unlockLogsMap();
+            txLogs.unlock(id);
         }
         return log;
     }
@@ -108,16 +96,16 @@ public abstract class TxManager(data:MapData) {
     public def getOrAddLockingTxLog(id:Long) {
         var log:LockingTxLog = null;
         try {
-        	lockLogsMap();
+            lockingTxLogs.lock(id);
 
-            log = lockingTxLogs.getOrElse(id, null);
+            log = lockingTxLogs.getOrElseUnsafe(id, null);
             if (log == null) {
                 log = new LockingTxLog(id);
-                lockingTxLogs.put(id, log);
+                lockingTxLogs.putUnsafe(id, log);
             }
         }
         finally{
-        	unlockLogsMap();
+            lockingTxLogs.unlock(id);
         }
         return log;
     }
@@ -149,45 +137,30 @@ public abstract class TxManager(data:MapData) {
     /*************************************************/
     
     public def validate(id:Long) {
-    	lockLogsMap();
-        val log = txLogs.getOrElse(id, null);
-        unlockLogsMap();
+        val log = txLogs.getOrElseSafe(id, null);
         if (log == null)
             return;
         validate(log);
     }
     
     public def commit(id:Long) {
-    	lockLogsMap();
-        val log = txLogs.getOrElse(id, null);
-        unlockLogsMap();
-        
+        val log = txLogs.getOrElseSafe(id, null);
         if (log == null)
             return;
         
         commit(log);
         
         //delete log to avoid repeated commit if a recovery commit is called
-        lockLogsMap();
-        txLogs.delete(id);
-        unlockLogsMap();
+        txLogs.deleteSafe(id);
     }
     
     public def abort(id:Long) {
-        var log:TxLog = null;
-        try {
-            /*Abort may reach before normal Tx operations, wait until we have a txLog to abort*/
-        	lockLogsMap();
-            log = txLogs.getOrElse(id, null);
-            abortedTxs.add(id);
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] added to abortedTxs ...");
-            if (log == null) {
-                return;
-            }
+        /*Abort may reach before normal Tx operations, wait until we have a txLog to abort*/
+        val log = txLogs.getOrElseSafe(id, null);
+        if (log == null) {
+            return;
         }
-        finally {
-        	unlockLogsMap();
-        }
+
         try {
             log.lock();
             abort(log); 
@@ -802,16 +775,6 @@ public abstract class TxManager(data:MapData) {
         return memory.setValueLocked(value, key, id);
     }
     
-    /************************************************/
-    
-    private def lockLogsMap() {
-    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
-    		logsLock.lock();
-    }
-    private def unlockLogsMap() {
-    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
-    		logsLock.unlock();
-    }
 }
 
 class LogContainer(memory:MemoryUnit, log:TxLog){

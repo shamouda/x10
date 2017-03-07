@@ -31,7 +31,6 @@ public class SafeBucketHashMap[K,V] {V haszero} implements x10.io.Unserializable
     }
     
     public def this(bucketsCnt:Long) {
-        super();
         buckets = new Rail[Bucket[K,V]](bucketsCnt, (i:Long)=> new Bucket[K,V]());
         if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
         	bucketsLocks = new Rail[Lock](bucketsCnt, (i:Long)=> new Lock());
@@ -243,6 +242,6 @@ public class SafeBucketHashMap[K,V] {V haszero} implements x10.io.Unserializable
     }
     
     @NonEscaping protected final def hashInternal(k:K):Int {
-        return k.hashCode() * 17n;
+        return Math.abs(k.hashCode() * 17n);
     }
 }

@@ -36,6 +36,7 @@ public class TxConfig {
     public static val READ_VERSIONING = 2n;
     
     public val BUCKETS_COUNT:Long;
+    public val DISABLE_INCR_PARALLELISM:Boolean;
     
     private static val instance = new TxConfig();
     
@@ -45,7 +46,7 @@ public class TxConfig {
         assert (TM != null && !TM.equals("")) : "you must specify the TM environment variable, allowed values = locking|RL_EA_UL|RL_EA_WB|...";
         
         BUCKETS_COUNT = (System.getenv("BUCKETS_COUNT") == null || System.getenv("BUCKETS_COUNT").equals("")) ? 256 : Long.parseLong(System.getenv("BUCKETS_COUNT"));
-        	
+        DISABLE_INCR_PARALLELISM = (System.getenv("DISABLE_INCR_PARALLELISM") == null || System.getenv("DISABLE_INCR_PARALLELISM").equals("")) ? false : Long.parseLong(System.getenv("DISABLE_INCR_PARALLELISM")) == 1;
         if (TM.contains("locking")) {
         	if (lockfree)
         		LOCKING_MODE = LOCKING_MODE_FREE;

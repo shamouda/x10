@@ -117,7 +117,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
       
     public def executeTransaction(members:PlaceGroup, closure:(Tx)=>Any):TxResult {
     	try {
-    		if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    		if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
     			Runtime.increaseParallelism();
 	        while(true) {
 	            val tx = startGlobalTransaction(members);
@@ -148,7 +148,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
 	            }
 	        }
     	}finally {
-    		if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    		if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
     			Runtime.decreaseParallelism(1n);
     	}
     }
@@ -169,7 +169,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     	var out:Any;
         var commitStatus:Int = -1n;
         try {
-        	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+        	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
         		Runtime.increaseParallelism();
             while(true) {
             	val tx = startLocalTransaction();
@@ -192,7 +192,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                 }
             }
         }finally {
-        	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+        	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
         		Runtime.decreaseParallelism(1n);
         }
         return new TxResult(commitStatus, out);
@@ -203,7 +203,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
             var out:Any;
             var commitStatus:Int = -1n;
             try {
-            	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+            	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
             		Runtime.increaseParallelism();
                 while(true) {
                 	val tx = startLocalTransaction();
@@ -227,7 +227,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                     System.threadSleep(0);
                 }
             }finally {
-            	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+            	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
             		Runtime.decreaseParallelism(1n);
             }
             

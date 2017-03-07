@@ -16,7 +16,7 @@ import x10.util.concurrent.Lock;
 import x10.util.concurrent.ReadWriteSemaphore;
 import x10.util.HashSet;
 import x10.xrx.Runtime;
-
+import x10.util.resilient.localstore.TxConfig;
 /*
  * A non-blocking concurrent read exclusive write lock for transactional management.
  * Failing to acquire the lock, results in receiving a ConflictException, or a DeadPlaceExeption.
@@ -74,14 +74,17 @@ public class TxLockCREW extends TxLock {
     		else { //locked by me and other readers
  				waitingWriters++;
 				
- 				Runtime.increaseParallelism();
+ 				if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
+ 				    Runtime.increaseParallelism();
+ 				
 				for (var i:Int = 0n; i < WRITER_WAIT_ITER && readers.size() > 1; i++) {
 					if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite WAIT("+i+") lockedWriter["+lockedWriter+"] readers["+readersAsString(readers)+"] waitingWriters["+waitingWriters+"]");
 					lock.unlock();
 					System.threadSleep(WRITER_WAIT_MS);   				
 					lock.lock();
 				}
-				Runtime.decreaseParallelism(1n);
+				if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
+				    Runtime.decreaseParallelism(1n);
 				
 				waitingWriters--;
 				

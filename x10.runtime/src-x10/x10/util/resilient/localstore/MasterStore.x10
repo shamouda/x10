@@ -108,13 +108,17 @@ public class MasterStore {
     public def filterCommitted(txList:ArrayList[Long]) {
     	val list = new ArrayList[Long]();
     	val metadata = txManager.data.getMap();
+    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    	    metadata.lockAll();
     	
     	for (txId in txList) {
-    		val obj = metadata.getOrThrow("_TxDesc_"+"tx"+txId).getAtomicValue(false, "_TxDesc_"+"tx"+txId, -1).value;
+    		val obj = metadata.getOrThrowUnsafe("_TxDesc_"+"tx"+txId).getAtomicValueLocked(false, "_TxDesc_"+"tx"+txId, -1).value;
     		if (obj != null && ( (obj as TxDesc).status == TxDesc.COMMITTED || (obj as TxDesc).status == TxDesc.COMMITTING) ) {
     		    list.add(txId);
     		}
     	}
+    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    	    metadata.unlockAll();
     	return list;
     }
 }

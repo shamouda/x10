@@ -12,7 +12,6 @@
 
 package x10.util.resilient.localstore;
 
-import x10.util.HashMap;
 import x10.util.ArrayList;
 import x10.util.Set;
 import x10.compiler.Ifdef;

@@ -1,7 +1,6 @@
 package x10.util.resilient.localstore.tx;
 
 import x10.util.Set;
-import x10.util.HashMap;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.ArrayList;
