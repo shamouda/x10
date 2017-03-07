@@ -35,6 +35,8 @@ public class TxConfig {
     public static val READ_LOCKING= 1n;
     public static val READ_VERSIONING = 2n;
     
+    public val BUCKETS_COUNT:Long;
+    
     private static val instance = new TxConfig();
     
     private def this(){
@@ -42,6 +44,7 @@ public class TxConfig {
         val lockfree = (System.getenv("LOCK_FREE") == null || System.getenv("LOCK_FREE").equals("")) ? false : Long.parseLong(System.getenv("LOCK_FREE")) == 1;
         assert (TM != null && !TM.equals("")) : "you must specify the TM environment variable, allowed values = locking|RL_EA_UL|RL_EA_WB|...";
         
+        BUCKETS_COUNT = (System.getenv("BUCKETS_COUNT") == null || System.getenv("BUCKETS_COUNT").equals("")) ? 256 : Long.parseLong(System.getenv("BUCKETS_COUNT"));
         	
         if (TM.contains("locking")) {
         	if (lockfree)
