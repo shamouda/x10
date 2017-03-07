@@ -117,7 +117,8 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
       
     public def executeTransaction(members:PlaceGroup, closure:(Tx)=>Any):TxResult {
     	try {
-	    	Runtime.increaseParallelism();
+    		if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    			Runtime.increaseParallelism();
 	        while(true) {
 	            val tx = startGlobalTransaction(members);
 	            var commitCalled:Boolean = false;
@@ -147,7 +148,8 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
 	            }
 	        }
     	}finally {
-    		Runtime.decreaseParallelism(1n);
+    		if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    			Runtime.decreaseParallelism(1n);
     	}
     }
     
@@ -167,7 +169,8 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     	var out:Any;
         var commitStatus:Int = -1n;
         try {
-            Runtime.increaseParallelism();
+        	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+        		Runtime.increaseParallelism();
             while(true) {
             	val tx = startLocalTransaction();
             	var commitCalled:Boolean = false;
@@ -189,7 +192,8 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                 }
             }
         }finally {
-            Runtime.decreaseParallelism(1n);
+        	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+        		Runtime.decreaseParallelism(1n);
         }
         return new TxResult(commitStatus, out);
     }
@@ -199,7 +203,8 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
             var out:Any;
             var commitStatus:Int = -1n;
             try {
-                Runtime.increaseParallelism();
+            	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+            		Runtime.increaseParallelism();
                 while(true) {
                 	val tx = startLocalTransaction();
                 	var commitCalled:Boolean = false;
@@ -222,7 +227,8 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                     System.threadSleep(0);
                 }
             }finally {
-                Runtime.decreaseParallelism(1n);
+            	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+            		Runtime.decreaseParallelism(1n);
             }
             
             new TxResult(commitStatus, out)
