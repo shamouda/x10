@@ -105,13 +105,19 @@ public class MapData {
     }
     
     public def toString() {
-        var str:String = here+"--->\n";
-        val iter = metadata.keySet().iterator();
-        while (iter.hasNext()) {
-            val key = iter.next();
-            val value = metadata.getOrThrow(key);
-            str += "Key["+key+"] Value["+value.toString()+"]\n";
-        }
-        return str;
+    	try {
+    		lockAll();
+	        var str:String = here+"--->\n";
+	        val iter = metadata.keySetSafe().iterator();
+	        while (iter.hasNext()) {
+	            val key = iter.next();
+	            val value = metadata.getOrThrowUnsafe(key);
+	            str += "Key["+key+"] Value["+value.toString()+"]\n";
+	        }
+	        return str;
+    	}finally {
+    		unlockAll();
+    	}
+        
     }
 }
