@@ -51,7 +51,7 @@ public class STMBench {
 		val d = opts("d", 5000);
 		val h = opts("h", 2);
 		val o = opts("o", 2);
-		val g = opts("g", 10);
+		val g = opts("g", -1);
 		val s = opts("s", 0);
 			
 		val mgr = new PlaceManager(s, false);
@@ -99,21 +99,23 @@ public class STMBench {
 	}
 
 	public static def produce(map:ResilientNativeMap, activePlaces:PlaceGroup, producers:PlaceGroup, producerId:Long, d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long) {
-		val startMS = Timer.milliTime();
+		var timeMS:Long = 0;
 		var txCount:Long = 0;
 		val activePlacesCount = activePlaces.size();
 		val rand = new Random((here.id+1) * producerId);
 		var flag:Boolean = true;
 		
-		while (Timer.milliTime() - startMS < d) {
+		while (timeMS < d) {
+			//do not include the time to select the random operations as part of the time//
 			val members = nextTransactionMembers(rand, activePlaces, h);
 			val membersOperations = nextRandomOperations(rand, activePlacesCount, members, r, u, o);
-			
-			/*var str:String = "members = ";
-			for (ee in members) {
-				str += ee + " ";
+			val lockRequests = new ArrayList[LockingRequest]();
+			for (memReq in membersOperations) {
+				lockRequests.add(new LockingRequest(memReq.dest, memReq.keys));
 			}
-			Console.OUT.println(str);*/
+			
+			//time starts here
+			val start = Timer.milliTime();
 			if (members.size() > 1 && !TxConfig.getInstance().TM.contains("locking")) {
 				if (flag) {
 				    Console.OUT.println("globalSTM ");
@@ -124,7 +126,6 @@ public class STMBench {
 					
 					for (var m:Long = 0; m < members.size(); m++) {
 						val operations = membersOperations.get(m);
-						//Console.OUT.println(operations);
 						val f1 = tx.asyncAt(operations.dest, () => {
 							
 							for (var x:Long = 0; x < o; x++) {
@@ -134,11 +135,9 @@ public class STMBench {
 								
 								if (read) {
 									tx.get(key);
-									//Console.OUT.println(here.id + "x" + producerId + ":read:"+key);
 								}
 								else {
 									tx.put(key, new CloneableLong(value));
-									//Console.OUT.println(here.id + "x" + producerId + ":write:"+key);
 								}
 							}
 		                });
@@ -160,7 +159,6 @@ public class STMBench {
 				assert (members(0) == here) : "local transactions are not supported at remote places for this benchmark" ;
 				map.executeLocalTransaction((tx:LocalTx) => {
 					val operations = membersOperations.get(0);
-					//Console.OUT.println(operations);
 					for (var x:Long = 0; x < o; x++) {
 						val key = operations.keys(x).key;
 						val read = operations.keys(x).read;
@@ -168,11 +166,9 @@ public class STMBench {
 						
 						if (read) {
 							tx.get(key);
-							//Console.OUT.println(here.id + "x" + producerId + ":read:"+key);
 						}
 						else {
 							tx.put(key, new CloneableLong(value));
-							//Console.OUT.println(here.id + "x" + producerId + ":write:"+key);
 						}
 					}
 	                return null;
@@ -183,11 +179,6 @@ public class STMBench {
 			        Console.OUT.println("globalLocking ");
 			        flag = false;
 			    }
-				val lockRequests = new ArrayList[LockingRequest]();
-				for (memReq in membersOperations) {
-					lockRequests.add(new LockingRequest(memReq.dest, memReq.keys));
-				}
-				
 				map.executeLockingTransaction(members, lockRequests, (tx:LockingTx) => {
 					val futuresList = new ArrayList[Future[Any]]();
 					
@@ -202,11 +193,9 @@ public class STMBench {
 								
 								if (read) {
 									tx.get(key);
-									//Console.OUT.println(here.id + "x" + producerId + ":read:"+key);
 								}
 								else {
 									tx.put(key, new CloneableLong(value));
-									//Console.OUT.println(here.id + "x" + producerId + ":write:"+key);
 								}
 							}
 		                });
@@ -224,11 +213,6 @@ public class STMBench {
 				    Console.OUT.println("localLocking ");
 				    flag = false;
 				}
-				val lockRequests = new ArrayList[LockingRequest]();
-				for (memReq in membersOperations) {
-					lockRequests.add(new LockingRequest(memReq.dest, memReq.keys));
-				}
-				
 				map.executeLockingTransaction(members, lockRequests, (tx:LockingTx) => {
 					val operations = membersOperations.get(0);
 					//Console.OUT.println(operations);
@@ -255,10 +239,11 @@ public class STMBench {
 			if (g != -1 && txCount%g == 0)
 				Console.OUT.println("progress "+here.id+"x"+producerId + ":" + txCount );
 			txCount++;
+			
+			timeMS += Timer.milliTime() - start;
 		}
 		
-		val endMS = Timer.milliTime();
-		return new ProducerThroughput(here.id, producerId, endMS - startMS, txCount);
+		return new ProducerThroughput(here.id, producerId, timeMS, txCount);
 	}
 
 	public static def printThroughput(iteration:Long, throughputList:ArrayList[ProducerThroughput], h:Long, o:Long) {
@@ -280,6 +265,7 @@ public class STMBench {
 	public static def nextTransactionMembers(rand:Random, activePlaces:PlaceGroup, h:Long) {
 		val activePlacesCount = activePlaces.size();
 		val selectedPlaces = new HashSet[Long]();
+		selectedPlaces.add(here.id);
 		while (selectedPlaces.size() < h) {
 			selectedPlaces.add(Math.abs(rand.nextLong()) % activePlacesCount);
 		}
@@ -391,7 +377,8 @@ public class STMBench {
 		Console.OUT.println("X10_NTHREADS=" + Runtime.NTHREADS);
 		Console.OUT.println("TM=" + System.getenv("TM"));
 		Console.OUT.println("LOCK_FREE=" + System.getenv("LOCK_FREE"));
-		
+		Console.OUT.println("BUCKETS_COUNT=" + System.getenv("BUCKETS_COUNT"));
+	
 		Console.OUT.println("r=" + param.r);
 		Console.OUT.println("u=" + param.u);
 		Console.OUT.println("n=" + param.n);
@@ -399,7 +386,7 @@ public class STMBench {
 		Console.OUT.println("t=" + param.t);
 		Console.OUT.println("w=" + param.w);
 		Console.OUT.println("d=" + param.d);
-		Console.OUT.println("h=" + param.h);
+		Console.OUT.println("h=" + param.h + "   !!! At least one place is local !!!!   ");
 		Console.OUT.println("o=" + param.o);
 		Console.OUT.println("g=" + param.g);
 		Console.OUT.println("s=" + param.s);
