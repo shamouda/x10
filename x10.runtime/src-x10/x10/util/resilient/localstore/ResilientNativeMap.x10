@@ -116,41 +116,34 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     }
       
     public def executeTransaction(members:PlaceGroup, closure:(Tx)=>Any):TxResult {
-    	try {
-    		if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
-    			Runtime.increaseParallelism();
-	        while(true) {
-	            val tx = startGlobalTransaction(members);
-	            var commitCalled:Boolean = false;
-	            val start = Timer.milliTime();
-	            try {
-	            	val out:Any;
-	                finish {
-	                	out = closure(tx);
-	                }
-	                tx.processingElapsedTime = Timer.milliTime() - start ;
-	                
-	                if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} succeeded  preCommitTime["+tx.processingElapsedTime+"] ms");
-	                commitCalled = true;
-	                return new TxResult(tx.commit(), out);
-	            } catch(ex:Exception) {
-	                if (!commitCalled) {
-	                	tx.processingElapsedTime = Timer.milliTime() - start;
-	                    tx.abort(ex); // tx.commit() aborts automatically if needed
-	                }
-	                
-	                if (TM_DEBUG) {
-	                    Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] preCommitTime["+tx.processingElapsedTime+"] ms");
-	                    ex.printStackTrace();
-	                }
-	                throwIfNotConflictException(ex);
-	                System.threadSleep(TM_SLEEP);
-	            }
-	        }
-    	}finally {
-    		if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
-    			Runtime.decreaseParallelism(1n);
-    	}
+        while(true) {
+            val tx = startGlobalTransaction(members);
+            var commitCalled:Boolean = false;
+            val start = Timer.milliTime();
+            try {
+            	val out:Any;
+                finish {
+                	out = closure(tx);
+                }
+                tx.processingElapsedTime = Timer.milliTime() - start ;
+                
+                if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} succeeded  preCommitTime["+tx.processingElapsedTime+"] ms");
+                commitCalled = true;
+                return new TxResult(tx.commit(), out);
+            } catch(ex:Exception) {
+                if (!commitCalled) {
+                	tx.processingElapsedTime = Timer.milliTime() - start;
+                    tx.abort(ex); // tx.commit() aborts automatically if needed
+                }
+                
+                if (TM_DEBUG) {
+                    Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] preCommitTime["+tx.processingElapsedTime+"] ms");
+                    ex.printStackTrace();
+                }
+                throwIfNotConflictException(ex);
+                System.threadSleep(TM_SLEEP);
+            }
+        }
     }
     
     public def executeLockingTransaction(members:PlaceGroup, lockRequests:ArrayList[LockingRequest], closure:(LockingTx)=>Any) {
@@ -168,17 +161,46 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     public def executeLocalTransaction(closure:(LocalTx)=>Any) {
     	var out:Any;
         var commitStatus:Int = -1n;
-        try {
-        	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
-        		Runtime.increaseParallelism();
+
+        while(true) {
+        	val tx = startLocalTransaction();
+        	var commitCalled:Boolean = false;
+        	val start = Timer.milliTime();
+            try {
+            	out = closure(tx);
+                tx.processingElapsedTime = Timer.milliTime() - start ;
+                commitCalled = true;
+                commitStatus = tx.commit();
+                break;
+            } catch(ex:Exception) {
+            	if (!commitCalled) {
+                	tx.processingElapsedTime = Timer.milliTime() - start;
+                    //no need to call abort, abort occurs automatically in local tx all the time
+                }
+                throwIfNotConflictException(ex);
+                
+                System.threadSleep(TM_SLEEP);
+            }
+        }
+
+        return new TxResult(commitStatus, out);
+    }
+    
+    public def executeLocalTransaction(target:Place, closure:(LocalTx)=>Any) {
+        val txResult = at (target) {
+            var out:Any;
+            var commitStatus:Int = -1n;
+
             while(true) {
             	val tx = startLocalTransaction();
             	var commitCalled:Boolean = false;
             	val start = Timer.milliTime();
                 try {
                 	out = closure(tx);
-                    tx.processingElapsedTime = Timer.milliTime() - start ;
+                    tx.processingElapsedTime = Timer.milliTime() - start;
+                    
                     commitCalled = true;
+                    
                     commitStatus = tx.commit();
                     break;
                 } catch(ex:Exception) {
@@ -187,49 +209,10 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                         //no need to call abort, abort occurs automatically in local tx all the time
                     }
                     throwIfNotConflictException(ex);
-                    
-                    System.threadSleep(TM_SLEEP);
                 }
+                System.threadSleep(0);
             }
-        }finally {
-        	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
-        		Runtime.decreaseParallelism(1n);
-        }
-        return new TxResult(commitStatus, out);
-    }
-    
-    public def executeLocalTransaction(target:Place, closure:(LocalTx)=>Any) {
-        val txResult = at (target) {
-            var out:Any;
-            var commitStatus:Int = -1n;
-            try {
-            	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
-            		Runtime.increaseParallelism();
-                while(true) {
-                	val tx = startLocalTransaction();
-                	var commitCalled:Boolean = false;
-                	val start = Timer.milliTime();
-                    try {
-                    	out = closure(tx);
-                        tx.processingElapsedTime = Timer.milliTime() - start;
-                        
-                        commitCalled = true;
-                        
-                        commitStatus = tx.commit();
-                        break;
-                    } catch(ex:Exception) {
-                    	if (!commitCalled) {
-                        	tx.processingElapsedTime = Timer.milliTime() - start;
-                            //no need to call abort, abort occurs automatically in local tx all the time
-                        }
-                        throwIfNotConflictException(ex);
-                    }
-                    System.threadSleep(0);
-                }
-            }finally {
-            	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
-            		Runtime.decreaseParallelism(1n);
-            }
+
             
             new TxResult(commitStatus, out)
         };
