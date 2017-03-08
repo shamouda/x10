@@ -98,7 +98,8 @@ public class BankAsync {
                     f1.force();
                     f2.force();
                     tx.setWaitElapsedTime(Timer.milliTime() - startWait);
-                    if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitForFuturesElapsedTime +"] ms");
+                    if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitElapsedTime +"] ms");
+                    return null;
                 });
             }
         }

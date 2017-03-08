@@ -29,11 +29,11 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     public transient val startTime:Long = Timer.milliTime(); ////
-	public transient var lockingElapsedTime:Long = -1;  //////
-	public transient var processingElapsedTime:Long = -1; //// (including waitTime)
-	public transient var waitElapsedTime:Long = -1; ///
-    public transient var unlockingElapsedTime:Long = -1; ///////
-    public transient var totalElapsedTime:Long = -1; //////
+	public transient var lockingElapsedTime:Long = 0;  //////
+	public transient var processingElapsedTime:Long = 0; //// (including waitTime)
+	public transient var waitElapsedTime:Long = 0; ///
+    public transient var unlockingElapsedTime:Long = 0; ///////
+    public transient var totalElapsedTime:Long = 0; //////
    
     /* Constants */
     

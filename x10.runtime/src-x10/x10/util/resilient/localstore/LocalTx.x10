@@ -25,9 +25,9 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     public transient val startTime:Long = Timer.milliTime();
-    public transient var commitTime:Long = -1;
-    public transient var abortTime:Long = -1;   
-    public transient var processingElapsedTime:Long = -1;
+    public transient var commitTime:Long = 0;
+    public transient var abortTime:Long = 0;   
+    public transient var processingElapsedTime:Long = 0;
        
     
     /***************** Get ********************/

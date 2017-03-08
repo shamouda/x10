@@ -51,8 +51,7 @@ public abstract class TxManager(data:MapData) {
     
     public def getTxCommitLog(id:Long):HashMap[String,Cloneable] {
         val log = txLogs.getOrElseSafe(id, null);
-        
-        if (log == null)
+        if (log == null || log.aborted)
             return null;
         
         try {
@@ -164,7 +163,7 @@ public abstract class TxManager(data:MapData) {
         try {
             log.lock();
             abort(log); 
-        }finally {
+        } finally {
             log.unlock();
         }
     }
@@ -199,10 +198,16 @@ public abstract class TxManager(data:MapData) {
             }
             //FIXME: abort if locking failed and we throwed an exception without returning a log object to the caller (log = null, no abort)
             return new LogContainer(memory, log);
-        } catch(ex:Exception) {
-        	abortAndThrowException(log, ex);
-            log.unlock();
+        } catch(ex:AbortedTransactionException) {
             throw ex;
+        } catch(ex:Exception) {
+        	try {
+        		abortAndThrowException(log, ex);
+        	}
+        	finally {
+        		log.unlock();
+        	}
+        	throw ex;
         }
     }
     
@@ -654,7 +659,7 @@ public abstract class TxManager(data:MapData) {
                 if (TM_DEBUG) Console.OUT.println("Tx["+log.id+"]  abort_UL key "+key+" is NOT locked !!!!");
             }
         }
-        log.aborted = true;
+        log.clearAborted();
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] abort_UL completed");
     }
     

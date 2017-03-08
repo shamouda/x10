@@ -37,11 +37,11 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     public transient var abortTime:Long = -1;
     
     // consumed time
-	public transient var processingElapsedTime:Long = -1; ////including waitTime
-    public transient var waitElapsedTime:Long = -1;
-    public transient var phase1ElapsedTime:Long = -1;
-    public transient var phase2ElapsedTime:Long = -1;
-    public transient var txLoggingElapsedTime:Long = -1;
+	public transient var processingElapsedTime:Long = 0; ////including waitTime
+    public transient var waitElapsedTime:Long = 0;
+    public transient var phase1ElapsedTime:Long = 0;
+    public transient var phase2ElapsedTime:Long = 0;
+    public transient var txLoggingElapsedTime:Long = 0;
     
     private transient var excs:GrowableRail[CheckedThrowable];
     private transient var excsLock:Lock;

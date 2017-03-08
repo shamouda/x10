@@ -29,9 +29,9 @@ import x10.util.resilient.localstore.TxConfig;
 public class TxLog (id:Long) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
-    public val transLog:HashMap[String,TxKeyChange];
+    public var transLog:HashMap[String,TxKeyChange];
     public var aborted:Boolean = false;
-    private val lock:Lock;
+    private var lock:Lock;
     
     public def this(id:Long) {
         property(id);
@@ -134,6 +134,9 @@ public class TxLog (id:Long) {
     /*Get log without readonly changes*/
     public def removeReadOnlyKeys():HashMap[String,Cloneable] {
         val map = new HashMap[String,Cloneable]();
+        if (transLog == null && aborted) {
+        	return null;
+        }
         val iter = transLog.keySet().iterator();
         while (iter.hasNext()) {
             val key = iter.next();
@@ -154,5 +157,11 @@ public class TxLog (id:Long) {
     public def unlock() {
     	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
     		lock.unlock();
+    }
+    
+    public def clearAborted() {
+    	if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] clearTxLog ...");
+        transLog = null;
+        aborted = true;
     }
 }
