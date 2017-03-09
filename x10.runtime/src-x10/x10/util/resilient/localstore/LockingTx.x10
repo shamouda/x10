@@ -211,11 +211,12 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
                 		Runtime.increaseParallelism();
                 	
                     for (var i:Long = 0; i < req.keys.size ; i++) {
-                    	//Console.OUT.println("locking " + req.keys(i).key + "  rw: " + req.keys(i).read);
+                    	Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read);
                         if (req.keys(i).read)
                             plh().masterStore.lockRead(mapName, id, req.keys(i).key);
                         else
                             plh().masterStore.lockWrite(mapName, id, req.keys(i).key);
+                        Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
                     }
                     
                     if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
@@ -228,11 +229,12 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
 	                    		Runtime.increaseParallelism();
 	                        
 	                    	for (var i:Long = 0; i < req.keys.size ; i++) {
-	                        	//Console.OUT.println("locking " + req.keys(i).key + "  rw: " + req.keys(i).read);
+	                        	Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read);
 	                            if (req.keys(i).read)
 	                                plh().masterStore.lockRead(mapName, id, req.keys(i).key);
 	                            else
 	                                plh().masterStore.lockWrite(mapName, id, req.keys(i).key);
+	                            Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
 	                        }
 	                        
 	                        if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
@@ -248,22 +250,24 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
                 if (requests.size() == 1 && requests.get(0).dest.id == here.id) {//local locking
                 	val req = requests.get(0);
                 	for (var i:Long = 0; i < req.keys.size ; i++) {
-                    	//Console.OUT.println("unlocking " + req.keys(i).key + "  rw: " + req.keys(i).read);
+                		Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read);
                         if (req.keys(i).read)
                             plh().masterStore.unlockRead(mapName, id, req.keys(i).key);
                         else
                             plh().masterStore.unlockWrite(mapName, id, req.keys(i).key);
+                        Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
                     }
                 }
                 else {
 	                finish for (req in requests) {
 	                    at (req.dest) async {
 	                        for (var i:Long = 0; i < req.keys.size ; i++) {
-	                        	//Console.OUT.println("unlocking " + req.keys(i).key + "  rw: " + req.keys(i).read);
+	                        	Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read);
 	                            if (req.keys(i).read)
 	                                plh().masterStore.unlockRead(mapName, id, req.keys(i).key);
 	                            else
 	                                plh().masterStore.unlockWrite(mapName, id, req.keys(i).key);
+	                            Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
 	                        }
 	                    }
 	                }

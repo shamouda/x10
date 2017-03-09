@@ -110,10 +110,14 @@ public class STMBench {
 			val members = nextTransactionMembers(rand, activePlaces, h);
 			val membersOperations = nextRandomOperations(rand, activePlacesCount, members, r, u, o);
 			val lockRequests = new ArrayList[LockingRequest]();
-			for (memReq in membersOperations) {
-				lockRequests.add(new LockingRequest(memReq.dest, memReq.keys));
-			}
 			
+			if (TxConfig.getInstance().TM.contains("locking")) {
+				val rail = membersOperations.toRail();
+				RailUtils.sort(rail);
+				for (memReq in rail) {
+					lockRequests.add(new LockingRequest(memReq.dest, memReq.keys));
+				}
+			}
 			//time starts here
 			val start = Timer.milliTime();
 			if (members.size() > 1 && !TxConfig.getInstance().TM.contains("locking")) {
@@ -184,7 +188,6 @@ public class STMBench {
 					
 					for (var m:Long = 0; m < members.size(); m++) {
 						val operations = membersOperations.get(m);
-						//Console.OUT.println(operations);
 						val f1 = tx.asyncAt(operations.dest, () => {
 							for (var x:Long = 0; x < o; x++) {
 								val key = operations.keys(x).key;
@@ -223,11 +226,9 @@ public class STMBench {
 						
 						if (read) {
 							tx.get(key);
-							//Console.OUT.println(here.id + "x" + producerId + ":read:"+key);
 						}
 						else {
 							tx.put(key, new CloneableLong(value));
-							//Console.OUT.println(here.id + "x" + producerId + ":write:"+key);
 						}
 					}
 	                return null;
@@ -305,7 +306,7 @@ public class STMBench {
 	}
 	
 	/*********************  Structs ********************/
-	public static struct MemberOperations {
+	public static struct MemberOperations implements Comparable[MemberOperations] {
 		val dest:Place;
 	    val keys:Rail[KeyInfo];
 	    val values:Rail[Long];
@@ -320,6 +321,15 @@ public class STMBench {
 	        	str += "("+k.key+","+k.read+")" ;
 	    	return str;
 	    }
+	    
+		public def compareTo(that:MemberOperations):Int {
+			if (dest.id == that.dest.id)
+				return 0n;
+			else if ( dest.id < that.dest.id)
+				return -1n;
+			else
+				return 1n;
+		}
 	}
 	
 	public static struct STMBenchParameters {
