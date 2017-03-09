@@ -14,8 +14,8 @@ package x10.util.resilient.localstore;
 import x10.util.RailUtils;
 
 public class LockingRequest {
-	val keys:Rail[KeyInfo];
-	val dest:Place;
+	public val keys:Rail[KeyInfo];
+	public val dest:Place;
 
 	public def this(dest:Place, keys:Rail[KeyInfo]) {
 		this.dest = dest;
