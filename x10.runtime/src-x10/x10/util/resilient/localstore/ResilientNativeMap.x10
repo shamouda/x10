@@ -149,20 +149,13 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     public def executeLockingTransaction(members:PlaceGroup, lockRequests:ArrayList[LockingRequest], closure:(LockingTx)=>Any) {
         val tx = startLockingTransaction(members, lockRequests);
         
-        if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] locking started  ");
         tx.lock();
-        if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] locking finished  ");
-        if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] closure started  ");
         
         val start = Timer.milliTime();
         val out = closure(tx);
         tx.processingElapsedTime = Timer.milliTime() - start;
         
-        if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] closure finished ");
-         
-        if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] unlocking started  ");
         tx.unlock();
-        if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] unlocking started  ");
         return new TxResult(Tx.SUCCESS, out);
     }
     

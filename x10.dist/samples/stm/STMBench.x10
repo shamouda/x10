@@ -388,7 +388,8 @@ public class STMBench {
 		Console.OUT.println("TM=" + System.getenv("TM"));
 		Console.OUT.println("LOCK_FREE=" + System.getenv("LOCK_FREE"));
 		Console.OUT.println("BUCKETS_COUNT=" + System.getenv("BUCKETS_COUNT"));
-	
+		Console.OUT.println("DISABLE_INCR_PARALLELISM=" + System.getenv("DISABLE_INCR_PARALLELISM"));
+		
 		Console.OUT.println("r=" + param.r);
 		Console.OUT.println("u=" + param.u);
 		Console.OUT.println("n=" + param.n);
