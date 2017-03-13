@@ -103,7 +103,7 @@ public class STMBench {
 		var txCount:Long = 0;
 		val activePlacesCount = activePlaces.size();
 		val rand = new Random((here.id+1) * producerId);
-		var flag:Boolean = true;
+		
 		
 		while (timeMS < d) {
 			//do not include the time to select the random operations as part of the time//
@@ -121,10 +121,7 @@ public class STMBench {
 			//time starts here
 			val start = Timer.milliTime();
 			if (members.size() > 1 && !TxConfig.getInstance().TM.contains("locking")) {
-				if (flag) {
-				    Console.OUT.println("globalSTM ");
-				    flag = false;
-				}
+				
 				map.executeTransaction(members, (tx:Tx) => {
 					val futuresList = new ArrayList[Future[Any]]();
 					
@@ -155,10 +152,7 @@ public class STMBench {
 	            });
 			}
 			else if (members.size() == 1 && producers.size() == 1 && !TxConfig.getInstance().TM.contains("locking")) {
-			    if (flag) {
-			        Console.OUT.println("localSTM ");
-			        flag = false;
-			    }
+			    
 				//local transaction
 				assert (members(0) == here) : "local transactions are not supported at remote places for this benchmark" ;
 				map.executeLocalTransaction((tx:LocalTx) => {
@@ -179,10 +173,7 @@ public class STMBench {
 	            });
 			}
 			else if (members.size() > 1 && TxConfig.getInstance().TM.contains("locking")) { //locking
-			    if (flag) {
-			        Console.OUT.println("globalLocking ");
-			        flag = false;
-			    }
+			    
 				map.executeLockingTransaction(members, lockRequests, (tx:LockingTx) => {
 					val futuresList = new ArrayList[Future[Any]]();
 					
@@ -212,10 +203,7 @@ public class STMBench {
 				});
 			}
 			else if (members.size() == 1 && producers.size() == 1 && TxConfig.getInstance().TM.contains("locking")) { //locking
-				if (flag) {
-				    Console.OUT.println("localLocking ");
-				    flag = false;
-				}
+				
 				map.executeLockingTransaction(members, lockRequests, (tx:LockingTx) => {
 					val operations = membersOperations.get(0);
 					//Console.OUT.println(operations);
