@@ -38,8 +38,8 @@ public class STMBench {
             Option("w","warmupTime","warm up time in milliseconds (default 5000 ms)"),
             Option("d","iterationDuration","Single iteration duration"),
             Option("h","txParticipants","number of transaction participants (default 2)"),
-            Option("o","TxParticipantOperations","number of operations per transaction participant"),
-            Option("g","progress","interval of progress reporting per producer (default 10 transactions)"),
+            Option("o","TxParticipantOperations","number of operations per transaction participant (default 2)"),
+            Option("g","progress","interval of progress reporting per producer (default no progress reporting)"),
             Option("s","spare","Spare places (default 0)")
         ]);
 		
@@ -72,7 +72,7 @@ public class STMBench {
 		val startWarmup = Timer.milliTime();
 		Console.OUT.println("warmup started");
 		runIteration(map, activePlaces, producerPlaces, w, r, u, t, h, o, g);
-		Console.OUT.println("warmup completed, warmp elapsed time ["+(Timer.milliTime() - startWarmup)+"]  ms ");
+		Console.OUT.println("warmup completed, warmup elapsed time ["+(Timer.milliTime() - startWarmup)+"]  ms ");
 		
 		for (iter in 1..n) {
 			val throughputList = runIteration(map, activePlaces, producerPlaces, d, r, u, t, h, o, g);
