@@ -196,7 +196,6 @@ public abstract class TxManager(data:MapData) {
 	            val ver = atomicV.version;
 	            log.logInitialValue(key, copy1, ver, id, lockRead, memory);
             }
-            //FIXME: abort if locking failed and we throwed an exception without returning a log object to the caller (log = null, no abort)
             return new LogContainer(memory, log);
         } catch(ex:AbortedTransactionException) {
             throw ex;
@@ -232,7 +231,7 @@ public abstract class TxManager(data:MapData) {
             val curVer = atomicV.version;
             val initVer = log.getInitVersion(key);
             if (curVer != initVer) {
-                /*another transaction have modified it and committed since we read the initial value*/
+                /*another transaction has modified it and committed since we read the initial value*/
                 memory.unlockWrite(id, key);
                 //don't mark it as locked, because at abort time we return the old value for locked variables. our old value is wrong.
                 throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
