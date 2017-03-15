@@ -4,11 +4,11 @@ import x10.util.Set;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.ArrayList;
 
-public class TxManager_LockBased extends TxManager {
+public class TxManager_Locking extends TxManager {
 
     public def this(map:MapData) {
         super(map);
-        if (here.id == 0) Console.OUT.println("TxManager_LockBased");
+        if (here.id == 0) Console.OUT.println("TxManager_Locking");
     }
     
     public def get(id:Long, key:String):Cloneable {

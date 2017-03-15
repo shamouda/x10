@@ -13,75 +13,50 @@
 package x10.util.resilient.localstore;
 
 public class TxConfig {
-	public val TM:String; //locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB
+	public val TM:String; //baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB
 	
-    public val LOCKING_MODE:Int;
     public val VALIDATION_REQUIRED:Boolean;
-    public val TM_READ:Int;
-    public val TM_ACQUIRE:Int;
-    public val TM_RECOVER:Int;
-    
-    /*locking modes*/
-    public static val LOCKING_MODE_FREE = 0n;
-    public static val LOCKING_MODE_BLOCKING = 1n;
-    public static val LOCKING_MODE_STM = 2n;
-    
-    /*STM TM dimensions*/
-    public static val INVALID = -1n;
-    public static val EARLY_ACQUIRE= 1n;
-    public static val LATE_ACQUIRE = 2n;
-    public static val UNDO_LOGGING= 1n;
-    public static val WRITE_BUFFERING = 2n;
-    public static val READ_LOCKING= 1n;
-    public static val READ_VERSIONING = 2n;
-    
     public val BUCKETS_COUNT:Long;
     public val DISABLE_INCR_PARALLELISM:Boolean;
+    
+    public val BASELINE:Boolean;
+    public val STM:Boolean;
+    public val LOCKING:Boolean;
+    public val LOCK_FREE:Boolean;
     
     private static val instance = new TxConfig();
     
     private def this(){
         TM = System.getenv("TM");
-        val lockfree = (System.getenv("LOCK_FREE") == null || System.getenv("LOCK_FREE").equals("")) ? false : Long.parseLong(System.getenv("LOCK_FREE")) == 1;
         assert (TM != null && !TM.equals("")) : "you must specify the TM environment variable, allowed values = locking|RL_EA_UL|RL_EA_WB|...";
+
+        if (TM.equals("baseline") || TM.startsWith("locking") || TM.equals("RL_EA_UL") || TM.equals("RL_EA_WB")) {
+        	VALIDATION_REQUIRED = false;
+        }
+        else if (TM.equals("RL_LA_WB") || TM.equals("RV_EA_UL") || TM.equals("RV_EA_WB") || TM.equals("RV_LA_WB")) {
+        	VALIDATION_REQUIRED = true;
+        }
+        else {
+        	VALIDATION_REQUIRED = false;
+        	assert(false) : "Invalid TM value, possible values are: baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB";
+        }
         
         BUCKETS_COUNT = (System.getenv("BUCKETS_COUNT") == null || System.getenv("BUCKETS_COUNT").equals("")) ? 256 : Long.parseLong(System.getenv("BUCKETS_COUNT"));
         DISABLE_INCR_PARALLELISM = (System.getenv("DISABLE_INCR_PARALLELISM") == null || System.getenv("DISABLE_INCR_PARALLELISM").equals("")) ? false : Long.parseLong(System.getenv("DISABLE_INCR_PARALLELISM")) == 1;
-        if (TM.contains("locking")) {
-        	if (lockfree)
-        		LOCKING_MODE = LOCKING_MODE_FREE;
-        	else
-        		LOCKING_MODE = LOCKING_MODE_BLOCKING;
-            VALIDATION_REQUIRED = false;
-            TM_READ = INVALID;
-            TM_ACQUIRE = INVALID;
-            TM_RECOVER = INVALID;
-        }
-        else {
-        	if (lockfree)
-        		LOCKING_MODE = LOCKING_MODE_FREE;
-        	else
-        		LOCKING_MODE = LOCKING_MODE_STM;
-            if (TM.contains("RL"))
-                TM_READ = READ_LOCKING;
-            else
-                TM_READ = READ_VERSIONING;
-            
-            if (TM.contains("EA"))
-                TM_ACQUIRE = EARLY_ACQUIRE;
-            else
-                TM_ACQUIRE = LATE_ACQUIRE;
-            
-            if (TM.contains("UL"))
-                TM_RECOVER = UNDO_LOGGING;
-            else 
-                TM_RECOVER = WRITE_BUFFERING;
-            
-            if (TM_READ == READ_LOCKING && TM_ACQUIRE == EARLY_ACQUIRE )
-                VALIDATION_REQUIRED = false;
-            else
-                VALIDATION_REQUIRED = true;
-        }
+
+        if (TM.equals("baseline"))
+        	BASELINE = true;
+        else
+        	BASELINE = false;
+        
+        if (BASELINE || TM.startsWith("locking")) 
+        	STM = false;
+        else
+        	STM = true;
+        
+        LOCKING = ! ( STM || BASELINE);
+        
+        LOCK_FREE = BASELINE || (System.getenv("LOCK_FREE") == null || System.getenv("LOCK_FREE").equals("")) ? false : Long.parseLong(System.getenv("LOCK_FREE")) == 1;
     }
     
     public static def getInstance() = instance;

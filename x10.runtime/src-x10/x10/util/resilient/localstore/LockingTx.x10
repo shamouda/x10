@@ -25,9 +25,7 @@ import x10.compiler.Immediate;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Future;
 
-public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, requests:ArrayList[LockingRequest]) {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-    
+public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, requests:ArrayList[LockingRequest]) extends AbstractTx {
     public transient val startTime:Long = Timer.milliTime(); ////
 	public transient var lockingElapsedTime:Long = 0;  //////
 	public transient var processingElapsedTime:Long = 0; //// (including waitTime)
@@ -35,34 +33,15 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
     public transient var unlockingElapsedTime:Long = 0; ///////
     public transient var totalElapsedTime:Long = 0; //////
    
-    /* Constants */
-    
-    private static val GET_LOCAL = 0n;
-    private static val GET_REMOTE = 1n;
-    private static val PUT_LOCAL = 2n;
-    private static val PUT_REMOTE = 3n;
-    private static val DELETE_LOCAL = 4n;
-    private static val DELETE_REMOTE = 5n;
-    private static val KEYSET_LOCAL = 6n;
-    private static val KEYSET_REMOTE = 7n;
-    private static val AT_VOID = 8n;
-    private static val AT_RETURN = 9n;
-    private static val ASYNC_GET = 10n;
-    private static val ASYNC_PUT = 11n;
-    private static val ASYNC_DELETE = 12n;
-    private static val ASYNC_KEYSET = 13n;
-    private static val ASYNC_AT_VOID = 14n;
-    private static val ASYNC_AT_RETURN = 15n;
-    
-    private static val LOCK = 20n;
-    private static val UNLOCK = 21n;
-    
     public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, requests:ArrayList[LockingRequest]) {
         property(plh, id, mapName, requests);
-        var membersStr:String = "";
-        for (p in members)
-            membersStr += p +" ";
-        if (TM_DEBUG) Console.OUT.println("LockingTx["+id+"] here["+here+"] started members["+membersStr+"]");
+
+		if (TM_DEBUG) {
+        	var membersStr:String = "";
+        	for (p in members)
+        		membersStr += p + " ";
+        	Console.OUT.println("LockingTx["+id+"] here["+here+"] started members["+membersStr+"]");
+        }
     }
     
     public def setWaitElapsedTime(t:Long) {
@@ -207,7 +186,7 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
                 if (requests.size() == 1 && requests.get(0).dest.id == here.id) {//local locking
                 	val req = requests.get(0);
                 	
-                	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+                	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && !TxConfig.getInstance().LOCK_FREE)
                 		Runtime.increaseParallelism();
                 	
                     for (var i:Long = 0; i < req.keys.size ; i++) {
@@ -219,13 +198,13 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
                         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
                     }
                     
-                    if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+                    if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && !TxConfig.getInstance().LOCK_FREE)
                     	Runtime.decreaseParallelism(1n);
                 }
                 else {
 	                finish for (req in requests) {
 	                    at (req.dest) {
-	                    	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+	                    	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && !TxConfig.getInstance().LOCK_FREE)
 	                    		Runtime.increaseParallelism();
 	                        
 	                    	for (var i:Long = 0; i < req.keys.size ; i++) {
@@ -237,7 +216,7 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
 	                            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
 	                        }
 	                        
-	                        if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+	                        if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && !TxConfig.getInstance().LOCK_FREE)
 	                        	Runtime.decreaseParallelism(1n);
 	                    }
 	                }
@@ -315,31 +294,5 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
         }
         
     }
-    
-    
-    public static def opDesc(op:Int) {
-        switch(op) {
-            case LOCK: return "LOCK";
-            case UNLOCK: return "UNLOCK";
-            case GET_LOCAL: return "GET_LOCAL";
-            case GET_REMOTE: return "GET_REMOTE";
-            case PUT_LOCAL: return "PUT_LOCAL";
-            case PUT_REMOTE: return "PUT_REMOTE";
-            case DELETE_LOCAL: return "DELETE_LOCAL";
-            case DELETE_REMOTE: return "DELETE_REMOTE";
-            case KEYSET_LOCAL: return "KEYSET_LOCAL";
-            case KEYSET_REMOTE: return "KEYSET_REMOTE";
-            case AT_VOID: return "AT_VOID";
-            case AT_RETURN: return "AT_RETURN";
-            case ASYNC_GET: return "ASYNC_GET";
-            case ASYNC_PUT: return "ASYNC_PUT";
-            case ASYNC_DELETE: return "ASYNC_DELETE";
-            case ASYNC_KEYSET: return "ASYNC_KEYSET";
-            case ASYNC_AT_VOID: return "ASYNC_AT_VOID";
-            case ASYNC_AT_RETURN: return "ASYNC_AT_RETURN";
-        }
-        return "";
-    }
-
     
 }

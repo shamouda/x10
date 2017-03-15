@@ -36,7 +36,7 @@ public class TxLog (id:Long) {
     public def this(id:Long) {
         property(id);
         transLog = new HashMap[String,TxKeyChange]();
-        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+        if (!TxConfig.getInstance().LOCK_FREE)
         	lock = new Lock();
         else
         	lock = null;
@@ -150,12 +150,12 @@ public class TxLog (id:Long) {
     }
     
     public def lock() {
-    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    	if (!TxConfig.getInstance().LOCK_FREE)
     		lock.lock();
     }
     
     public def unlock() {
-    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    	if (!TxConfig.getInstance().LOCK_FREE)
     		lock.unlock();
     }
     

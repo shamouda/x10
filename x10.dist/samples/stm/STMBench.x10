@@ -10,6 +10,8 @@ import x10.util.resilient.localstore.LockingRequest;
 import x10.util.resilient.localstore.LockingRequest.KeyInfo;
 import x10.util.resilient.localstore.LockingTx;
 import x10.util.resilient.localstore.LocalTx;
+import x10.util.resilient.localstore.AbstractTx;
+import x10.util.resilient.localstore.BaselineTx;
 
 import x10.util.concurrent.Future;
 import x10.xrx.Runtime;
@@ -62,7 +64,7 @@ public class STMBench {
 		
 		assert (h <= activePlaces.size()) : "invalid value for parameter h, h should not exceed the number of active places" ;
 
-		if (TxConfig.getInstance().LOCKING_MODE == TxConfig.LOCKING_MODE_FREE) {
+		if (TxConfig.getInstance().LOCK_FREE) {
 			assert (p * t == 1): "lock free mode can only be used with only 1 producer thread";
 		}
 		
@@ -104,123 +106,75 @@ public class STMBench {
 		val activePlacesCount = activePlaces.size();
 		val rand = new Random((here.id+1) * producerId);
 		
-		
 		while (timeMS < d) {
 			//do not include the time to select the random operations as part of the time//
 			val members = nextTransactionMembers(rand, activePlaces, h);
 			val membersOperations = nextRandomOperations(rand, activePlacesCount, members, r, u, o);
 			val lockRequests = new ArrayList[LockingRequest]();
 			
-			if (TxConfig.getInstance().TM.contains("locking")) {
+			val distClosure = (tx:AbstractTx) => {
+				val futuresList = new ArrayList[Future[Any]]();
+				
+				for (var m:Long = 0; m < members.size(); m++) {
+					val operations = membersOperations.get(m);
+					val f1 = tx.asyncAt(operations.dest, () => {
+						for (var x:Long = 0; x < o; x++) {
+							val key = operations.keys(x).key;
+							val read = operations.keys(x).read;
+							val value = operations.values(x);
+							read? tx.get(key): tx.put(key, new CloneableLong(value));
+						}
+	                });
+					futuresList.add(f1);
+				}
+	            val startWait = Timer.milliTime();
+	            for (f in futuresList)
+	            	f.force();
+	            tx.setWaitElapsedTime(Timer.milliTime() - startWait);
+	            return null;
+	        };
+	        
+	        val localClosure = (tx:AbstractTx) => {
+				val operations = membersOperations.get(0);
+				for (var x:Long = 0; x < o; x++) {
+					val key = operations.keys(x).key;
+					val read = operations.keys(x).read;
+					val value = operations.values(x);
+					read? tx.get(key): tx.put(key, new CloneableLong(value));
+				}
+	            return null;
+	        };
+			
+			if (TxConfig.getInstance().LOCKING ) {
 				val rail = membersOperations.toRail();
 				RailUtils.sort(rail);
 				for (memReq in rail) {
-					lockRequests.add(new LockingRequest(memReq.dest, memReq.keys));
+					lockRequests.add(new LockingRequest(memReq.dest, memReq.keys)); //sorting of the keys is done internally
 				}
 			}
+            
 			//time starts here
 			val start = Timer.milliTime();
-			if (members.size() > 1 && !TxConfig.getInstance().TM.contains("locking")) {
-				
-				map.executeTransaction(members, (tx:Tx) => {
-					val futuresList = new ArrayList[Future[Any]]();
-					
-					for (var m:Long = 0; m < members.size(); m++) {
-						val operations = membersOperations.get(m);
-						val f1 = tx.asyncAt(operations.dest, () => {
-							
-							for (var x:Long = 0; x < o; x++) {
-								val key = operations.keys(x).key;
-								val read = operations.keys(x).read;
-								val value = operations.values(x);
-								
-								if (read) {
-									tx.get(key);
-								}
-								else {
-									tx.put(key, new CloneableLong(value));
-								}
-							}
-		                });
-						futuresList.add(f1);
-					}
-	                val startWait = Timer.milliTime();
-	                for (f in futuresList)
-	                	f.force();
-	                tx.setWaitElapsedTime(Timer.milliTime() - startWait);
-	                return null;
-	            });
+			if (members.size() > 1 && TxConfig.getInstance().STM ) { //STM distributed
+				map.executeTransaction(members, distClosure);
 			}
-			else if (members.size() == 1 && producers.size() == 1 && !TxConfig.getInstance().TM.contains("locking")) {
-			    
+			else if (members.size() > 1 && TxConfig.getInstance().LOCKING ) { //locking distributed
+				map.executeLockingTransaction(members, lockRequests, distClosure);
+			}
+			else if (members.size() == 1 && producers.size() == 1 && TxConfig.getInstance().STM ) { // STM local
 				//local transaction
 				assert (members(0) == here) : "local transactions are not supported at remote places for this benchmark" ;
-				map.executeLocalTransaction((tx:LocalTx) => {
-					val operations = membersOperations.get(0);
-					for (var x:Long = 0; x < o; x++) {
-						val key = operations.keys(x).key;
-						val read = operations.keys(x).read;
-						val value = operations.values(x);
-						
-						if (read) {
-							tx.get(key);
-						}
-						else {
-							tx.put(key, new CloneableLong(value));
-						}
-					}
-	                return null;
-	            });
+				map.executeLocalTransaction(localClosure);
 			}
-			else if (members.size() > 1 && TxConfig.getInstance().TM.contains("locking")) { //locking
-			    
-				map.executeLockingTransaction(members, lockRequests, (tx:LockingTx) => {
-					val futuresList = new ArrayList[Future[Any]]();
-					
-					for (var m:Long = 0; m < members.size(); m++) {
-						val operations = membersOperations.get(m);
-						val f1 = tx.asyncAt(operations.dest, () => {
-							for (var x:Long = 0; x < o; x++) {
-								val key = operations.keys(x).key;
-								val read = operations.keys(x).read;
-								val value = operations.values(x);
-								
-								if (read) {
-									tx.get(key);
-								}
-								else {
-									tx.put(key, new CloneableLong(value));
-								}
-							}
-		                });
-						futuresList.add(f1);
-					}
-	                val startWait = Timer.milliTime();
-	                for (f in futuresList)
-	                	f.force();
-	                tx.setWaitElapsedTime(Timer.milliTime() - startWait);
-	                return null;
-				});
+			else if (members.size() == 1 && producers.size() == 1 && TxConfig.getInstance().LOCKING ) { //Locking local
+				assert (members(0) == here) : "local transactions are not supported at remote places for this benchmark" ;
+				map.executeLockingTransaction(members, lockRequests, localClosure);
 			}
-			else if (members.size() == 1 && producers.size() == 1 && TxConfig.getInstance().TM.contains("locking")) { //locking
-				
-				map.executeLockingTransaction(members, lockRequests, (tx:LockingTx) => {
-					val operations = membersOperations.get(0);
-					//Console.OUT.println(operations);
-					for (var x:Long = 0; x < o; x++) {
-						val key = operations.keys(x).key;
-						val read = operations.keys(x).read;
-						val value = operations.values(x);
-						
-						if (read) {
-							tx.get(key);
-						}
-						else {
-							tx.put(key, new CloneableLong(value));
-						}
-					}
-	                return null;
-				});
+			else if (members.size() == 1 && producers.size() == 1 && TxConfig.getInstance().BASELINE ) { //baseline local
+				map.executeBaselineTransaction(members, localClosure);
+			}
+			else if (members.size() > 1 && TxConfig.getInstance().BASELINE ) { //baseline distributed
+				map.executeBaselineTransaction(members, distClosure);
 			}
 			else
 				assert (false) : "wrong or unsupported configurations, members= " + members.size();
@@ -228,7 +182,6 @@ public class STMBench {
 			if (g != -1 && txCount%g == 0)
 				Console.OUT.println("progress "+here.id+"x"+producerId + ":" + txCount );
 			txCount++;
-			
 			timeMS += Timer.milliTime() - start;
 		}
 		

@@ -30,7 +30,7 @@ public class TransactionsList {
         globalTx = new ArrayList[Tx]();
         localTx = new ArrayList[LocalTx]();
         lockingTx = new ArrayList[LockingTx]();
-        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+        if (!TxConfig.getInstance().LOCK_FREE)
         	listLock = new Lock();
         else
         	listLock = null;
@@ -53,12 +53,12 @@ public class TransactionsList {
     }
     
     private def lock() {
-    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    	if (!TxConfig.getInstance().LOCK_FREE)
     		listLock.lock();
     }
     
     private def unlock() {
-    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    	if (!TxConfig.getInstance().LOCK_FREE)
     		listLock.unlock();
     }
 }

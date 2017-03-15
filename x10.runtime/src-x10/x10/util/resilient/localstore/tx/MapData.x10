@@ -20,7 +20,7 @@ public class MapData {
     
     public def this(values:HashMap[String,Cloneable]) {
         metadata = new SafeBucketHashMap[String,MemoryUnit](TxConfig.getInstance().BUCKETS_COUNT);
-        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+        if (!TxConfig.getInstance().LOCK_FREE)
         	metadata.lockAll();
         
         val iter = values.keySet().iterator();
@@ -30,7 +30,7 @@ public class MapData {
             metadata.putUnsafe(k, new MemoryUnit(v));
         }
         
-        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+        if (!TxConfig.getInstance().LOCK_FREE)
         	metadata.unlockAll();
     }
     
@@ -85,22 +85,22 @@ public class MapData {
     }
     
     private def lockAll(){
-        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    	if (!TxConfig.getInstance().LOCK_FREE)
         	metadata.lockAll();
     }
     
     private def unlockAll() {
-        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    	if (!TxConfig.getInstance().LOCK_FREE)
         	metadata.unlockAll();
     }
     
     private def lockKey(key:String){
-        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    	if (!TxConfig.getInstance().LOCK_FREE)
         	metadata.lock(key);
     }
     
     private def unlockKey(key:String) {
-        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    	if (!TxConfig.getInstance().LOCK_FREE)
         	metadata.unlock(key);
     }
     
@@ -118,6 +118,26 @@ public class MapData {
     	}finally {
     		unlockAll();
     	}
+    }
+    
+    public def baselineGetValue(k:String):Cloneable {
+    	val memU = metadata.getOrElseUnsafe(k, null);
+    	if (memU == null)
+    		return null;
+    	else
+    		return memU.baselineGet();
+    }
+    
+    public def baselinePutValue(k:String, value:Cloneable):Cloneable {
+    	var memU:MemoryUnit = metadata.getOrElseUnsafe(k, null);
+        if (memU == null) {
+        	memU = new MemoryUnit(value);
+            metadata.putUnsafe(k, memU);
+        }
         
+        if (memU == null)
+    		return null;
+    	else
+    		return memU.baselineGet();
     }
 }

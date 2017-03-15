@@ -35,7 +35,7 @@ public class SlaveStore {
         assert(resilient);
         masterState = new HashMap[String,Cloneable]();
         logs = new ArrayList[TxSlaveLog]();
-        if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+        if (!TxConfig.getInstance().LOCK_FREE)
         	lock = new Lock();
         else
         	lock = null;
@@ -179,7 +179,6 @@ public class SlaveStore {
     public def commitAll(committed:ArrayList[Long]) {
     	try {
     		lockLogsList();
-
     		for (log in logs){
     			if (committed.contains(log.id))
     				commitLockAcquired(log);
@@ -200,12 +199,12 @@ public class SlaveStore {
     }
     
     private def lockLogsList(){
-    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    	if (!TxConfig.getInstance().LOCK_FREE)
     		lock.lock();
     }
     
     private def unlockLogsList(){
-    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    	if (!TxConfig.getInstance().LOCK_FREE)
     		lock.unlock();
     }
     

@@ -18,6 +18,8 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     public val list:PlaceLocalHandle[TransactionsList];
     
+    private var baselineTxId:Long = 0;
+    
     public def this(name:String, store:ResilientStore, list:PlaceLocalHandle[TransactionsList]) {
         property(name, store);
         this.list = list;
@@ -219,6 +221,20 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         };
         return txResult;
     }
+    
+    /**************Baseline Operations*****************/
+    private def startBaselineTransaction(members:PlaceGroup):BaselineTx {
+        assert(store.plh().virtualPlaceId != -1);
+        val id = baselineTxId ++;
+        val tx = new BaselineTx(store.plh, id, name, members);
+        return tx;
+    }
+    public def executeBaselineTransaction(members:PlaceGroup, closure:(BaselineTx)=>Any) {
+        val tx = startBaselineTransaction(members);
+        val out = closure(tx);
+        return out;
+    }
+    /**************End of Baseline Operations*****************/
     
     private static def throwIfNotConflictException(ex:Exception) {
         if (ex instanceof MultipleExceptions) {

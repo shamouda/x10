@@ -26,8 +26,7 @@ import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Future;
 import x10.util.concurrent.Lock;
 
-public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup) {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
+public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup) extends AbstractTx {
     private static val TM_REP = System.getenv("TM_REP") == null ? "lazy" : System.getenv("TM_REP");
     
     private val root = GlobalRef[Tx](this);
@@ -52,7 +51,6 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     private transient var activePlaces:PlaceGroup;
     
     /* Constants */
-    private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     private static val DISABLE_SLAVE = System.getenv("DISABLE_SLAVE") != null && System.getenv("DISABLE_SLAVE").equals("1");
     private static val DISABLE_DESC = System.getenv("DISABLE_DESC") != null && System.getenv("DISABLE_DESC").equals("1");
     

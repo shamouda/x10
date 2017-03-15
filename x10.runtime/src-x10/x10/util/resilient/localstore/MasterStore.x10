@@ -108,7 +108,7 @@ public class MasterStore {
     public def filterCommitted(txList:ArrayList[Long]) {
     	val list = new ArrayList[Long]();
     	val metadata = txManager.data.getMap();
-    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    	if (!TxConfig.getInstance().LOCK_FREE)
     	    metadata.lockAll();
     	
     	for (txId in txList) {
@@ -117,7 +117,7 @@ public class MasterStore {
     		    list.add(txId);
     		}
     	}
-    	if (TxConfig.getInstance().LOCKING_MODE != TxConfig.LOCKING_MODE_FREE)
+    	if (!TxConfig.getInstance().LOCK_FREE)
     	    metadata.unlockAll();
     	return list;
     }

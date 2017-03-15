@@ -20,7 +20,11 @@ public abstract class TxManager(data:MapData) {
     
     public def this(data:MapData) {
     	property(data);
-    	if (!TxConfig.getInstance().TM.contains("locking")){
+    	if (TxConfig.getInstance().BASELINE) {
+    		txLogs = null;
+    		lockingTxLogs = null;
+    	}
+    	else if (TxConfig.getInstance().STM ){
     	    txLogs = new SafeBucketHashMap[Long,TxLog](TxConfig.getInstance().BUCKETS_COUNT);
     	    lockingTxLogs = null;
     	}
@@ -31,24 +35,31 @@ public abstract class TxManager(data:MapData) {
     }
     
     public static def make(data:MapData):TxManager {
-        if (TxConfig.getInstance().TM.contains("locking"))
-            return new TxManager_LockBased(data);
-        else if (TxConfig.getInstance().TM_READ == TxConfig.READ_LOCKING    &&  TxConfig.getInstance().TM_ACQUIRE == TxConfig.EARLY_ACQUIRE && TxConfig.getInstance().TM_RECOVER == TxConfig.UNDO_LOGGING)
+    	if (TxConfig.getInstance().BASELINE )
+             return new TxManager_Baseline(data);
+    	else if (TxConfig.getInstance().LOCKING )
+            return new TxManager_Locking(data);
+        else if (TxConfig.getInstance().TM.equals("RL_EA_UL"))
             return new TxManager_RL_EA_UL(data);
-        else if (TxConfig.getInstance().TM_READ == TxConfig.READ_LOCKING    &&  TxConfig.getInstance().TM_ACQUIRE == TxConfig.EARLY_ACQUIRE && TxConfig.getInstance().TM_RECOVER == TxConfig.WRITE_BUFFERING)
+        else if (TxConfig.getInstance().TM.equals("RL_EA_WB"))
             return new TxManager_RL_EA_WB(data);
-        else if (TxConfig.getInstance().TM_READ == TxConfig.READ_LOCKING    &&  TxConfig.getInstance().TM_ACQUIRE == TxConfig.LATE_ACQUIRE  && TxConfig.getInstance().TM_RECOVER == TxConfig.WRITE_BUFFERING)
+        else if (TxConfig.getInstance().TM.equals("RL_LA_WB"))
             return new TxManager_RL_LA_WB(data);
-        else if (TxConfig.getInstance().TM_READ == TxConfig.READ_VERSIONING &&  TxConfig.getInstance().TM_ACQUIRE == TxConfig.EARLY_ACQUIRE && TxConfig.getInstance().TM_RECOVER == TxConfig.UNDO_LOGGING)
+        else if (TxConfig.getInstance().TM.equals("RV_EA_UL"))
             return new TxManager_RV_EA_UL(data);
-        else if (TxConfig.getInstance().TM_READ == TxConfig.READ_VERSIONING &&  TxConfig.getInstance().TM_ACQUIRE == TxConfig.EARLY_ACQUIRE && TxConfig.getInstance().TM_RECOVER == TxConfig.WRITE_BUFFERING)
+        else if (TxConfig.getInstance().TM.equals("RV_EA_WB"))
             return new TxManager_RV_EA_WB(data);
-        else if (TxConfig.getInstance().TM_READ == TxConfig.READ_VERSIONING &&  TxConfig.getInstance().TM_ACQUIRE == TxConfig.LATE_ACQUIRE  && TxConfig.getInstance().TM_RECOVER == TxConfig.WRITE_BUFFERING)
+        else if (TxConfig.getInstance().TM.equals("RV_LA_WB"))
             return new TxManager_RV_LA_WB(data);
         else
             throw new Exception("Wrong Tx Manager Configuration (undo logging can not be selected with late acquire");
     }
     
+    /* Used in resilient mode to transfer the changes done by a transaction to the Slave.
+     * We filter the TxLog object to remove the read-only keys,
+     * so that we transfer only the update operations.
+     * Accordingly, read-only transactions incurs no replication overhead.
+     */
     public def getTxCommitLog(id:Long):HashMap[String,Cloneable] {
         val log = txLogs.getOrElseSafe(id, null);
         if (log == null || log.aborted)
@@ -56,7 +67,7 @@ public abstract class TxManager(data:MapData) {
         
         try {
             log.lock();
-            if (TxConfig.getInstance().TM_RECOVER == TxConfig.WRITE_BUFFERING) {
+            if (TxConfig.getInstance().TM.contains("WB")) { //write buffering
                 return log.removeReadOnlyKeys();
             }
             else {
@@ -688,7 +699,7 @@ public abstract class TxManager(data:MapData) {
     /********************* End of abort operations  *********************/
         
     
-    /*******   Blocking Lock methods *********/
+    /*******   TxManager_Locking methods *********/
     public def lockWrite_Locking(id:Long, key:String) {
     	val log = getOrAddLockingTxLog(id);
     	var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
@@ -778,7 +789,6 @@ public abstract class TxManager(data:MapData) {
     	assert (memory != null) : "locking mistake, putting a value before locking it";    
         return memory.setValueLocked(value, key, id);
     }
-    
 }
 
 class LogContainer(memory:MemoryUnit, log:TxLog){
