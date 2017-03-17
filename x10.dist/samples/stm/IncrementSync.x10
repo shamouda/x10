@@ -39,6 +39,7 @@ public class IncrementSync {
                     tx.put("X", acc1);
                     //Console.OUT.println("App-Tx["+tx.id+"] changing from ["+oldv+"] to ["+newv+"]");
                 });
+        		return null;
         	});
         }
         val endProc = System.nanoTime();
