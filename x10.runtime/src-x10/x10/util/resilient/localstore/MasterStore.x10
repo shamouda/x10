@@ -16,7 +16,7 @@ import x10.util.HashSet;
 import x10.util.HashMap;
 import x10.util.ArrayList;
 import x10.util.concurrent.Lock;
-import x10.util.concurrent.AtomicLong;
+import x10.util.concurrent.AtomicInteger;
 import x10.compiler.Ifdef;
 import x10.xrx.Runtime;
 import x10.util.resilient.localstore.tx.*;
@@ -25,12 +25,12 @@ import x10.util.resilient.localstore.Cloneable;
 public class MasterStore {
     /*Each map has an object of TxManager (same object even after failures)*/
     private val txManager:TxManager;
-    private val sequence:AtomicLong;
+    private val sequence:AtomicInteger;
 
     public static val TX_FACTOR=1000000;
     
-    public def this(masterMap:HashMap[String,Cloneable]) { 
-        this.sequence = new AtomicLong();
+    public def this(masterMap:HashMap[String,Cloneable]) {
+        this.sequence = new AtomicInteger();
         this.txManager = TxManager.make(new MapData(masterMap));
     }   
     
@@ -73,7 +73,10 @@ public class MasterStore {
     public def getState() = txManager.data;
     
     public def getNextTransactionId() {
-        return ( (here.id + 1) * TX_FACTOR) + sequence.incrementAndGet();
+    	val placeId = here.id as Int;
+    	val localTxId = sequence.incrementAndGet();
+    	val txId = ((placeId as Long) << 32) | localTxId as Long;
+        return txId;
     }
     
     /*Lock based method*/
