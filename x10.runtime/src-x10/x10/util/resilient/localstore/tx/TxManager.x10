@@ -790,7 +790,9 @@ public abstract class TxManager(data:MapData) {
     }
     
     public static def txIdToString (txId:Long) {
-    	return "TXPLC["+((txId >> 32) as Int)+"] TXSEQ["+(txId as Int)+"]";
+    	val placeId =  ((txId >> 32) as Int);
+    	val txSeq = (txId as Int);
+    	return "TX["+ (placeId*100000000 + txSeq)+"] TXPLC["+placeId+"] TXSEQ["+txSeq+"]";
     }
 }
 
