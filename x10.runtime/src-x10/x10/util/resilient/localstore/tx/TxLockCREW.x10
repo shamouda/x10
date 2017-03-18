@@ -174,7 +174,7 @@ public class TxLockCREW extends TxLock {
 			count ++;
 			if (count % 1000 == 0){
 				val s = strongerLog(txId, writer);
-				Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitReaderWriterLocked key["+key+"] readers.size()["+readers.size()+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s + "  ====> first time " + firstTime);
+				Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitReaderWriterLocked key["+key+"] readers.size()["+readers.size()+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
 			}
 		}
 		
