@@ -43,9 +43,10 @@ public class TxLockCREW extends TxLock {
     			conflict = false;
     		}
     		else if (waitingWriter == -1 && stronger(txId, writer)) {
-		    	waitReaderWriterLocked(txId, key);
-		    	readers.add(txId);
-		    	conflict = false;
+		    	if (waitReaderWriterLocked(txId, key)) {
+		    		readers.add(txId);
+		    		conflict = false;
+		    	}
     		}
     		
     		if (conflict) {
@@ -158,16 +159,13 @@ public class TxLockCREW extends TxLock {
      * A reader waiting for readers to unlock
      * */
     private def waitReaderWriterLocked(txId:Long, key:String) {
-    	
-    	val k = stronger(txId, writer);
-    	val firstTime = "firstWriter[" + writer + "] stronger(" + txId + "," + writer + ")= " + k + " : ";
-    	
     	if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitReaderWriterLocked started"); 
     	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
     		Runtime.increaseParallelism();
 		
     	var count:Long = 0;
-		while (writer != -1 || waitingWriter != -1) {  //waiting writers get access first
+		while ( (writer != -1 && stronger(txId, writer)) || 
+				(waitingWriter != -1 && stronger(txId, waitingWriter))) {  //waiting writers get access first
 			if (resilient)
 				checkDeadLockers();
 			lock.unlock();
@@ -183,6 +181,11 @@ public class TxLockCREW extends TxLock {
 		if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
 		    Runtime.decreaseParallelism(1n);
 		if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitReaderWriterLocked completed"); 
+		
+		if (writer == -1 && waitingWriter == -1)
+			return true;
+		else
+			return false;
     }
     
     /*
