@@ -16,6 +16,7 @@ import x10.util.HashMap;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.localstore.TxConfig;
+import x10.util.RailUtils;
 
 /*
  * The log to track actions done on a key. 
@@ -163,5 +164,17 @@ public class TxLog (id:Long) {
     	if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] clearTxLog ...");
         transLog = null;
         aborted = true;
+    }
+    
+    public def getSortedKeys():Rail[String] {
+    	val size = transLog.size();
+    	val rail = new Rail[String](size);
+    	var i:Int = 0n;
+    	val iter = transLog.keySet().iterator();
+    	while (iter.hasNext()) {
+    		rail(i++) = iter.next();
+    	}
+    	RailUtils.sort(rail);
+    	return rail;
     }
 }

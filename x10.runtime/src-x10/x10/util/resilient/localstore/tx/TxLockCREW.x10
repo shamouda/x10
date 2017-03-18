@@ -25,42 +25,34 @@ import x10.util.resilient.localstore.TxConfig;
 public class TxLockCREW extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     private static val LOCK_WAIT_MS = System.getenv("LOCK_WAIT_MS") == null ? 10 : Long.parseLong(System.getenv("LOCK_WAIT_MS"));
-    private static val WRITER_WAIT_ITER = System.getenv("WRITER_WAIT_ITER") == null ? 3 : Long.parseLong(System.getenv("WRITER_WAIT_ITER"));
     
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     private val lock = new Lock();
     private val readers = new HashSet[Long]();
     private var waitingWriter:Long = -1;
-    
-    private var lockedWriter:Long = -1;
+    private var writer:Long = -1;
     
     public def lockRead(txId:Long, key:String) {
     	try {
     		lock.lock();
-    		var conflict:Boolean = false;
-    		
-    		if (lockedWriter == -1 && waitingWriter == -1) {
+    		var conflict:Boolean = true;
+    		if (writer == -1 && waitingWriter == -1) {
     			assert(!readers.contains(txId)) : "lockRead bug, locking an already locked key";
     			readers.add(txId);
-    			if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] lockRead done"); 
+    			if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] lockRead done");
+    			conflict = false;
     		}
-    		else if (waitingWriter == -1) {
-    		    if (stronger(txId, lockedWriter)) {
-    		    	waitReaderWriterLocked(txId, key);
-    		    	readers.add(txId);
-    		    }
-    		    else
-    		    	conflict = true;
-    		}
-    		else { // waitingWriter != -1
-    			conflict = true;
+    		else if (waitingWriter == -1 && stronger(txId, writer)) {
+		    	waitReaderWriterLocked(txId, key);
+		    	readers.add(txId);
+		    	conflict = false;
     		}
     		
     		if (conflict) {
     			 if (resilient)
    	                checkDeadLockers();
-    			assert (lockedWriter != txId) : "lockRead bug, downgrade is not supported ";
-   	            if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] lockRead CONFLICT, lockedWriter["+lockedWriter+"] waitingWriter["+waitingWriter+"] ");
+    			assert (writer != txId) : "lockRead bug, downgrade is not supported ";
+   	            if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] lockRead CONFLICT, writer["+writer+"] waitingWriter["+waitingWriter+"] ");
    	            throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId) + " key ["+key+"] ", here);
     		}
     	}
@@ -72,59 +64,51 @@ public class TxLockCREW extends TxLock {
     public def lockWrite(txId:Long, key:String) {
     	try {
     		lock.lock();
-    		assert (lockedWriter != txId) : "lockWrite bug, locking an already locked key";
+    		assert (writer != txId) : "lockWrite bug, locking an already locked key";
     		
-    		var conflict:Boolean = false;    		
-    		if (readers.size() == 0 && lockedWriter == -1 && waitingWriter == -1) { //FREE
-    			lockedWriter = txId;
+    		var conflict:Boolean = true;    		
+    		if (readers.size() == 0 && writer == -1 && waitingWriter == -1) { 
+    			writer = txId;
+    			conflict = false;
     		}
-    		else if (readers.size() == 1 && readers.iterator().next() == txId) { //READ - ready to upgrade
+    		else if (readers.size() == 1 && readers.iterator().next() == txId) { 
 				readers.remove(txId);
-    			lockedWriter = txId;
+    			writer = txId;
+    			conflict = false;
     		}
-    		else if (readers.size() > 0 && !readers.contains(txId)) {  //READ - wait if stronger than others
-    			if (stronger(txId, readers)) {
-    				if (waitWriterReadersLocked(0, txId, key))
-    					lockedWriter = txId;
-    				else
-    					conflict = true;
-    			}
-    			else
-    				conflict = true;
+    		else if (readers.size() > 0 && !readers.contains(txId) && stronger(txId, readers)) {  
+				if (waitWriterReadersLocked(0, txId, key)) {
+					writer = txId;
+					conflict = false;
+				}
     		}
-    		else if (readers.size() > 0 && readers.contains(txId)) {  //READ - wait to upgrade - kill other waiters if you are stronger
+    		else if (readers.size() > 0 && readers.contains(txId)) {
 				if (waitWriterReadersLocked(1, txId, key)) {
 					readers.remove(txId);
-					lockedWriter = txId;
+					writer = txId;
+					conflict = false;
 				}
 				else {
-					conflict = true;
 					readers.remove(txId);
-					if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite CONFLICT, lockedWriter["+lockedWriter+"] readers["+readersAsString(readers)+"] waitingWriter["+waitingWriter+"]");
 				}
     		}   		
-    		else if (lockedWriter != -1){  //locked by another writer
-    			if (stronger(txId, lockedWriter)) {
-    				if (waitWriterWriterLocked(txId, key))
-    					lockedWriter = txId;
-    				else
-    					conflict = true;	
-    			}
-    			else
-    				conflict = true;
+    		else if (writer != -1 && stronger(txId, writer)){ 
+				if (waitWriterWriterLocked(txId, key)) {
+					writer = txId;
+					conflict = false;
+				}
     		}
-    		else {
-    			assert (waitingWriter != -1) : "bug illegal lock write path ...";
-   				if (waitWriterWriterLocked(txId, key))
-   					lockedWriter = txId;
-   				else
-   					conflict = true;
+    		else if (waitingWriter != -1 && stronger(txId, waitingWriter)){
+				if (waitWriterWriterLocked(txId, key)) {
+					writer = txId;
+					conflict = false;
+				}
     		}
     		
     		if (conflict) {
     			if (resilient)
                 	checkDeadLockers();
-            	if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite CONFLICT, lockedWriter["+lockedWriter+"] readers["+readersAsString(readers)+"] ");
+            	if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite CONFLICT, writer["+writer+"] readers["+readersAsString(readers)+"] ");
             	throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId) + " key ["+key+"] ", here);
     		}
     		else
@@ -137,7 +121,7 @@ public class TxLockCREW extends TxLock {
     
     public def unlockRead(txId:Long, key:String) {
     	lock.lock();
-        assert(readers.contains(txId) && lockedWriter == -1);
+        assert(readers.contains(txId) && writer == -1);
         readers.remove(txId);
         lock.unlock();
         if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] unlockRead done");
@@ -145,8 +129,8 @@ public class TxLockCREW extends TxLock {
     
     public def unlockWrite(txId:Long, key:String) {
     	lock.lock();
-        assert(readers.size() == 0 && lockedWriter == txId);
-        lockedWriter = -1;
+        assert(readers.size() == 0 && writer == txId);
+        writer = -1;
         lock.unlock();
         if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] unlockWrite done");
     }
@@ -178,7 +162,7 @@ public class TxLockCREW extends TxLock {
     	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
     		Runtime.increaseParallelism();
 			
-		while (lockedWriter != -1 || waitingWriter != -1) {  //waiting writers get access first
+		while (writer != -1 || waitingWriter != -1) {  //waiting writers get access first
 			if (resilient)
 				checkDeadLockers();
 			lock.unlock();
@@ -238,13 +222,11 @@ public class TxLockCREW extends TxLock {
     	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
     		Runtime.increaseParallelism();
 			
-		while (lockedWriter != -1 && waitingWriter == txId) {
+		while (writer != -1 && waitingWriter == txId) {
 			if (resilient)
 				checkDeadLockers();
 			lock.unlock();
-			
 			System.threadSleep(LOCK_WAIT_MS);
-			
 			lock.lock();
 		}
 		
@@ -286,7 +268,7 @@ public class TxLockCREW extends TxLock {
             val txId = iter.next();
             TxManager.checkDeadCoordinator(txId);
         }
-        if (lockedWriter != -1)
-            TxManager.checkDeadCoordinator(lockedWriter);
+        if (writer != -1)
+            TxManager.checkDeadCoordinator(writer);
     }
 }

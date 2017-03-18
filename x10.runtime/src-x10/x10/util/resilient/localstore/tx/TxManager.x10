@@ -534,9 +534,9 @@ public abstract class TxManager(data:MapData) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RV_LA_WB started");
         try {
             val logMap = log.transLog;
-            val iter = logMap.keySet().iterator();
-            while (iter.hasNext()) {
-                val key = iter.next();
+            val sortedKeys = log.getSortedKeys();
+            for (var i:Int = 0n; i < sortedKeys.size; i++){
+                val key = sortedKeys(i);
                 val memory = log.getMemoryUnit(key);
                 
                 if (log.getReadOnly(key))
@@ -592,7 +592,6 @@ public abstract class TxManager(data:MapData) {
                         memory.unlockRead(id, key);
                         throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
                     }
-                    
                     log.setLockedRead(key, true);
                 }
             }
@@ -782,7 +781,7 @@ public abstract class TxManager(data:MapData) {
         return memory.getValueLocked(true, key, id);
     }
     
-    public def  putLocked(id:Long, key:String, value:Cloneable):Cloneable{
+    public def  putLocked(id:Long, key:String, value:Cloneable):Cloneable {
     	val log = getOrAddLockingTxLog(id);
     	val memory = log.memUnits.getOrElse(key, null);
     	assert (memory != null) : "locking mistake, putting a value before locking it";    
