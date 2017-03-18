@@ -158,6 +158,10 @@ public class TxLockCREW extends TxLock {
      * A reader waiting for readers to unlock
      * */
     private def waitReaderWriterLocked(txId:Long, key:String) {
+    	
+    	val k = stronger(txId, writer);
+    	val firstTime = "firstWriter[" + writer + "] stronger(" + txId + "," + writer + ")= " + k + " : ";
+    	
     	if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitReaderWriterLocked started"); 
     	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
     		Runtime.increaseParallelism();
@@ -172,7 +176,7 @@ public class TxLockCREW extends TxLock {
 			count ++;
 			if (count % 1000 == 0){
 				val s = strongerLog(txId, writer);
-				Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitReaderWriterLocked key["+key+"] readers.size()["+readers.size()+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
+				Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitReaderWriterLocked key["+key+"] readers.size()["+readers.size()+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s + "  ====> first time " + firstTime);
 			}
 		}
 		
