@@ -48,7 +48,7 @@ public class MemoryUnit {
             if (copy) {
                 v = value == null?null:value.clone();
             }
-            if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] getvv key["+key+"] ver["+version+"] val["+v+"]");
+            if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " getvv key["+key+"] ver["+version+"] val["+v+"]");
             return new AtomicValue(version, v);
         }
         finally {
@@ -61,14 +61,14 @@ public class MemoryUnit {
         if (copy) {
             v = value == null?null:value.clone();
         }
-        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] getvv key["+key+"] ver["+version+"] val["+v+"]");
+        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " getvv key["+key+"] ver["+version+"] val["+v+"]");
         return new AtomicValue(version, v);
     }
     
     public def rollbackValueLocked(oldValue:Cloneable, oldVersion:Int, key:String, txId:Long) {
         version = oldVersion; 
         value = oldValue;
-        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] rollsetvv key["+key+"] ver["+version+"] val["+value+"]");
+        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " rollsetvv key["+key+"] ver["+version+"] val["+value+"]");
     }
        
     public def lockRead(txId:Long, key:String) {
@@ -101,7 +101,7 @@ public class MemoryUnit {
         if (copy) {
             v = value == null?null:value.clone();
         }
-        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] getvv key["+key+"] ver["+version+"] val["+v+"]");
+        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " getvv key["+key+"] ver["+version+"] val["+v+"]");
         return v;
     }
     
@@ -109,7 +109,7 @@ public class MemoryUnit {
         val oldValue = value;
         version++;
         value = v;
-        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] setvv key["+key+"] ver["+version+"] val["+value+"]");
+        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " setvv key["+key+"] ver["+version+"] val["+value+"]");
         return oldValue;
     }
     

@@ -161,13 +161,18 @@ public class TxLockCREW extends TxLock {
     	if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitReaderWriterLocked started"); 
     	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
     		Runtime.increaseParallelism();
-			
+		
+    	var count:Long = 0;
 		while (writer != -1 || waitingWriter != -1) {  //waiting writers get access first
 			if (resilient)
 				checkDeadLockers();
 			lock.unlock();
 			System.threadSleep(LOCK_WAIT_MS);   				
 			lock.lock();
+			count ++;
+			if (count % 1000 == 0){
+				Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitReaderWriterLocked key["+key+"] readers.size()["+readers.size()+"] writer["+writer+"] waitingWriter["+waitingWriter+"] ");
+			}
 		}
 		
 		if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
@@ -191,12 +196,17 @@ public class TxLockCREW extends TxLock {
     	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
     		Runtime.increaseParallelism();
 			
+    	var count:Long = 0;
 		while (readers.size() > minLimit && waitingWriter == txId) {
 			if (resilient)
 				checkDeadLockers();
 			lock.unlock();
 			System.threadSleep(LOCK_WAIT_MS);   				
 			lock.lock();
+			count ++;
+			if (count % 1000 == 0){
+				Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitWriterReadersLocked key["+key+"] readers.size()["+readers.size()+"] writer["+writer+"] waitingWriter["+waitingWriter+"] ");
+			}
 		}
 		
 		if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
@@ -222,12 +232,17 @@ public class TxLockCREW extends TxLock {
     	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
     		Runtime.increaseParallelism();
 			
+    	var count:Long = 0;
 		while (writer != -1 && waitingWriter == txId) {
 			if (resilient)
 				checkDeadLockers();
 			lock.unlock();
 			System.threadSleep(LOCK_WAIT_MS);
 			lock.lock();
+			count ++;
+			if (count % 1000 == 0){
+				Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitWriterWriterLocked key["+key+"] readers.size()["+readers.size()+"] writer["+writer+"] waitingWriter["+waitingWriter+"]  ");
+			}
 		}
 		
 		if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)

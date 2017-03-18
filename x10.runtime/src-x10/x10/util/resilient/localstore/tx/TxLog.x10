@@ -81,7 +81,7 @@ public class TxLog (id:Long) {
         if (log == null) {
             log = new TxKeyChange(copiedValue, version, txId, lockedRead, memU);
             transLog.put(key, log);
-            if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] initial read ver["+version+"] val["+copiedValue+"]");
+            if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " initial read ver["+version+"] val["+copiedValue+"]");
         }
     }
     
@@ -100,13 +100,13 @@ public class TxLog (id:Long) {
 
     // mark as locked for read
     public def setLockedRead(key:String, lr:Boolean) {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] key["+key+"] setLockedRead("+lr+") ");
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + "here["+here+"] key["+key+"] setLockedRead("+lr+") ");
         transLog.getOrThrow(key).setLockedRead(lr);
     }
     
     // mark as locked for write
     public def setLockedWrite(key:String, lw:Boolean) {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] key["+key+"] setLockedWrite("+lw+") ");
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] key["+key+"] setLockedWrite("+lw+") ");
         transLog.getOrThrow(key).setLockedWrite(lw);
     }
     
@@ -117,7 +117,7 @@ public class TxLog (id:Long) {
     		result = false;
     	else
     		result = keyLog.getLockedRead();
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] key["+key+"] getLockedRead?["+result+"]");
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + "here["+here+"] key["+key+"] getLockedRead?["+result+"]");
         return result;
     }
     
@@ -128,7 +128,7 @@ public class TxLog (id:Long) {
     		result = false;
     	else
     		result = keyLog.getLockedWrite();
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] key["+key+"] getLockedWrite?["+result+"]");
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] key["+key+"] getLockedWrite?["+result+"]");
         return result;
     }
     
@@ -161,7 +161,7 @@ public class TxLog (id:Long) {
     }
     
     public def clearAborted() {
-    	if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] clearTxLog ...");
+    	if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] clearTxLog ...");
         transLog = null;
         aborted = true;
     }
