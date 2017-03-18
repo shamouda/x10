@@ -171,7 +171,8 @@ public class TxLockCREW extends TxLock {
 			lock.lock();
 			count ++;
 			if (count % 1000 == 0){
-				Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitReaderWriterLocked key["+key+"] readers.size()["+readers.size()+"] writer["+writer+"] waitingWriter["+waitingWriter+"] ");
+				val s = strongerLog(txId, writer);
+				Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitReaderWriterLocked key["+key+"] readers.size()["+readers.size()+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
 			}
 		}
 		
@@ -261,6 +262,12 @@ public class TxLockCREW extends TxLock {
     private def stronger(me:Long, other:Long) {
         val res = (me as Int) < (other as Int);
         if (TM_DEBUG) Console.OUT.println("Tx[" + me + "] isStronger(other:" + other + ")? [" + res + "]  meSEQ["+ (me as Int) +"] otherSEQ["+ (other as Int) +"] ");
+        return res;
+    }
+    
+    private def strongerLog(me:Long, other:Long) {
+        val res = (me as Int) < (other as Int);
+        Console.OUT.println("Tx[" + me + "] isStronger(other:" + other + ")? [" + res + "]  meSEQ["+ (me as Int) +"] otherSEQ["+ (other as Int) +"] ");
         return res;
     }
     
