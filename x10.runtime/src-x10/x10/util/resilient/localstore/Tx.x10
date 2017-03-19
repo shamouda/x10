@@ -489,7 +489,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                 continue;
             
             if (p.id == here.id) {
-            	async finalizeLocal(commit, plh, id, root);
+            	finalizeLocal(commit, plh, id, root);
             }
             else {
             	at (p) async {
