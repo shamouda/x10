@@ -58,23 +58,6 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     public static val SUCCESS = 0n;
     public static val SUCCESS_RECOVER_STORE = 1n;
 
-    private static val GET_LOCAL = 0n;
-    private static val GET_REMOTE = 1n;
-    private static val PUT_LOCAL = 2n;
-    private static val PUT_REMOTE = 3n;
-    private static val DELETE_LOCAL = 4n;
-    private static val DELETE_REMOTE = 5n;
-    private static val KEYSET_LOCAL = 6n;
-    private static val KEYSET_REMOTE = 7n;
-    private static val AT_VOID = 8n;
-    private static val AT_RETURN = 9n;
-    private static val ASYNC_GET = 10n;
-    private static val ASYNC_PUT = 11n;
-    private static val ASYNC_DELETE = 12n;
-    private static val ASYNC_KEYSET = 13n;
-    private static val ASYNC_AT_VOID = 14n;
-    private static val ASYNC_AT_RETURN = 15n;
-    
     public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, 
             activePlaces:PlaceGroup, txDescMap:ResilientNativeMap) {
         property(plh, id, mapName, members);
@@ -90,7 +73,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         var membersStr:String = "";
         for (p in members)
             membersStr += p +" ";
-        if (TM_DEBUG) Console.OUT.println("TX["+id+"] here["+here+"] started members["+membersStr+"]");
+        if (TM_DEBUG) Console.OUT.println("TX["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] started members["+membersStr+"]");
     }
     
     /********** Setting the pre-commit time for statistical analysis **********/   
@@ -254,13 +237,13 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             }
         }catch (ex:Exception) {
             if(TM_DEBUG) {
-                Console.OUT.println("Tx["+id+"]  Failed Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] key["+key+"] value["+value+"] ...");
+                Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Failed Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] key["+key+"] value["+value+"] ...");
                 ex.printStackTrace();
             }
             throw ex;  // someone must call Tx.abort
         } finally {
             val endExec = Timer.milliTime();
-            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] execute Op["+opDesc(op)+"] time: [" + ((endExec-startExec)) + "] ms");
+            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " execute Op["+opDesc(op)+"] time: [" + ((endExec-startExec)) + "] ms");
         }
         
     }
@@ -275,7 +258,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     }
     
     @Pinned private def abort(abortedPlaces:ArrayList[Place]) {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] abort   (abortPlaces.size = " + abortedPlaces.size() + ") alreadyAborted = " + aborted);
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " abort (abortPlaces.size = " + abortedPlaces.size() + ") alreadyAborted = " + aborted);
         if (!aborted)
             aborted = true;
         else 
@@ -308,7 +291,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         
         if (abortTime == -1) {
             abortTime = Timer.milliTime();
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] aborted, allTxTime ["+(abortTime-startTime)+"] ms");
+            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " aborted, allTxTime ["+(abortTime-startTime)+"] ms");
         }
     }
 
@@ -340,7 +323,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         val startP2 = Timer.milliTime();
         val p2success = commitPhaseTwo(plh, id, members, root);
         val endP2 = Timer.milliTime();
-        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseTwo time [" + (endP2-startP2) + "] ms");
+        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseTwo time [" + (endP2-startP2) + "] ms");
         
         
         if (resilient && !DISABLE_DESC ){
@@ -352,11 +335,11 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             
 
         commitTime = Timer.milliTime();
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] committed, allTxTime [" + (commitTime-startTime) + "] ms");
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " committed, allTxTime [" + (commitTime-startTime) + "] ms");
         
         if (resilient && excs.size() > 0 || p2success == SUCCESS_RECOVER_STORE) {
             for (e in excs.toRail()) {
-                Console.OUT.println("Tx["+id+"] excs>0  msg["+e.getMessage()+"]");
+                Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " excs>0  msg["+e.getMessage()+"]");
                 e.printStackTrace();
             }
             return SUCCESS_RECOVER_STORE;
@@ -369,7 +352,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         val start = Timer.milliTime();
         val localTx = txDescMap.startLocalTransaction();
         try {
-            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] updateTxDesc localTx["+localTx.id+"] started ...");
+            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " updateTxDesc localTx["+localTx.id+"] started ...");
             val desc = localTx.get("tx"+id) as TxDesc;
             //while recovering a transaction, the current place will not have the TxDesc stored, NPE can be thrown
             if (desc != null) {
@@ -377,11 +360,11 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                 localTx.put("tx"+id, desc);
             }
             localTx.commit();
-            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] updateTxDesc localTx["+localTx.id+"] completed ...");
+            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " updateTxDesc localTx["+localTx.id+"] completed ...");
     
         } catch(ex:Exception) {
             if(TM_DEBUG) {
-                Console.OUT.println("Tx["+id+"] updateTxDesc localTx["+localTx.id+"] failed exception["+ex.getMessage()+"] ...");
+                Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " updateTxDesc localTx["+localTx.id+"] failed exception["+ex.getMessage()+"] ...");
                 ex.printStackTrace();
             }
             throw ex;
@@ -394,10 +377,10 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         val start = Timer.milliTime();
         try {
             val localTx = txDescMap.startLocalTransaction();
-            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] deleteTxDesc localTx["+localTx.id+"] started ...");
+            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " deleteTxDesc localTx["+localTx.id+"] started ...");
             localTx.put("tx"+id, null);
             localTx.commit();
-            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] deleteTxDesc localTx["+localTx.id+"] completed ...");
+            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " deleteTxDesc localTx["+localTx.id+"] completed ...");
         }catch(ex:Exception) {
             Console.OUT.println("Warning: ignoring exception during deleteTxDesc: " + ex.getMessage());
             ex.printStackTrace();
@@ -411,16 +394,16 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         val start = Timer.milliTime();
         try {
             val placeIndex = plh().virtualPlaceId;
-            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne ...");
+            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseOne ...");
             finish for (p in members) {
                 if ((resilient && !DISABLE_SLAVE) || TxConfig.getInstance().VALIDATION_REQUIRED) {
-                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne going to move to ["+p+"] ...");
+                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseOne going to move to ["+p+"] ...");
                     at (p) async {
             
                         if (TxConfig.getInstance().VALIDATION_REQUIRED) {
-                            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate started ...");
+                            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] commitPhaseOne : validate started ...");
                             plh().masterStore.validate(id);
-                            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate done ...");
+                            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] commitPhaseOne : validate done ...");
                         }
                     
                         if (resilient && !DISABLE_SLAVE) {
@@ -435,7 +418,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                     }
                 }
                 else
-                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate NOT required ...");
+                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] commitPhaseOne : validate NOT required ...");
             }
         } finally {
             phase1ElapsedTime = Timer.milliTime() - start;
@@ -443,7 +426,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     }
     
     private def commitPhaseTwo(plh:PlaceLocalHandle[LocalStore], id:Long, members:PlaceGroup, root:GlobalRef[Tx]) {
-        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseTwo ...");
+        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseTwo ...");
         val start = Timer.milliTime();
         try {
             //ask masters and slaves to commit
@@ -480,7 +463,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     //used for both commit and abort
     private def finalize(commit:Boolean, abortedPlaces:ArrayList[Place], 
             plh:PlaceLocalHandle[LocalStore], id:Long, members:PlaceGroup, root:GlobalRef[Tx]) {
-        if(TM_DEBUG) Console.OUT.println("Tx["+id+"]  here["+here+"] " + ( commit? " Commit Started ": " Abort Started " ) + " ...");
+        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] " + ( commit? " Commit Started ": " Abort Started " ) + " ...");
         val placeIndex = plh().virtualPlaceId;
         //if one of the masters die, let the exception be thrown to the caller, but hide dying slves
         finish for (p in members) {
@@ -501,18 +484,17 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     
     
     private def finalizeLocal(commit:Boolean, plh:PlaceLocalHandle[LocalStore], id:Long, root:GlobalRef[Tx]) {
-        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalizeLocal  here["+here+"] " + ( commit? " Commit Local Started ": " Abort Local Started " ) + " ...");
+        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeLocal  here["+here+"] " + ( commit? " Commit Local Started ": " Abort Local Started " ) + " ...");
         var ex:Exception = null;
         if (resilient && !TM_REP.equals("lazy") && !DISABLE_SLAVE) {
             try {
             val log = plh().masterStore.getTxCommitLog(id);
-            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] getTxCommitLog  returned: " + log);
             if (log != null && log.size() > 0) {
                 //ask slave to commit, slave's death is not fatal
                 try {
-                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalize here["+here+"] moving to slave["+plh().slave+"] to " + ( commit? "commit": "abort" ));
+                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeLocal here["+here+"] moving to slave["+plh().slave+"] to " + ( commit? "commit": "abort" ));
                     finish at (plh().slave) async {
-                        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalize here["+here+"] moved to slave["+here+"] to " + ( commit? "commit": "abort" ));
+                        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeLocal here["+here+"] moved to slave["+here+"] to " + ( commit? "commit": "abort" ));
                         if (commit)
                             plh().slaveStore.commit(id);
                         else
@@ -556,9 +538,9 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             finish for (p in deadMasters) {
                 assert(members.contains(p));
                 val slave = activePlaces.next(p);
-                if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalizeSlaves here["+here+"] moving to slave["+plh().slave+"] to " + ( commit? "commit": "abort" ));
+                if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeSlaves here["+here+"] moving to slave["+plh().slave+"] to " + ( commit? "commit": "abort" ));
                 at (slave) async {
-                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalizeSlaves here["+here+"] moved to slave["+here+"] to " + ( commit? "commit": "abort" ));
+                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeSlaves here["+here+"] moved to slave["+here+"] to " + ( commit? "commit": "abort" ));
                     if (commit)
                         plh().slaveStore.commit(id);
                     else
@@ -567,29 +549,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             }
         }
         else if (TM_DEBUG)
-            Console.OUT.println("Tx["+id+"] LazyRep, IGNORE finalize slave ...");
-    }
-    
-    public static def opDesc(op:Int) {
-        switch(op) {
-            case GET_LOCAL: return "GET_LOCAL";
-            case GET_REMOTE: return "GET_REMOTE";
-            case PUT_LOCAL: return "PUT_LOCAL";
-            case PUT_REMOTE: return "PUT_REMOTE";
-            case DELETE_LOCAL: return "DELETE_LOCAL";
-            case DELETE_REMOTE: return "DELETE_REMOTE";
-            case KEYSET_LOCAL: return "KEYSET_LOCAL";
-            case KEYSET_REMOTE: return "KEYSET_REMOTE";
-            case AT_VOID: return "AT_VOID";
-            case AT_RETURN: return "AT_RETURN";
-            case ASYNC_GET: return "ASYNC_GET";
-            case ASYNC_PUT: return "ASYNC_PUT";
-            case ASYNC_DELETE: return "ASYNC_DELETE";
-            case ASYNC_KEYSET: return "ASYNC_KEYSET";
-            case ASYNC_AT_VOID: return "ASYNC_AT_VOID";
-            case ASYNC_AT_RETURN: return "ASYNC_AT_RETURN";
-        }
-        return "";
+            Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " LazyRep, IGNORE finalize slave ...");
     }
     
     private static def getDeadAndConflictingPlaces(ex:Exception) {
