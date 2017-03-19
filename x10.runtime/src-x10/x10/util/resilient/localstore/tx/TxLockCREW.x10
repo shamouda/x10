@@ -50,11 +50,11 @@ public class TxLockCREW extends TxLock {
             }
             
             if (conflict) {
-                 if (resilient)
-                       checkDeadLockers();
+                if (resilient)
+                    checkDeadLockers();
                 assert (writer != txId) : "lockRead bug, downgrade is not supported ";
-                   if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] lockRead CONFLICT, writer["+writer+"] waitingWriter["+waitingWriter+"] ");
-                   throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId) + " key ["+key+"] ", here);
+                if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] lockRead CONFLICT, writer["+writer+"] waitingWriter["+waitingWriter+"] ");
+                throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId) + " key ["+key+"] ", here);
             }
         }
         finally {
@@ -163,7 +163,6 @@ public class TxLockCREW extends TxLock {
         if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
             Runtime.increaseParallelism();
         
-        var count:Long = 0;
         while ( (writer != -1 && stronger(txId, writer)) || 
                 (waitingWriter != -1 && stronger(txId, waitingWriter))) {  //waiting writers get access first
             if (resilient)
@@ -171,11 +170,6 @@ public class TxLockCREW extends TxLock {
             lock.unlock();
             System.threadSleep(LOCK_WAIT_MS);                   
             lock.lock();
-            count ++;
-            if (count % 1000 == 0){
-                val s = strongerLog(txId, writer);
-                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitReaderWriterLocked key["+key+"] readers.size()["+readers.size()+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
-            }
         }
         
         if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
@@ -204,17 +198,12 @@ public class TxLockCREW extends TxLock {
         if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
             Runtime.increaseParallelism();
             
-        var count:Long = 0;
         while (readers.size() > minLimit && waitingWriter == txId) {
             if (resilient)
                 checkDeadLockers();
             lock.unlock();
             System.threadSleep(LOCK_WAIT_MS);                   
             lock.lock();
-            count ++;
-            if (count % 1000 == 0){
-                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitWriterReadersLocked key["+key+"] readers.size()["+readers.size()+"] writer["+writer+"] waitingWriter["+waitingWriter+"] ");
-            }
         }
         
         if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
@@ -240,17 +229,12 @@ public class TxLockCREW extends TxLock {
         if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
             Runtime.increaseParallelism();
             
-        var count:Long = 0;
         while (writer != -1 && waitingWriter == txId) {
             if (resilient)
                 checkDeadLockers();
             lock.unlock();
             System.threadSleep(LOCK_WAIT_MS);
             lock.lock();
-            count ++;
-            if (count % 1000 == 0){
-                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitWriterWriterLocked key["+key+"] readers.size()["+readers.size()+"] writer["+writer+"] waitingWriter["+waitingWriter+"]  ");
-            }
         }
         
         if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
@@ -269,12 +253,6 @@ public class TxLockCREW extends TxLock {
     private def stronger(me:Long, other:Long) {
         val res = (me as Int) < (other as Int);
         if (TM_DEBUG) Console.OUT.println("Tx[" + me + "] isStronger(other:" + other + ")? [" + res + "]  meSEQ["+ (me as Int) +"] otherSEQ["+ (other as Int) +"] ");
-        return res;
-    }
-    
-    private def strongerLog(me:Long, other:Long) {
-        val res = (me as Int) < (other as Int);
-        Console.OUT.println("Tx[" + me + "] isStronger(other:" + other + ")? [" + res + "]  meSEQ["+ (me as Int) +"] otherSEQ["+ (other as Int) +"] ");
         return res;
     }
     
