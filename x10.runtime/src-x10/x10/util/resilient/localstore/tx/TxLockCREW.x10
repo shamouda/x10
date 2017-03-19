@@ -282,6 +282,12 @@ public class TxLockCREW extends TxLock {
         return res;
     }
     
+    private def strongerLog(me:Long, other:Long) {
+        val res = (me as Int) < (other as Int);
+        Console.OUT.println("Tx[" + me + "] isStronger(other:" + other + ")? [" + res + "]  meSEQ["+ (me as Int) +"] otherSEQ["+ (other as Int) +"] ");
+        return res;
+    }
+    
     private def stronger(me:Long, readers:HashSet[Long]) {
         var res:Boolean = true;
     
