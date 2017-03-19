@@ -180,7 +180,7 @@ public class TxLockCREW extends TxLock {
             count ++;
             if (count % 1000 == 0){
                 val s = strongerLog(txId, writer);
-                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitReaderWriterLocked key["+key+"] readers.size()["+readers.size()+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
+                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitReaderWriterLocked key["+key+"] readers["+readersAsString(readers)+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
             }
         }
         
@@ -217,8 +217,8 @@ public class TxLockCREW extends TxLock {
             lock.lock();
             count ++;
             if (count % 1000 == 0){
-                val s = strongerLog(txId, writer);
-                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitWriterReadersLocked key["+key+"] readers.size()["+readers.size()+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
+                val s = strongerLog(txId, readers);
+                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitWriterReadersLocked key["+key+"] readers["+readersAsString(readers)+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
             }
         }
         
@@ -253,7 +253,7 @@ public class TxLockCREW extends TxLock {
             count ++;
             if (count % 1000 == 0){
                 val s = strongerLog(txId, writer);
-                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitWriterWriterLocked key["+key+"] readers.size()["+readers.size()+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
+                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitWriterWriterLocked key["+key+"] readers["+readersAsString(readers)+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
             }
         }
         
@@ -288,6 +288,20 @@ public class TxLockCREW extends TxLock {
         while (iter.hasNext()) {
             val other = iter.next();
             res = stronger(me, other);
+            if (!res)
+                break;
+        }
+        return res;
+    }
+    
+    
+    private def strongerLog(me:Long, readers:HashSet[Long]) {
+        var res:Boolean = true;
+    
+        val iter = readers.iterator();
+        while (iter.hasNext()) {
+            val other = iter.next();
+            res = strongerLog(me, other);
             if (!res)
                 break;
         }
