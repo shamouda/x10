@@ -39,47 +39,47 @@ public class TxStatistics {
     }
     
     public static def boxPlot(values:ArrayList[Double]) {
-    	if (values == null || values.size() == 0)
-    		return new BoxPlot(0, 0, 0, 0, 0, 0, 0);
-    	val v = values.toRail();
+        if (values == null || values.size() == 0)
+            return new BoxPlot(0, 0, 0, 0, 0, 0, 0);
+        val v = values.toRail();
         RailUtils.sort(v);
-    	if (v.size == 1) {
-    		return new BoxPlot(v(0), v(0), v(0), v(0), v(0), v(0), v(0));
-    	}
-    	else if (v.size == 2) {
-    		return new BoxPlot(v(0), v(0), v(0), v(0), v(1), v(1), v(1));
-    	}
-    	else if (v.size == 3) {
-    		return new BoxPlot(v(0), v(0), v(0), v(1), v(2), v(2), v(2));
-    	}
-    	else {
-	        val size = values.size();
-	        val min = v(0);
-	        val max = v(size -1);
-	        
-	        val medianPair = medianRange (v , 0, size-1 );
-	        val q1Pair = medianRange (v , 0, medianPair.first-1 );
-	        val q3Pair = medianRange (v , medianPair.second+1, size-1 );
-	        
-	        val median = ( v(medianPair.first) + v(medianPair.second) ) / 2.0;
-	        val q1 = ( v(q1Pair.first) + v(q1Pair.second) ) / 2.0;
-	        val q3 = ( v(q3Pair.first) + v(q3Pair.second) ) / 2.0;
-	        
-	        val ninetyPer = 0.9 * size as Double;
-	        val ninetyUnit = ninetyPer as Long;
-	        val ninetyPercentile = (ninetyPer - ninetyUnit == 0.0) ? ninetyUnit : ninetyUnit+1;
-	        val ninetyV = (ninetyPercentile <= size-1) ? v(ninetyPercentile) : max;
-	        
-	        val thenthPer = 0.1 * size as Double;
-	        val thenthUnit = thenthPer as Long;
-	        val thenthPercentile = (thenthPer - thenthUnit == 0.0) ? thenthUnit : thenthUnit+1;
-	        val thenthV = v(thenthPercentile);
-	        return new BoxPlot(min, thenthV, q1, median, q3, ninetyV, max);
-    	}
+        if (v.size == 1) {
+            return new BoxPlot(v(0), v(0), v(0), v(0), v(0), v(0), v(0));
+        }
+        else if (v.size == 2) {
+            return new BoxPlot(v(0), v(0), v(0), v(0), v(1), v(1), v(1));
+        }
+        else if (v.size == 3) {
+            return new BoxPlot(v(0), v(0), v(0), v(1), v(2), v(2), v(2));
+        }
+        else {
+            val size = values.size();
+            val min = v(0);
+            val max = v(size -1);
+            
+            val medianPair = medianRange (v , 0, size-1 );
+            val q1Pair = medianRange (v , 0, medianPair.first-1 );
+            val q3Pair = medianRange (v , medianPair.second+1, size-1 );
+            
+            val median = ( v(medianPair.first) + v(medianPair.second) ) / 2.0;
+            val q1 = ( v(q1Pair.first) + v(q1Pair.second) ) / 2.0;
+            val q3 = ( v(q3Pair.first) + v(q3Pair.second) ) / 2.0;
+            
+            val ninetyPer = 0.9 * size as Double;
+            val ninetyUnit = ninetyPer as Long;
+            val ninetyPercentile = (ninetyPer - ninetyUnit == 0.0) ? ninetyUnit : ninetyUnit+1;
+            val ninetyV = (ninetyPercentile <= size-1) ? v(ninetyPercentile) : max;
+            
+            val thenthPer = 0.1 * size as Double;
+            val thenthUnit = thenthPer as Long;
+            val thenthPercentile = (thenthPer - thenthUnit == 0.0) ? thenthUnit : thenthUnit+1;
+            val thenthV = v(thenthPercentile);
+            return new BoxPlot(min, thenthV, q1, median, q3, ninetyV, max);
+        }
     }
     
     public static def medianRange(rail:Rail[Double], s:Long, e:Long) {
-    	val start = (s < 0)? 0 : s;
+        val start = (s < 0)? 0 : s;
         val end = (e >= rail.size)? (rail.size-1) : e;
         val size = end - start;
         var medianLoc:Long = 0;

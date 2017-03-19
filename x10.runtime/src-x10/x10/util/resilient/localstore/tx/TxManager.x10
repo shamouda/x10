@@ -19,25 +19,25 @@ public abstract class TxManager(data:MapData) {
     protected val lockingTxLogs:SafeBucketHashMap[Long,LockingTxLog];
     
     public def this(data:MapData) {
-    	property(data);
-    	if (TxConfig.getInstance().BASELINE) {
-    		txLogs = null;
-    		lockingTxLogs = null;
-    	}
-    	else if (TxConfig.getInstance().STM ){
-    	    txLogs = new SafeBucketHashMap[Long,TxLog](TxConfig.getInstance().BUCKETS_COUNT);
-    	    lockingTxLogs = null;
-    	}
-    	else {
-    	    txLogs = null;
-    	    lockingTxLogs = new SafeBucketHashMap[Long,LockingTxLog](TxConfig.getInstance().BUCKETS_COUNT);
-    	}
+        property(data);
+        if (TxConfig.getInstance().BASELINE) {
+            txLogs = null;
+            lockingTxLogs = null;
+        }
+        else if (TxConfig.getInstance().STM ){
+            txLogs = new SafeBucketHashMap[Long,TxLog](TxConfig.getInstance().BUCKETS_COUNT);
+            lockingTxLogs = null;
+        }
+        else {
+            txLogs = null;
+            lockingTxLogs = new SafeBucketHashMap[Long,LockingTxLog](TxConfig.getInstance().BUCKETS_COUNT);
+        }
     }
     
     public static def make(data:MapData):TxManager {
-    	if (TxConfig.getInstance().BASELINE )
+        if (TxConfig.getInstance().BASELINE )
              return new TxManager_Baseline(data);
-    	else if (TxConfig.getInstance().LOCKING )
+        else if (TxConfig.getInstance().LOCKING )
             return new TxManager_Locking(data);
         else if (TxConfig.getInstance().TM.equals("RL_EA_UL"))
             return new TxManager_RL_EA_UL(data);
@@ -121,7 +121,7 @@ public abstract class TxManager(data:MapData) {
     }
     
     public static def checkDeadCoordinator(txId:Long) {
-    	val placeId = (txId >> 32) as Int;
+        val placeId = (txId >> 32) as Int;
         if (Place(placeId as Long).isDead()) {
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + txIdToString (txId)+ " coordinator place["+Place(placeId)+"] died !!!!");
             throw new DeadPlaceException(Place(placeId));
@@ -193,30 +193,30 @@ public abstract class TxManager(data:MapData) {
             }
             var memory:MemoryUnit = log.getMemoryUnit(key);
             if (memory == null) {
-	            memory = data.getMemoryUnit(key);
-	            if (lockRead)
-	            	memory.lockRead(id, key);
-	            
-	            var atomicV:AtomicValue = null;
-	            if (lockRead)
-	            	atomicV = memory.getAtomicValueLocked(true, key, id);
-	            else
-	            	atomicV = memory.getAtomicValue(true, key, id); //will cause internal locking
-	            val copy1 = atomicV.value;
-	            val ver = atomicV.version;
-	            log.logInitialValue(key, copy1, ver, id, lockRead, memory);
+                memory = data.getMemoryUnit(key);
+                if (lockRead)
+                    memory.lockRead(id, key);
+                
+                var atomicV:AtomicValue = null;
+                if (lockRead)
+                    atomicV = memory.getAtomicValueLocked(true, key, id);
+                else
+                    atomicV = memory.getAtomicValue(true, key, id); //will cause internal locking
+                val copy1 = atomicV.value;
+                val ver = atomicV.version;
+                log.logInitialValue(key, copy1, ver, id, lockRead, memory);
             }
             return new LogContainer(memory, log);
         } catch(ex:AbortedTransactionException) {
             throw ex;
         } catch(ex:Exception) {
-        	try {
-        		abortAndThrowException(log, ex);
-        	}
-        	finally {
-        		log.unlock();
-        	}
-        	throw ex;
+            try {
+                abortAndThrowException(log, ex);
+            }
+            finally {
+                log.unlock();
+            }
+            throw ex;
         }
     }
     
@@ -260,13 +260,13 @@ public abstract class TxManager(data:MapData) {
         val log = cont.log;
         
         if (!log.getLockedWrite(key)) {
-        	
-        	if (log.getLockedRead(key))
+            
+            if (log.getLockedRead(key))
                 log.setLockedRead(key, false);
-        	
-        	memory.lockWrite(id, key); //lockWrite unlockRead if upgrading fails 
-        	
-        	log.setLockedWrite(key, true);
+            
+            memory.lockWrite(id, key); //lockWrite unlockRead if upgrading fails 
+            
+            log.setLockedWrite(key, true);
             log.setReadOnly(key, false);
         }
     }
@@ -516,7 +516,7 @@ public abstract class TxManager(data:MapData) {
                 val memory = log.getMemoryUnit(key);
                 
                 if (!log.getReadOnly(key)) {
-                	lockWriteRL(id, key, new LogContainer( memory, log));                                   
+                    lockWriteRL(id, key, new LogContainer( memory, log));                                   
                 }
                 else {
                     assert(log.getLockedRead(key));                    
@@ -699,99 +699,99 @@ public abstract class TxManager(data:MapData) {
     
     /*******   TxManager_Locking methods *********/
     public def lockWrite_Locking(id:Long, key:String) {
-    	val log = getOrAddLockingTxLog(id);
-    	var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
-    	if (memory == null) {
-    		memory = data.getMemoryUnit(key);
-    		log.memUnits.put(key, memory);
-    	}
+        val log = getOrAddLockingTxLog(id);
+        var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
+        if (memory == null) {
+            memory = data.getMemoryUnit(key);
+            log.memUnits.put(key, memory);
+        }
         memory.lockWrite(id, key);
     }
     
     public def lockWrite_Locking(id:Long, keys:ArrayList[String]) {
-    	val log = getOrAddLockingTxLog(id);
-    	for (key in keys) {
-    		var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
-    		if (memory == null) {
-    			memory = data.getMemoryUnit(key);
-    			log.memUnits.put(key, memory);
-    		}
-    		memory.lockWrite(id, key);
-    	}
+        val log = getOrAddLockingTxLog(id);
+        for (key in keys) {
+            var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
+            if (memory == null) {
+                memory = data.getMemoryUnit(key);
+                log.memUnits.put(key, memory);
+            }
+            memory.lockWrite(id, key);
+        }
     }
     
     public def lockRead_Locking(id:Long, key:String) {
-    	val log = getOrAddLockingTxLog(id);
-    	var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
-    	if (memory == null) {
-    		memory = data.getMemoryUnit(key);
-    		log.memUnits.put(key, memory);
-    	}
-    	memory.lockRead(id, key);        
+        val log = getOrAddLockingTxLog(id);
+        var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
+        if (memory == null) {
+            memory = data.getMemoryUnit(key);
+            log.memUnits.put(key, memory);
+        }
+        memory.lockRead(id, key);        
     }
     
     public def lockRead_Locking(id:Long, keys:ArrayList[String]) {
-    	val log = getOrAddLockingTxLog(id);
-    	for (key in keys) {
-	    	var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
-	    	if (memory == null) {
-	    		memory = data.getMemoryUnit(key);
-	    		log.memUnits.put(key, memory);
-	    	}
-	    	memory.lockRead(id, key);
-    	}
+        val log = getOrAddLockingTxLog(id);
+        for (key in keys) {
+            var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
+            if (memory == null) {
+                memory = data.getMemoryUnit(key);
+                log.memUnits.put(key, memory);
+            }
+            memory.lockRead(id, key);
+        }
     }
     
     public def unlockWrite_Locking(id:Long, key:String) {
-    	val log = getOrAddLockingTxLog(id);
-    	val memory = log.memUnits.getOrElse(key, null);
-    	assert (memory != null) : "locking mistake, unlocking a key that was not locked";
-    	memory.unlockWrite(id, key);
+        val log = getOrAddLockingTxLog(id);
+        val memory = log.memUnits.getOrElse(key, null);
+        assert (memory != null) : "locking mistake, unlocking a key that was not locked";
+        memory.unlockWrite(id, key);
     }
     
     public def unlockWrite_Locking(id:Long, keys:ArrayList[String]) {
-    	val log = getOrAddLockingTxLog(id);
-    	for (key in keys) {
-    		val memory = log.memUnits.getOrElse(key, null);
-    		assert (memory != null) : "locking mistake, unlocking a key that was not locked";
-    		memory.unlockWrite(id, key);
-    	}
+        val log = getOrAddLockingTxLog(id);
+        for (key in keys) {
+            val memory = log.memUnits.getOrElse(key, null);
+            assert (memory != null) : "locking mistake, unlocking a key that was not locked";
+            memory.unlockWrite(id, key);
+        }
     }
     
     public def unlockRead_Locking(id:Long, key:String) {
-    	val log = getOrAddLockingTxLog(id);
-    	val memory = log.memUnits.getOrElse(key, null);
-    	assert (memory != null) : "locking mistake, unlocking a key that was not locked";
-    	memory.unlockRead(id, key);
+        val log = getOrAddLockingTxLog(id);
+        val memory = log.memUnits.getOrElse(key, null);
+        assert (memory != null) : "locking mistake, unlocking a key that was not locked";
+        memory.unlockRead(id, key);
     }
     
     public def unlockRead_Locking(id:Long, keys:ArrayList[String]) {
-    	val log = getOrAddLockingTxLog(id);
-    	for (key in keys) {
-	    	val memory = log.memUnits.getOrElse(key, null);
-	    	assert (memory != null) : "locking mistake, unlocking a key that was not locked";
-	    	memory.unlockRead(id, key);
-    	}
+        val log = getOrAddLockingTxLog(id);
+        for (key in keys) {
+            val memory = log.memUnits.getOrElse(key, null);
+            assert (memory != null) : "locking mistake, unlocking a key that was not locked";
+            memory.unlockRead(id, key);
+        }
     }
     
     public def getLocked(id:Long, key:String):Cloneable {
-    	val log = getOrAddLockingTxLog(id);
-    	val memory = log.memUnits.getOrElse(key, null);
-    	assert (memory != null) : "locking mistake, getting a value before locking it";
+        val log = getOrAddLockingTxLog(id);
+        val memory = log.memUnits.getOrElse(key, null);
+        assert (memory != null) : "locking mistake, getting a value before locking it";
         return memory.getValueLocked(true, key, id);
     }
     
     public def  putLocked(id:Long, key:String, value:Cloneable):Cloneable {
-    	val log = getOrAddLockingTxLog(id);
-    	val memory = log.memUnits.getOrElse(key, null);
-    	assert (memory != null) : "locking mistake, putting a value before locking it";    
+        val log = getOrAddLockingTxLog(id);
+        val memory = log.memUnits.getOrElse(key, null);
+        assert (memory != null) : "locking mistake, putting a value before locking it";    
         return memory.setValueLocked(value, key, id);
     }
     
     public static def txIdToString (txId:Long) {
-    	val placeId =  ((txId >> 32) as Int);
-    	val txSeq = (txId as Int);
-    	return "TX["+ (placeId*100000000 + txSeq)+"] TXPLC["+placeId+"] TXSEQ["+txSeq+"]";
+        val placeId =  ((txId >> 32) as Int);
+        val txSeq = (txId as Int);
+        return "TX["+ (placeId*100000000 + txSeq)+"] TXPLC["+placeId+"] TXSEQ["+txSeq+"]";
     }
 }
 

@@ -38,7 +38,7 @@ public class TxManager_RL_EA_UL extends TxManager {
     }
 
     public def validate(log:TxLog) {
-    	throw new Exception("validate() is not needed for TxManager_RL_EA_UL");
+        throw new Exception("validate() is not needed for TxManager_RL_EA_UL");
     }
     
     public def lockRead(id:Long, key:String) {
@@ -54,15 +54,15 @@ public class TxManager_RL_EA_UL extends TxManager {
         throw new Exception("unlockWrite not supported for lock based tx manager");
     }
     public def lockRead(id:Long, keys:ArrayList[String]) {
-    	throw new Exception("operation not supported");
+        throw new Exception("operation not supported");
     }
     public def lockWrite(id:Long, keys:ArrayList[String]) {
-    	throw new Exception("operation not supported");
+        throw new Exception("operation not supported");
     }
     public def unlockRead(id:Long, keys:ArrayList[String]) {
-    	throw new Exception("operation not supported");
+        throw new Exception("operation not supported");
     }
     public def unlockWrite(id:Long, keys:ArrayList[String]) {
-    	throw new Exception("operation not supported");
+        throw new Exception("operation not supported");
     }
 }

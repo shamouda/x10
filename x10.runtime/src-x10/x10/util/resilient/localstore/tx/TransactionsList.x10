@@ -21,8 +21,8 @@ import x10.util.resilient.localstore.TxConfig;
 
 public class TransactionsList {
     public val globalTx:ArrayList[Tx];
-	public val localTx:ArrayList[LocalTx];
-	public val lockingTx:ArrayList[LockingTx];
+    public val localTx:ArrayList[LocalTx];
+    public val lockingTx:ArrayList[LockingTx];
 
     private val listLock:Lock;
 
@@ -31,9 +31,9 @@ public class TransactionsList {
         localTx = new ArrayList[LocalTx]();
         lockingTx = new ArrayList[LockingTx]();
         if (!TxConfig.getInstance().LOCK_FREE)
-        	listLock = new Lock();
+            listLock = new Lock();
         else
-        	listLock = null;
+            listLock = null;
     }
     
     public def addLocalTx(tx:LocalTx) {
@@ -42,23 +42,23 @@ public class TransactionsList {
         unlock();
     }
     public def addGlobalTx(tx:Tx) {
-    	lock();
+        lock();
         globalTx.add(tx);
         unlock();
     }
     public def addLockingTx(tx:LockingTx) {
-    	lock();
+        lock();
         lockingTx.add(tx);
         unlock();
     }
     
     private def lock() {
-    	if (!TxConfig.getInstance().LOCK_FREE)
-    		listLock.lock();
+        if (!TxConfig.getInstance().LOCK_FREE)
+            listLock.lock();
     }
     
     private def unlock() {
-    	if (!TxConfig.getInstance().LOCK_FREE)
-    		listLock.unlock();
+        if (!TxConfig.getInstance().LOCK_FREE)
+            listLock.unlock();
     }
 }

@@ -166,27 +166,27 @@ public class ResilientStore {
                         while (iter.hasNext()) {
                             val txId = iter.next();
                             if (txId.contains("_TxDesc_")) {
-                            	val obj = txDescMap.get(txId);
-                            	if (obj != null) {
-                            		val txDesc = obj as TxDesc;
-                            		val map = appMaps.getOrThrow(txDesc.mapName);
-                            		if (TM_DEBUG) Console.OUT.println(here + " recovering txdesc " + txDesc);
-                            		val tx = map.restartGlobalTransaction(txDesc);
-                            		if (txDesc.status == TxDesc.COMMITTING) {
-                            			if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] commit it");
-                            			tx.commit(true); //ignore phase one
-                            		}
-                            		else if (txDesc.status == TxDesc.STARTED) {
-                            			if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] abort it");
-                            			tx.abort();
-                            		}
-                            	}
+                                val obj = txDescMap.get(txId);
+                                if (obj != null) {
+                                    val txDesc = obj as TxDesc;
+                                    val map = appMaps.getOrThrow(txDesc.mapName);
+                                    if (TM_DEBUG) Console.OUT.println(here + " recovering txdesc " + txDesc);
+                                    val tx = map.restartGlobalTransaction(txDesc);
+                                    if (txDesc.status == TxDesc.COMMITTING) {
+                                        if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] commit it");
+                                        tx.commit(true); //ignore phase one
+                                    }
+                                    else if (txDesc.status == TxDesc.STARTED) {
+                                        if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] abort it");
+                                        tx.abort();
+                                    }
+                                }
                             }
                         }
                     }
                     
                     if (TM_REP.equals("lazy"))
-                    	applySlaveTransactions(plh, changes);
+                        applySlaveTransactions(plh, changes);
                 }
             }
         }
@@ -194,53 +194,53 @@ public class ResilientStore {
     }
     
     private def applySlaveTransactions(plh:PlaceLocalHandle[LocalStore], changes:ChangeDescription) {
-    	val committed = GlobalRef(new ArrayList[Long]());
-    	val committedLock = GlobalRef(new Lock());
-    	val root = here;
-    	
-    	if (TxConfig.getInstance().VALIDATION_REQUIRED) {
-	    	val placeTxsMap = plh().slaveStore.clusterTransactions();
-	    	finish {
-	    		val iter = placeTxsMap.keySet().iterator();
-	    		while (iter.hasNext()) {
-	    			val placeIndex = iter.next();
-	    			val txList = placeTxsMap.getOrThrow(placeIndex);
-	    		    var pl:Place = changes.oldActivePlaces(placeIndex);
-	    			var master:Boolean = true;
-	    			if (pl.isDead()){
-	    				pl = changes.oldActivePlaces.next(pl);
-	    				master = false;
-	    			}
-	    			val isMaster = master;
-	    			at (pl) async {
-	    				var committedList:ArrayList[Long]; 
-	    				if (isMaster)
-	    					committedList = plh().masterStore.filterCommitted(txList);
-	    				else
-	    					committedList = plh().slaveStore.filterCommitted(txList);
-	    				
-	    				val cList = committedList;
-	    				at (root) {
-	    					committedLock().lock();
-	    					committed().addAll(cList);
-	    					committedLock().unlock();
-	    				}
-	    			}
-	    		}
-	    	}
-    	}
-    	
-    	val orderedTx = plh().slaveStore.getPendingTransactions();
-    	if (TxConfig.getInstance().VALIDATION_REQUIRED) {
-    		val commitTxOrdered = new ArrayList[Long]();
-    		for (val tx in orderedTx){
-    			if (committed().contains(tx))
-    				commitTxOrdered.add(tx);
-    		}
-    		plh().slaveStore.commitAll(commitTxOrdered);
-    	}
-    	else
-    		plh().slaveStore.commitAll(orderedTx);
+        val committed = GlobalRef(new ArrayList[Long]());
+        val committedLock = GlobalRef(new Lock());
+        val root = here;
+        
+        if (TxConfig.getInstance().VALIDATION_REQUIRED) {
+            val placeTxsMap = plh().slaveStore.clusterTransactions();
+            finish {
+                val iter = placeTxsMap.keySet().iterator();
+                while (iter.hasNext()) {
+                    val placeIndex = iter.next();
+                    val txList = placeTxsMap.getOrThrow(placeIndex);
+                    var pl:Place = changes.oldActivePlaces(placeIndex);
+                    var master:Boolean = true;
+                    if (pl.isDead()){
+                        pl = changes.oldActivePlaces.next(pl);
+                        master = false;
+                    }
+                    val isMaster = master;
+                    at (pl) async {
+                        var committedList:ArrayList[Long]; 
+                        if (isMaster)
+                            committedList = plh().masterStore.filterCommitted(txList);
+                        else
+                            committedList = plh().slaveStore.filterCommitted(txList);
+                        
+                        val cList = committedList;
+                        at (root) {
+                            committedLock().lock();
+                            committed().addAll(cList);
+                            committedLock().unlock();
+                        }
+                    }
+                }
+            }
+        }
+        
+        val orderedTx = plh().slaveStore.getPendingTransactions();
+        if (TxConfig.getInstance().VALIDATION_REQUIRED) {
+            val commitTxOrdered = new ArrayList[Long]();
+            for (val tx in orderedTx){
+                if (committed().contains(tx))
+                    commitTxOrdered.add(tx);
+            }
+            plh().slaveStore.commitAll(commitTxOrdered);
+        }
+        else
+            plh().slaveStore.commitAll(orderedTx);
     }
     
 }

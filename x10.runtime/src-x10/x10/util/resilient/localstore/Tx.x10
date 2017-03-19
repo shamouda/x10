@@ -36,7 +36,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     public transient var abortTime:Long = -1;
     
     // consumed time
-	public transient var processingElapsedTime:Long = 0; ////including waitTime
+    public transient var processingElapsedTime:Long = 0; ////including waitTime
     public transient var waitElapsedTime:Long = 0;
     public transient var phase1ElapsedTime:Long = 0;
     public transient var phase2ElapsedTime:Long = 0;
@@ -95,7 +95,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     
     /********** Setting the pre-commit time for statistical analysis **********/   
     public def setWaitElapsedTime(t:Long) {
-    	waitElapsedTime = t;
+        waitElapsedTime = t;
     }
     
     public def noop(key:String):Cloneable {
@@ -254,8 +254,8 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             }
         }catch (ex:Exception) {
             if(TM_DEBUG) {
-            	Console.OUT.println("Tx["+id+"]  Failed Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] key["+key+"] value["+value+"] ...");
-            	ex.printStackTrace();
+                Console.OUT.println("Tx["+id+"]  Failed Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] key["+key+"] value["+value+"] ...");
+                ex.printStackTrace();
             }
             throw ex;  // someone must call Tx.abort
         } finally {
@@ -270,17 +270,17 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     }
     
     @Pinned public def abort(ex:Exception) {
-   		val list = getDeadAndConflictingPlaces(ex);
+           val list = getDeadAndConflictingPlaces(ex);
         abort(list);
     }
     
     @Pinned private def abort(abortedPlaces:ArrayList[Place]) {
-    	if (TM_DEBUG) Console.OUT.println("Tx["+id+"] abort   (abortPlaces.size = " + abortedPlaces.size() + ") alreadyAborted = " + aborted);
-		if (!aborted)
-			aborted = true;
-		else 
-			return;
-    	
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] abort   (abortPlaces.size = " + abortedPlaces.size() + ") alreadyAborted = " + aborted);
+        if (!aborted)
+            aborted = true;
+        else 
+            return;
+        
         try {
             //ask masters to abort (a master will abort slave first, then abort itself)
             finalize(false, abortedPlaces, plh, id, members, root);
@@ -344,10 +344,10 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         
         
         if (resilient && !DISABLE_DESC ){
-        	if (!TM_REP.equals("lazy"))
-        		deleteTxDesc();
-        	else
-        		updateTxDesc(TxDesc.COMMITTED);
+            if (!TM_REP.equals("lazy"))
+                deleteTxDesc();
+            else
+                updateTxDesc(TxDesc.COMMITTED);
         }
             
 
@@ -366,15 +366,15 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     }
     
     private def updateTxDesc(status:Long){
-    	val start = Timer.milliTime();
+        val start = Timer.milliTime();
         val localTx = txDescMap.startLocalTransaction();
         try {
             if(TM_DEBUG) Console.OUT.println("Tx["+id+"] updateTxDesc localTx["+localTx.id+"] started ...");
             val desc = localTx.get("tx"+id) as TxDesc;
             //while recovering a transaction, the current place will not have the TxDesc stored, NPE can be thrown
             if (desc != null) {
-            	desc.status = status;
-            	localTx.put("tx"+id, desc);
+                desc.status = status;
+                localTx.put("tx"+id, desc);
             }
             localTx.commit();
             if(TM_DEBUG) Console.OUT.println("Tx["+id+"] updateTxDesc localTx["+localTx.id+"] completed ...");
@@ -387,11 +387,11 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             throw ex;
         }
         finally {
-        	txLoggingElapsedTime += Timer.milliTime() - start;
+            txLoggingElapsedTime += Timer.milliTime() - start;
         }
     }
     private def deleteTxDesc(){
-    	val start = Timer.milliTime();
+        val start = Timer.milliTime();
         try {
             val localTx = txDescMap.startLocalTransaction();
             if(TM_DEBUG) Console.OUT.println("Tx["+id+"] deleteTxDesc localTx["+localTx.id+"] started ...");
@@ -403,43 +403,43 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             ex.printStackTrace();
         }
         finally {
-        	txLoggingElapsedTime += Timer.milliTime() - start;
+            txLoggingElapsedTime += Timer.milliTime() - start;
         }
     }
     
     private def commitPhaseOne(plh:PlaceLocalHandle[LocalStore], id:Long, members:PlaceGroup, root:GlobalRef[Tx]) {
-    	val start = Timer.milliTime();
-    	try {
-    		val placeIndex = plh().virtualPlaceId;
-    		if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne ...");
-    		finish for (p in members) {
-    			if ((resilient && !DISABLE_SLAVE) || TxConfig.getInstance().VALIDATION_REQUIRED) {
-    				if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne going to move to ["+p+"] ...");
-    				at (p) async {
-	        
-    					if (TxConfig.getInstance().VALIDATION_REQUIRED) {
-    						if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate started ...");
-    						plh().masterStore.validate(id);
-    						if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate done ...");
-    					}
-            		
-    					if (resilient && !DISABLE_SLAVE) {
-    						val log = plh().masterStore.getTxCommitLog(id);
-    						if (log != null && log.size() > 0) {	                        
-    							//send txLog to slave (very important to be able to tolerate failures of masters just after prepare)
-    							at (plh().slave) async {
-    								plh().slaveStore.prepare(id, log, placeIndex);
-    							}
-    						}
-    					}
-    				}
-    			}
-    			else
-    				if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate NOT required ...");
-    		}
-    	} finally {
-    		phase1ElapsedTime = Timer.milliTime() - start;
-    	}
+        val start = Timer.milliTime();
+        try {
+            val placeIndex = plh().virtualPlaceId;
+            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne ...");
+            finish for (p in members) {
+                if ((resilient && !DISABLE_SLAVE) || TxConfig.getInstance().VALIDATION_REQUIRED) {
+                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] commitPhaseOne going to move to ["+p+"] ...");
+                    at (p) async {
+            
+                        if (TxConfig.getInstance().VALIDATION_REQUIRED) {
+                            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate started ...");
+                            plh().masterStore.validate(id);
+                            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate done ...");
+                        }
+                    
+                        if (resilient && !DISABLE_SLAVE) {
+                            val log = plh().masterStore.getTxCommitLog(id);
+                            if (log != null && log.size() > 0) {                            
+                                //send txLog to slave (very important to be able to tolerate failures of masters just after prepare)
+                                at (plh().slave) async {
+                                    plh().slaveStore.prepare(id, log, placeIndex);
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne : validate NOT required ...");
+            }
+        } finally {
+            phase1ElapsedTime = Timer.milliTime() - start;
+        }
     }
     
     private def commitPhaseTwo(plh:PlaceLocalHandle[LocalStore], id:Long, members:PlaceGroup, root:GlobalRef[Tx]) {
@@ -472,7 +472,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                 throw new Exception("FATAL ERROR: Master and Slave died together, Exception["+ex2.getMessage()+"] ");
             }
         } finally {
-        	phase2ElapsedTime = Timer.milliTime() - start;
+            phase2ElapsedTime = Timer.milliTime() - start;
         }
         return SUCCESS_RECOVER_STORE;
     }
@@ -491,7 +491,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             at (p) async {
                 var ex:Exception = null;
                 if (resilient && !TM_REP.equals("lazy") && !DISABLE_SLAVE) {
-                	try {
+                    try {
                     val log = plh().masterStore.getTxCommitLog(id);
                     if(TM_DEBUG) Console.OUT.println("Tx["+id+"] getTxCommitLog  returned: " + log);
                     if (log != null && log.size() > 0) {
@@ -509,10 +509,10 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                             ex = e;
                         }
                     }
-                	}catch(tm:Exception) {
-                		tm.printStackTrace();
-                		throw tm;
-                	}
+                    }catch(tm:Exception) {
+                        tm.printStackTrace();
+                        throw tm;
+                    }
                 }
                     
                 if (commit)
@@ -523,7 +523,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                 if (resilient && ex != null) {
                     val slaveEx = ex;
                     at (root) async {
-                    	excsLock.lock();
+                        excsLock.lock();
                         root().excs.add(slaveEx as CheckedThrowable);
                         excsLock.unlock();
                     }
@@ -539,23 +539,23 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             return;
         
         if (!TM_REP.equals("lazy")) {
-	        //ask slaves to commit (their master died, 
-	        //and we need to resolve the slave's pending transactions)
-	        finish for (p in deadMasters) {
-	            assert(members.contains(p));
-	            val slave = activePlaces.next(p);
-	            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalizeSlaves here["+here+"] moving to slave["+plh().slave+"] to " + ( commit? "commit": "abort" ));
-	            at (slave) async {
-	                if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalizeSlaves here["+here+"] moved to slave["+here+"] to " + ( commit? "commit": "abort" ));
-	                if (commit)
-	                    plh().slaveStore.commit(id);
-	                else
-	                    plh().slaveStore.abort(id);
-	            }
-	        }
+            //ask slaves to commit (their master died, 
+            //and we need to resolve the slave's pending transactions)
+            finish for (p in deadMasters) {
+                assert(members.contains(p));
+                val slave = activePlaces.next(p);
+                if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalizeSlaves here["+here+"] moving to slave["+plh().slave+"] to " + ( commit? "commit": "abort" ));
+                at (slave) async {
+                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalizeSlaves here["+here+"] moved to slave["+here+"] to " + ( commit? "commit": "abort" ));
+                    if (commit)
+                        plh().slaveStore.commit(id);
+                    else
+                        plh().slaveStore.abort(id);
+                }
+            }
         }
         else if (TM_DEBUG)
-        	Console.OUT.println("Tx["+id+"] LazyRep, IGNORE finalize slave ...");
+            Console.OUT.println("Tx["+id+"] LazyRep, IGNORE finalize slave ...");
     }
     
     public static def opDesc(op:Int) {
@@ -583,27 +583,27 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     private static def getDeadAndConflictingPlaces(ex:Exception) {
         val list = new ArrayList[Place]();
         if (ex != null) {
-	        if (ex instanceof DeadPlaceException) {
-	        	list.add((ex as DeadPlaceException).place);
-	        }
-	        else if (ex instanceof ConflictException) {
-	        	list.add((ex as ConflictException).place);
-	        }
-	        else {
-	        	val mulExp = ex as MultipleExceptions;
-		        val deadExList = mulExp.getExceptionsOfType[DeadPlaceException]();
-		        if (deadExList != null) {
-		            for (dpe in deadExList) {
-		                list.add(dpe.place);
-		            }
-		        }
-		        val confExList = mulExp.getExceptionsOfType[ConflictException]();
-		        if (confExList != null) {
-		            for (ce in confExList) {
-		                list.add(ce.place);
-		            }
-		        }
-	        }
+            if (ex instanceof DeadPlaceException) {
+                list.add((ex as DeadPlaceException).place);
+            }
+            else if (ex instanceof ConflictException) {
+                list.add((ex as ConflictException).place);
+            }
+            else {
+                val mulExp = ex as MultipleExceptions;
+                val deadExList = mulExp.getExceptionsOfType[DeadPlaceException]();
+                if (deadExList != null) {
+                    for (dpe in deadExList) {
+                        list.add(dpe.place);
+                    }
+                }
+                val confExList = mulExp.getExceptionsOfType[ConflictException]();
+                if (confExList != null) {
+                    for (ce in confExList) {
+                        list.add(ce.place);
+                    }
+                }
+            }
         }
         return list;
     }

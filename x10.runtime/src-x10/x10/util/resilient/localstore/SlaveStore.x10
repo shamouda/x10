@@ -36,9 +36,9 @@ public class SlaveStore {
         masterState = new HashMap[String,Cloneable]();
         logs = new ArrayList[TxSlaveLog]();
         if (!TxConfig.getInstance().LOCK_FREE)
-        	lock = new Lock();
+            lock = new Lock();
         else
-        	lock = null;
+            lock = null;
     }
     
     /******* Recovery functions (called by one place) , no risk of race condition *******/
@@ -55,11 +55,11 @@ public class SlaveStore {
     public def commit(id:Long, transLog:HashMap[String,Cloneable], placeIndex:Long) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit1() started ...");
         try {
-        	lockLogsList();
+            lockLogsList();
             commitLockAcquired(new TxSlaveLog(id, transLog, placeIndex));
         }
         finally {
-        	unlockLogsList();
+            unlockLogsList();
         }
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit1() committed ...");
     }
@@ -67,20 +67,20 @@ public class SlaveStore {
     public def commit(id:Long) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit2() started ...");
         try {
-        	lockLogsList();
+            lockLogsList();
             val txLog = getLog(id);
             if (txLog != null) {
                 commitLockAcquired(txLog);
                 logs.remove(txLog);
             }
         } finally {
-        	unlockLogsList();
+            unlockLogsList();
         }
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit2() committed ...");
     }
     
     private def commitLockAcquired(txLog:TxSlaveLog) {
-    	if (TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] here["+here+"] SlaveStore.commitLockAcquired() started ...");
+        if (TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] here["+here+"] SlaveStore.commitLockAcquired() started ...");
         try {
             val data = masterState;
             val iter = txLog.transLog.keySet().iterator();
@@ -99,7 +99,7 @@ public class SlaveStore {
     public def prepare(id:Long, entries:HashMap[String,Cloneable], placeIndex:Long) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() started ...");
         try {
-        	lockLogsList();
+            lockLogsList();
             var txSlaveLog:TxSlaveLog = getLog(id);
             if (txSlaveLog == null) {
                 txSlaveLog = new TxSlaveLog( id, new HashMap[String,Cloneable](), placeIndex);
@@ -114,7 +114,7 @@ public class SlaveStore {
             if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() logs.put(id="+id+") ...");
         }
         finally {
-        	unlockLogsList();
+            unlockLogsList();
         }
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() completed ...");
     }
@@ -122,90 +122,90 @@ public class SlaveStore {
     public def abort(id:Long) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.abort() started ...");
         try {
-        	lockLogsList();
+            lockLogsList();
             val log = getLog(id);
             logs.remove(log);
         }
         finally {
-        	unlockLogsList();
+            unlockLogsList();
         }
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.abort() completed ...");
     }
     
     public def filterCommitted(txList:ArrayList[Long]) {
-    	val list = new ArrayList[Long]();
-    	for (txId in txList) {
-    		val obj = masterState.getOrElse("_TxDesc_"+"tx"+txId, null);
-    		if (obj != null && ((obj as TxDesc).status == TxDesc.COMMITTED || (obj as TxDesc).status == TxDesc.COMMITTING)) {
-    			list.add(txId);
-    		}
-    	}
-    	return list;
+        val list = new ArrayList[Long]();
+        for (txId in txList) {
+            val obj = masterState.getOrElse("_TxDesc_"+"tx"+txId, null);
+            if (obj != null && ((obj as TxDesc).status == TxDesc.COMMITTED || (obj as TxDesc).status == TxDesc.COMMITTING)) {
+                list.add(txId);
+            }
+        }
+        return list;
     }
     
     public def clusterTransactions() {
-    	val map = new HashMap[Long,ArrayList[Long]]();
-    	try {
-    		lockLogsList();
-    		for (log in logs) {
-    			var list:ArrayList[Long] = map.getOrElse(log.placeIndex, null);
-    			if (list == null){
-    				list = new ArrayList[Long]();
-    				map.put(log.placeIndex, list);
-    			}
-    			list.add(log.id);
-    		}
-    	} 
-    	finally {
-    		unlockLogsList();
+        val map = new HashMap[Long,ArrayList[Long]]();
+        try {
+            lockLogsList();
+            for (log in logs) {
+                var list:ArrayList[Long] = map.getOrElse(log.placeIndex, null);
+                if (list == null){
+                    list = new ArrayList[Long]();
+                    map.put(log.placeIndex, list);
+                }
+                list.add(log.id);
+            }
+        } 
+        finally {
+            unlockLogsList();
         }
-    	return map;
+        return map;
     }
     
     public def getPendingTransactions() {
-    	val list = new ArrayList[Long]();
-    	try {
-    		lockLogsList();
-    		for (log in logs){
-    			list.add(log.id);
-    		}
-    	} 
-    	finally {
-    		unlockLogsList();
+        val list = new ArrayList[Long]();
+        try {
+            lockLogsList();
+            for (log in logs){
+                list.add(log.id);
+            }
+        } 
+        finally {
+            unlockLogsList();
         }
-    	return list;
+        return list;
     }
     
     public def commitAll(committed:ArrayList[Long]) {
-    	try {
-    		lockLogsList();
-    		for (log in logs){
-    			if (committed.contains(log.id))
-    				commitLockAcquired(log);
-    		}
-    		logs.clear();
-    	}
-    	finally {
-    		unlockLogsList();
-    	}
+        try {
+            lockLogsList();
+            for (log in logs){
+                if (committed.contains(log.id))
+                    commitLockAcquired(log);
+            }
+            logs.clear();
+        }
+        finally {
+            unlockLogsList();
+        }
     }
     
     private def getLog(id:Long) {
-    	for (log in logs){
-    		if (log.id == id)
-    			return log;
-    	}
-    	return null;
+        for (log in logs){
+            if (log.id == id)
+                return log;
+        }
+        return null;
     }
     
     private def lockLogsList(){
-    	if (!TxConfig.getInstance().LOCK_FREE)
-    		lock.lock();
+        if (!TxConfig.getInstance().LOCK_FREE)
+            lock.lock();
     }
     
     private def unlockLogsList(){
-    	if (!TxConfig.getInstance().LOCK_FREE)
-    		lock.unlock();
+        if (!TxConfig.getInstance().LOCK_FREE)
+            lock.unlock();
     }
     
 }

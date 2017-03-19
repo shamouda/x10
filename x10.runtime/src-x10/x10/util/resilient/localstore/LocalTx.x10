@@ -31,42 +31,42 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     
     /***************** Get ********************/
     public def get(key:String):Cloneable {
-    	try {
-    		return plh().masterStore.get(mapName, id, key);
-    	}catch(ex:Exception){
-    		abortTime = Timer.milliTime();
-    		throw ex;
-    	}
+        try {
+            return plh().masterStore.get(mapName, id, key);
+        }catch(ex:Exception){
+            abortTime = Timer.milliTime();
+            throw ex;
+        }
     }
 
     /***************** PUT ********************/
     public def put(key:String, value:Cloneable):Cloneable {
-    	try {
-    		return plh().masterStore.put(mapName, id, key, value);
-    	}catch(ex:Exception){
-    		abortTime = Timer.milliTime();
-    		throw ex;
-    	}
+        try {
+            return plh().masterStore.put(mapName, id, key, value);
+        }catch(ex:Exception){
+            abortTime = Timer.milliTime();
+            throw ex;
+        }
     }
     
     /***************** Delete ********************/
     public def delete(key:String):Cloneable {
-    	try {
-    		return plh().masterStore.delete(mapName, id, key);
-    	}catch(ex:Exception){
-    		abortTime = Timer.milliTime();
-    		throw ex;
-    	}
+        try {
+            return plh().masterStore.delete(mapName, id, key);
+        }catch(ex:Exception){
+            abortTime = Timer.milliTime();
+            throw ex;
+        }
     }
     
     /***************** KeySet ********************/
     public def keySet():Set[String] {
-    	try {
-    		return plh().masterStore.keySet(mapName, id);
-    	}catch(ex:Exception){
-    		abortTime = Timer.milliTime();
-    		throw ex;
-    	}
+        try {
+            return plh().masterStore.keySet(mapName, id);
+        }catch(ex:Exception){
+            abortTime = Timer.milliTime();
+            throw ex;
+        }
     }
 
     /***********************   Abort ************************/  
@@ -84,9 +84,9 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
         val plh = this.plh;
         val placeIndex = plh().virtualPlaceId;
         try {
-        	if (TxConfig.getInstance().VALIDATION_REQUIRED)
-        		plh().masterStore.validate(id);
-        	
+            if (TxConfig.getInstance().VALIDATION_REQUIRED)
+                plh().masterStore.validate(id);
+            
             val log = plh().masterStore.getTxCommitLog(id);
             try {
                 if (resilient && log != null && log.size() > 0) {
@@ -106,49 +106,49 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
             return success;
         } catch(ex:Exception) { // slave is dead         
             //master abort
-        	abort();
+            abort();
             throw ex;
         }
     }
     
     /***************** Unsupported Methods ********************/
     public def getRemote(dest:Place, key:String):Cloneable {
-    	throw new Exception("Unsupported method");
+        throw new Exception("Unsupported method");
     }
     public def asyncGetRemote(dest:Place, key:String):Future[Any] {
-    	throw new Exception("Unsupported method");
+        throw new Exception("Unsupported method");
     }    
     public def putRemote(dest:Place, key:String, value:Cloneable):Cloneable {
-    	throw new Exception("Unsupported method");
+        throw new Exception("Unsupported method");
     }    
     public def asyncPutRemote(dest:Place, key:String, value:Cloneable):Future[Any] {
-    	throw new Exception("Unsupported method");
+        throw new Exception("Unsupported method");
     }    
     public def deleteRemote(dest:Place, key:String):Cloneable {
-    	throw new Exception("Unsupported method");
+        throw new Exception("Unsupported method");
     }    
     public def asyncDeleteRemote(dest:Place, key:String):Future[Any] {
-    	throw new Exception("Unsupported method");
+        throw new Exception("Unsupported method");
     }    
     public def keySetRemote(dest:Place):Set[String] {
-    	throw new Exception("Unsupported method");
+        throw new Exception("Unsupported method");
     }    
     public def asyncKeySetRemote(dest:Place):Future[Any] {
-    	throw new Exception("Unsupported method");
+        throw new Exception("Unsupported method");
     }    
     public def syncAt(dest:Place, closure:()=>void) {
-    	throw new Exception("Unsupported method");
+        throw new Exception("Unsupported method");
     }    
     public def syncAt(dest:Place, closure:()=>Any):Cloneable {
-    	throw new Exception("Unsupported method");
+        throw new Exception("Unsupported method");
     }    
     public def asyncAt(dest:Place, closure:()=>void):Future[Any] {
-    	throw new Exception("Unsupported method");
+        throw new Exception("Unsupported method");
     }    
     public def asyncAt(dest:Place, closure:()=>Any):Future[Any] {
-    	throw new Exception("Unsupported method");
+        throw new Exception("Unsupported method");
     }
     public def setWaitElapsedTime(t:Long) {
-    	throw new Exception("Unsupported method");
+        throw new Exception("Unsupported method");
     }
 }

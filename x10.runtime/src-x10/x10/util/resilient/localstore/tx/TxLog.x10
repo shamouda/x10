@@ -38,9 +38,9 @@ public class TxLog (id:Long) {
         property(id);
         transLog = new HashMap[String,TxKeyChange]();
         if (!TxConfig.getInstance().LOCK_FREE)
-        	lock = new Lock();
+            lock = new Lock();
         else
-        	lock = null;
+            lock = null;
     } 
     
     public def getChangeLog(key:String) {
@@ -68,11 +68,11 @@ public class TxLog (id:Long) {
     }
        
     public def getMemoryUnit(key:String) {
-    	var log:TxKeyChange = transLog.getOrElse(key, null);
+        var log:TxKeyChange = transLog.getOrElse(key, null);
         if (log == null)
-        	return null;
+            return null;
         else
-        	return log.getMemoryUnit();
+            return log.getMemoryUnit();
     }
     
     /*MUST be called before logPut and logDelete*/
@@ -111,23 +111,23 @@ public class TxLog (id:Long) {
     }
     
     public def getLockedRead(key:String) {
-    	var result:Boolean = false;
-    	val keyLog = transLog.getOrElse(key, null);
-    	if (keyLog == null)
-    		result = false;
-    	else
-    		result = keyLog.getLockedRead();
+        var result:Boolean = false;
+        val keyLog = transLog.getOrElse(key, null);
+        if (keyLog == null)
+            result = false;
+        else
+            result = keyLog.getLockedRead();
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + "here["+here+"] key["+key+"] getLockedRead?["+result+"]");
         return result;
     }
     
     public def getLockedWrite(key:String) {
-    	var result:Boolean = false;
-    	val keyLog = transLog.getOrElse(key, null);
-    	if (keyLog == null)
-    		result = false;
-    	else
-    		result = keyLog.getLockedWrite();
+        var result:Boolean = false;
+        val keyLog = transLog.getOrElse(key, null);
+        if (keyLog == null)
+            result = false;
+        else
+            result = keyLog.getLockedWrite();
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] key["+key+"] getLockedWrite?["+result+"]");
         return result;
     }
@@ -136,7 +136,7 @@ public class TxLog (id:Long) {
     public def removeReadOnlyKeys():HashMap[String,Cloneable] {
         val map = new HashMap[String,Cloneable]();
         if (transLog == null && aborted) {
-        	return null;
+            return null;
         }
         val iter = transLog.keySet().iterator();
         while (iter.hasNext()) {
@@ -151,30 +151,30 @@ public class TxLog (id:Long) {
     }
     
     public def lock() {
-    	if (!TxConfig.getInstance().LOCK_FREE)
-    		lock.lock();
+        if (!TxConfig.getInstance().LOCK_FREE)
+            lock.lock();
     }
     
     public def unlock() {
-    	if (!TxConfig.getInstance().LOCK_FREE)
-    		lock.unlock();
+        if (!TxConfig.getInstance().LOCK_FREE)
+            lock.unlock();
     }
     
     public def clearAborted() {
-    	if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] clearTxLog ...");
+        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] clearTxLog ...");
         transLog = null;
         aborted = true;
     }
     
     public def getSortedKeys():Rail[String] {
-    	val size = transLog.size();
-    	val rail = new Rail[String](size);
-    	var i:Int = 0n;
-    	val iter = transLog.keySet().iterator();
-    	while (iter.hasNext()) {
-    		rail(i++) = iter.next();
-    	}
-    	RailUtils.sort(rail);
-    	return rail;
+        val size = transLog.size();
+        val rail = new Rail[String](size);
+        var i:Int = 0n;
+        val iter = transLog.keySet().iterator();
+        while (iter.hasNext()) {
+            rail(i++) = iter.next();
+        }
+        RailUtils.sort(rail);
+        return rail;
     }
 }

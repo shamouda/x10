@@ -54,15 +54,15 @@ public class TxManager_RL_LA_WB extends TxManager {
         throw new Exception("unlockWrite not supported for lock based tx manager");
     }
     public def lockRead(id:Long, keys:ArrayList[String]) {
-    	throw new Exception("operation not supported");
+        throw new Exception("operation not supported");
     }
     public def lockWrite(id:Long, keys:ArrayList[String]) {
-    	throw new Exception("operation not supported");
+        throw new Exception("operation not supported");
     }
     public def unlockRead(id:Long, keys:ArrayList[String]) {
-    	throw new Exception("operation not supported");
+        throw new Exception("operation not supported");
     }
     public def unlockWrite(id:Long, keys:ArrayList[String]) {
-    	throw new Exception("operation not supported");
+        throw new Exception("operation not supported");
     }
 }

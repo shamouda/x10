@@ -59,7 +59,7 @@ public class MasterStore {
     }
     
     public def commit(log:TxLog) {
-    	txManager.commit(log);
+        txManager.commit(log);
     }
     
     public def abort(id:Long) {
@@ -73,9 +73,9 @@ public class MasterStore {
     public def getState() = txManager.data;
     
     public def getNextTransactionId() {
-    	val placeId = here.id as Int;
-    	val localTxId = sequence.incrementAndGet();
-    	val txId = ((placeId as Long) << 32) | localTxId as Long;
+        val placeId = here.id as Int;
+        val localTxId = sequence.incrementAndGet();
+        val txId = ((placeId as Long) << 32) | localTxId as Long;
         return txId;
     }
     
@@ -85,15 +85,15 @@ public class MasterStore {
     }
     
     public def lockWrite(mapName:String, id:Long, key:String) {
-    	txManager.lockWrite(id, mapName+key);
+        txManager.lockWrite(id, mapName+key);
     }
     
     public def unlockRead(mapName:String, id:Long, key:String) {
-    	txManager.unlockRead(id, mapName+key);
+        txManager.unlockRead(id, mapName+key);
     }
     
     public def unlockWrite(mapName:String, id:Long, key:String) {
-    	txManager.unlockWrite(id, mapName+key);
+        txManager.unlockWrite(id, mapName+key);
     }
     
     public def getLocked(mapName:String, id:Long, key:String):Cloneable {
@@ -109,19 +109,19 @@ public class MasterStore {
     }
     
     public def filterCommitted(txList:ArrayList[Long]) {
-    	val list = new ArrayList[Long]();
-    	val metadata = txManager.data.getMap();
-    	if (!TxConfig.getInstance().LOCK_FREE)
-    	    metadata.lockAll();
-    	
-    	for (txId in txList) {
-    		val obj = metadata.getOrThrowUnsafe("_TxDesc_"+"tx"+txId).getAtomicValueLocked(false, "_TxDesc_"+"tx"+txId, -1).value;
-    		if (obj != null && ( (obj as TxDesc).status == TxDesc.COMMITTED || (obj as TxDesc).status == TxDesc.COMMITTING) ) {
-    		    list.add(txId);
-    		}
-    	}
-    	if (!TxConfig.getInstance().LOCK_FREE)
-    	    metadata.unlockAll();
-    	return list;
+        val list = new ArrayList[Long]();
+        val metadata = txManager.data.getMap();
+        if (!TxConfig.getInstance().LOCK_FREE)
+            metadata.lockAll();
+        
+        for (txId in txList) {
+            val obj = metadata.getOrThrowUnsafe("_TxDesc_"+"tx"+txId).getAtomicValueLocked(false, "_TxDesc_"+"tx"+txId, -1).value;
+            if (obj != null && ( (obj as TxDesc).status == TxDesc.COMMITTED || (obj as TxDesc).status == TxDesc.COMMITTING) ) {
+                list.add(txId);
+            }
+        }
+        if (!TxConfig.getInstance().LOCK_FREE)
+            metadata.unlockAll();
+        return list;
     }
 }

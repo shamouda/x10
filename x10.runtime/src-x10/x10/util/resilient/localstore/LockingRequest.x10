@@ -14,19 +14,19 @@ package x10.util.resilient.localstore;
 import x10.util.RailUtils;
 
 public class LockingRequest {
-	public val keys:Rail[KeyInfo];
-	public val dest:Place;
+    public val keys:Rail[KeyInfo];
+    public val dest:Place;
 
-	public def this(dest:Place, keys:Rail[KeyInfo]) {
-		this.dest = dest;
-		RailUtils.sort(keys);
-		this.keys = keys;
-	}
-	
-	public static struct KeyInfo(key:String, read:Boolean) implements Comparable[KeyInfo] {
-		public def compareTo(that:KeyInfo) {
-			return key.compareTo(that.key);
-		}
-	};
+    public def this(dest:Place, keys:Rail[KeyInfo]) {
+        this.dest = dest;
+        RailUtils.sort(keys);
+        this.keys = keys;
+    }
+    
+    public static struct KeyInfo(key:String, read:Boolean) implements Comparable[KeyInfo] {
+        public def compareTo(that:KeyInfo) {
+            return key.compareTo(that.key);
+        }
+    };
 }
 

@@ -16,7 +16,7 @@ public class TxManager_Baseline extends TxManager {
     }
     
     public def put(id:Long, key:String, value:Cloneable):Cloneable {
-    	return data.baselinePutValue(key, value);
+        return data.baselinePutValue(key, value);
     }
     
     public def delete(id:Long, key:String):Cloneable {
@@ -24,35 +24,35 @@ public class TxManager_Baseline extends TxManager {
     }
     
     public def lockRead(id:Long, key:String) {
-    	throw new Exception("operation not supported for baseline tx manager");
+        throw new Exception("operation not supported for baseline tx manager");
     }
         
     public def lockWrite(id:Long, key:String) {
-    	throw new Exception("operation not supported for baseline tx manager");
+        throw new Exception("operation not supported for baseline tx manager");
     }
     
     public def unlockRead(id:Long, key:String) {
-    	throw new Exception("operation not supported for baseline tx manager");
+        throw new Exception("operation not supported for baseline tx manager");
     }
     
     public def unlockWrite(id:Long, key:String) {
-    	throw new Exception("operation not supported for baseline tx manager");
+        throw new Exception("operation not supported for baseline tx manager");
     }
     
     public def lockRead(id:Long, keys:ArrayList[String]) {
-    	throw new Exception("operation not supported for baseline tx manager");
+        throw new Exception("operation not supported for baseline tx manager");
     }
     
     public def lockWrite(id:Long, keys:ArrayList[String]) {
-    	throw new Exception("operation not supported for baseline tx manager");
+        throw new Exception("operation not supported for baseline tx manager");
     }
     
     public def unlockRead(id:Long, keys:ArrayList[String]) {
-    	throw new Exception("operation not supported for baseline tx manager");
+        throw new Exception("operation not supported for baseline tx manager");
     }
     
     public def unlockWrite(id:Long, keys:ArrayList[String]) {
-    	throw new Exception("operation not supported for baseline tx manager");
+        throw new Exception("operation not supported for baseline tx manager");
     }
     
     public def commit(log:TxLog) {
@@ -60,10 +60,10 @@ public class TxManager_Baseline extends TxManager {
     }
     
     public def abort(log:TxLog) {
-    	throw new Exception("operation not supported for baseline tx manager");
+        throw new Exception("operation not supported for baseline tx manager");
     }
 
     public def validate(log:TxLog) {
-    	throw new Exception("operation not supported for baseline tx manager");
+        throw new Exception("operation not supported for baseline tx manager");
     }
 }

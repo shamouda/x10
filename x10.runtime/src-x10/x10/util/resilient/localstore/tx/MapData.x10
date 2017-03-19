@@ -21,7 +21,7 @@ public class MapData {
     public def this(values:HashMap[String,Cloneable]) {
         metadata = new SafeBucketHashMap[String,MemoryUnit](TxConfig.getInstance().BUCKETS_COUNT);
         if (!TxConfig.getInstance().LOCK_FREE)
-        	metadata.lockAll();
+            metadata.lockAll();
         
         val iter = values.keySet().iterator();
         while (iter.hasNext()) {
@@ -31,7 +31,7 @@ public class MapData {
         }
         
         if (!TxConfig.getInstance().LOCK_FREE)
-        	metadata.unlockAll();
+            metadata.unlockAll();
     }
     
     public def getMap() = metadata;
@@ -54,7 +54,7 @@ public class MapData {
     }
     
     public def getMemoryUnit(k:String):MemoryUnit {
-    	var res:MemoryUnit = null;
+        var res:MemoryUnit = null;
         try {
             lockKey(k);
             res = metadata.getOrElseUnsafe(k, null);
@@ -74,9 +74,9 @@ public class MapData {
             val set = new HashSet[String]();
             val iter = metadata.keySetUnsafe().iterator();
             while (iter.hasNext()) {
-            	val key = iter.next();
-            	if (key.startsWith(mapName))
-            		set.add(key);
+                val key = iter.next();
+                if (key.startsWith(mapName))
+                    set.add(key);
             }
             return set;
         }finally {
@@ -85,59 +85,59 @@ public class MapData {
     }
     
     private def lockAll(){
-    	if (!TxConfig.getInstance().LOCK_FREE)
-        	metadata.lockAll();
+        if (!TxConfig.getInstance().LOCK_FREE)
+            metadata.lockAll();
     }
     
     private def unlockAll() {
-    	if (!TxConfig.getInstance().LOCK_FREE)
-        	metadata.unlockAll();
+        if (!TxConfig.getInstance().LOCK_FREE)
+            metadata.unlockAll();
     }
     
     private def lockKey(key:String){
-    	if (!TxConfig.getInstance().LOCK_FREE)
-        	metadata.lock(key);
+        if (!TxConfig.getInstance().LOCK_FREE)
+            metadata.lock(key);
     }
     
     private def unlockKey(key:String) {
-    	if (!TxConfig.getInstance().LOCK_FREE)
-        	metadata.unlock(key);
+        if (!TxConfig.getInstance().LOCK_FREE)
+            metadata.unlock(key);
     }
     
     public def toString() {
-    	try {
-    		lockAll();
-	        var str:String = here+"--->\n";
-	        val iter = metadata.keySetSafe().iterator();
-	        while (iter.hasNext()) {
-	            val key = iter.next();
-	            val value = metadata.getOrThrowUnsafe(key);
-	            str += "Key["+key+"] Value["+value.toString()+"]\n";
-	        }
-	        return str;
-    	}finally {
-    		unlockAll();
-    	}
+        try {
+            lockAll();
+            var str:String = here+"--->\n";
+            val iter = metadata.keySetSafe().iterator();
+            while (iter.hasNext()) {
+                val key = iter.next();
+                val value = metadata.getOrThrowUnsafe(key);
+                str += "Key["+key+"] Value["+value.toString()+"]\n";
+            }
+            return str;
+        }finally {
+            unlockAll();
+        }
     }
     
     public def baselineGetValue(k:String):Cloneable {
-    	val memU = metadata.getOrElseUnsafe(k, null);
-    	if (memU == null)
-    		return null;
-    	else
-    		return memU.baselineGet();
+        val memU = metadata.getOrElseUnsafe(k, null);
+        if (memU == null)
+            return null;
+        else
+            return memU.baselineGet();
     }
     
     public def baselinePutValue(k:String, value:Cloneable):Cloneable {
-    	var memU:MemoryUnit = metadata.getOrElseUnsafe(k, null);
+        var memU:MemoryUnit = metadata.getOrElseUnsafe(k, null);
         if (memU == null) {
-        	memU = new MemoryUnit(value);
+            memU = new MemoryUnit(value);
             metadata.putUnsafe(k, memU);
         }
         
         if (memU == null)
-    		return null;
-    	else
-    		return memU.baselineGet();
+            return null;
+        else
+            return memU.baselineGet();
     }
 }

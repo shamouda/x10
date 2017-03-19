@@ -27,7 +27,7 @@ import x10.util.concurrent.Future;
 
 public class BaselineTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String) extends AbstractTx {  
 
-	public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup) {
+    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup) {
         property(plh, id, mapName);
     }
     
@@ -180,6 +180,6 @@ public class BaselineTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Stri
     }
     
     public def setWaitElapsedTime(t:Long) {
-    	
+        
     }
 }

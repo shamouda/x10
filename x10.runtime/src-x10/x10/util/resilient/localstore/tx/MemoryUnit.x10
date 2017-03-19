@@ -28,7 +28,7 @@ public class MemoryUnit {
     public def this(v:Cloneable) {
         value = v;
         if (TxConfig.getInstance().BASELINE) { //Baseline
-        	txLock = null;
+            txLock = null;
             internalLock = null;
         }
         else if (TxConfig.getInstance().LOCKING) { //Locking
@@ -43,7 +43,7 @@ public class MemoryUnit {
     
     public def getAtomicValue(copy:Boolean, key:String, txId:Long) {
         try {
-        	lockExclusive(); //lock is used to ensure that value/version are always in sync as a composite value 
+            lockExclusive(); //lock is used to ensure that value/version are always in sync as a composite value 
             var v:Cloneable = value;
             if (copy) {
                 v = value == null?null:value.clone();
@@ -52,7 +52,7 @@ public class MemoryUnit {
             return new AtomicValue(version, v);
         }
         finally {
-        	unlockExclusive();
+            unlockExclusive();
         }
     }
     
@@ -72,23 +72,23 @@ public class MemoryUnit {
     }
        
     public def lockRead(txId:Long, key:String) {
-    	if (!TxConfig.getInstance().LOCK_FREE)
-    		txLock.lockRead(txId, key);
+        if (!TxConfig.getInstance().LOCK_FREE)
+            txLock.lockRead(txId, key);
     }
     
     public def unlockRead(txId:Long, key:String) {
-    	if (!TxConfig.getInstance().LOCK_FREE)
-    		txLock.unlockRead(txId, key);
+        if (!TxConfig.getInstance().LOCK_FREE)
+            txLock.unlockRead(txId, key);
     }
     
     public def lockWrite(txId:Long, key:String) {
-    	if (!TxConfig.getInstance().LOCK_FREE)
-    		txLock.lockWrite(txId, key);
+        if (!TxConfig.getInstance().LOCK_FREE)
+            txLock.lockWrite(txId, key);
     }
     
     public def unlockWrite(txId:Long, key:String) {
-    	if (!TxConfig.getInstance().LOCK_FREE)
-    		txLock.unlockWrite(txId, key);
+        if (!TxConfig.getInstance().LOCK_FREE)
+            txLock.unlockWrite(txId, key);
     }
 
     public def toString() {
@@ -115,7 +115,7 @@ public class MemoryUnit {
     
     /**************************************/
     private def lockExclusive() {
-    	if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.getInstance().LOCK_FREE)
             internalLock.lock();
     }
     

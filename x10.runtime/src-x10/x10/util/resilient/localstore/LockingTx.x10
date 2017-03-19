@@ -27,25 +27,25 @@ import x10.util.concurrent.Future;
 
 public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, requests:ArrayList[LockingRequest]) extends AbstractTx {
     public transient val startTime:Long = Timer.milliTime(); ////
-	public transient var lockingElapsedTime:Long = 0;  //////
-	public transient var processingElapsedTime:Long = 0; //// (including waitTime)
-	public transient var waitElapsedTime:Long = 0; ///
+    public transient var lockingElapsedTime:Long = 0;  //////
+    public transient var processingElapsedTime:Long = 0; //// (including waitTime)
+    public transient var waitElapsedTime:Long = 0; ///
     public transient var unlockingElapsedTime:Long = 0; ///////
     public transient var totalElapsedTime:Long = 0; //////
    
     public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, requests:ArrayList[LockingRequest]) {
         property(plh, id, mapName, requests);
 
-		if (TM_DEBUG) {
-        	var membersStr:String = "";
-        	for (p in members)
-        		membersStr += p + " ";
-        	Console.OUT.println("LockingTx["+id+"] here["+here+"] started members["+membersStr+"]");
+        if (TM_DEBUG) {
+            var membersStr:String = "";
+            for (p in members)
+                membersStr += p + " ";
+            Console.OUT.println("LockingTx["+id+"] here["+here+"] started members["+membersStr+"]");
         }
     }
     
     public def setWaitElapsedTime(t:Long) {
-    	waitElapsedTime = t;
+        waitElapsedTime = t;
     }
     
     /****************lock and unlock all keys**********************/
@@ -184,11 +184,11 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
                 val startLock = Timer.milliTime();
                 
                 if (requests.size() == 1 && requests.get(0).dest.id == here.id) {//local locking
-                	val req = requests.get(0);
-                	
-                	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && !TxConfig.getInstance().LOCK_FREE)
-                		Runtime.increaseParallelism();
-                	
+                    val req = requests.get(0);
+                    
+                    if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && !TxConfig.getInstance().LOCK_FREE)
+                        Runtime.increaseParallelism();
+                    
                     for (var i:Long = 0; i < req.keys.size ; i++) {
                         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read);
                         if (req.keys(i).read)
@@ -199,27 +199,27 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
                     }
                     
                     if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && !TxConfig.getInstance().LOCK_FREE)
-                    	Runtime.decreaseParallelism(1n);
+                        Runtime.decreaseParallelism(1n);
                 }
                 else {
-	                finish for (req in requests) {
-	                    at (req.dest) {
-	                    	if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && !TxConfig.getInstance().LOCK_FREE)
-	                    		Runtime.increaseParallelism();
-	                        
-	                    	for (var i:Long = 0; i < req.keys.size ; i++) {
-	                    	    if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read);
-	                            if (req.keys(i).read)
-	                                plh().masterStore.lockRead(mapName, id, req.keys(i).key);
-	                            else
-	                                plh().masterStore.lockWrite(mapName, id, req.keys(i).key);
-	                            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
-	                        }
-	                        
-	                        if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && !TxConfig.getInstance().LOCK_FREE)
-	                        	Runtime.decreaseParallelism(1n);
-	                    }
-	                }
+                    finish for (req in requests) {
+                        at (req.dest) {
+                            if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && !TxConfig.getInstance().LOCK_FREE)
+                                Runtime.increaseParallelism();
+                            
+                            for (var i:Long = 0; i < req.keys.size ; i++) {
+                                if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read);
+                                if (req.keys(i).read)
+                                    plh().masterStore.lockRead(mapName, id, req.keys(i).key);
+                                else
+                                    plh().masterStore.lockWrite(mapName, id, req.keys(i).key);
+                                if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
+                            }
+                            
+                            if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && !TxConfig.getInstance().LOCK_FREE)
+                                Runtime.decreaseParallelism(1n);
+                        }
+                    }
                 }
                 lockingElapsedTime = Timer.milliTime() - startLock;
                 return null;
@@ -227,9 +227,9 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
             else if (op == UNLOCK) {
                 val startUnlock = Timer.milliTime();
                 if (requests.size() == 1 && requests.get(0).dest.id == here.id) {//local locking
-                	val req = requests.get(0);
-                	for (var i:Long = 0; i < req.keys.size ; i++) {
-                	    if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read);
+                    val req = requests.get(0);
+                    for (var i:Long = 0; i < req.keys.size ; i++) {
+                        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read);
                         if (req.keys(i).read)
                             plh().masterStore.unlockRead(mapName, id, req.keys(i).key);
                         else
@@ -238,18 +238,18 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
                     }
                 }
                 else {
-	                finish for (req in requests) {
-	                    at (req.dest) async {
-	                        for (var i:Long = 0; i < req.keys.size ; i++) {
-	                            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read);
-	                            if (req.keys(i).read)
-	                                plh().masterStore.unlockRead(mapName, id, req.keys(i).key);
-	                            else
-	                                plh().masterStore.unlockWrite(mapName, id, req.keys(i).key);
-	                            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
-	                        }
-	                    }
-	                }
+                    finish for (req in requests) {
+                        at (req.dest) async {
+                            for (var i:Long = 0; i < req.keys.size ; i++) {
+                                if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read);
+                                if (req.keys(i).read)
+                                    plh().masterStore.unlockRead(mapName, id, req.keys(i).key);
+                                else
+                                    plh().masterStore.unlockWrite(mapName, id, req.keys(i).key);
+                                if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
+                            }
+                        }
+                    }
                 }
                 unlockingElapsedTime = Timer.milliTime() - startUnlock;
                 totalElapsedTime = Timer.milliTime() - startTime;
@@ -284,8 +284,8 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
             }
         }catch (ex:Exception) {
             if(TM_DEBUG) {
-            	Console.OUT.println("Tx["+id+"]  Failed Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] key["+key+"] value["+value+"] ...");
-            	ex.printStackTrace();
+                Console.OUT.println("Tx["+id+"]  Failed Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] key["+key+"] value["+value+"] ...");
+                ex.printStackTrace();
             }
             throw ex;  // someone must call Tx.abort
         } finally {

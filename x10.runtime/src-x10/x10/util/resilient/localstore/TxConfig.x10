@@ -13,8 +13,8 @@
 package x10.util.resilient.localstore;
 
 public class TxConfig {
-	public val TM:String; //baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB
-	
+    public val TM:String; //baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB
+    
     public val VALIDATION_REQUIRED:Boolean;
     public val BUCKETS_COUNT:Long;
     public val DISABLE_INCR_PARALLELISM:Boolean;
@@ -31,28 +31,28 @@ public class TxConfig {
         assert (TM != null && !TM.equals("")) : "you must specify the TM environment variable, allowed values = locking|RL_EA_UL|RL_EA_WB|...";
 
         if (TM.equals("baseline") || TM.startsWith("locking") || TM.equals("RL_EA_UL") || TM.equals("RL_EA_WB")) {
-        	VALIDATION_REQUIRED = false;
+            VALIDATION_REQUIRED = false;
         }
         else if (TM.equals("RL_LA_WB") || TM.equals("RV_EA_UL") || TM.equals("RV_EA_WB") || TM.equals("RV_LA_WB")) {
-        	VALIDATION_REQUIRED = true;
+            VALIDATION_REQUIRED = true;
         }
         else {
-        	VALIDATION_REQUIRED = false;
-        	assert(false) : "Invalid TM value, possible values are: baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB";
+            VALIDATION_REQUIRED = false;
+            assert(false) : "Invalid TM value, possible values are: baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB";
         }
         
         BUCKETS_COUNT = (System.getenv("BUCKETS_COUNT") == null || System.getenv("BUCKETS_COUNT").equals("")) ? 256 : Long.parseLong(System.getenv("BUCKETS_COUNT"));
         DISABLE_INCR_PARALLELISM = (System.getenv("DISABLE_INCR_PARALLELISM") == null || System.getenv("DISABLE_INCR_PARALLELISM").equals("")) ? false : Long.parseLong(System.getenv("DISABLE_INCR_PARALLELISM")) == 1;
 
         if (TM.equals("baseline"))
-        	BASELINE = true;
+            BASELINE = true;
         else
-        	BASELINE = false;
+            BASELINE = false;
         
         if (BASELINE || TM.startsWith("locking")) 
-        	STM = false;
+            STM = false;
         else
-        	STM = true;
+            STM = true;
         
         LOCKING = ! ( STM || BASELINE);
         

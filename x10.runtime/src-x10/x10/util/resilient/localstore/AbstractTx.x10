@@ -17,10 +17,10 @@ import x10.xrx.Runtime;
 import x10.util.concurrent.Future;
 
 public abstract class AbstractTx {
-	protected static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-	protected static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
-	
-	/* Constants */
+    protected static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
+    protected static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
+    
+    /* Constants */
     protected static val GET_LOCAL = 0n;
     protected static val GET_REMOTE = 1n;
     protected static val PUT_LOCAL = 2n;

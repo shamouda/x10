@@ -40,16 +40,16 @@ public class TxManager_Locking extends TxManager {
     }
     
     public def lockRead(id:Long, keys:ArrayList[String]) {
-    	lockRead_Locking(id, keys);
+        lockRead_Locking(id, keys);
     }
     public def lockWrite(id:Long, keys:ArrayList[String]) {
-    	lockWrite_Locking(id, keys);
+        lockWrite_Locking(id, keys);
     }
     public def unlockRead(id:Long, keys:ArrayList[String]) {
-    	unlockRead_Locking(id, keys);
+        unlockRead_Locking(id, keys);
     }
     public def unlockWrite(id:Long, keys:ArrayList[String]) {
-    	unlockWrite_Locking(id, keys);
+        unlockWrite_Locking(id, keys);
     }
     
     public def commit(log:TxLog) {

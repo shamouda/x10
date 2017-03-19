@@ -15,6 +15,6 @@ package x10.util.resilient.localstore.tx;
 import x10.util.HashMap;
 
 public class LockingTxLog (id:Long) {
-	public val memUnits = new HashMap[String, MemoryUnit]();
+    public val memUnits = new HashMap[String, MemoryUnit]();
     
 }
