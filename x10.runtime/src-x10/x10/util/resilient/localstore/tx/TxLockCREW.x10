@@ -179,7 +179,7 @@ public class TxLockCREW extends TxLock {
             count ++;
             if (count % 1000 == 0){
                 val s = strongerLog(txId, writer);
-                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitReaderWriterLocked key["+key+"] readers["+readersAsString(readers)+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
+                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " here["+here+"] - waitReaderWriterLocked key["+key+"] readers["+readersAsString(readers)+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
             }
         }
         
@@ -217,7 +217,7 @@ public class TxLockCREW extends TxLock {
             count ++;
             if (count % 1000 == 0){
                 val s = strongerLog(txId, readers);
-                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitWriterReadersLocked key["+key+"] readers["+readersAsString(readers)+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
+                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " here["+here+"] - waitWriterReadersLocked key["+key+"] readers["+readersAsString(readers)+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+readersAsString(readers)+")=" + s);
             }
         }
         
@@ -252,7 +252,7 @@ public class TxLockCREW extends TxLock {
             count ++;
             if (count % 1000 == 0){
                 val s = strongerLog(txId, writer);
-                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitWriterWriterLocked key["+key+"] readers["+readersAsString(readers)+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
+                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " here["+here+"] - waitWriterWriterLocked key["+key+"] readers["+readersAsString(readers)+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
             }
         }
         
