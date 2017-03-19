@@ -170,8 +170,7 @@ public class TxLockCREW extends TxLock {
         if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitReaderWriterLocked started");
         Runtime.increaseParallelism();
         var count:Long = 0;
-        while ( (writer != -1 && stronger(txId, writer)) || 
-                (waitingWriter != -1 && stronger(txId, waitingWriter))) {  //waiting writers get access first
+        while (waitingWriter == -1 && writer != -1 && stronger(txId, writer)) {  //waiting writers get access first
             if (resilient)
                 checkDeadLockers();
             lock.unlock();
