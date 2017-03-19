@@ -18,9 +18,17 @@ import x10.util.HashSet;
 import x10.xrx.Runtime;
 import x10.util.resilient.localstore.TxConfig;
 /*
- * A non-blocking concurrent read exclusive write lock for transactional management.
- * Failing to acquire the lock, results in receiving a ConflictException, or a DeadPlaceExeption.
- * A DeadPlaceException is thrown when the lock is being acquired by a dead place's transaction.
+ * A concurrent read exclusive write lock for transactional management.
+ * Each lock records a set of readers, one writer and one waiting writer
+ * Priority is decided based on the following criteria in order:
+ *  - A transaction id is composed of a place id and a sequence, the sequence is used for deciding the priority
+ *  1) Readers have the lowest priority: 
+ *     a reading transaction fails to acquire the lock if there is a waiting writer, or if the current writer has smaller sequence number.
+ *     a reading transaction waits only if the current writer has younger sequence number, and there is no waiting writers.   
+ *  2) A writer waits if his sequence number is smaller than the sequence of the current writer, or smaller than current readers. Otherwise, the writer 
+ *     fails to acquire the lock.
+ * Failing to acquire the lock, results in receiving a ConflictException, or a DeadPlaceExeption.  A DeadPlaceException is thrown 
+ * when the lock is being acquired by a dead place's transaction.
  * */
 public class TxLockCREW extends TxLock {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
@@ -163,6 +171,7 @@ public class TxLockCREW extends TxLock {
         if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
             Runtime.increaseParallelism();
         
+        var count:Long = 0;
         while ( (writer != -1 && stronger(txId, writer)) || 
                 (waitingWriter != -1 && stronger(txId, waitingWriter))) {  //waiting writers get access first
             if (resilient)
@@ -170,6 +179,11 @@ public class TxLockCREW extends TxLock {
             lock.unlock();
             System.threadSleep(LOCK_WAIT_MS);                   
             lock.lock();
+            count ++;
+            if (count % 1000 == 0){
+                val s = strongerLog(txId, writer);
+                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitReaderWriterLocked key["+key+"] readers.size()["+readers.size()+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
+            }
         }
         
         if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
@@ -197,13 +211,19 @@ public class TxLockCREW extends TxLock {
         
         if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
             Runtime.increaseParallelism();
-            
+        
+        var count:Long = 0;
         while (readers.size() > minLimit && waitingWriter == txId) {
             if (resilient)
                 checkDeadLockers();
             lock.unlock();
             System.threadSleep(LOCK_WAIT_MS);                   
             lock.lock();
+            count ++;
+            if (count % 1000 == 0){
+                val s = strongerLog(txId, writer);
+                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitWriterReadersLocked key["+key+"] readers.size()["+readers.size()+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
+            }
         }
         
         if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
@@ -229,12 +249,18 @@ public class TxLockCREW extends TxLock {
         if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)
             Runtime.increaseParallelism();
             
+        var count:Long = 0;
         while (writer != -1 && waitingWriter == txId) {
             if (resilient)
                 checkDeadLockers();
             lock.unlock();
             System.threadSleep(LOCK_WAIT_MS);
             lock.lock();
+            count ++;
+            if (count % 1000 == 0){
+                val s = strongerLog(txId, writer);
+                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " - waitWriterWriterLocked key["+key+"] readers.size()["+readers.size()+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
+            }
         }
         
         if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM)

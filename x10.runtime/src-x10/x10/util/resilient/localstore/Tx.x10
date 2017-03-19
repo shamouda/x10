@@ -488,49 +488,61 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             if (!commit && abortedPlaces.contains(p))
                 continue;
             
-            at (p) async {
-                var ex:Exception = null;
-                if (resilient && !TM_REP.equals("lazy") && !DISABLE_SLAVE) {
-                    try {
-                    val log = plh().masterStore.getTxCommitLog(id);
-                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] getTxCommitLog  returned: " + log);
-                    if (log != null && log.size() > 0) {
-                        //ask slave to commit, slave's death is not fatal
-                        try {
-                            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalize here["+here+"] moving to slave["+plh().slave+"] to " + ( commit? "commit": "abort" ));
-                            finish at (plh().slave) async {
-                                if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalize here["+here+"] moved to slave["+here+"] to " + ( commit? "commit": "abort" ));
-                                if (commit)
-                                    plh().slaveStore.commit(id);
-                                else
-                                    plh().slaveStore.abort(id);
-                            }
-                        }catch (e:Exception) {
-                            ex = e;
-                        }
-                    }
-                    }catch(tm:Exception) {
-                        tm.printStackTrace();
-                        throw tm;
-                    }
-                }
-                    
-                if (commit)
-                    plh().masterStore.commit(id);
-                else
-                    plh().masterStore.abort(id);
-                    
-                if (resilient && ex != null) {
-                    val slaveEx = ex;
-                    at (root) async {
-                        excsLock.lock();
-                        root().excs.add(slaveEx as CheckedThrowable);
-                        excsLock.unlock();
-                    }
-                }
+            if (p.id == here.id) {
+            	async finalizeLocal(commit, plh, id, root);
+            }
+            else {
+            	at (p) async {
+            		finalizeLocal(commit, plh, id, root);
+            	}
             }
         }
     }
+    
+    
+    private def finalizeLocal(commit:Boolean, plh:PlaceLocalHandle[LocalStore], id:Long, root:GlobalRef[Tx]) {
+        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalizeLocal  here["+here+"] " + ( commit? " Commit Local Started ": " Abort Local Started " ) + " ...");
+        var ex:Exception = null;
+        if (resilient && !TM_REP.equals("lazy") && !DISABLE_SLAVE) {
+            try {
+            val log = plh().masterStore.getTxCommitLog(id);
+            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] getTxCommitLog  returned: " + log);
+            if (log != null && log.size() > 0) {
+                //ask slave to commit, slave's death is not fatal
+                try {
+                    if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalize here["+here+"] moving to slave["+plh().slave+"] to " + ( commit? "commit": "abort" ));
+                    finish at (plh().slave) async {
+                        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] finalize here["+here+"] moved to slave["+here+"] to " + ( commit? "commit": "abort" ));
+                        if (commit)
+                            plh().slaveStore.commit(id);
+                        else
+                            plh().slaveStore.abort(id);
+                    }
+                }catch (e:Exception) {
+                    ex = e;
+                }
+            }
+            }catch(tm:Exception) {
+                tm.printStackTrace();
+                throw tm;
+            }
+        }
+            
+        if (commit)
+            plh().masterStore.commit(id);
+        else
+            plh().masterStore.abort(id);
+            
+        if (resilient && ex != null) {
+            val slaveEx = ex;
+            at (root) async {
+                excsLock.lock();
+                root().excs.add(slaveEx as CheckedThrowable);
+                excsLock.unlock();
+            }
+        }
+    }
+    
     
     private def finalizeSlaves(commit:Boolean, deadMasters:ArrayList[Place], 
             plh:PlaceLocalHandle[LocalStore], id:Long, members:PlaceGroup, root:GlobalRef[Tx]) {
