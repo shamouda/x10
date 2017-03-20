@@ -1,15 +1,11 @@
-struct TxResult {
-    output:Any;
-    success:Int; // SUCCESS | SUCCESS_RECOVER_STORE (when a slave dies)
-};
-
 class ResilientNativeMap {
 	/*This was not existing in the old APIs*/
     public abstract def createTransaction():Tx;
+    public abstract def isRecoveryRequired():Boolean; //true if one or more active places are dead
 }
 
 class Tx {
-    
+	
     /***************** Starting (nested) transactions ********************/
     //these 2 functions replace old asyncAt, and syncAt functions//
     public abstract def startTransaction(target:Place, closure:()=>Any):Any;
@@ -17,7 +13,7 @@ class Tx {
         
     /***************** Commit/Abort ********************/
     
-    public abstract def commit():TxResult;   //called inside the startTransaction(...) closure.
+    public abstract def commit():void;  //called inside the startTransaction(...) closure.
     public abstract def abort():void;   //called inside the startTransaction(...) closure.
     
     /***************** Get ********************/
@@ -46,14 +42,21 @@ class Tx {
 /*** Example program ***/
 public class Nesting {
     
-    public static def main(args:Rail[String]) {            
+    public static def main(args:Rail[String]) {
         val mgr = new PlaceManager(0, false);
         val store = ResilientStore.make(mgr.activePlaces());
         val map = store.makeMap("map");
         
-        val tx = map.createTransaction();    
+    	while (true) {
+    		try {
+    			val tx = map.createTransaction();
+    			outer(tx);
+    			break;
+    		} catch(cex:ConflictException) {
+    			//repeat
+    		}
+    	}
         
-        outer(tx);
     }
     
     public static def outer(tx:Tx) {
@@ -64,6 +67,7 @@ public class Nesting {
             val b = bFuture.force();
             
             val dFuture = tx.asyncPut(Place(3), "d", b + c);
+            val eFuture = tx.asyncPut(Place(4), "e", b - c);
             
             tx.commit(); //implicitly waits for local futures, before asking parent to commit
         });
