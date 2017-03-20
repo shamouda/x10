@@ -1,15 +1,14 @@
 class ResilientNativeMap {
-	/*This was not existing in the old APIs*/
-    public abstract def createTransaction():Tx;
+    public abstract def createTransaction():Tx; //creates a transaction reference. we did not have this function before.
     public abstract def isRecoveryRequired():Boolean; //true if one or more active places are dead
 }
 
 class Tx {
-	
+    
     /***************** Starting (nested) transactions ********************/
     //these 2 functions replace old asyncAt, and syncAt functions//
-    public abstract def startTransaction(target:Place, closure:()=>Any):Any;
-    public abstract def startAsyncTransaction(target:Place, closure:()=>Any):Future[Any]; //waiting for futures!!!
+    public abstract def startTransaction(target:Place, closure:()=>Any):Any; //starts a (nested) transaction synchronously at a remote place
+    public abstract def startAsyncTransaction(target:Place, closure:()=>Any):Future[Any]; //starts a (nested) transaction asynchronously at a remote place
         
     /***************** Commit/Abort ********************/
     
@@ -17,25 +16,25 @@ class Tx {
     public abstract def abort():void;   //called inside the startTransaction(...) closure.
     
     /***************** Get ********************/
-    public abstract def get(key:String):Cloneable;
+    public abstract def get(key:String):Cloneable; //local get
     
-    public abstract def getRemote(dest:Place, key:String):Cloneable;
+    public abstract def getRemote(dest:Place, key:String):Cloneable; //remote get
     
-    public abstract def asyncGetRemote(dest:Place, key:String):Future[Any];
+    public abstract def asyncGetRemote(dest:Place, key:String):Future[Cloneable]; //async remote get
     
     /***************** PUT ********************/
-    public abstract def put(key:String, value:Cloneable):Cloneable;
+    public abstract def put(key:String, value:Cloneable):Cloneable; //local put
     
-    public abstract def putRemote(dest:Place, key:String, value:Cloneable):Cloneable;
+    public abstract def putRemote(dest:Place, key:String, value:Cloneable):Cloneable; //remote put
     
-    public abstract def asyncPutRemote(dest:Place, key:String, value:Cloneable):Future[Any];
+    public abstract def asyncPutRemote(dest:Place, key:String, value:Cloneable):Future[Cloneable]; //async remote put
     
     /***************** Delete ********************/
-    public abstract def delete(key:String):Cloneable;
+    public abstract def delete(key:String):Cloneable; //local delete
     
-    public abstract def deleteRemote(dest:Place, key:String):Cloneable;
+    public abstract def deleteRemote(dest:Place, key:String):Cloneable; //remote delete
     
-    public abstract def asyncDeleteRemote(dest:Place, key:String):Future[Any];
+    public abstract def asyncDeleteRemote(dest:Place, key:String):Future[Cloneable]; //async remote delete
     
 }
 
@@ -47,16 +46,15 @@ public class Nesting {
         val store = ResilientStore.make(mgr.activePlaces());
         val map = store.makeMap("map");
         
-    	while (true) {
-    		try {
-    			val tx = map.createTransaction();
-    			outer(tx);
-    			break;
-    		} catch(cex:ConflictException) {
-    			//repeat
-    		}
-    	}
-        
+        while (true) {
+            try {
+                val tx = map.createTransaction();
+                outer(tx);
+                break;
+            } catch(cex:ConflictException) {
+                //repeat
+            }
+        }
     }
     
     public static def outer(tx:Tx) {
