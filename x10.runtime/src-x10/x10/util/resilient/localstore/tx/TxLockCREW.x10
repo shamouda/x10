@@ -19,7 +19,7 @@ import x10.xrx.Runtime;
 import x10.util.resilient.localstore.TxConfig;
 /*
  * A concurrent read exclusive write lock for transactional management.
- * Each lock records a set of readers, one writer and one waiting writer
+ * Each lock records: a set of readers, one writer and one waiting writer.
  * Priority is decided based on the following criteria in order:
  *  - A transaction id is composed of a place id and a sequence, the sequence is used for deciding the priority
  *  1) Readers have the lowest priority: 
@@ -169,18 +169,13 @@ public class TxLockCREW extends TxLock {
     private def waitReaderWriterLocked(txId:Long, key:String) {
         if (TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitReaderWriterLocked started");
         Runtime.increaseParallelism();
-        var count:Long = 0;
+
         while (waitingWriter == -1 && writer != -1 && stronger(txId, writer)) {  //waiting writers get access first
             if (resilient)
                 checkDeadLockers();
             lock.unlock();
             System.threadSleep(LOCK_WAIT_MS);                   
             lock.lock();
-            count ++;
-            if (count % 1000 == 0){
-                val s = strongerLog(txId, writer);
-                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " here["+here+"] - waitReaderWriterLocked key["+key+"] readers["+readersAsString(readers)+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
-            }
         }
         
         Runtime.decreaseParallelism(1n);
@@ -207,18 +202,12 @@ public class TxLockCREW extends TxLock {
         
         Runtime.increaseParallelism();
         
-        var count:Long = 0;
         while (readers.size() > minLimit && waitingWriter == txId) {
             if (resilient)
                 checkDeadLockers();
             lock.unlock();
             System.threadSleep(LOCK_WAIT_MS);                   
             lock.lock();
-            count ++;
-            if (count % 1000 == 0){
-                val s = strongerLog(txId, readers);
-                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " here["+here+"] - waitWriterReadersLocked key["+key+"] readers["+readersAsString(readers)+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+readersAsString(readers)+")=" + s);
-            }
         }
         
         Runtime.decreaseParallelism(1n);
@@ -242,18 +231,12 @@ public class TxLockCREW extends TxLock {
         
         Runtime.increaseParallelism();
             
-        var count:Long = 0;
         while (writer != -1 && waitingWriter == txId) {
             if (resilient)
                 checkDeadLockers();
             lock.unlock();
             System.threadSleep(LOCK_WAIT_MS);
             lock.lock();
-            count ++;
-            if (count % 1000 == 0){
-                val s = strongerLog(txId, writer);
-                Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " here["+here+"] - waitWriterWriterLocked key["+key+"] readers["+readersAsString(readers)+"] writer["+writer+"] waitingWriter["+waitingWriter+"] stronger("+txId+", "+writer+")=" + s);
-            }
         }
         
         Runtime.decreaseParallelism(1n);
@@ -274,12 +257,6 @@ public class TxLockCREW extends TxLock {
         return res;
     }
     
-    private def strongerLog(me:Long, other:Long) {
-        val res = (me as Int) < (other as Int);
-        Console.OUT.println("Tx[" + me + "] isStronger(other:" + other + ")? [" + res + "]  meSEQ["+ (me as Int) +"] otherSEQ["+ (other as Int) +"] ");
-        return res;
-    }
-    
     private def stronger(me:Long, readers:HashSet[Long]) {
         var res:Boolean = true;
     
@@ -287,20 +264,6 @@ public class TxLockCREW extends TxLock {
         while (iter.hasNext()) {
             val other = iter.next();
             res = stronger(me, other);
-            if (!res)
-                break;
-        }
-        return res;
-    }
-    
-    
-    private def strongerLog(me:Long, readers:HashSet[Long]) {
-        var res:Boolean = true;
-    
-        val iter = readers.iterator();
-        while (iter.hasNext()) {
-            val other = iter.next();
-            res = strongerLog(me, other);
             if (!res)
                 break;
         }
