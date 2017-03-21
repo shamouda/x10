@@ -510,9 +510,9 @@ public abstract class TxManager(data:MapData) {
         try {
             
             val logMap = log.transLog;
-            val iter = logMap.keySet().iterator();
-            while (iter.hasNext()) {
-                val key = iter.next();
+            val sortedKeys = log.getSortedKeys();
+            for (var i:Int = 0n; i < sortedKeys.size; i++){
+                val key = sortedKeys(i);
                 val memory = log.getMemoryUnit(key);
                 
                 if (!log.getReadOnly(key)) {
@@ -574,9 +574,9 @@ public abstract class TxManager(data:MapData) {
         try {
             
             val logMap = log.transLog;
-            val iter = logMap.keySet().iterator();
-            while (iter.hasNext()) {
-                val key = iter.next();
+            val sortedKeys = log.getSortedKeys();
+            for (var i:Int = 0n; i < sortedKeys.size; i++){
+                val key = sortedKeys(i);
                 val memory = log.getMemoryUnit(key);
                 
                 //lock read only key
