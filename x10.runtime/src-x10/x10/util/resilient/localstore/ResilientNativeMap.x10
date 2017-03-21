@@ -3,6 +3,7 @@ package x10.util.resilient.localstore;
 import x10.util.Set;
 import x10.util.HashMap;
 import x10.util.ArrayList;
+import x10.util.RailUtils;
 import x10.util.resilient.localstore.tx.*;
 import x10.util.resilient.localstore.LockingRequest;
 import x10.util.resilient.localstore.Cloneable;
@@ -94,8 +95,9 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         return tx;
     }
     
-    private def startGlobalTransaction(members:PlaceGroup):Tx {
+    private def startGlobalTransaction(pg:PlaceGroup):Tx {
         assert(store.plh().virtualPlaceId != -1);
+        val members = sortPlaces(pg);
         val id = store.plh().masterStore.getNextTransactionId();
         if (resilient) {
             val localTx = store.txDescMap.startLocalTransaction();
@@ -109,8 +111,9 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         return tx;
     }
     
-    private def startLockingTransaction(members:PlaceGroup, requests:ArrayList[LockingRequest]):LockingTx {
+    private def startLockingTransaction(pg:PlaceGroup, requests:ArrayList[LockingRequest]):LockingTx {
         assert(store.plh().virtualPlaceId != -1);
+        val members = sortPlaces(pg);
         val id = store.plh().masterStore.getNextTransactionId();
         val tx = new LockingTx(store.plh, id, name, members, requests);
         list().addLockingTx(tx);
@@ -223,8 +226,9 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     }
     
     /**************Baseline Operations*****************/
-    private def startBaselineTransaction(members:PlaceGroup):BaselineTx {
+    private def startBaselineTransaction(pg:PlaceGroup):BaselineTx {
         assert(store.plh().virtualPlaceId != -1);
+        val members = sortPlaces(pg);
         val id = baselineTxId ++;
         val tx = new BaselineTx(store.plh, id, name, members);
         return tx;
@@ -269,6 +273,18 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                 list.add(activePG(members(i)));
         }
         return new SparsePlaceGroup(list.toRail());
+    }
+    
+    private def sortPlaces(members:PlaceGroup) {
+    	val rail = new Rail[Long](members.size());
+    	val prail = new Rail[Place](members.size());
+    	
+    	for (var i:Long = 0; i < members.size(); i++)
+    		rail(i) = members(i).id;
+    	RailUtils.sort(rail);
+    	for (var i:Long = 0; i < members.size(); i++)
+    		prail(i) = Place(rail(i));
+    	return new SparsePlaceGroup(prail);
     }
     
     public def printTxStatistics() {

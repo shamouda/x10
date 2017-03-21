@@ -398,23 +398,15 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             finish for (p in members) {
                 if ((resilient && !DISABLE_SLAVE) || TxConfig.getInstance().VALIDATION_REQUIRED) {
                     if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseOne going to move to ["+p+"] ...");
-                    at (p) async {
-            
-                        if (TxConfig.getInstance().VALIDATION_REQUIRED) {
-                            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] commitPhaseOne : validate started ...");
-                            plh().masterStore.validate(id);
-                            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] commitPhaseOne : validate done ...");
-                        }
-                    
-                        if (resilient && !DISABLE_SLAVE) {
-                            val log = plh().masterStore.getTxCommitLog(id);
-                            if (log != null && log.size() > 0) {                            
-                                //send txLog to slave (very important to be able to tolerate failures of masters just after prepare)
-                                at (plh().slave) async {
-                                    plh().slaveStore.prepare(id, log, placeIndex);
-                                }
-                            }
-                        }
+                    if (TxConfig.getInstance().TM.equals("RV_LA_WB")) {
+	                    at (p) { // do the locking sequentially (no async), the members list must be sorted
+	                    	commitPhaseOne_local(plh, id, placeIndex);
+	                    }
+                    }
+                    else {
+	                    at (p) async {
+	                    	commitPhaseOne_local(plh, id, placeIndex);
+	                    }
                     }
                 }
                 else
@@ -422,6 +414,24 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             }
         } finally {
             phase1ElapsedTime = Timer.milliTime() - start;
+        }
+    }
+    
+    private def commitPhaseOne_local(plh:PlaceLocalHandle[LocalStore], id:Long, placeIndex:Long) {
+        if (TxConfig.getInstance().VALIDATION_REQUIRED) {
+            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] commitPhaseOne : validate started ...");
+            plh().masterStore.validate(id);
+            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] commitPhaseOne : validate done ...");
+        }
+    
+        if (resilient && !DISABLE_SLAVE) {
+            val log = plh().masterStore.getTxCommitLog(id);
+            if (log != null && log.size() > 0) {                            
+                //send txLog to slave (very important to be able to tolerate failures of masters just after prepare)
+                at (plh().slave) async {
+                    plh().slaveStore.prepare(id, log, placeIndex);
+                }
+            }
         }
     }
     

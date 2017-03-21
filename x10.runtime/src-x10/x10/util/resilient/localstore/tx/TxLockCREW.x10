@@ -252,7 +252,17 @@ public class TxLockCREW extends TxLock {
     }
     
     private def stronger(me:Long, other:Long) {
-        val res = (me as Int) < (other as Int);
+    	var res:Boolean = true;
+    	val seq = (me as Int);
+    	val otherSeq = (other as Int);
+    	
+    	if (seq == otherSeq) {
+    		val placeId = (me >> 32) as Int;
+    		val otherPlaceId = (other >> 32) as Int;
+    		res = placeId < otherPlaceId;
+    	}
+    	else
+    		res = (me as Int) < (other as Int);
         if (TM_DEBUG) Console.OUT.println("Tx[" + me + "] isStronger(other:" + other + ")? [" + res + "]  meSEQ["+ (me as Int) +"] otherSEQ["+ (other as Int) +"] ");
         return res;
     }
