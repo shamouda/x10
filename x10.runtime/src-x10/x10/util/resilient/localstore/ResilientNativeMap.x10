@@ -95,6 +95,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         return tx;
     }
     
+    
     private def startGlobalTransaction(pg:PlaceGroup):Tx {
         assert(store.plh().virtualPlaceId != -1);
         val members = sortPlaces(pg);
@@ -110,6 +111,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         list().addGlobalTx(tx);
         return tx;
     }
+    
     
     private def startLockingTransaction(pg:PlaceGroup, requests:ArrayList[LockingRequest]):LockingTx {
         assert(store.plh().virtualPlaceId != -1);
@@ -528,6 +530,89 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
             str += v + ":";
         }
         return str;
+    }
+    
+    public def executeTransaction(target:Place, closure:(tx:NestingTx)=>Any):Any {
+    	var curTx:NestingTx = currentTransaction();
+    	if (curTx == null) {
+    		curTx = createTopLevelTransaction();
+    		curTx.addMember(here);
+    		Runtime.activity().setTransaction(curTx);
+    	}
+    	
+    	val depth = curTx.depth;
+    	val parentGR = new GlobalRef(curTx);
+    	curTx.addMember(target);
+    	
+        output = at (target) {
+        	var childTx:NestingTx = currentTransaction();
+    		if (childTx == null) {
+    			childTx = createChildTransaction(depth+1, parentGR);
+    			childTx.addMember(here);
+    			Runtime.activity().setTransaction(curTx);
+    		}
+    		
+        	val out = closure(childTx);
+        	
+        	childTx.commit();//local validate, and notify parent
+        	
+        	out
+        };
+    	
+    	curTx.commit();
+    	
+    	return output;
+    }
+    
+    public def executeAsyncTransaction(target:Place , closure:(tx:NestingTx)=>Any):Future[Any] {
+    	var curTx:NestingTx = currentTransaction();
+    	if (curTx == null) {
+    		curTx = createTopLevelTransaction();
+    		curTx.addMember(here);
+    		Runtime.activity().setTransaction(curTx);
+    	}
+    	
+    	val depth = curTx.depth;
+    	val parentGR = new GlobalRef(curTx);
+    	curTx.addMember(target);
+    	
+    	val future = Future.make[Any](() => 
+    		var childTx:NestingTx = currentTransaction();
+			if (childTx == null) {
+				childTx = createChildTransaction(depth+1, parentGR);
+				childTx.addMember(here);
+				Runtime.activity().setTransaction(curTx);
+			}
+		
+			val out = closure(childTx);
+    	
+			childTx.commit();//local validate, and notify parent
+    	
+			out
+    	);
+ 
+    	curTx.commit();
+    	
+    	return future;
+    }
+    
+    private def createTopLevelTransaction() {
+    	val id = store.plh().masterStore.getNextTransactionId();
+    	return new NestingTx(store.plh, id, name, 0, null);
+    }
+    
+    private def createChildTransaction() {
+    	val id = store.plh().masterStore.getNextTransactionId();
+    	return new NestingTx(store.plh, id, name, 0, null);
+    }
+    
+    
+    private def deleteCurrentTransaction(curDepth:Long) {
+    	Runtime.activity().setTransaction(null);
+    }
+    
+    private def currentTransaction() {
+    	return Runtime.activity().getTransaction();
     }
     
 }

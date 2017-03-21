@@ -7,8 +7,8 @@ class Tx {
     
     /***************** Starting (nested) transactions ********************/
     //these 2 functions replace old asyncAt, and syncAt functions//
-    public static abstract def executeTransaction(target:Place, closure:()=>Any):Any; //starts a (nested) transaction synchronously at a remote place
-    public static abstract def executeAsyncTransaction(target:Place, closure:()=>Any):Future[Any]; //starts a (nested) transaction asynchronously at a remote place
+    public static abstract def executeTransaction(target:Place, closure:(tx:Tx)=>Any):Any; //starts a (nested) transaction synchronously at a remote place
+    public static abstract def executeAsyncTransaction(target:Place, closure:(tx:Tx)=>Any):Future[Any]; //starts a (nested) transaction asynchronously at a remote place
         
     /***************** Commit/Abort ********************/
     

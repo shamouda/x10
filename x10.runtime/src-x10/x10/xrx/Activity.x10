@@ -11,6 +11,8 @@
 
 package x10.xrx;
 
+import x10.util.resilient.localstore.NestingTx;
+
 /**
  * Runtime representation of an async. Only to be used in the runtime implementation.
  */
@@ -56,7 +58,12 @@ public class Activity {
      * Depth of enclosing atomic blocks
      */
     private var atomicDepth:Int = 0n;
-
+    
+    /**
+     * A distributed transaction handle
+     * */
+    private var transaction:NestingTx;
+    
     /**
      * Create activity.
      */
@@ -146,6 +153,14 @@ public class Activity {
         } catch (DeadPlaceException) {}
         if (DEALLOC_BODY) Unsafe.dealloc(body);
     }
+    
+    
+    /***  Transactions  ***/
+    public def getTransaction() = transaction;
+    public def setTransaction(trans:Transaction) {
+    	transaction = trans;
+    }
+    
 }
 
 // vim:shiftwidth=4:tabstop=4:expandtab
