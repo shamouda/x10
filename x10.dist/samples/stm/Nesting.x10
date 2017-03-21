@@ -1,5 +1,5 @@
 class ResilientNativeMap {
-    public abstract def createTransaction():Tx; //creates a transaction reference. we did not have this function before.
+    
     public abstract def isRecoveryRequired():Boolean; //true if one or more active places are dead
 }
 
