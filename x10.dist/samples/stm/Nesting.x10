@@ -7,13 +7,13 @@ class Tx {
     
     /***************** Starting (nested) transactions ********************/
     //these 2 functions replace old asyncAt, and syncAt functions//
-    public abstract def startTransaction(target:Place, closure:()=>Any):Any; //starts a (nested) transaction synchronously at a remote place
-    public abstract def startAsyncTransaction(target:Place, closure:()=>Any):Future[Any]; //starts a (nested) transaction asynchronously at a remote place
+    public static abstract def executeTransaction(target:Place, closure:()=>Any):Any; //starts a (nested) transaction synchronously at a remote place
+    public static abstract def executeAsyncTransaction(target:Place, closure:()=>Any):Future[Any]; //starts a (nested) transaction asynchronously at a remote place
         
     /***************** Commit/Abort ********************/
     
-    public abstract def commit():void;  //called inside the startTransaction(...) closure.
-    public abstract def abort():void;   //called inside the startTransaction(...) closure.
+    private abstract def commit():void;  //called inside the startTransaction(...) closure.
+    private abstract def abort():void;   //called inside the startTransaction(...) closure.
     
     /***************** Get ********************/
     public abstract def get(key:String):Cloneable; //local get
@@ -48,45 +48,38 @@ public class Nesting {
         
         while (true) {
             try {
-                val tx = map.createTransaction();
-                outer(tx);
+                outer();
                 break;
-            } catch(cex:ConflictException) {
+            } catch(ex:ConflictException) {
                 //repeat
             }
         }
     }
     
-    public static def outer(tx:Tx) {
-        tx.startTransaction(here , ()=> {
-            val bFuture = inner(tx);
-            
-            val c = tx.get("c");            
+    public static def outer() {
+        Tx.executeTransaction(here , (tx:Tx)=> {
+            val bFuture = inner();
+            val c = Tx.get("c");            
             val b = bFuture.force();
-            
-            val dFuture = tx.asyncPut(Place(3), "d", b + c);
-            val eFuture = tx.asyncPut(Place(4), "e", b - c);
-            
-            tx.commit(); //implicitly waits for local futures, before asking parent to commit
+            tx.asyncPut(Place(3), "d", b + c);
+            tx.asyncPut(Place(4), "e", b - c);
+            return null;
         });
     }
     
-    public static def inner(tx:Tx) {
-        val future = tx.startAsyncTransaction(Place(1), ()=> {
-            val a = innerInner(tx);
+    public static def inner() {
+        val future = Tx.executeAsyncTransaction(Place(1), (tx:Tx)=> {
+            val a = innerInner();
             val b = a+2;
             tx.put("b", b);
-            
-            tx.commit(); // asks parent to commit
             return b;
         });
         return future;
     }
     
     public static def innerInner(tx:Tx) {
-        val result = tx.startTransaction(Place(2), ()=> {
+        val result = Tx.executeTransaction(Place(2), ()=> {
             val a = tx.get("a");
-            tx.commit(); //asks parent to commit
             return a; 
         });
         return result;
