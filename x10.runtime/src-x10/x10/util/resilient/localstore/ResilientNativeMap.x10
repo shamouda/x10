@@ -10,6 +10,7 @@ import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Lock;
 import x10.xrx.Runtime;
 import x10.util.Timer;
+import x10.util.concurrent.Future;
 
 public class ResilientNativeMap (name:String, store:ResilientStore) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
@@ -533,79 +534,164 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     }
     
     public def executeTransaction(target:Place, closure:(tx:NestingTx)=>Any):Any {
-    	var curTx:NestingTx = currentTransaction();
-    	if (curTx == null) {
-    		curTx = createTopLevelTransaction();
-    		curTx.addMember(here);
-    		Runtime.activity().setTransaction(curTx);
+    	var parentTx:NestingTx = currentTransaction();
+        var parentFirstVisit:Boolean = false;
+        
+    	if (parentTx == null) {
+    		parentTx = createTopLevelTransaction();
+    		parentTx.addMember(here);
+    		Runtime.activity().setTransaction(parentTx);
+    		parentFirstVisit = true;
     	}
     	
-    	val depth = curTx.depth;
-    	val parentGR = new GlobalRef(curTx);
-    	curTx.addMember(target);
+    	val depth = parentTx.depth;
+    	val parentGR = new GlobalRef(parentTx);
+    	parentTx.addMember(target);
     	
-        output = at (target) {
+        val output = at (target) {
         	var childTx:NestingTx = currentTransaction();
+            var childFirstVisit:Boolean = false;
     		if (childTx == null) {
     			childTx = createChildTransaction(depth+1, parentGR);
     			childTx.addMember(here);
-    			Runtime.activity().setTransaction(curTx);
+    			Runtime.activity().setTransaction(childTx);
+    			childFirstVisit = true;
     		}
     		
         	val out = closure(childTx);
         	
-        	childTx.commit();//local validate, and notify parent
+        	if (childFirstVisit)
+        	    childTx.commit();//local validate, and notify parent
         	
         	out
         };
     	
-    	curTx.commit();
-    	
     	return output;
     }
     
-    public def executeAsyncTransaction(target:Place , closure:(tx:NestingTx)=>Any):Future[Any] {
-    	var curTx:NestingTx = currentTransaction();
-    	if (curTx == null) {
-    		curTx = createTopLevelTransaction();
-    		curTx.addMember(here);
-    		Runtime.activity().setTransaction(curTx);
-    	}
-    	
-    	val depth = curTx.depth;
-    	val parentGR = new GlobalRef(curTx);
-    	curTx.addMember(target);
-    	
-    	val future = Future.make[Any](() => 
-    		var childTx:NestingTx = currentTransaction();
-			if (childTx == null) {
-				childTx = createChildTransaction(depth+1, parentGR);
-				childTx.addMember(here);
-				Runtime.activity().setTransaction(curTx);
-			}
-		
-			val out = closure(childTx);
-    	
-			childTx.commit();//local validate, and notify parent
-    	
-			out
-    	);
- 
-    	curTx.commit();
-    	
-    	return future;
+    private def executeTopLevelTransaction(target:Place, closure:(tx:NestingTx)=>Any):Any {
+        val parentTx = createTopLevelTransaction();
+        parentTx.addMember(target);
+        Runtime.activity().setTransaction(parentTx);
+                
+        val depth = parentTx.depth;
+        val parentGR = new GlobalRef(parentTx);
+        
+        val output:Any;
+        try {
+            finish {
+                output = at (target) {
+                    var childTx:NestingTx = currentTransaction();
+                    var childFirstVisit:Boolean = false;
+                    if (childTx == null) {
+                        childTx = createChildTransaction(depth+1, parentGR);
+                        Runtime.activity().setTransaction(childTx);
+                        childFirstVisit = true;
+                    }
+                    
+                    val out = closure(childTx);
+                    
+                    if (childFirstVisit)
+                        childTx.commit();//local validate, and notify parent
+                    
+                    out
+                };
+            }
+            parentTx.waitForFutures();
+            parentTx.commit();
+        }catch(ex:Exception) {
+            parentTx.abort();
+            throw ex;
+        }
+        return output;
     }
+    
+    
+    private def executeSubTransaction(target:Place, closure:(tx:NestingTx)=>Any):Any {
+        val tx = Runtime.activity().getTransaction();
+        parentTx.addMember(target);
+                
+        val depth = tx.depth;
+        val parentGR = tx.parent;
+        
+        val output:Any;
+        try {
+                output = at (target) {
+                    var childTx:NestingTx = currentTransaction();
+                    var childFirstVisit:Boolean = false;
+                    if (childTx == null) {
+                        childTx = createChildTransaction(depth+1, parentGR);
+                        Runtime.activity().setTransaction(childTx);
+                        childFirstVisit = true;
+                    }
+                    
+                    val out = closure(childTx);
+                    
+                    if (childFirstVisit)
+                        childTx.commit();//local validate, and notify parent
+                    
+                    out
+                };
+            parentTx.waitForFutures();
+            parentTx.commit();
+        }catch(ex:Exception) {
+            parentTx.abort();
+            throw ex;
+        }
+        return output;
+    }
+    
+    public def executeAsyncTransaction(target:Place, closure:(tx:NestingTx)=>Any):Future[Any] {
+        var parentTx:NestingTx = currentTransaction();
+        var parentFirstVisit:Boolean = false;
+    
+        if (parentTx == null) {
+            parentTx = createTopLevelTransaction();
+            parentTx.addMember(here);
+            Runtime.activity().setTransaction(parentTx);
+            parentFirstVisit = true;
+        }
+        
+        val depth = parentTx.depth;
+        val parentGR = new GlobalRef(parentTx);
+        parentTx.addMember(target);
+        
+        val future = Future.make[Any](() => 
+            at (target) {
+                var childTx:NestingTx = currentTransaction();
+                var childFirstVisit:Boolean = false;
+            
+                if (childTx == null) {
+                    childTx = createChildTransaction(depth+1, parentGR);
+                    childTx.addMember(here);
+                    Runtime.activity().setTransaction(childTx);
+                    childFirstVisit = true;
+                }
+                
+                val out = closure(childTx);
+                
+                if (childFirstVisit)
+                    childTx.commit();//local validate, and notify parent
+                
+                out
+            }
+        );
+        
+        parentTx.addFuture(future);
+        
+        return future;
+    }
+
     
     private def createTopLevelTransaction() {
     	val id = store.plh().masterStore.getNextTransactionId();
-    	return new NestingTx(store.plh, id, name, 0, null);
+    	return new NestingTx(store.plh, id, name, 0);
     }
     
-    private def createChildTransaction() {
+    private def createChildTransaction(depth:Long, gr:GlobalRef[NestingTx]) {
     	val id = store.plh().masterStore.getNextTransactionId();
-    	return new NestingTx(store.plh, id, name, 0, null);
+    	return new NestingTx(store.plh, id, name, depth, gr);
     }
-    
     
     private def deleteCurrentTransaction(curDepth:Long) {
     	Runtime.activity().setTransaction(null);

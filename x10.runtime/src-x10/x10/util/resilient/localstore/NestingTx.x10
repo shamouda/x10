@@ -14,15 +14,83 @@ package x10.util.resilient.localstore;
 
 import x10.util.ArrayList;
 import x10.util.HashSet;
+import x10.util.concurrent.Future;
+import x10.util.Set;
 
-public class NestingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, depth:Long, parent:GlobalRef[NestingTx]) {
+public class NestingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, depth:Long) {
     private val members = new HashSet[Place]();
     private val futures = new ArrayList[Future[Any]]();
+    private var parent:GlobalRef[NestingTx];
+    
+    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, depth:Long) {
+        property(plh, id, mapName, depth);
+    }
+    
+    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, depth:Long, parent:GlobalRef[NestingTx]) {
+        property(plh, id, mapName, depth);
+        this.parent = parent;
+    }
     
     public def addMember(target:Place) {
         if (!members.contains(target))
     	    members.add(target);
     }
     
+    public def addFuture(f:Future[Any]) {
+        futures.add(f);
+    }
+    
+    /***************** Get ********************/
+    public def get(key:String):Cloneable {
+        return plh().masterStore.get(mapName, id, key);
+    }
+    
+    /***************** PUT ********************/
+    public def put(key:String, value:Cloneable):Cloneable {
+        return plh().masterStore.put(mapName, id, key, value);
+    }
+    
+    /***************** Delete ********************/
+    public def delete(key:String):Cloneable {
+        return deleteLocal(key, plh, id, mapName);
+    }
+    
+    /***************** KeySet ********************/
+    public def keySet():Set[String] {
+        return plh().masterStore.keySet(mapName, id);
+    }
+    
+    /***************** Commit/Abort methods ********************/
+    public def commit() {
+        if (depth == 0)
+            rootCommit();
+        else
+            childCommit();
+    }
+    
+    public def rootCommit() {
+        
+            
+    }
+    
+    public def childCommit() {
+        
+    }
+    
+    public def abort() {
+        if (depth == 0)
+            rootAbort();
+        else
+            childAbort();
+            
+    }
+    
+    public def rootAbort() {
+            
+    }
+    
+    public def childAbort() {
+        
+    }
     
 }

@@ -26,4 +26,13 @@ public class CloneableLong implements Cloneable {
     public def toString() {
         return "CloneableLong[" + v + "]";
     }
+    
+    public operator this + (other:CloneableLong) {
+        return new CloneableLong (v + other.v );
+    }
+    
+    public operator this - (other:CloneableLong) {
+        return new CloneableLong (v - other.v );
+    }
+    
 }
