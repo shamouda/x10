@@ -157,7 +157,7 @@ public class Activity {
     
     /***  Transactions  ***/
     public def getTransaction() = transaction;
-    public def setTransaction(trans:Transaction) {
+    public def setTransaction(trans:NestingTx) {
     	transaction = trans;
     }
     
