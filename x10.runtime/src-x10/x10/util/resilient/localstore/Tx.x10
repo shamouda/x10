@@ -398,15 +398,8 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             finish for (p in members) {
                 if ((resilient && !DISABLE_SLAVE) || TxConfig.getInstance().VALIDATION_REQUIRED) {
                     if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseOne going to move to ["+p+"] ...");
-                    if (TxConfig.getInstance().TM.equals("RV_LA_WB")) {
-	                    at (p) { // do the locking sequentially (no async), the members list must be sorted
-	                    	commitPhaseOne_local(plh, id, placeIndex);
-	                    }
-                    }
-                    else {
-	                    at (p) async {
-	                    	commitPhaseOne_local(plh, id, placeIndex);
-	                    }
+                    at (p) async {
+                    	commitPhaseOne_local(plh, id, placeIndex);
                     }
                 }
                 else
