@@ -26,6 +26,7 @@ import x10.util.HashSet;
 
 public class STMBench {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
+    private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     public static def main(args:Rail[String]) {
         val opts = new OptionsParser(args, [
@@ -61,7 +62,8 @@ public class STMBench {
         val mgr = new PlaceManager(s, false);
         val activePlaces = mgr.activePlaces();
         val p = opts("p", activePlaces.size());
-        val producerPlaces = getTxProducers(activePlaces, p);        
+        val producerPlaces = getTxProducers(activePlaces, p);  
+        val producersCount = producerPlaces.size();
         printRunConfigurations (new STMBenchParameters(r, u, n, p, t, w, d, a, h, o, g, s));
         
         assert (h <= activePlaces.size()) : "invalid value for parameter h, h should not exceed the number of active places" ;
@@ -75,45 +77,53 @@ public class STMBench {
         
         val startWarmup = Timer.milliTime();
         Console.OUT.println("warmup started");
-        runIteration(map, activePlaces, producerPlaces, w, a, r, u, t, h, o, g);
+        runIteration(map, activePlaces, producersCount, w, a, r, u, t, h, o, g);
         Console.OUT.println("warmup completed, warmup elapsed time ["+(Timer.milliTime() - startWarmup)+"]  ms ");
         
         for (iter in 1..n) {
         	val startIter = Timer.milliTime();
-            val throughputList = runIteration(map, activePlaces, producerPlaces, d, a, r, u, t, h, o, g);
+            val throughputList = runIteration(map, activePlaces, producersCount, d, a, r, u, t, h, o, g);
             printThroughput(map, iter, throughputList, d, a, h, o);
             Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
         }
     }
     
-    public static def runIteration(map:ResilientNativeMap, activePlaces:PlaceGroup, producers:PlaceGroup, 
+    public static def runIteration(map:ResilientNativeMap, activePlaces:PlaceGroup, producersCount:Long, 
     		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long) {
-        val root = here;
-        val statGR = GlobalRef(new ArrayList[ProducerThroughput]());
-        finish for (pl in producers) at (pl) async {
+        val resultGR = new GlobalRef[ArrayList[ProducerThroughput]](new ArrayList[ProducerThroughput]());
+        finish for (var i:Long = 0; i < producersCount; i++) {
+        	startPlace(activePlaces(i), map, activePlaces, producersCount, d, a, r, u, t, h, o, g, resultGR);
+        }
+        return resultGR();
+    }
+
+    private static def startPlace(pl:Place, map:ResilientNativeMap, activePlaces:PlaceGroup, producersCount:Long, 
+    		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, resultGR:GlobalRef[ArrayList[ProducerThroughput]]) {
+    	Console.OUT.println(here + " - starting an iteration ...");
+    	at (pl) async {
             for (thrd in 1..t) async {
-                
-                val throughput = produce(map, activePlaces, producers, thrd, d, a, r, u, t, h, o, g);
-                
-                at (root) async {
-                    atomic statGR().add(throughput);
+                val throughput = produce(map, activePlaces, producersCount, thrd, d, a, r, u, t, h, o, g, resultGR);
+                at (resultGR) async {
+                    atomic resultGR().add(throughput);
                 }
             }
         }
-        return statGR();
     }
-
-    public static def produce(map:ResilientNativeMap, activePlaces:PlaceGroup, producers:PlaceGroup, producerId:Long, 
-    		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long) {
+    
+    public static def produce(map:ResilientNativeMap, active:PlaceGroup, producersCount:Long, producerId:Long, 
+    		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, resultGR:GlobalRef[ArrayList[ProducerThroughput]]) {
         var timeNS:Long = 0;
         var txCount:Long = 0;
-        val activePlacesCount = activePlaces.size();
         val rand = new Random((here.id+1) * producerId);
         
         val slices = d / a;
         val counts = new Rail[Long](slices);
         val times = new Rail[Long](slices);
         
+        /*****   for resilience   ******/
+        var nextPlace:Place = map.store.getNextPlace();
+        var activePlaces:PlaceGroup = active;
+        val activePlacesCount = activePlaces.size();
         while (timeNS < d*1e6) {
             //do not include the time to select the random operations as part of the time//
             val members = nextTransactionMembers(rand, activePlaces, h);
@@ -169,16 +179,16 @@ public class STMBench {
             else if (members.size() > 1 && TxConfig.getInstance().LOCKING ) { //locking distributed
                 map.executeLockingTransaction(members, lockRequests, distClosure);
             }
-            else if (members.size() == 1 && producers.size() == 1 && TxConfig.getInstance().STM ) { // STM local
+            else if (members.size() == 1 && producersCount == 1 && TxConfig.getInstance().STM ) { // STM local
                 //local transaction
                 assert (members(0) == here) : "local transactions are not supported at remote places in this benchmark" ;
                 map.executeLocalTransaction(localClosure);
             }
-            else if (members.size() == 1 && producers.size() == 1 && TxConfig.getInstance().LOCKING ) { //Locking local
+            else if (members.size() == 1 && producersCount == 1 && TxConfig.getInstance().LOCKING ) { //Locking local
                 assert (members(0) == here) : "local transactions are not supported at remote places in this benchmark" ;
                 map.executeLockingTransaction(members, lockRequests, localClosure);
             }
-            else if (members.size() == 1 && producers.size() == 1 && TxConfig.getInstance().BASELINE ) { //baseline local
+            else if (members.size() == 1 && producersCount == 1 && TxConfig.getInstance().BASELINE ) { //baseline local
                 map.executeBaselineTransaction(members, localClosure);
             }
             else if (members.size() > 1 && TxConfig.getInstance().BASELINE ) { //baseline distributed
@@ -200,6 +210,15 @@ public class STMBench {
             counts(slice)+= 1;
             times(slice) += elapsedNS;
             //Console.OUT.println("[" + here + "] slice["+slice+"]  counts["+counts(slice)+"] timesMS["+times(slice)+"]");
+
+            if (resilient && !map.store.sameActivePlaces(activePlaces)) {
+            	activePlaces = map.store.getActivePlaces();
+            	val nxt = activePlaces.next(here);
+            	if (nxt.id != nextPlace.id) {
+            		nextPlace = nxt;
+            		startPlace(nextPlace, map, activePlaces, producersCount, d, a, r, u, t, h, o, g, resultGR);
+            	}
+            }
         }
         
         return new ProducerThroughput(here.id, producerId, times, counts);
@@ -212,7 +231,6 @@ public class STMBench {
         var allOperations:Long = 0;
         var allTimeNS:Long = 0;
         val producers = throughputList.size();
-        
         val slices = d / a;
         val counts = new Rail[Long](slices);
         val timesNS = new Rail[Long](slices);
@@ -226,10 +244,8 @@ public class STMBench {
                 localTimeNS += producer.timesNS(i);
                 timesNS(i) += producer.timesNS(i);
         	}
-        	
         	allOperations += localCount * h * o;
         	allTimeNS     += localTimeNS;
-            
         	val localThroughput = (localCount as Double ) * h * o / (localTimeNS / 1e6);
             Console.OUT.println("iteration:" + iteration +":producer:"+producer.placeId+"x"+producer.threadId+ ":localthroughput(op/MS):"+localThroughput);
         }
@@ -246,7 +262,6 @@ public class STMBench {
     	Console.OUT.println();
         Console.OUT.println("iteration:" + iteration + ":globalthroughput(op/MS):"+throughput);
     }
-    
     
     
     public static def nextTransactionMembers(rand:Random, activePlaces:PlaceGroup, h:Long) {
@@ -321,7 +336,7 @@ public class STMBench {
     public static struct STMBenchParameters {
         public val r:Long;  //keysRange
         public val u:Float; //updatePercentage
-        public val n:Long;    //iterations
+        public val n:Long;  //iterations
         public val p:Long;  //txPlaces
         public val t:Long;  //txThreadsPerPlace
         public val w:Long;  //warmupTime

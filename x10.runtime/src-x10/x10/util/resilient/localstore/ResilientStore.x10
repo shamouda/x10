@@ -39,6 +39,7 @@ public class ResilientStore {
     
     private val appMaps:HashMap[String,ResilientNativeMap];
     private transient val lock:SimpleLatch;
+    private transient var paused:Boolean;
     
     //A resilient map for transactions' descriptors
     var txDescMap:ResilientNativeMap;
@@ -73,13 +74,61 @@ public class ResilientStore {
         }
     }
     
+    public def paused() {
+    	try {
+    		lock.lock();
+    	    return paused;
+    	} finally {
+    		lock.unlock();
+    	}
+    }
+    
     public def getVirtualPlaceId() = activePlaces.indexOf(here);
     
-    public def getActivePlaces() = activePlaces;
+    public def getActivePlaces() {
+    	try {
+    		lock.lock();
+    		return new SparsePlaceGroup(new Rail[Place](activePlaces.size(), (i:Long) => activePlaces(i)));
+    	}finally {
+    		lock.unlock();
+    	}
+    }
 
-    private def getMaster(p:Place) = activePlaces.prev(p);
+    private def getMaster(p:Place) {
+    	try {
+    		lock.lock();
+    	    return activePlaces.prev(p);
+    	} finally {
+    		lock.unlock();
+    	}
+    }
 
-    private def getSlave(p:Place) = activePlaces.next(p);
+    private def getSlave(p:Place) {
+    	try {
+    		lock.lock();
+    	    return activePlaces.next(p);
+    	}finally {
+    		lock.unlock();
+    	}
+    }
+    
+    public def getNextPlace() {
+    	try {
+    		lock.lock();
+    		return activePlaces.next(here);
+    	}finally {
+    		lock.unlock();
+    	}
+    }
+    
+    public def sameActivePlaces(active:PlaceGroup) {
+    	try {
+    		lock.lock();
+    		return activePlaces.equals(active);
+    	}finally {
+    		lock.unlock();
+    	}
+    }
 
     public def updateForChangedPlaces(changes:ChangeDescription):void {
         // Initialize LocalStore at newly active places.

@@ -26,7 +26,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
         this.list = list;
     }
     
-    /**
+    /**	
      * Get the value of key k in the resilient map.
      */
     public def get(k:String) {
