@@ -23,9 +23,6 @@ import x10.util.resilient.localstore.Cloneable;
  * either its master during normal execution, or the store coordinator during failure recovery */
 public class SlaveStore {
     static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-    private static val HB_INTERVAL_MS = System.getenv("HB_INTERVAL_MS") == null ? 1000 : Long.parseLong(System.getenv("HB_INTERVAL_MS"));
-    
-    
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     private var masterState:HashMap[String,Cloneable];
@@ -33,8 +30,7 @@ public class SlaveStore {
     // TODO: change to a HashMap[place index, list]
     private var logs:ArrayList[TxSlaveLog]; 
     private transient val lock:Lock;
-    private var master:Place;
-    private var heartBeatOn:Boolean;
+    public var master:Place;
     
     public def this(master:Place) {
         assert(resilient);
@@ -44,7 +40,6 @@ public class SlaveStore {
             lock = new Lock();
         else
             lock = null;
-        
         this.master = master;
     }
     
@@ -57,49 +52,6 @@ public class SlaveStore {
     public def getSlaveMasterState():HashMap[String,Cloneable] {
         return masterState;
     }
-    
-    public def startHeartBeat(hbIntervalMS:Long) {
-    	assert(resilient);
-    	try {
-            slaveLock();
-            heartBeatOn = true;
-            while (heartBeatOn)
-                heartBeatLocked(hbIntervalMS);
-        }
-        finally {
-            slaveUnlock();
-        }
-    }
-    
-    private def heartBeatLocked(hbIntervalMS:Long) {
-        while (heartBeatOn && !master.isDead()) {
-        	slaveUnlock();
-            System.threadSleep(HB_INTERVAL_MS);                   
-            slaveLock();
-            
-            try {
-        		finish at (master) async {}
-        	}
-        	catch(ex:Exception) { heartBeatOn = false; }
-        }
-        
-        if (master.isDead()) {
-        	//recover masters
-        }
-        
-        heartBeatOn = true;
-    }
-    
-    public def stopHeartBeat() {
-    	try {
-            slaveLock();
-            heartBeatOn = false;
-        }
-        finally {
-            slaveUnlock();
-        }
-    }
-    
     
     /******* Prepare/Commit/Abort functions *******/
     public def commit(id:Long, transLog:HashMap[String,Cloneable], placeIndex:Long) {

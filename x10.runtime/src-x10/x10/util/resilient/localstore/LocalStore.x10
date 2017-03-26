@@ -22,7 +22,9 @@ import x10.util.resilient.localstore.Cloneable;
 
 public class LocalStore {
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
-        
+    private static val HB_INTERVAL_MS = System.getenv("HB_INTERVAL_MS") == null ? 1000 : Long.parseLong(System.getenv("HB_INTERVAL_MS"));
+    
+       
     public var masterStore:MasterStore = null;
     public var virtualPlaceId:Long = -1; //-1 means a spare place
     
@@ -32,23 +34,26 @@ public class LocalStore {
     
     public var activePlaces:PlaceGroup;
     
+    private var plh:PlaceLocalHandle[LocalStore];
+    
     private var heartBeatOn:Boolean;
+
+    private transient var lock:Lock;
     
     public def this(active:PlaceGroup) {
-    	this.activePlaces = active;
-        this.virtualPlaceId = active.indexOf(here);
-        masterStore = new MasterStore(new HashMap[String,Cloneable]());
-        if (resilient) {
-            slaveStore = new SlaveStore(active.prev(here));
-            this.slave = active.next(here);
+        if (active.contains(here)) {
+        	this.activePlaces = active;
+            this.virtualPlaceId = active.indexOf(here);
+            masterStore = new MasterStore(new HashMap[String,Cloneable]());
+            if (resilient) {
+                slaveStore = new SlaveStore(active.prev(here));
+                this.slave = active.next(here);
+            }
+            lock = new Lock();
         }
     }
-
-    /* used to initialize elastically added or spare places */
-    public def this() {
-    	
-    }
-
+    
+    
     /*used when a spare place joins*/
     public def joinAsMaster (active:PlaceGroup, data:HashMap[String,Cloneable]) {
         assert(resilient);
@@ -59,5 +64,86 @@ public class LocalStore {
             slaveStore = new SlaveStore(active.prev(here));
             this.slave = active.next(here);
         }
+        lock = new Lock();
+    }
+    
+    public def allocate(vPlace:Long) {
+        try {
+            lock.lock();
+            if (virtualPlaceId == -1) {
+                virtualPlaceId = vPlace;
+                return true;
+            }
+            return false;
+        }
+        finally {
+            lock.unlock();
+        }
+    }
+    
+    public def setPLH(plh:PlaceLocalHandle[LocalStore]) {
+        this.plh = plh;
+    }
+    
+    public def PLH() = plh;
+    
+
+    
+    
+    
+    /*****  Heartbeating from slave to master ******/
+    
+    public def startHeartBeat(hbIntervalMS:Long) {
+        assert(resilient);
+        try {
+            lock();
+            heartBeatOn = true;
+            while (heartBeatOn)
+                heartBeatLocked(hbIntervalMS);
+        }
+        finally {
+            unlock();
+        }
+    }
+    
+    private def heartBeatLocked(hbIntervalMS:Long) {
+        while (heartBeatOn && !slaveStore.master.isDead()) {
+            unlock();
+            System.threadSleep(HB_INTERVAL_MS);                   
+            lock();
+            
+            try {
+                finish at (slaveStore.master) async {}
+            }
+            catch(ex:Exception) { heartBeatOn = false; }
+        }
+        
+        if (slaveStore.master.isDead()) {
+            //recover masters
+        }
+        
+        heartBeatOn = true;
+    }
+    
+    public def stopHeartBeat() {
+        try {
+            lock();
+            heartBeatOn = false;
+        }
+        finally {
+            unlock();
+        }
+    }
+
+    /*******************************************/
+    
+    private def lock(){
+        if (!TxConfig.getInstance().LOCK_FREE)
+            lock.lock();
+    }
+    
+    private def unlock(){
+        if (!TxConfig.getInstance().LOCK_FREE)
+            lock.unlock();
     }
 }

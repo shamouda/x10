@@ -105,7 +105,8 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
             localTx.commit();
             if(TM_DEBUG) Console.OUT.println("Tx["+id+"] startGlobalTransaction localTx["+localTx.id+"] completed ...");
         }
-        val tx = new Tx(store.plh, id, name, members, store.activePlaces, store.txDescMap);
+        val activePlaces = store.getActivePlaces();
+        val tx = new Tx(store.plh, id, name, members, activePlaces, store.txDescMap);
         list().addGlobalTx(tx);
         return tx;
     }
@@ -249,14 +250,15 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     
     public def restartGlobalTransaction(txDesc:TxDesc):Tx {
         assert(store.plh().virtualPlaceId != -1);
-        val tx = new Tx(store.plh, txDesc.id, name, getMembers(txDesc.members), store.activePlaces, store.txDescMap);
+        val activePlaces = store.getActivePlaces();
+        val tx = new Tx(store.plh, txDesc.id, name, getMembers(txDesc.members), activePlaces, store.txDescMap);
         list().addGlobalTx(tx);
         return tx;
     }
     
     public def getMembersIndices(members:PlaceGroup):Rail[Long] {
         val rail = new Rail[Long](members.size());
-        val activePG = store.activePlaces;
+        val activePG = store.getActivePlaces();
         for (var i:Long = 0; i <  members.size(); i++)
             rail(i) = activePG.indexOf(members(i));
         return rail;
@@ -264,7 +266,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     
     public def getMembers(members:Rail[Long]):PlaceGroup {
         val list = new ArrayList[Place]();
-        val activePG = store.activePlaces;
+        val activePG = store.getActivePlaces();
         for (var i:Long = 0; i < members.size; i++) {
             if (!activePG(members(i)).isDead())
                 list.add(activePG(members(i)));
@@ -275,7 +277,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     public def printTxStatistics() {
         Console.OUT.println("Calculating execution statistics ...");
         val pl_stat = new ArrayList[TxPlaceStatistics]();
-        for (p in store.activePlaces) {
+        for (p in store.getActivePlaces()) {
             val pstat = at (p) {
                 //####         Global TX         ####//
                 val g_commitList = new ArrayList[Double]();
@@ -500,7 +502,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     }
     
     public def resetTxStatistics() {
-        finish for (p in store.activePlaces) at (p) async {
+        finish for (p in store.getActivePlaces()) at (p) async {
             list().globalTx.clear();
             list().localTx.clear();
             list().lockingTx.clear();

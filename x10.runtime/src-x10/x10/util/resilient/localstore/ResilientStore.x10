@@ -15,7 +15,7 @@ package x10.util.resilient.localstore;
 import x10.util.HashSet;
 import x10.util.ArrayList;
 import x10.util.HashMap;
-import x10.util.concurrent.SimpleLatch;
+import x10.util.concurrent.Lock;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.tx.TxManager;
@@ -37,24 +37,23 @@ public class ResilientStore {
     public val plh:PlaceLocalHandle[LocalStore];
     
     private val appMaps:HashMap[String,ResilientNativeMap];
-    private transient val lock:SimpleLatch;
+    private transient val lock:Lock;
     
     //A resilient map for transactions' descriptors
     var txDescMap:ResilientNativeMap;
-    public var activePlaces:PlaceGroup;
     
-    private def this(pg:PlaceGroup, plh:PlaceLocalHandle[LocalStore]) {
-    	this.activePlaces = pg;
+    private def this(plh:PlaceLocalHandle[LocalStore]) {
         this.plh = plh;
         this.appMaps = new HashMap[String,ResilientNativeMap]();
-        this.lock = new SimpleLatch();
+        this.lock = new Lock();
     }
     
     public static def make(pg:PlaceGroup):ResilientStore {
-        val plh = PlaceLocalHandle.make[LocalStore](pg, () => {
-            new LocalStore(pg)
+        val plh = PlaceLocalHandle.make[LocalStore](Place.places(), ()=> new LocalStore(pg) );
+        val store = new ResilientStore(plh);
+        Place.places().broadcastFlat(()=> {
+            plh().setPLH(plh);
         });
-        val store = new ResilientStore(pg, plh);
         
         if (resilient)
             store.txDescMap = store.makeMap("_TxDesc_");
@@ -64,7 +63,7 @@ public class ResilientStore {
     public def makeMap(name:String):ResilientNativeMap {
         try {
             lock.lock();
-            val list = PlaceLocalHandle.make[TransactionsList](activePlaces, () => new TransactionsList());
+            val list = PlaceLocalHandle.make[TransactionsList](Place.places(), () => new TransactionsList());
             val map = new ResilientNativeMap(name, this, list);
             appMaps.put(name, map);
             return map;
@@ -73,12 +72,20 @@ public class ResilientStore {
         }
     }
     
-    public def getVirtualPlaceId() = activePlaces.indexOf(here);
+    public def getVirtualPlaceId() {
+        try {
+            lock.lock();
+            return plh().activePlaces.indexOf(here);
+        }finally {
+            lock.unlock();
+        }
+    }
     
     public def getActivePlaces() {
     	try {
     		lock.lock();
-    		return new SparsePlaceGroup(new Rail[Place](activePlaces.size(), (i:Long) => activePlaces(i)));
+    		val active = plh().activePlaces;
+    		return new SparsePlaceGroup(new Rail[Place](active.size(), (i:Long) => active(i)));
     	}finally {
     		lock.unlock();
     	}
@@ -87,7 +94,8 @@ public class ResilientStore {
     private def getMaster(p:Place) {
     	try {
     		lock.lock();
-    	    return activePlaces.prev(p);
+    		val active = plh().activePlaces;
+    	    return active.prev(p);
     	} finally {
     		lock.unlock();
     	}
@@ -96,7 +104,8 @@ public class ResilientStore {
     private def getSlave(p:Place) {
     	try {
     		lock.lock();
-    	    return activePlaces.next(p);
+    		val active = plh().activePlaces;
+    	    return active.next(p);
     	}finally {
     		lock.unlock();
     	}
@@ -105,7 +114,8 @@ public class ResilientStore {
     public def getNextPlace() {
     	try {
     		lock.lock();
-    		return activePlaces.next(here);
+    		val active = plh().activePlaces;
+    		return active.next(here);
     	}finally {
     		lock.unlock();
     	}
@@ -114,24 +124,13 @@ public class ResilientStore {
     public def sameActivePlaces(active:PlaceGroup) {
     	try {
     		lock.lock();
-    		return activePlaces.equals(active);
+    		return plh().activePlaces.equals(active);
     	}finally {
     		lock.unlock();
     	}
     }
 
     public def updateForChangedPlaces(changes:ChangeDescription):void {
-        // Initialize LocalStore at newly active places.
-        for (p in changes.addedPlaces) {
-            PlaceLocalHandle.addPlace[LocalStore](plh, p, ()=>new LocalStore(changes.newActivePlaces));
-            val iter = appMaps.keySet().iterator();
-            while (iter.hasNext()) {
-                val mapName = iter.next();
-                val map = appMaps.getOrThrow(mapName);
-                PlaceLocalHandle.addPlace[TransactionsList]( map.list, p, ()=>new TransactionsList());
-            }
-        }
-
         checkIfBothMasterAndSlaveDied(changes);
         
         /*complete transactions whose coordinator died*/
@@ -141,7 +140,7 @@ public class ResilientStore {
         
         recoverSlaves(changes);
 
-        activePlaces = changes.newActivePlaces;
+        plh().activePlaces = changes.newActivePlaces;
     }
 
     private def checkIfBothMasterAndSlaveDied(changes:ChangeDescription) {
