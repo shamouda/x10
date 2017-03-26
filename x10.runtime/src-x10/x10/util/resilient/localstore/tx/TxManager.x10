@@ -12,11 +12,15 @@ import x10.util.resilient.localstore.TxConfig;
 
 public abstract class TxManager(data:MapData) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-
-    protected val txLogs:SafeBucketHashMap[Long,TxLog];
+    private static val PAUSE_WAIT_MS = System.getenv("PAUSE_WAIT_MS") == null ? 10 : Long.parseLong(System.getenv("PAUSE_WAIT_MS"));
     
+    protected var paused:Long; // 0 (not paused), 1 (preparing to pause), 2 (paused)
+    
+    //stm
+    protected val txLogs:SafeBucketHashMap[Long,TxLog];
     //locking
     protected val lockingTxLogs:SafeBucketHashMap[Long,LockingTxLog];
+    protected static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     public def this(data:MapData) {
         property(data);
@@ -56,7 +60,7 @@ public abstract class TxManager(data:MapData) {
     }
     
     /* Used in resilient mode to transfer the changes done by a transaction to the Slave.
-     * We filter the TxLog object to remove the read-only keys,
+     * We filter the TxLog object to remove read-only keys,
      * so that we transfer only the update operations.
      * Accordingly, read-only transactions incurs no replication overhead.
      */
@@ -93,6 +97,7 @@ public abstract class TxManager(data:MapData) {
             if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] ");
             log = txLogs.getOrElseUnsafe(id, null);
             if (log == null) {
+            	ensureNotPaused(); // do not add new transactions is the store is paused
                 log = new TxLog(id);
                 txLogs.putUnsafe(id, log);
             }
@@ -110,6 +115,7 @@ public abstract class TxManager(data:MapData) {
 
             log = lockingTxLogs.getOrElseUnsafe(id, null);
             if (log == null) {
+            	ensureNotPaused(); // do not add new transactions is the store is paused
                 log = new LockingTxLog(id);
                 lockingTxLogs.putUnsafe(id, log);
             }
@@ -119,6 +125,59 @@ public abstract class TxManager(data:MapData) {
         }
         return log;
     }
+    
+    /**************   Pausing for Recovery    ****************/
+    
+    private def ensureNotPaused() {
+        if ( resilient && paused > 0 )
+            throw new StorePausedException("Local store paused for recovery");
+    }
+    
+    public def isPaused() = (paused == 2);
+    
+    public def pause() {
+    	paused = 1; //preparing to pause
+    	waitForRunningTransactions();
+    	paused = 2;
+    }
+    
+    public def resume() {
+    	paused = 0;
+    }
+    
+    private def waitForRunningTransactions() {
+    	val buckets = TxConfig.getInstance().BUCKETS_COUNT;
+    	
+        Runtime.increaseParallelism();
+        
+        var stopped:Boolean;
+        do{
+        	stopped = true;
+	        for (var i:Long = 0; i < buckets; i++) {
+	        	val bucket = txLogs.getBucket(i);
+	    		bucket.lock();
+	        	val iter = bucket.bucketMap.keySet().iterator();
+	        	while (iter.hasNext()) {
+	        		val key = iter.next();
+	        		val log = bucket.bucketMap.getOrThrow(key);
+	        		if (!log.aborted){
+	        			stopped = false;
+	        			break;
+	        		}
+	        	}
+	        	bucket.unlock();
+	        	if (!stopped)
+	        		break;
+	        }
+	        
+	        if (!stopped)
+	        	System.threadSleep(PAUSE_WAIT_MS);
+        } while (!stopped);
+        
+        Runtime.decreaseParallelism(1n);
+    }
+    
+    /********************************************************/
     
     public static def checkDeadCoordinator(txId:Long) {
         val placeId = (txId >> 32) as Int;
@@ -172,7 +231,7 @@ public abstract class TxManager(data:MapData) {
 
         try {
             log.lock();
-            abort(log); 
+            abort(log);
         } finally {
             log.unlock();
         }
@@ -274,8 +333,8 @@ public abstract class TxManager(data:MapData) {
     protected def put_RV_EA_WB(id:Long, key:String, value:Cloneable):Cloneable {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RV_EA_WB started");
         var log:TxLog = null;
-        try {
-            val cont = logInitialIfNotLogged(id, key, false);
+        try {     	
+            val cont = logInitialIfNotLogged(id, key, false);        	
             val memory = cont.memory;
             log = cont.log;
             

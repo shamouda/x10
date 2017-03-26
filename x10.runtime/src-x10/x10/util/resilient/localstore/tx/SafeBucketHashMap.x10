@@ -48,6 +48,8 @@ public class SafeBucketHashMap[K,V] {V haszero} implements x10.io.Unserializable
         this.bucketsCnt = bucketsCnt;
     }
     
+    public def getBucket(indx:Long) = buckets(indx);
+    
     /***************************Safe methods**********************************/
     public def containsKeySafe(k:K):Boolean {
         var bucket:Bucket[K,V] = null;

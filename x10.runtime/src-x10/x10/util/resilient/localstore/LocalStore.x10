@@ -30,25 +30,34 @@ public class LocalStore {
     public var slave:Place;
     public var slaveStore:SlaveStore = null;
     
-    public def this(virtualPlaceId:Long, slave:Place) {
-        this.virtualPlaceId = virtualPlaceId;
+    public var activePlaces:PlaceGroup;
+    
+    private var heartBeatOn:Boolean;
+    
+    public def this(active:PlaceGroup) {
+    	this.activePlaces = active;
+        this.virtualPlaceId = active.indexOf(here);
         masterStore = new MasterStore(new HashMap[String,Cloneable]());
         if (resilient) {
-            slaveStore = new SlaveStore();
-            this.slave = slave;
+            slaveStore = new SlaveStore(active.prev(here));
+            this.slave = active.next(here);
         }
     }
 
     /* used to initialize elastically added or spare places */
-    public def this() { 
+    public def this() {
+    	
     }
 
     /*used when a spare place joins*/
-    public def joinAsMaster (virtualPlaceId:Long, slave:Place, data:HashMap[String,Cloneable]) {
+    public def joinAsMaster (active:PlaceGroup, data:HashMap[String,Cloneable]) {
         assert(resilient);
-        this.virtualPlaceId = virtualPlaceId;
+        this.activePlaces = active;
+        this.virtualPlaceId = active.indexOf(here);
         masterStore = new MasterStore(data);
-        slaveStore = new SlaveStore();
-        this.slave = slave;
+        if (resilient) {
+            slaveStore = new SlaveStore(active.prev(here));
+            this.slave = active.next(here);
+        }
     }
 }

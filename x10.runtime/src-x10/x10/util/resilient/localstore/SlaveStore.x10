@@ -23,6 +23,9 @@ import x10.util.resilient.localstore.Cloneable;
  * either its master during normal execution, or the store coordinator during failure recovery */
 public class SlaveStore {
     static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
+    private static val HB_INTERVAL_MS = System.getenv("HB_INTERVAL_MS") == null ? 1000 : Long.parseLong(System.getenv("HB_INTERVAL_MS"));
+    
+    
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     private var masterState:HashMap[String,Cloneable];
@@ -30,8 +33,10 @@ public class SlaveStore {
     // TODO: change to a HashMap[place index, list]
     private var logs:ArrayList[TxSlaveLog]; 
     private transient val lock:Lock;
+    private var master:Place;
+    private var heartBeatOn:Boolean;
     
-    public def this() {
+    public def this(master:Place) {
         assert(resilient);
         masterState = new HashMap[String,Cloneable]();
         logs = new ArrayList[TxSlaveLog]();
@@ -39,6 +44,8 @@ public class SlaveStore {
             lock = new Lock();
         else
             lock = null;
+        
+        this.master = master;
     }
     
     /******* Recovery functions (called by one place) , no risk of race condition *******/
@@ -51,15 +58,58 @@ public class SlaveStore {
         return masterState;
     }
     
+    public def startHeartBeat(hbIntervalMS:Long) {
+    	assert(resilient);
+    	try {
+            slaveLock();
+            heartBeatOn = true;
+            while (heartBeatOn)
+                heartBeatLocked(hbIntervalMS);
+        }
+        finally {
+            slaveUnlock();
+        }
+    }
+    
+    private def heartBeatLocked(hbIntervalMS:Long) {
+        while (heartBeatOn && !master.isDead()) {
+        	slaveUnlock();
+            System.threadSleep(HB_INTERVAL_MS);                   
+            slaveLock();
+            
+            try {
+        		finish at (master) async {}
+        	}
+        	catch(ex:Exception) { heartBeatOn = false; }
+        }
+        
+        if (master.isDead()) {
+        	//recover masters
+        }
+        
+        heartBeatOn = true;
+    }
+    
+    public def stopHeartBeat() {
+    	try {
+            slaveLock();
+            heartBeatOn = false;
+        }
+        finally {
+            slaveUnlock();
+        }
+    }
+    
+    
     /******* Prepare/Commit/Abort functions *******/
     public def commit(id:Long, transLog:HashMap[String,Cloneable], placeIndex:Long) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit1() started ...");
         try {
-            lockLogsList();
+            slaveLock();
             commitLockAcquired(new TxSlaveLog(id, transLog, placeIndex));
         }
         finally {
-            unlockLogsList();
+            slaveUnlock();
         }
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit1() committed ...");
     }
@@ -67,14 +117,14 @@ public class SlaveStore {
     public def commit(id:Long) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit2() started ...");
         try {
-            lockLogsList();
+            slaveLock();
             val txLog = getLog(id);
             if (txLog != null) {
                 commitLockAcquired(txLog);
                 logs.remove(txLog);
             }
         } finally {
-            unlockLogsList();
+            slaveUnlock();
         }
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit2() committed ...");
     }
@@ -99,7 +149,7 @@ public class SlaveStore {
     public def prepare(id:Long, entries:HashMap[String,Cloneable], placeIndex:Long) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() started ...");
         try {
-            lockLogsList();
+            slaveLock();
             var txSlaveLog:TxSlaveLog = getLog(id);
             if (txSlaveLog == null) {
                 txSlaveLog = new TxSlaveLog( id, new HashMap[String,Cloneable](), placeIndex);
@@ -114,7 +164,7 @@ public class SlaveStore {
             if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() logs.put(id="+id+") ...");
         }
         finally {
-            unlockLogsList();
+            slaveUnlock();
         }
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() completed ...");
     }
@@ -122,12 +172,12 @@ public class SlaveStore {
     public def abort(id:Long) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.abort() started ...");
         try {
-            lockLogsList();
+            slaveLock();
             val log = getLog(id);
             logs.remove(log);
         }
         finally {
-            unlockLogsList();
+            slaveUnlock();
         }
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.abort() completed ...");
     }
@@ -146,7 +196,7 @@ public class SlaveStore {
     public def clusterTransactions() {
         val map = new HashMap[Long,ArrayList[Long]]();
         try {
-            lockLogsList();
+            slaveLock();
             for (log in logs) {
                 var list:ArrayList[Long] = map.getOrElse(log.placeIndex, null);
                 if (list == null){
@@ -157,7 +207,7 @@ public class SlaveStore {
             }
         } 
         finally {
-            unlockLogsList();
+            slaveUnlock();
         }
         return map;
     }
@@ -165,20 +215,20 @@ public class SlaveStore {
     public def getPendingTransactions() {
         val list = new ArrayList[Long]();
         try {
-            lockLogsList();
+            slaveLock();
             for (log in logs){
                 list.add(log.id);
             }
         } 
         finally {
-            unlockLogsList();
+            slaveUnlock();
         }
         return list;
     }
     
     public def commitAll(committed:ArrayList[Long]) {
         try {
-            lockLogsList();
+            slaveLock();
             for (log in logs){
                 if (committed.contains(log.id))
                     commitLockAcquired(log);
@@ -186,7 +236,7 @@ public class SlaveStore {
             logs.clear();
         }
         finally {
-            unlockLogsList();
+            slaveUnlock();
         }
     }
     
@@ -198,12 +248,12 @@ public class SlaveStore {
         return null;
     }
     
-    private def lockLogsList(){
+    private def slaveLock(){
         if (!TxConfig.getInstance().LOCK_FREE)
             lock.lock();
     }
     
-    private def unlockLogsList(){
+    private def slaveUnlock(){
         if (!TxConfig.getInstance().LOCK_FREE)
             lock.unlock();
     }

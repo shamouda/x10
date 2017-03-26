@@ -35,17 +35,16 @@ public class ResilientStore {
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     public val plh:PlaceLocalHandle[LocalStore];
-    public var activePlaces:PlaceGroup;
     
     private val appMaps:HashMap[String,ResilientNativeMap];
     private transient val lock:SimpleLatch;
-    private transient var paused:Boolean;
     
     //A resilient map for transactions' descriptors
     var txDescMap:ResilientNativeMap;
+    public var activePlaces:PlaceGroup;
     
     private def this(pg:PlaceGroup, plh:PlaceLocalHandle[LocalStore]) {
-        this.activePlaces = pg;
+    	this.activePlaces = pg;
         this.plh = plh;
         this.appMaps = new HashMap[String,ResilientNativeMap]();
         this.lock = new SimpleLatch();
@@ -53,7 +52,7 @@ public class ResilientStore {
     
     public static def make(pg:PlaceGroup):ResilientStore {
         val plh = PlaceLocalHandle.make[LocalStore](pg, () => {
-            new LocalStore(pg.indexOf(here), pg.next(here))
+            new LocalStore(pg)
         });
         val store = new ResilientStore(pg, plh);
         
@@ -72,15 +71,6 @@ public class ResilientStore {
         } finally {
             lock.unlock();
         }
-    }
-    
-    public def paused() {
-    	try {
-    		lock.lock();
-    	    return paused;
-    	} finally {
-    		lock.unlock();
-    	}
     }
     
     public def getVirtualPlaceId() = activePlaces.indexOf(here);
@@ -133,7 +123,7 @@ public class ResilientStore {
     public def updateForChangedPlaces(changes:ChangeDescription):void {
         // Initialize LocalStore at newly active places.
         for (p in changes.addedPlaces) {
-            PlaceLocalHandle.addPlace[LocalStore](plh, p, ()=>new LocalStore());
+            PlaceLocalHandle.addPlace[LocalStore](plh, p, ()=>new LocalStore(changes.newActivePlaces));
             val iter = appMaps.keySet().iterator();
             while (iter.hasNext()) {
                 val mapName = iter.next();
@@ -168,13 +158,13 @@ public class ResilientStore {
         val plh = this.plh; // don't capture this in at!
         finish {
             for (newMaster in changes.addedPlaces) {
-                val virtualId = changes.newActivePlaces.indexOf(newMaster);
+            	val active = changes.newActivePlaces;
                 val slave = changes.newActivePlaces.next(newMaster);
                 Console.OUT.println("recovering masters: newMaster["+newMaster+"] slave["+slave+"] ");
                 at (slave) async {                    
                     val map = plh().slaveStore.getSlaveMasterState();
                     at (newMaster) async {
-                        plh().joinAsMaster(virtualId, slave, map);
+                        plh().joinAsMaster(active, map);
                     }
                 }
             }
