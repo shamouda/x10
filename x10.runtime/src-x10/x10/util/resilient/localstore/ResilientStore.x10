@@ -85,7 +85,7 @@ public class ResilientStore {
     public def sameActivePlaces(active:PlaceGroup) = plh().sameActivePlaces(active);
 
     public def updateForChangedPlaces(changes:ChangeDescription):void {
-        ResilientStoreRecoveryHelper.recoverCentralized(plh, changes);
+        CentralizedRecoveryHelper.recover(plh, changes);
         plh().activePlaces = changes.newActivePlaces;
     }
     

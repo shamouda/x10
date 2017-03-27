@@ -5,12 +5,11 @@ import x10.util.concurrent.Lock;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.tx.TxDesc;
 
-public class ResilientStoreRecoveryHelper {
+public class CentralizedRecoveryHelper {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     /*******************  Centralized Recovery At Place(0)  ****************************/
-
-    public static def recoverCentralized(plh:PlaceLocalHandle[LocalStore], changes:ChangeDescription):void {
+    public static def recover(plh:PlaceLocalHandle[LocalStore], changes:ChangeDescription):void {
         checkIfBothMasterAndSlaveDied(changes);
         
         recoverTransactions(plh, changes);
@@ -18,7 +17,6 @@ public class ResilientStoreRecoveryHelper {
         recoverMasters(plh, changes);
         
         recoverSlaves(plh, changes);
-
     }
     
     private static def checkIfBothMasterAndSlaveDied(changes:ChangeDescription) {
