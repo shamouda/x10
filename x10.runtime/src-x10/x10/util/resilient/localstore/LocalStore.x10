@@ -24,25 +24,21 @@ import x10.util.resilient.localstore.tx.TransactionsList;
 
 public class LocalStore {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-    static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
-    public var masterStore:MasterStore = null;
-    public var virtualPlaceId:Long = -1; //-1 means a spare place
+    private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
+    public transient var masterStore:MasterStore = null;
+    public transient var virtualPlaceId:Long = -1; //-1 means a spare place
     
     /*resilient mode variables*/    
-    public var slave:Place;
-    public var slaveStore:SlaveStore = null;
-    
-    public var activePlaces:PlaceGroup;
-    
+    public transient var slave:Place;
+    public transient var slaveStore:SlaveStore = null;
+    public transient var activePlaces:PlaceGroup;
     private var plh:PlaceLocalHandle[LocalStore];
-    
-    private var heartBeatOn:Boolean;
-
+    private transient var heartBeatOn:Boolean;
     private transient var lock:Lock;
     
     /*store transactions for statistical purposes*/
-    public val txList = new TransactionsList();
-    private var txDescMap:ResilientNativeMap; //A resilient map for transactions' descriptors
+    public transient val txList:TransactionsList = new TransactionsList();
+    private transient var txDescMap:ResilientNativeMap; //A resilient map for transactions' descriptors
     
     public def this(active:PlaceGroup) {
         if (active.contains(here)) {

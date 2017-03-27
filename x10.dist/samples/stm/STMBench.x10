@@ -151,7 +151,7 @@ public class STMBench {
         val times = new Rail[Long](slices);
         
         /*****   for resilience   ******/
-        var nextPlace:Place = map.store.getNextPlace();
+        var nextPlace:Place = map.plh().getNextPlace();
         var activePlaces:PlaceGroup = active;
         val activePlacesCount = activePlaces.size();
         while (timeNS < d*1e6) {
@@ -166,17 +166,11 @@ public class STMBench {
                 for (var m:Long = 0; m < members.size(); m++) {
                     val operations = membersOperations.get(m);
                     val f1 = tx.asyncAt(operations.dest, () => {
-                    	Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] step 1");
                         for (var x:Long = 0; x < o; x++) {
-                        	//Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] step 2 (x = " + x + ")");
                             val key = operations.keys(x).key;
-                            //Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] step 3 (x = " + x + ")");
                             val read = operations.keys(x).read;
-                            //Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] step 4 (x = " + x + ")");
                             val value = operations.values(x);
-                            //Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] step 5 (x = " + x + ")");
                             read? tx.get(key): tx.put(key, new CloneableLong(value));
-                            //Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] step 6 (x = " + x + ")");
                         }
                     });
                     futuresList.add(f1);
@@ -254,8 +248,8 @@ public class STMBench {
             times(slice) += elapsedNS;
             //Console.OUT.println("[" + here + "] slice["+slice+"]  counts["+counts(slice)+"] timesMS["+times(slice)+"]");
 
-            if (resilient && !map.store.sameActivePlaces(activePlaces)) {
-            	activePlaces = map.store.getActivePlaces();
+            if (resilient && !map.plh().sameActivePlaces(activePlaces)) {
+            	activePlaces = map.plh().getActivePlaces();
             	val nxt = activePlaces.next(here);
             	if (nxt.id != nextPlace.id) {
             		nextPlace = nxt;

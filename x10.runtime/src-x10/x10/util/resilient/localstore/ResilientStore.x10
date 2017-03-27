@@ -51,7 +51,7 @@ public class ResilientStore {
         
         Place.places().broadcastFlat(()=> { 
         	plh().setPLH(plh); 
-        	if (heartbeatOn && pg.contains(here)) {
+        	if (resilient && heartbeatOn && pg.contains(here)) {
         		@Uncounted async {
             		plh().startHeartBeat(HB_MS);
             	}
