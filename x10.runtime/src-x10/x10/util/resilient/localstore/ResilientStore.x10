@@ -32,22 +32,16 @@ import x10.compiler.Uncounted;
  */
 public class ResilientStore {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-    private static val TM_REP = System.getenv("TM_REP") == null ? "lazy" : System.getenv("TM_REP");
     private static val HB_MS = System.getenv("HB_MS") == null ? 1000 : Long.parseLong(System.getenv("HB_MS"));
     
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     public val plh:PlaceLocalHandle[LocalStore];
     
-    private val appMaps:HashMap[String,ResilientNativeMap];
     private transient val lock:Lock;
-    
-    //A resilient map for transactions' descriptors
-    var txDescMap:ResilientNativeMap;
     
     private def this(plh:PlaceLocalHandle[LocalStore]) {
         this.plh = plh;
-        this.appMaps = new HashMap[String,ResilientNativeMap]();
         this.lock = new Lock();
     }
     
@@ -64,10 +58,6 @@ public class ResilientStore {
         	}
         });
         
-        if (resilient) {
-            store.txDescMap = store.makeMap("_TxDesc_");
-        }
-        
         Console.OUT.println("store created successfully ...");
         return store;
     }
@@ -77,16 +67,9 @@ public class ResilientStore {
             plh().stopHeartBeat();
         });
     }
+    
     public def makeMap(name:String):ResilientNativeMap {
-        try {
-            lock.lock();
-            val list = PlaceLocalHandle.make[TransactionsList](Place.places(), () => new TransactionsList());
-            val map = new ResilientNativeMap(name, this, list);
-            appMaps.put(name, map);
-            return map;
-        } finally {
-            lock.unlock();
-        }
+    	return new ResilientNativeMap(name, plh);
     }
     
     public def getVirtualPlaceId() = plh().getVirtualPlaceId();
@@ -124,6 +107,49 @@ public class ResilientStore {
         }
     }
 
+    private def recoverTransactions(changes:ChangeDescription) {
+        Console.OUT.println("recoverTransactions started");
+        val plh = this.plh; // don't capture this in at!
+        finish {
+            val oldActivePlaces = changes.oldActivePlaces;
+            for (deadPlace in changes.removedPlaces) {
+                val slave = oldActivePlaces.next(deadPlace);
+                Console.OUT.println("recoverTransactions deadPlace["+deadPlace+"] moving to its slave["+slave+"] ");
+                at (slave) async {
+                    val txDescMap = plh().slaveStore.getSlaveMasterState();
+                    if (txDescMap != null) {
+                        val set = txDescMap.keySet();
+                        val iter = set.iterator();
+                        while (iter.hasNext()) {
+                            val txId = iter.next();
+                            if (txId.contains("_TxDesc_")) {
+                                val obj = txDescMap.get(txId);
+                                if (obj != null) {
+                                    val txDesc = obj as TxDesc;
+                                    val map = new ResilientNativeMap(txDesc.mapName, plh);
+                                    if (TM_DEBUG) Console.OUT.println(here + " recovering txdesc " + txDesc);
+                                    val tx = map.restartGlobalTransaction(txDesc);
+                                    if (txDesc.status == TxDesc.COMMITTING) {
+                                        if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] commit it");
+                                        tx.commit(true); //ignore phase one
+                                    }
+                                    else if (txDesc.status == TxDesc.STARTED) {
+                                        if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] abort it");
+                                        tx.abort();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (TxConfig.getInstance().TM_REP.equals("lazy"))
+                        applySlaveTransactions(plh, changes);
+                }
+            }
+        }
+        Console.OUT.println("recoverTransactions completed");
+    }
+    
     private def recoverMasters(changes:ChangeDescription) {
         val plh = this.plh; // don't capture this in at!
         finish {
@@ -157,49 +183,6 @@ public class ResilientStore {
                 }
             }
         }
-    }
-    
-    private def recoverTransactions(changes:ChangeDescription) {
-        Console.OUT.println("recoverTransactions started");
-        val plh = this.plh; // don't capture this in at!
-        finish {
-            val oldActivePlaces = changes.oldActivePlaces;
-            for (deadPlace in changes.removedPlaces) {
-                val slave = oldActivePlaces.next(deadPlace);
-                Console.OUT.println("recoverTransactions deadPlace["+deadPlace+"] moving to its slave["+slave+"] ");
-                at (slave) async {
-                    val txDescMap = plh().slaveStore.getSlaveMasterState();
-                    if (txDescMap != null) {
-                        val set = txDescMap.keySet();
-                        val iter = set.iterator();
-                        while (iter.hasNext()) {
-                            val txId = iter.next();
-                            if (txId.contains("_TxDesc_")) {
-                                val obj = txDescMap.get(txId);
-                                if (obj != null) {
-                                    val txDesc = obj as TxDesc;
-                                    val map = appMaps.getOrThrow(txDesc.mapName);
-                                    if (TM_DEBUG) Console.OUT.println(here + " recovering txdesc " + txDesc);
-                                    val tx = map.restartGlobalTransaction(txDesc);
-                                    if (txDesc.status == TxDesc.COMMITTING) {
-                                        if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] commit it");
-                                        tx.commit(true); //ignore phase one
-                                    }
-                                    else if (txDesc.status == TxDesc.STARTED) {
-                                        if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] abort it");
-                                        tx.abort();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    if (TM_REP.equals("lazy"))
-                        applySlaveTransactions(plh, changes);
-                }
-            }
-        }
-        Console.OUT.println("recoverTransactions completed");
     }
     
     private def applySlaveTransactions(plh:PlaceLocalHandle[LocalStore], changes:ChangeDescription) {

@@ -19,8 +19,11 @@ import x10.xrx.Runtime;
 import x10.util.concurrent.AtomicLong;
 import x10.compiler.Ifdef;
 import x10.util.resilient.localstore.Cloneable;
+import x10.util.resilient.localstore.tx.TxDesc;
+import x10.util.resilient.localstore.tx.TransactionsList;
 
 public class LocalStore {
+    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     public var masterStore:MasterStore = null;
     public var virtualPlaceId:Long = -1; //-1 means a spare place
@@ -37,6 +40,10 @@ public class LocalStore {
 
     private transient var lock:Lock;
     
+    /*store transactions for statistical purposes*/
+    public val txList = new TransactionsList();
+    private var txDescMap:ResilientNativeMap; //A resilient map for transactions' descriptors
+    
     public def this(active:PlaceGroup) {
         if (active.contains(here)) {
         	this.activePlaces = active;
@@ -50,6 +57,11 @@ public class LocalStore {
         }
     }
     
+    public def getTxLoggingMap() {
+    	if (txDescMap == null)
+    		txDescMap = new ResilientNativeMap("_TxDesc_", plh);
+    	return txDescMap;
+    }
     
     /*used when a spare place joins*/
     public def joinAsMaster (active:PlaceGroup, data:HashMap[String,Cloneable]) {
@@ -111,23 +123,40 @@ public class LocalStore {
         }
         
         if (heartBeatOn && slaveStore.master.isDead()) {
+        	Console.OUT.println(here + " HB>>>>> " + slaveStore.master + " ... ERROR ");
         	val spare = allocateSparePlace();
             //recover master:
         	//  allocate NEW_MASTER
         	//  give NEW_MASTER its data
         	//  recover NEW_MASTER's incomplete transactions
         	//  slaveStore.master = {NEW_MASTER}
-        	Console.OUT.println(here + " HB>>>>> " + slaveStore.master + " ... ERROR ");
+        	
+        	val newActivePlaces = generateNewActivePlaces(slaveStore.master, spare);
+        	 /*complete transactions whose coordinator died*/
+            recoverTransactions(spare);
+            
+            recoverMasters(spare, newActivePlaces);
+            
+            recoverSlaves(spare, activePlaces.prev(slaveStore.master)); //todo: pause before copying
+            
+            activePlaces = newActivePlaces;
+            
+        	slaveStore.master = spare;
         }
+        
+        val active = activePlaces;
+        activePlaces.broadcastFlat(()=> { 
+        	setActivePlaces(active);
+        });
     }
     
     /*****  Recover master ******/
     private def allocateSparePlace() {
+    	val plh = this.plh;
     	try {
             lock();
             val nPlaces = Place.numAllPlaces();
             val nActive = activePlaces.size();
-            val masterIndex = 
             var placeIndx:Long = -1;
             for (var i:Long = nActive; i < nPlaces; i++) {
                 if (activePlaces.contains(Place(i)))
@@ -155,6 +184,15 @@ public class LocalStore {
         }	
     }
     
+    public def generateNewActivePlaces(deadPlace:Place, newPlace:Place) {
+    	val rail = new Rail[Place]();
+    	for (var i:Long = 0; i < activePlaces.size(); i++) {
+    		if (activePlaces(i).id == deadPlace.id)
+    			rail(i) = newPlace;
+    	}
+    	return new SparsePlaceGroup(rail);
+    }
+    
     public def allocate(vPlace:Long) {
         try {
             lock.lock();
@@ -172,62 +210,120 @@ public class LocalStore {
         }
     }
 
-
-    
-    private def recoverTransactions(changes:ChangeDescription) {
-        Console.OUT.println("recoverTransactions started");
+    private def recoverTransactions(spare:Place) {
+        Console.OUT.println(here + " - recoverTransactions started");
         val plh = this.plh; // don't capture this in at!
         finish {
-            val oldActivePlaces = changes.oldActivePlaces;
-            for (deadPlace in changes.removedPlaces) {
-                val slave = oldActivePlaces.next(deadPlace);
-                Console.OUT.println("recoverTransactions deadPlace["+deadPlace+"] moving to its slave["+slave+"] ");
-                at (slave) async {
-                    val txDescMap = plh().slaveStore.getSlaveMasterState();
-                    if (txDescMap != null) {
-                        val set = txDescMap.keySet();
-                        val iter = set.iterator();
-                        while (iter.hasNext()) {
-                            val txId = iter.next();
-                            if (txId.contains("_TxDesc_")) {
-                                val obj = txDescMap.get(txId);
-                                if (obj != null) {
-                                    val txDesc = obj as TxDesc;
-                                    val map = appMaps.getOrThrow(txDesc.mapName);
-                                    if (TM_DEBUG) Console.OUT.println(here + " recovering txdesc " + txDesc);
-                                    val tx = map.restartGlobalTransaction(txDesc);
-                                    if (txDesc.status == TxDesc.COMMITTING) {
-                                        if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] commit it");
-                                        tx.commit(true); //ignore phase one
-                                    }
-                                    else if (txDesc.status == TxDesc.STARTED) {
-                                        if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] abort it");
-                                        tx.abort();
-                                    }
-                                }
+            Console.OUT.println(here + " - recoverTransactions deadPlace["+slaveStore.master+"] moving to its slave["+here+"] ");
+            
+            val txDescMap = plh().slaveStore.getSlaveMasterState();
+            if (txDescMap != null) {
+                val set = txDescMap.keySet();
+                val iter = set.iterator();
+                while (iter.hasNext()) {
+                    val txId = iter.next();
+                    if (txId.contains("_TxDesc_")) {
+                        val obj = txDescMap.get(txId);
+                        if (obj != null) {
+                            val txDesc = obj as TxDesc;
+                            val map = new ResilientNativeMap(txDesc.mapName, plh);
+                            if (TM_DEBUG) Console.OUT.println(here + " - recovering txdesc " + txDesc);
+                            val tx = map.restartGlobalTransaction(txDesc);
+                            if (txDesc.status == TxDesc.COMMITTING) {
+                                if (TM_DEBUG) Console.OUT.println(here + " - recovering Tx["+tx.id+"] commit it");
+                                tx.commit(true); //ignore phase one
+                            }
+                            else if (txDesc.status == TxDesc.STARTED) {
+                                if (TM_DEBUG) Console.OUT.println(here + " - recovering Tx["+tx.id+"] abort it");
+                                tx.abort();
                             }
                         }
                     }
-                    
-                    if (TM_REP.equals("lazy"))
-                        applySlaveTransactions(plh, changes);
                 }
             }
+            
+            if (TxConfig.getInstance().TM_REP.equals("lazy"))
+                applySlaveTransactions();
         }
         Console.OUT.println("recoverTransactions completed");
     }
     
-    /*******************************************/
-    private def lock() {
-        if (!TxConfig.getInstance().LOCK_FREE)
-            lock.lock();
+    private def recoverMasters(spare:Place, newActivePlaces:PlaceGroup) {
+        val plh = this.plh; // don't capture this in at!
+        finish {
+            val map = plh().slaveStore.getSlaveMasterState();
+            at (spare) async {
+                plh().joinAsMaster(newActivePlaces, map);
+            }
+        }
+    }
+
+    private def recoverSlaves(spare:Place, masterOfDeadSlave:Place) {
+        val plh = this.plh; // don't capture this in at!
+        val vPlaceId = activePlaces.indexOf(masterOfDeadSlave);
+        finish {
+            at (masterOfDeadSlave) async {
+                val masterState = plh().masterStore.getState().getKeyValueMap();
+                at (spare) {
+                    plh().slaveStore.addMasterPlace(vPlaceId, masterState);
+                }
+                plh().slave = spare;
+            }
+        }
+    }
+
+    private def applySlaveTransactions() {
+    	val plh = this.plh;
+        val committed = GlobalRef(new ArrayList[Long]());
+        val committedLock = GlobalRef(new Lock());
+        val root = here;
+        
+        if (TxConfig.getInstance().VALIDATION_REQUIRED) {
+            val placeTxsMap = plh().slaveStore.clusterTransactions();
+            finish {
+                val iter = placeTxsMap.keySet().iterator();
+                while (iter.hasNext()) {
+                    val placeIndex = iter.next();
+                    val txList = placeTxsMap.getOrThrow(placeIndex);
+                    var pl:Place = activePlaces(placeIndex);
+                    var master:Boolean = true;
+                    if (pl.isDead()){
+                        pl = activePlaces.next(pl);
+                        master = false;
+                    }
+                    val isMaster = master;
+                    at (pl) async {
+                        var committedList:ArrayList[Long]; 
+                        if (isMaster)
+                            committedList = plh().masterStore.filterCommitted(txList);
+                        else
+                            committedList = plh().slaveStore.filterCommitted(txList);
+                        
+                        val cList = committedList;
+                        at (root) {
+                            committedLock().lock();
+                            committed().addAll(cList);
+                            committedLock().unlock();
+                        }
+                    }
+                }
+            }
+        }
+        
+        val orderedTx = plh().slaveStore.getPendingTransactions();
+        if (TxConfig.getInstance().VALIDATION_REQUIRED) {
+            val commitTxOrdered = new ArrayList[Long]();
+            for (val tx in orderedTx){
+                if (committed().contains(tx))
+                    commitTxOrdered.add(tx);
+            }
+            plh().slaveStore.commitAll(commitTxOrdered);
+        }
+        else
+            plh().slaveStore.commitAll(orderedTx);
     }
     
-    private def unlock() {
-        if (!TxConfig.getInstance().LOCK_FREE)
-            lock.unlock();
-    }
-    /********************Resilient Store Helper Methods *************************/
+    /**************     ActivePlaces utility methods     ****************/
     public def getVirtualPlaceId() {
         try {
         	lock();
@@ -240,12 +336,21 @@ public class LocalStore {
     public def getActivePlaces() {
     	try {
     		lock();
-    		return new SparsePlaceGroup(new Rail[Place](activePlaces.size(), (i:Long) => activePlaces(i)));
+    		return activePlaces;
     	}finally {
     		unlock();
     	}
     }
 
+    public def setActivePlaces(active:PlaceGroup) {
+    	try {
+    		lock();
+    		this.activePlaces = active;
+    	}finally {
+    		unlock();
+    	}
+    }
+    
     public def getMaster(p:Place) {
     	try {
     		lock();
@@ -280,5 +385,17 @@ public class LocalStore {
     	}finally {
     		unlock();
     	}
+    }
+    
+    
+    /*******************************************/
+    private def lock() {
+        if (!TxConfig.getInstance().LOCK_FREE)
+            lock.lock();
+    }
+    
+    private def unlock() {
+        if (!TxConfig.getInstance().LOCK_FREE)
+            lock.unlock();
     }
 }

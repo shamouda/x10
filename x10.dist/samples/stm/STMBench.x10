@@ -168,30 +168,30 @@ public class STMBench {
                     val f1 = tx.asyncAt(operations.dest, () => {
                     	Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] step 1");
                         for (var x:Long = 0; x < o; x++) {
-                        	Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] step 2 (x = " + x + ")");
+                        	//Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] step 2 (x = " + x + ")");
                             val key = operations.keys(x).key;
-                            Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] step 3 (x = " + x + ")");
+                            //Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] step 3 (x = " + x + ")");
                             val read = operations.keys(x).read;
-                            Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] step 4 (x = " + x + ")");
+                            //Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] step 4 (x = " + x + ")");
                             val value = operations.values(x);
-                            Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] step 5 (x = " + x + ")");
+                            //Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] step 5 (x = " + x + ")");
                             read? tx.get(key): tx.put(key, new CloneableLong(value));
-                            Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] step 6 (x = " + x + ")");
+                            //Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] step 6 (x = " + x + ")");
                         }
                     });
                     futuresList.add(f1);
                 }
                 
-                Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] start wait for futures ...");
+                //Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] start wait for futures ...");
                 
                 val startWait = Timer.milliTime();
                 for (f in futuresList) {
                 	assert ( f != null) : "bug future is null ...";
                     f.force();
-                    Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] future done ...");
+                    //Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] future done ...");
                 }
                 tx.setWaitElapsedTime(Timer.milliTime() - startWait);
-                Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] wait completed ");
+                //Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] wait completed ");
                 return null;
             };
             

@@ -11,20 +11,13 @@ import x10.util.concurrent.Lock;
 import x10.xrx.Runtime;
 import x10.util.Timer;
 
-public class ResilientNativeMap (name:String, store:ResilientStore) {
+public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     private static val TM_STAT_ALL = System.getenv("TM_STAT_ALL") != null && System.getenv("TM_STAT_ALL").equals("1");
     private static val TM_SLEEP = System.getenv("TM_SLEEP") == null ? 0 : Long.parseLong(System.getenv("TM_SLEEP"));
     
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
-    public val list:PlaceLocalHandle[TransactionsList];
-    
     private var baselineTxId:Long = 0;
-    
-    public def this(name:String, store:ResilientStore, list:PlaceLocalHandle[TransactionsList]) {
-        property(name, store);
-        this.list = list;
-    }
     
     /**	
      * Get the value of key k in the resilient map.
@@ -88,34 +81,34 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     }
     
     public def startLocalTransaction():LocalTx {
-        assert(store.plh().virtualPlaceId != -1);
-        val id = store.plh().masterStore.getNextTransactionId();
-        val tx = new LocalTx(store.plh, id, name);
-        list().addLocalTx(tx);
+        assert(plh().virtualPlaceId != -1);
+        val id = plh().masterStore.getNextTransactionId();
+        val tx = new LocalTx(plh, id, name);
+        plh().txList.addLocalTx(tx);
         return tx;
     }
     
     private def startGlobalTransaction(members:PlaceGroup):Tx {
-        assert(store.plh().virtualPlaceId != -1);
-        val id = store.plh().masterStore.getNextTransactionId();
+        assert(plh().virtualPlaceId != -1);
+        val id = plh().masterStore.getNextTransactionId();
+        val activePlaces = plh().getActivePlaces();
         if (resilient) {
-            val localTx = store.txDescMap.startLocalTransaction();
+            val localTx = plh().getTxLoggingMap().startLocalTransaction();
             if(TM_DEBUG) Console.OUT.println("Tx["+id+"] startGlobalTransaction localTx["+localTx.id+"] started ...");
-            localTx.put("tx"+id, new TxDesc(id, name, getMembersIndices(members), TxDesc.STARTED));
+            localTx.put("tx"+id, new TxDesc(id, name, getMembersIndices(members, activePlaces), TxDesc.STARTED));
             localTx.commit();
             if(TM_DEBUG) Console.OUT.println("Tx["+id+"] startGlobalTransaction localTx["+localTx.id+"] completed ...");
         }
-        val activePlaces = store.getActivePlaces();
-        val tx = new Tx(store.plh, id, name, members, activePlaces, store.txDescMap);
-        list().addGlobalTx(tx);
+        val tx = new Tx(plh, id, name, members, activePlaces, plh().getTxLoggingMap());
+        plh().txList.addGlobalTx(tx);
         return tx;
     }
     
     private def startLockingTransaction(members:PlaceGroup, requests:ArrayList[LockingRequest]):LockingTx {
-        assert(store.plh().virtualPlaceId != -1);
-        val id = store.plh().masterStore.getNextTransactionId();
-        val tx = new LockingTx(store.plh, id, name, members, requests);
-        list().addLockingTx(tx);
+        assert(plh().virtualPlaceId != -1);
+        val id = plh().masterStore.getNextTransactionId();
+        val tx = new LockingTx(plh, id, name, members, requests);
+        plh().txList.addLockingTx(tx);
         return tx;
     }
       
@@ -226,9 +219,9 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     
     /**************Baseline Operations*****************/
     private def startBaselineTransaction(members:PlaceGroup):BaselineTx {
-        assert(store.plh().virtualPlaceId != -1);
+        assert(plh().virtualPlaceId != -1);
         val id = baselineTxId ++;
-        val tx = new BaselineTx(store.plh, id, name, members);
+        val tx = new BaselineTx(plh, id, name, members);
         return tx;
     }
     public def executeBaselineTransaction(members:PlaceGroup, closure:(BaselineTx)=>Any) {
@@ -249,27 +242,25 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     }
     
     public def restartGlobalTransaction(txDesc:TxDesc):Tx {
-        assert(store.plh().virtualPlaceId != -1);
-        val activePlaces = store.getActivePlaces();
-        val tx = new Tx(store.plh, txDesc.id, name, getMembers(txDesc.members), activePlaces, store.txDescMap);
-        list().addGlobalTx(tx);
+        assert(plh().virtualPlaceId != -1);
+        val activePlaces = plh().getActivePlaces();
+        val tx = new Tx(plh, txDesc.id, name, getMembers(txDesc.members, activePlaces), activePlaces, plh().getTxLoggingMap());
+        plh().txList.addGlobalTx(tx);
         return tx;
     }
     
-    public def getMembersIndices(members:PlaceGroup):Rail[Long] {
+    public def getMembersIndices(members:PlaceGroup, activePlaces:PlaceGroup):Rail[Long] {
         val rail = new Rail[Long](members.size());
-        val activePG = store.getActivePlaces();
         for (var i:Long = 0; i <  members.size(); i++)
-            rail(i) = activePG.indexOf(members(i));
+            rail(i) = activePlaces.indexOf(members(i));
         return rail;
     }
     
-    public def getMembers(members:Rail[Long]):PlaceGroup {
+    public static def getMembers(members:Rail[Long], activePlaces:PlaceGroup):PlaceGroup {
         val list = new ArrayList[Place]();
-        val activePG = store.getActivePlaces();
         for (var i:Long = 0; i < members.size; i++) {
-            if (!activePG(members(i)).isDead())
-                list.add(activePG(members(i)));
+            if (!activePlaces(members(i)).isDead())
+                list.add(activePlaces(members(i)));
         }
         return new SparsePlaceGroup(list.toRail());
     }
@@ -277,7 +268,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     public def printTxStatistics() {
         Console.OUT.println("Calculating execution statistics ...");
         val pl_stat = new ArrayList[TxPlaceStatistics]();
-        for (p in store.getActivePlaces()) {
+        for (p in plh().getActivePlaces()) {
             val pstat = at (p) {
                 //####         Global TX         ####//
                 val g_commitList = new ArrayList[Double]();
@@ -290,7 +281,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                 val g_abortList = new ArrayList[Double]();
                 val g_abortProcList = new ArrayList[Double]();
                 
-                for (tx in list().globalTx) {
+                for (tx in plh().txList.globalTx) {
                     if (tx.commitTime != -1) {
                         g_commitList.add(tx.commitTime - tx.startTime);
                         g_commitProcList.add(tx.processingElapsedTime);
@@ -311,7 +302,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                 val l_abortList = new ArrayList[Double]();
                 val l_abortProcList = new ArrayList[Double]();
                 
-                for (tx in list().localTx) {
+                for (tx in plh().txList.localTx) {
                     if (tx.commitTime != -1) {
                         l_commitList.add(tx.commitTime - tx.startTime);
                         l_commitProcList.add(tx.processingElapsedTime);
@@ -329,7 +320,7 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
                 val lk_waitList = new ArrayList[Double]();
                 val lk_unlockList = new ArrayList[Double]();
                 
-                for (tx in list().lockingTx) {
+                for (tx in plh().txList.lockingTx) {
                     lk_totalList.add(tx.totalElapsedTime);
                     lk_lockList.add(tx.lockingElapsedTime);
                     lk_procList.add(tx.processingElapsedTime);
@@ -502,10 +493,10 @@ public class ResilientNativeMap (name:String, store:ResilientStore) {
     }
     
     public def resetTxStatistics() {
-        finish for (p in store.getActivePlaces()) at (p) async {
-            list().globalTx.clear();
-            list().localTx.clear();
-            list().lockingTx.clear();
+        finish for (p in plh().getActivePlaces()) at (p) async {
+            plh().txList.globalTx.clear();
+            plh().txList.localTx.clear();
+            plh().txList.lockingTx.clear();
         }
     }
     

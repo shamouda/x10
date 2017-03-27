@@ -14,7 +14,7 @@ package x10.util.resilient.localstore;
 
 public class TxConfig {
     public val TM:String; //baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB
-    
+    public val TM_REP:String; //lazy|eager
     public val VALIDATION_REQUIRED:Boolean;
     public val BUCKETS_COUNT:Long;
     public val DISABLE_INCR_PARALLELISM:Boolean;
@@ -57,6 +57,8 @@ public class TxConfig {
         LOCKING = ! ( STM || BASELINE);
         
         LOCK_FREE = BASELINE || (System.getenv("LOCK_FREE") == null || System.getenv("LOCK_FREE").equals("")) ? false : Long.parseLong(System.getenv("LOCK_FREE")) == 1;
+        
+        TM_REP = System.getenv("TM_REP") == null ? "lazy" : System.getenv("TM_REP");
     }
     
     public static def getInstance() = instance;
