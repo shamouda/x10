@@ -37,7 +37,8 @@ public class BankAsyncResilient {
             hammer.scheduleTimers();
         }
         val mgr = new PlaceManager(sparePlaces, supportShrinking);
-        val store = ResilientStore.make(mgr.activePlaces());
+        val heartbeatOn = false;
+        val store = ResilientStore.make(mgr.activePlaces(), heartbeatOn);
         val map = store.makeMap("mapA");
         try {
             val startTransfer = System.nanoTime();
@@ -97,7 +98,7 @@ public class BankAsyncResilient {
             var start:Long = 1;
             if (recovered) {
                 start = STMAppUtils.restoreProgress(map, placeIndex, 0) + 1;
-                Console.OUT.println(here + " continue transfering from " + start + "   slave:" + map.store.plh().slave);
+                Console.OUT.println(here + " continue transfering from " + start + "   slave:" + map.plh().slave);
             }
             val rand = new Random(placeIndex);
             for (i in start..transfersPerPlace) {
