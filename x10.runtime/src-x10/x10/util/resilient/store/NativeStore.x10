@@ -24,7 +24,8 @@ public class NativeStore[V]{V haszero, V <: Cloneable} extends Store[V] {
   val map:ResilientNativeMap;
 
   def this(name:String, activePlaces:PlaceGroup) {
-    store = ResilientStore.make(activePlaces);
+	  val heartbeatOn = false;
+    store = ResilientStore.make(activePlaces, heartbeatOn);
     map = store.makeMap("_map_" + name);
   }
 
