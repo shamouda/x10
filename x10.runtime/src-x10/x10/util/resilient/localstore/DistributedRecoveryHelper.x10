@@ -8,7 +8,12 @@ import x10.util.resilient.localstore.tx.TxDesc;
 public class DistributedRecoveryHelper {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
-    public static def recover(plh:PlaceLocalHandle[LocalStore], spare:Place, masterOfDeadSlave:Place, oldActivePlaces:PlaceGroup, newActivePlaces:PlaceGroup):void {
+    public static def recover(plh:PlaceLocalHandle[LocalStore], deadSlave:Place, oldActivePlaces:PlaceGroup):void {
+    	val deadPlaceVirtualPlaceId = oldActivePlaces.indexOf(deadSlave);
+    	val spare = allocateSparePlace(plh, deadPlaceVirtualPlaceId, oldActivePlaces);
+    	val newActivePlaces = generateNewActivePlaces(deadSlave, spare, oldActivePlaces);
+    	val masterOfDeadSlave = oldActivePlaces.prev(deadSlave);
+    	
         recoverTransactions(plh, spare, oldActivePlaces);
         
         recoverMasters(plh, spare, newActivePlaces);
@@ -17,6 +22,66 @@ public class DistributedRecoveryHelper {
         
         newActivePlaces.broadcastFlat(()=> {plh().setActivePlaces(newActivePlaces);} );
     }
+    
+    private static def allocateSparePlace(plh:PlaceLocalHandle[LocalStore], deadPlaceVirtualPlaceId:Long, oldActivePlaces:PlaceGroup) {
+        try {
+            plh().lock();
+            val nPlaces = Place.numAllPlaces();
+            val nActive = plh().activePlaces.size();
+            var placeIndx:Long = -1;
+            for (var i:Long = nActive; i < nPlaces; i++) {
+                if (oldActivePlaces.contains(Place(i)))
+                    continue;
+                
+                var allocated:Boolean = false;
+                try {
+                    allocated = at (Place(i)) allocate(plh, deadPlaceVirtualPlaceId);
+                }catch(ex:Exception) {
+                }
+                
+                if (!allocated)
+                    Console.OUT.println(here + " - Failed to allocate " + Place(i) + ", is it dead? " + Place(i).isDead());
+                else {
+                    Console.OUT.println(here + " - Succeeded to allocate " + Place(i) );
+                    placeIndx = i;
+                    break;
+                }
+            }
+            assert(placeIndx != -1) : here + " no available spare places to allocate ";
+            return Place(placeIndx);
+        }
+        finally {
+            plh().unlock();
+        }   
+    }
+    
+    
+    private static def allocate(plh:PlaceLocalHandle[LocalStore], vPlace:Long) {
+        try {
+            plh().lock();
+            Console.OUT.println(here + " received allocation request to replace virtual place ["+vPlace+"] ");
+            if (plh().virtualPlaceId == -1) {
+                plh().virtualPlaceId = vPlace;
+                Console.OUT.println(here + " allocation request succeeded");
+                return true;
+            }
+            Console.OUT.println(here + " allocation request failed, already allocated for virtual place ["+plh().virtualPlaceId+"] ");
+            return false;
+        }
+        finally {
+            plh().unlock();
+        }
+    }
+    
+    private static def generateNewActivePlaces(deadPlace:Place, newPlace:Place, oldActivePlaces:PlaceGroup) {
+        val rail = new Rail[Place]();
+        for (var i:Long = 0; i < oldActivePlaces.size(); i++) {
+            if (oldActivePlaces(i).id == deadPlace.id)
+                rail(i) = newPlace;
+        }
+        return new SparsePlaceGroup(rail);
+    }
+    
     
     private static def recoverTransactions(plh:PlaceLocalHandle[LocalStore], spare:Place,oldActivePlaces:PlaceGroup) {
         Console.OUT.println(here + " - recoverTransactions started");

@@ -20,45 +20,44 @@ import x10.util.HashMap;
 import x10.util.resilient.localstore.TxResult;
 
 public class NativeStore[V]{V haszero, V <: Cloneable} extends Store[V] {
-  val store:ResilientStore;
-  val map:ResilientNativeMap;
+    val store:ResilientStore;
+      val map:ResilientNativeMap;
 
-  def this(name:String, activePlaces:PlaceGroup) {
-	  val heartbeatOn = false;
-    store = ResilientStore.make(activePlaces, heartbeatOn);
-    map = store.makeMap("_map_" + name);
-  }
+      def this(name:String, activePlaces:PlaceGroup) {
+          val immediateRecovery = false;
+          store = ResilientStore.make(activePlaces, immediateRecovery);
+          map = store.makeMap("_map_" + name);
+      }
 
-  public def get(key:String) = map.get(key) as V;
+      public def get(key:String) = map.get(key) as V;
 
-  public def set(key:String, value:V) {
-    map.set(key, value);
-  }
+      public def set(key:String, value:V) {
+          map.set(key, value);
+      }
   
-  public def setAll(pairs:HashMap[String,V]) {
-	  val tmp = new HashMap[String,Cloneable]();
-	  val iter = pairs.keySet().iterator();
-	  while (iter.hasNext()) {
-          val k = iter.next();
-		  val v = pairs.getOrThrow(k) as Cloneable;
-		  tmp.put(k,v);
-	  }
-	  map.setAll(tmp);
-  } 
+      public def setAll(pairs:HashMap[String,V]) {
+          val tmp = new HashMap[String,Cloneable]();
+          val iter = pairs.keySet().iterator();
+          while (iter.hasNext()) {
+              val k = iter.next();
+              val v = pairs.getOrThrow(k) as Cloneable;
+              tmp.put(k,v);
+          }
+          map.setAll(tmp);
+      } 
 
-  public def set2(key:String, value:V, place:Place, key2:String, value2:V) {
-    map.set2(key, value, place, key2, value2);
-  }
+      public def set2(key:String, value:V, place:Place, key2:String, value2:V) {
+          map.set2(key, value, place, key2, value2);
+      }
 
-  public def getActivePlaces() = store.getActivePlaces();
+      public def getActivePlaces() = store.getActivePlaces();
 
-  // update for changes in the active PlaceGroup
-  public def updateForChangedPlaces(changes:ChangeDescription):void {
-    store.updateForChangedPlaces(changes);
-  }
+      // update for changes in the active PlaceGroup
+      public def updateForChangedPlaces(changes:ChangeDescription):void {
+          store.updateForChangedPlaces(changes);
+      }
   
-  public def executeTransaction(members:PlaceGroup, closure:(Tx)=>Any):TxResult {
-	  return map.executeTransaction(members, closure);
-  }
-  
+      public def executeTransaction(members:PlaceGroup, closure:(Tx)=>Any):TxResult {
+          return map.executeTransaction(members, closure);
+      }
 }

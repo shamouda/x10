@@ -37,8 +37,8 @@ public class BankAsyncResilient {
             hammer.scheduleTimers();
         }
         val mgr = new PlaceManager(sparePlaces, supportShrinking);
-        val heartbeatOn = false;
-        val store = ResilientStore.make(mgr.activePlaces(), heartbeatOn);
+        val immediateRecovery = false;
+        val store = ResilientStore.make(mgr.activePlaces(), immediateRecovery);
         val map = store.makeMap("mapA");
         try {
             val startTransfer = System.nanoTime();

@@ -32,8 +32,6 @@ import x10.compiler.Uncounted;
  */
 public class ResilientStore {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-    private static val HB_MS = System.getenv("HB_MS") == null ? 1000 : Long.parseLong(System.getenv("HB_MS"));
-    
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     public val plh:PlaceLocalHandle[LocalStore];
@@ -45,27 +43,16 @@ public class ResilientStore {
         this.lock = new Lock();
     }
     
-    public static def make(pg:PlaceGroup, heartbeatOn:Boolean):ResilientStore {
-        val plh = PlaceLocalHandle.make[LocalStore](Place.places(), ()=> new LocalStore(pg) );
+    public static def make(pg:PlaceGroup, immediateRecovery:Boolean):ResilientStore {
+        val plh = PlaceLocalHandle.make[LocalStore](Place.places(), ()=> new LocalStore(pg, immediateRecovery) );
         val store = new ResilientStore(plh);
         
         Place.places().broadcastFlat(()=> { 
         	plh().setPLH(plh); 
-        	if (resilient && heartbeatOn && pg.contains(here)) {
-        		@Uncounted async {
-            		plh().startHeartBeat(HB_MS);
-            	}
-        	}
         });
         
         Console.OUT.println("store created successfully ...");
         return store;
-    }
-    
-    public def stopHeartBeat() {
-    	plh().activePlaces.broadcastFlat(()=> {
-            plh().stopHeartBeat();
-        });
     }
     
     public def makeMap(name:String):ResilientNativeMap {

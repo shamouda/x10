@@ -39,8 +39,8 @@ public class LocalStore {
     /*store transactions for statistical purposes*/
     public transient val txList:TransactionsList = new TransactionsList();
     private transient var txDescMap:ResilientNativeMap; //A resilient map for transactions' descriptors
-    
-    public def this(active:PlaceGroup) {
+    private transient val immediateRecovery:Boolean;
+    public def this(active:PlaceGroup, immediateRecovery:Boolean) {
         if (active.contains(here)) {
         	this.activePlaces = active;
             this.virtualPlaceId = active.indexOf(here);
@@ -51,6 +51,7 @@ public class LocalStore {
             }
             lock = new Lock();
         }
+        this.immediateRecovery = immediateRecovery;
     }
     
     public def getTxLoggingMap() {
@@ -78,120 +79,8 @@ public class LocalStore {
     
     public def PLH() = plh;
     
-    /*****  Heartbeating from slave to master ******/
-    public def startHeartBeat(hbIntervalMS:Long) {
-        assert(resilient);
-        try {
-            lock();
-            heartBeatOn = true;
-            while (heartBeatOn)
-                heartBeatLocked(hbIntervalMS);
-        }
-        finally {
-            unlock();
-        }
-    }
-    
-    public def stopHeartBeat() {
-        try {
-            lock();
-            heartBeatOn = false;
-        }
-        finally {
-            unlock();
-        }
-    }
-    
-    private def heartBeatLocked(hbIntervalMS:Long) {
-    	var i:Long = 0;
-        while (heartBeatOn && !slaveStore.master.isDead()) {
-            unlock();
-            System.threadSleep(hbIntervalMS);                   
-            lock();
-            
-            if (heartBeatOn) {
-	            try {
-	                finish at (slaveStore.master) async {}
-	            }
-	            catch(ex:Exception) { break; }            
-	            Console.OUT.println(here + " " + (i++) + ") HB>>>>> " + slaveStore.master + " ... OK ");
-            }
-        }
-        
-        if (heartBeatOn && slaveStore.master.isDead()) {
-        	Console.OUT.println(here + " HB>>>>> " + slaveStore.master + " ... ERROR ");
-        	val spare = allocateSparePlace();
-        	
-        	val newActivePlaces = generateNewActivePlaces(slaveStore.master, spare);
-        	val masterOfDeadSlave = activePlaces.prev(slaveStore.master);
-        	DistributedRecoveryHelper.recover(plh, spare, masterOfDeadSlave, activePlaces, newActivePlaces);
-        	
-            activePlaces = newActivePlaces;
-            
-        	slaveStore.master = spare;
-        }
-    }
-    
-    private def allocateSparePlace() {
-        val plh = this.plh;
-        try {
-            plh().lock();
-            val nPlaces = Place.numAllPlaces();
-            val nActive = plh().activePlaces.size();
-            var placeIndx:Long = -1;
-            for (var i:Long = nActive; i < nPlaces; i++) {
-                if (activePlaces.contains(Place(i)))
-                    continue;
-                
-                var allocated:Boolean = false;
-                try {
-                    allocated = at (Place(i)) plh().allocate(virtualPlaceId -1);
-                }catch(ex:Exception) {
-                }
-                
-                if (!allocated)
-                    Console.OUT.println(here + " - Failed to allocate " + Place(i) + ", is it dead? " + Place(i).isDead());
-                else {
-                    Console.OUT.println(here + " - Succeeded to allocate " + Place(i) );
-                    placeIndx = i;
-                    break;
-                }
-            }
-            assert(placeIndx != -1) : here + " no available spare places to allocate ";
-            return Place(placeIndx);
-        }
-        finally {
-            plh().unlock();
-        }   
-    }
-    
-    
-    private def allocate(vPlace:Long) {
-        val plh = this.plh;
-        try {
-            lock();
-            Console.OUT.println(here + " received allocation request to replace virtual place ["+vPlace+"] ");
-            if (virtualPlaceId == -1) {
-                virtualPlaceId = vPlace;
-                Console.OUT.println(here + " allocation request succeeded");
-                return true;
-            }
-            Console.OUT.println(here + " allocation request failed, already allocated for virtual place ["+virtualPlaceId+"] ");
-            return false;
-        }
-        finally {
-            unlock();
-        }
-    }
-    
-    private def generateNewActivePlaces(deadPlace:Place, newPlace:Place) {
-        val rail = new Rail[Place]();
-        for (var i:Long = 0; i < activePlaces.size(); i++) {
-            if (activePlaces(i).id == deadPlace.id)
-                rail(i) = newPlace;
-        }
-        return new SparsePlaceGroup(rail);
-    }
+   	//DistributedRecoveryHelper.recover(plh, spare, masterOfDeadSlave, activePlaces, newActivePlaces);
+   	
     /**************     ActivePlaces utility methods     ****************/
     public def getVirtualPlaceId() {
         try {
@@ -258,12 +147,12 @@ public class LocalStore {
     
     
     /*******************************************/
-    private def lock() {
+    public def lock() {
         if (!TxConfig.getInstance().LOCK_FREE)
             lock.lock();
     }
     
-    private def unlock() {
+    public def unlock() {
         if (!TxConfig.getInstance().LOCK_FREE)
             lock.unlock();
     }
