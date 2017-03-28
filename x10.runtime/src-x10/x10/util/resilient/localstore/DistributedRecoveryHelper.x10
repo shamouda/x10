@@ -9,18 +9,27 @@ public class DistributedRecoveryHelper {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     public static def recover(plh:PlaceLocalHandle[LocalStore], deadSlave:Place, oldActivePlaces:PlaceGroup):void {
-    	val deadPlaceVirtualPlaceId = oldActivePlaces.indexOf(deadSlave);
-    	val spare = allocateSparePlace(plh, deadPlaceVirtualPlaceId, oldActivePlaces);
-    	val newActivePlaces = generateNewActivePlaces(deadSlave, spare, oldActivePlaces);
-    	val masterOfDeadSlave = oldActivePlaces.prev(deadSlave);
-    	
-        recoverTransactions(plh, spare, oldActivePlaces);
-        
-        recoverMasters(plh, spare, newActivePlaces);
-        
-        recoverSlaves(plh, spare, masterOfDeadSlave); //todo: pause before copying
-        
-        newActivePlaces.broadcastFlat(()=> {plh().setActivePlaces(newActivePlaces);} );
+    	try {
+	    	plh().lock();
+	    	
+	    	val deadPlaceVirtualPlaceId = oldActivePlaces.indexOf(deadSlave);
+	    	val spare = allocateSparePlace(plh, deadPlaceVirtualPlaceId, oldActivePlaces);
+	    	val newActivePlaces = generateNewActivePlaces(deadSlave, spare, oldActivePlaces);
+	    	val masterOfDeadSlave = oldActivePlaces.prev(deadSlave);
+	    	
+	        recoverTransactions(plh, spare, oldActivePlaces);
+	        
+	        recoverMasters(plh, spare, newActivePlaces);
+	        
+	        recoverSlaves(plh, spare, masterOfDeadSlave);
+	        
+	        val otherPlaces = excludePlaces(newActivePlaces, here, spare);
+	        otherPlaces.broadcastFlat(()=> {plh().replace(deadSlave, spare);} );
+	        
+	        plh().activePlaces = newActivePlaces;
+    	} finally {
+    		plh().unlock();
+    	}
     }
     
     private static def allocateSparePlace(plh:PlaceLocalHandle[LocalStore], deadPlaceVirtualPlaceId:Long, oldActivePlaces:PlaceGroup) {
@@ -188,5 +197,17 @@ public class DistributedRecoveryHelper {
         }
         else
             plh().slaveStore.commitAll(orderedTx);
+    }
+    
+    
+    private static def excludePlaces(pg:PlaceGroup, pl1:Place, pl2:Place) {
+    	assert(pg.contains(pl1) && pg.contains(pl2));
+    	val rail = new Rail[Place](pg.size() - 2);
+    	var i:Long = 0;
+    	for (p in pg) {
+    		if (p.id != pl1.id && p.id != pl2.id)
+    			rail(i++) = p;
+    	}
+    	return new SparsePlaceGroup(rail);
     }
 }

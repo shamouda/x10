@@ -327,14 +327,17 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         val startP2 = Timer.milliTime();
         val p2success = commitPhaseTwo(plh, id, members, root);
         val endP2 = Timer.milliTime();
-      if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseTwo time [" + (endP2-startP2) + "] ms");
+        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseTwo time [" + (endP2-startP2) + "] ms");
         
         
         if (resilient && !DISABLE_DESC ){
             if (!TM_REP.equals("lazy"))
                 deleteTxDesc();
-            else
-                updateTxDesc(TxDesc.COMMITTED);
+            else {
+            	/* if we don't mark the committed transaction, 
+            	 * we will have to recommit all transactions that are already committed */
+                updateTxDesc(TxDesc.COMMITTED); 
+            }
         }
 
         commitTime = Timer.milliTime();

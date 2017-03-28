@@ -22,25 +22,24 @@ import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.tx.TxDesc;
 import x10.util.resilient.localstore.tx.TransactionsList;
 
-public class LocalStore {
+public class LocalStore(immediateRecovery:Boolean) {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
+    
     public transient var masterStore:MasterStore = null;
     public transient var virtualPlaceId:Long = -1; //-1 means a spare place
-    
-    /*resilient mode variables*/    
     public transient var slave:Place;
     public transient var slaveStore:SlaveStore = null;
     public transient var activePlaces:PlaceGroup;
     private var plh:PlaceLocalHandle[LocalStore];
     private transient var heartBeatOn:Boolean;
     private transient var lock:Lock;
-    
-    /*store transactions for statistical purposes*/
     public transient val txList:TransactionsList = new TransactionsList();
     private transient var txDescMap:ResilientNativeMap; //A resilient map for transactions' descriptors
-    private transient val immediateRecovery:Boolean;
+    
     public def this(active:PlaceGroup, immediateRecovery:Boolean) {
+    	property(immediateRecovery);
+    	
         if (active.contains(here)) {
         	this.activePlaces = active;
             this.virtualPlaceId = active.indexOf(here);
@@ -51,13 +50,7 @@ public class LocalStore {
             }
             lock = new Lock();
         }
-        this.immediateRecovery = immediateRecovery;
-    }
-    
-    public def getTxLoggingMap() {
-    	if (txDescMap == null)
-    		txDescMap = new ResilientNativeMap("_TxDesc_", plh);
-    	return txDescMap;
+        //else, I am a spare place, initialize me using joinAsMaster(...)
     }
     
     /*used when a spare place joins*/
@@ -73,14 +66,15 @@ public class LocalStore {
         lock = new Lock();
     }
     
+    public def getTxLoggingMap() {
+    	if (txDescMap == null)
+    		txDescMap = new ResilientNativeMap("_TxDesc_", plh);
+    	return txDescMap;
+    }
+    
     public def setPLH(plh:PlaceLocalHandle[LocalStore]) {
         this.plh = plh;
     }
-    
-    public def PLH() = plh;
-    
-   	//DistributedRecoveryHelper.recover(plh, spare, masterOfDeadSlave, activePlaces, newActivePlaces);
-   	
     /**************     ActivePlaces utility methods     ****************/
     public def getVirtualPlaceId() {
         try {
@@ -100,10 +94,25 @@ public class LocalStore {
     	}
     }
 
-    public def setActivePlaces(active:PlaceGroup) {
+    public def replace(dead:Place, spare:Place) {
     	try {
     		lock();
-    		this.activePlaces = active;
+    		val size = activePlaces.size();
+    		val rail = new Rail[Place](size);
+    		for (var i:Long = 0; i< size; i++) {
+    			if (activePlaces(i).id == dead.id)
+    				rail(i) = spare;
+    			else
+    				rail(i) = activePlaces(i);
+    		}
+    		activePlaces = new SparsePlaceGroup(rail);
+    		
+    		if (TM_DEBUG) {
+    			var str:String = "";
+    		    for (p in activePlaces)
+    		    	str += p + ",  " ;
+    			Console.OUT.println(here + " - updated activePlaces to be: " + str);
+    		}
     	}finally {
     		unlock();
     	}
@@ -139,7 +148,9 @@ public class LocalStore {
     public def sameActivePlaces(active:PlaceGroup) {
     	try {
     		lock();
-    		return activePlaces.equals(active);
+    		val result = activePlaces == active;
+    		if (TM_DEBUG) Console.OUT.println(here + " - sameActivePlaces returned " + result);
+    		return result;
     	}finally {
     		unlock();
     	}
