@@ -8,17 +8,17 @@ import x10.util.resilient.localstore.tx.TxDesc;
 public class DistributedRecoveryHelper {
     private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
-    public static def recover(plh:PlaceLocalHandle[LocalStore], spare:Place, oldActivePlaces:PlaceGroup, newActivePlaces:PlaceGroup):void {
-        recoverTransactions(plh, spare);
+    public static def recover(plh:PlaceLocalHandle[LocalStore], spare:Place, masterOfDeadSlave:Place, oldActivePlaces:PlaceGroup, newActivePlaces:PlaceGroup):void {
+        recoverTransactions(plh, spare, oldActivePlaces);
         
         recoverMasters(plh, spare, newActivePlaces);
         
-        recoverSlaves(plh, spare, oldActivePlaces.prev(slaveStore.master)); //todo: pause before copying
+        recoverSlaves(plh, spare, masterOfDeadSlave); //todo: pause before copying
         
-        newActivePlaces.broadcastFlat(()=> plh().setActivePlaces(newActivePlaces) );
+        newActivePlaces.broadcastFlat(()=> {plh().setActivePlaces(newActivePlaces);} );
     }
     
-    private static def recoverTransactions(plh:PlaceLocalHandle[LocalStore], spare:Place) {
+    private static def recoverTransactions(plh:PlaceLocalHandle[LocalStore], spare:Place,oldActivePlaces:PlaceGroup) {
         Console.OUT.println(here + " - recoverTransactions started");
         finish {
             Console.OUT.println(here + " - recoverTransactions deadPlace["+plh().slaveStore.master+"] moving to its slave["+here+"] ");
@@ -49,7 +49,7 @@ public class DistributedRecoveryHelper {
             }
             
             if (TxConfig.getInstance().TM_REP.equals("lazy"))
-                applySlaveTransactions(plh);
+                applySlaveTransactions(plh, oldActivePlaces);
         }
         Console.OUT.println("recoverTransactions completed");
     }
@@ -64,19 +64,18 @@ public class DistributedRecoveryHelper {
     }
 
     private static def recoverSlaves(plh:PlaceLocalHandle[LocalStore], spare:Place, masterOfDeadSlave:Place) {
-        val vPlaceId = activePlaces.indexOf(masterOfDeadSlave);
         finish {
             at (masterOfDeadSlave) async {
                 val masterState = plh().masterStore.getState().getKeyValueMap();
                 at (spare) {
-                    plh().slaveStore.addMasterPlace(vPlaceId, masterState);
+                    plh().slaveStore.addMasterPlace(masterState);
                 }
                 plh().slave = spare;
             }
         }
     }
 
-    private static def applySlaveTransactions(plh:PlaceLocalHandle[LocalStore]) {
+    private static def applySlaveTransactions(plh:PlaceLocalHandle[LocalStore], oldActivePlaces:PlaceGroup) {
         val committed = GlobalRef(new ArrayList[Long]());
         val committedLock = GlobalRef(new Lock());
         val root = here;
@@ -88,10 +87,10 @@ public class DistributedRecoveryHelper {
                 while (iter.hasNext()) {
                     val placeIndex = iter.next();
                     val txList = placeTxsMap.getOrThrow(placeIndex);
-                    var pl:Place = activePlaces(placeIndex);
+                    var pl:Place = oldActivePlaces(placeIndex);
                     var master:Boolean = true;
                     if (pl.isDead()){
-                        pl = activePlaces.next(pl);
+                        pl = oldActivePlaces.next(pl);
                         master = false;
                     }
                     val isMaster = master;

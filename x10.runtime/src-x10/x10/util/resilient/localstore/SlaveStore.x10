@@ -44,7 +44,7 @@ public class SlaveStore {
     }
     
     /******* Recovery functions (called by one place) , no risk of race condition *******/
-    public def addMasterPlace(masterVirtualId:Long, state:HashMap[String,Cloneable]) {
+    public def addMasterPlace(state:HashMap[String,Cloneable]) {
         masterState = state;
         logs = new ArrayList[TxSlaveLog]();
     }

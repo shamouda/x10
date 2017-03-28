@@ -92,11 +92,10 @@ public class CentralizedRecoveryHelper {
             for (newSlave in changes.addedPlaces) {
                 val master = changes.newActivePlaces.prev(newSlave);
                 Console.OUT.println("recovering slaves: master["+master+"] newSlave["+newSlave+"] ");
-                val masterVirtualId = changes.newActivePlaces.indexOf(master);
                 at (master) async {
                     val masterState = plh().masterStore.getState().getKeyValueMap();
                     at (newSlave) {
-                        plh().slaveStore.addMasterPlace(masterVirtualId, masterState);
+                        plh().slaveStore.addMasterPlace(masterState);
                     }
                     plh().slave = newSlave;
                 }

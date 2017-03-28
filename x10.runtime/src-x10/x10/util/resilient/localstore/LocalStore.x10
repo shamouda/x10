@@ -123,8 +123,8 @@ public class LocalStore {
         	val spare = allocateSparePlace();
         	
         	val newActivePlaces = generateNewActivePlaces(slaveStore.master, spare);
-        	
-        	DistributedRecoveryHelper.recover(plh, spare, activePlaces, newActivePlaces);
+        	val masterOfDeadSlave = activePlaces.prev(slaveStore.master);
+        	DistributedRecoveryHelper.recover(plh, spare, masterOfDeadSlave, activePlaces, newActivePlaces);
         	
             activePlaces = newActivePlaces;
             
@@ -166,7 +166,7 @@ public class LocalStore {
     }
     
     
-    private def allocate(plh:PlaceLocalHandle[LocalStore], vPlace:Long) {
+    private def allocate(vPlace:Long) {
         val plh = this.plh;
         try {
             lock();
