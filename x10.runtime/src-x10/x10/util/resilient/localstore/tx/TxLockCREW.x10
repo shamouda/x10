@@ -253,12 +253,12 @@ public class TxLockCREW extends TxLock {
     
     private def stronger(me:Long, other:Long) {
     	var res:Boolean = true;
-    	val seq = (me as Int);
-    	val otherSeq = (other as Int);
+    	val seq = TxConfig.getTxSequence(me);
+    	val otherSeq = TxConfig.getTxSequence(other);
     	
     	if (seq == otherSeq) {
-    		val placeId = (me >> 32) as Int;
-    		val otherPlaceId = (other >> 32) as Int;
+    		val placeId = TxConfig.getTxPlaceId(me);
+    		val otherPlaceId = TxConfig.getTxPlaceId(other);
     		res = placeId < otherPlaceId;
     	}
     	else

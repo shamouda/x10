@@ -54,6 +54,7 @@ public class SlaveStore {
     }
     
     /******* Prepare/Commit/Abort functions *******/
+    /*Used by LocalTx to commit a transaction. TransLog is applied immediately and not saved in the logs map*/
     public def commit(id:Long, transLog:HashMap[String,Cloneable], placeIndex:Long) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit1() started ...");
         try {
@@ -66,6 +67,7 @@ public class SlaveStore {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit1() committed ...");
     }
     
+    /*Used by Tx to commit a transaction that was previously prepared. TransLog is removed from the logs map after commit*/
     public def commit(id:Long) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit2() started ...");
         try {
@@ -98,21 +100,16 @@ public class SlaveStore {
         }
     }
     
-    public def prepare(id:Long, entries:HashMap[String,Cloneable], placeIndex:Long) {
+    public def prepare(id:Long, entries:HashMap[String,Cloneable]) {
         if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() started ...");
         try {
             slaveLock();
             var txSlaveLog:TxSlaveLog = getLog(id);
             if (txSlaveLog == null) {
-                txSlaveLog = new TxSlaveLog( id, new HashMap[String,Cloneable](), placeIndex);
+                txSlaveLog = new TxSlaveLog(id);
                 logs.add(txSlaveLog);
             }
-            val iter = entries.keySet().iterator();
-            while (iter.hasNext()) {
-                val key = iter.next();
-                val value = entries.getOrThrow(key);
-                txSlaveLog.transLog.put(key, value);
-            }
+            txSlaveLog.transLog = entries;
             if (TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() logs.put(id="+id+") ...");
         }
         finally {
@@ -150,10 +147,11 @@ public class SlaveStore {
         try {
             slaveLock();
             for (log in logs) {
-                var list:ArrayList[Long] = map.getOrElse(log.placeIndex, null);
+            	val placeId = TxConfig.getTxPlaceId(log.id);
+                var list:ArrayList[Long] = map.getOrElse(placeId, null);
                 if (list == null){
                     list = new ArrayList[Long]();
-                    map.put(log.placeIndex, list);
+                    map.put(placeId, list);
                 }
                 list.add(log.id);
             }

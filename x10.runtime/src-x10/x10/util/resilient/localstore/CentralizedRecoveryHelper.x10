@@ -37,34 +37,11 @@ public class CentralizedRecoveryHelper {
                 val slave = oldActivePlaces.next(deadPlace);
                 Console.OUT.println("recoverTransactions deadPlace["+deadPlace+"] moving to its slave["+slave+"] ");
                 at (slave) async {
-                    val masterMap = plh().slaveStore.getSlaveMasterState();
-                    if (masterMap != null) {
-                        val set = masterMap.keySet();
-                        val iter = set.iterator();
-                        while (iter.hasNext()) {
-                            val txId = iter.next();
-                            if (txId.contains("_TxDesc_")) {
-                                val obj = masterMap.get(txId);
-                                if (obj != null) {
-                                    val txDesc = obj as TxDesc;
-                                    val map = new ResilientNativeMap(txDesc.mapName, plh);
-                                    if (TM_DEBUG) Console.OUT.println(here + " recovering txdesc " + txDesc);
-                                    val tx = map.restartGlobalTransaction(txDesc);
-                                    if (txDesc.status == TxDesc.COMMITTING) {
-                                        if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] commit it");
-                                        tx.commit(true); //ignore phase one
-                                    }
-                                    else if (txDesc.status == TxDesc.STARTED) {
-                                        if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] abort it");
-                                        tx.abort();
-                                    }
-                                }
-                            }
-                        }
-                    }
+                	
+                    slaveAsCoordinator(plh);
                     
                     if (TxConfig.getInstance().TM_REP.equals("lazy"))
-                        applySlaveTransactions(plh, changes, deadPlace);
+                    	slaveAsParticipant(plh, changes, deadPlace);
                 }
             }
         }
@@ -103,10 +80,37 @@ public class CentralizedRecoveryHelper {
         }
     }
     
-    private static def applySlaveTransactions(plh:PlaceLocalHandle[LocalStore], changes:ChangeDescription, deadMaster:Place) {
+    private static def slaveAsCoordinator(plh:PlaceLocalHandle[LocalStore]) {
+    	val masterMap = plh().slaveStore.getSlaveMasterState();
+        if (masterMap != null) {
+            val set = masterMap.keySet();
+            val iter = set.iterator();
+            while (iter.hasNext()) {
+                val txId = iter.next();
+                if (txId.contains("_TxDesc_")) {
+                    val obj = masterMap.get(txId);
+                    if (obj != null) {
+                        val txDesc = obj as TxDesc;
+                        val map = new ResilientNativeMap(txDesc.mapName, plh);
+                        if (TM_DEBUG) Console.OUT.println(here + " recovering txdesc " + txDesc);
+                        val tx = map.restartGlobalTransaction(txDesc);
+                        if (txDesc.status == TxDesc.COMMITTING) {
+                            if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] commit it");
+                            tx.commit(true); //ignore phase one
+                        }
+                        else if (txDesc.status == TxDesc.STARTED) {
+                            if (TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] abort it");
+                            tx.abort();
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private static def slaveAsParticipant(plh:PlaceLocalHandle[LocalStore], changes:ChangeDescription, deadMaster:Place) {
         val committed = GlobalRef(new ArrayList[Long]());
         val committedLock = GlobalRef(new Lock());
-        val root = here;
         
         //In RL_EA_*, validation is not required. Thus any transaction reaching the slave, is for sure a committed transaction
         //In the other schemes, a transaction reaching the slave may or may not be committed, we need to find out the status of 
@@ -116,25 +120,27 @@ public class CentralizedRecoveryHelper {
             finish {
                 val iter = placeTxsMap.keySet().iterator();
                 while (iter.hasNext()) {
-                    val placeIndex = iter.next();
-                    val txList = placeTxsMap.getOrThrow(placeIndex);
-                    var pl:Place = changes.oldActivePlaces(placeIndex);
+                    val placeId = iter.next();
+                    val txList = placeTxsMap.getOrThrow(placeId);
+                    var pl = Place(placeId);
                     var master:Boolean = true;
-                    if (pl.id == deadMaster.id){ // transactions initiated by my dead master
-                        val committedList = plh().slaveStore.filterCommitted(txList);
-                        committedLock().lock();
-                        committed().addAll(committedList);
-                        committedLock().unlock();                        
+                    if (pl.isDead()){
+                        pl = changes.oldActivePlaces.next(pl);
+                        master = false;
                     }
-                    else {
-                    	assert (!pl.isDead()) : "fatal error detected at " + here + " , multiple places dying at once: " + deadMaster + " and " + pl;
-                    	at (pl) async {
-                            val committedList = plh().masterStore.filterCommitted(txList);
-                            at (root) {
-                                committedLock().lock();
-                                committed().addAll(committedList);
-                                committedLock().unlock();
-                            }
+                    val isMaster = master;
+                    at (pl) async {
+                        var committedList:ArrayList[Long]; 
+                        if (isMaster)
+                            committedList = plh().masterStore.filterCommitted(txList);
+                        else
+                            committedList = plh().slaveStore.filterCommitted(txList);
+                        
+                        val cList = committedList;
+                        at (committed) {
+                            committedLock().lock();
+                            committed().addAll(cList);
+                            committedLock().unlock();
                         }
                     }
                 }

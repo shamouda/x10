@@ -180,7 +180,7 @@ public abstract class TxManager(data:MapData) {
     /********************************************************/
     
     public static def checkDeadCoordinator(txId:Long) {
-        val placeId = (txId >> 32) as Int;
+        val placeId = TxConfig.getTxPlaceId(txId);
         if (Place(placeId as Long).isDead()) {
             if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + txIdToString (txId)+ " coordinator place["+Place(placeId)+"] died !!!!");
             throw new DeadPlaceException(Place(placeId));

@@ -63,4 +63,12 @@ public class TxConfig {
     
     public static def getInstance() = instance;
     
+    
+    public static def getTxPlaceId(txId:Long):Int {
+    	return (txId >> 32) as Int;
+    }
+    public static def getTxSequence(txId:Long):Int {
+    	return (txId as Int);
+    }
+    
 }
