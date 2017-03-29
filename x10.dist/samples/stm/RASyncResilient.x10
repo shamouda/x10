@@ -11,7 +11,6 @@ import x10.util.resilient.iterative.SimplePlaceHammer;
 import x10.util.resilient.localstore.CloneableLong;
 
 public class RASyncResilient {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     private static val DISABLE_CKPT = System.getenv("DISABLE_CKPT") != null && System.getenv("DISABLE_CKPT").equals("1");
     
     
@@ -128,7 +127,7 @@ public class RASyncResilient {
                         pg = STMAppUtils.createGroup(here,p1);
                     val members = pg;
                     val success = map.executeTransaction(members, (tx:Tx) => {
-                        if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc+"] place["+p1+"] amount["+amount+"]");
+                        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc+"] place["+p1+"] amount["+amount+"]");
                         tx.syncAt(p1, () => {
                             val obj = tx.get(randAcc);
                             var acc:BankAccount = null;

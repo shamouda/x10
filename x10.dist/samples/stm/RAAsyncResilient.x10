@@ -12,7 +12,6 @@ import x10.util.resilient.localstore.CloneableLong;
 import x10.util.Timer;
 
 public class RAAsyncResilient {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     private static val DISABLE_CKPT = System.getenv("DISABLE_CKPT") != null && System.getenv("DISABLE_CKPT").equals("1");
     
     
@@ -130,7 +129,7 @@ public class RAAsyncResilient {
                         pg = STMAppUtils.createGroup(here,p1);
                     val members = pg;
                     val success = map.executeTransaction(members, (tx:Tx) => {
-                        if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc+"] place["+p1+"] amount["+amount+"]");
+                        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc+"] place["+p1+"] amount["+amount+"]");
                         val f = tx.asyncAt(p1, () => {
                             val obj = tx.get(randAcc);
                             var acc:BankAccount = null;
@@ -146,7 +145,7 @@ public class RAAsyncResilient {
                         val startWait = Timer.milliTime();
 	                    f.force();	                    
 	                    tx.setWaitElapsedTime(Timer.milliTime() - startWait);
-	                    if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitForFuturesElapsedTime +"] ms");
+	                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitForFuturesElapsedTime +"] ms");
                     });
                     if (success == Tx.SUCCESS_RECOVER_STORE) {
                         throw new RecoverDataStoreException("RecoverDataStoreException", here);

@@ -8,9 +8,9 @@ import x10.util.Random;
 import x10.util.resilient.localstore.LockingRequest;
 import x10.util.resilient.localstore.LockingRequest.KeyInfo;
 import x10.util.resilient.localstore.LockingTx;
+import x10.util.resilient.localstore.TxConfig;
 
 public class STMAppUtils {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     public static def getPlace(accId:Long, activePG:PlaceGroup, accountPerPlace:Long):Place{
         return activePG(accId/accountPerPlace);
@@ -25,11 +25,11 @@ public class STMAppUtils {
             if (cl != null)
                 res = (cl as CloneableLong).v;
             
-            if (TM_DEBUG) Console.OUT.println("LocalTx["+tx.id+"] restoring progress here["+here+"] placeIndex["+placeIndex+"] progress["+res+"]");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("LocalTx["+tx.id+"] restoring progress here["+here+"] placeIndex["+placeIndex+"] progress["+res+"]");
             return res;
         }
         catch(ex:Exception) {
-            if (TM_DEBUG) Console.OUT.println("LocalTx["+tx.id+"] restoring progress failed, exception ["+ex.getMessage()+"]");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("LocalTx["+tx.id+"] restoring progress failed, exception ["+ex.getMessage()+"]");
             throw ex;
         }
     }

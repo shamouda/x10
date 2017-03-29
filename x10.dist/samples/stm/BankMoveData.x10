@@ -8,7 +8,6 @@ import x10.util.Set;
 import x10.xrx.Runtime;
 
 public class BankMoveData {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     public static def main(args:Rail[String]) {
         if (args.size != 3) {
@@ -79,7 +78,7 @@ public class BankMoveData {
                 map.executeTransaction(members, (tx:Tx) => {
                     val txId = tx.id;
                     val amount = txId;
-                    if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXSTART accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"] amount["+ amount + "]");
+                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] TXSTART accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"] amount["+ amount + "]");
                     var acc1:BankAccount = tx.getRemote(p1, randAcc1) as BankAccount;
                     var acc2:BankAccount = tx.getRemote(p2, randAcc2) as BankAccount;
                     if (acc1 == null)

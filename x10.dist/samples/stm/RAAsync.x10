@@ -10,7 +10,6 @@ import x10.xrx.Runtime;
 import x10.util.Timer;
 
 public class RAAsync {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     public static def main(args:Rail[String]) {
         if (args.size != 3) {
@@ -85,7 +84,7 @@ public class RAAsync {
                     val amount = requests.values1(i-1);
                     val members = STMAppUtils.createGroup(p1);
                     map.executeTransaction( members, (tx:Tx) => {                        
-                        if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc+"] place["+p1+"] amount["+amount+"]");
+                        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc+"] place["+p1+"] amount["+amount+"]");
                         val f1 = tx.asyncAt(p1, () => {
                             val obj = tx.get(randAcc);
                             var acc:BankAccount = null;
@@ -99,7 +98,7 @@ public class RAAsync {
                         val startWait = Timer.milliTime();
 	                    f1.force();	                    
 	                    tx.setWaitElapsedTime(Timer.milliTime() - startWait);
-	                    if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitForFuturesElapsedTime +"] ms");
+	                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitForFuturesElapsedTime +"] ms");
                     });
                 }
             }

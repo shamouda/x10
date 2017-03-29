@@ -28,16 +28,17 @@ import x10.util.RailUtils;
  * interleaving between abort and other operations.
  **/
 public class TxLog (id:Long) {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     public var transLog:HashMap[String,TxKeyChange];
     public var aborted:Boolean = false;
+    public var writeValidated:Boolean = false;
+
     private var lock:Lock;
     
     public def this(id:Long) {
         property(id);
         transLog = new HashMap[String,TxKeyChange]();
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             lock = new Lock();
         else
             lock = null;
@@ -81,7 +82,7 @@ public class TxLog (id:Long) {
         if (log == null) {
             log = new TxKeyChange(copiedValue, version, txId, lockedRead, memU);
             transLog.put(key, log);
-            if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " initial read ver["+version+"] val["+copiedValue+"]");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " initial read ver["+version+"] val["+copiedValue+"]");
         }
     }
     
@@ -100,13 +101,13 @@ public class TxLog (id:Long) {
 
     // mark as locked for read
     public def setLockedRead(key:String, lr:Boolean) {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + "here["+here+"] key["+key+"] setLockedRead("+lr+") ");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + "here["+here+"] key["+key+"] setLockedRead("+lr+") ");
         transLog.getOrThrow(key).setLockedRead(lr);
     }
     
     // mark as locked for write
     public def setLockedWrite(key:String, lw:Boolean) {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] key["+key+"] setLockedWrite("+lw+") ");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] key["+key+"] setLockedWrite("+lw+") ");
         transLog.getOrThrow(key).setLockedWrite(lw);
     }
     
@@ -117,7 +118,7 @@ public class TxLog (id:Long) {
             result = false;
         else
             result = keyLog.getLockedRead();
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + "here["+here+"] key["+key+"] getLockedRead?["+result+"]");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + "here["+here+"] key["+key+"] getLockedRead?["+result+"]");
         return result;
     }
     
@@ -128,7 +129,7 @@ public class TxLog (id:Long) {
             result = false;
         else
             result = keyLog.getLockedWrite();
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] key["+key+"] getLockedWrite?["+result+"]");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] key["+key+"] getLockedWrite?["+result+"]");
         return result;
     }
     
@@ -151,17 +152,17 @@ public class TxLog (id:Long) {
     }
     
     public def lock() {
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             lock.lock();
     }
     
     public def unlock() {
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             lock.unlock();
     }
     
     public def clearAborted() {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] clearTxLog ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] clearTxLog ...");
         transLog = null;
         aborted = true;
     }

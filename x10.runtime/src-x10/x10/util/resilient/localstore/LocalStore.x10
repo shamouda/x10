@@ -21,9 +21,9 @@ import x10.compiler.Ifdef;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.tx.TxDesc;
 import x10.util.resilient.localstore.tx.TransactionsList;
+import x10.compiler.Uncounted;
 
 public class LocalStore(immediateRecovery:Boolean) {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     public transient var masterStore:MasterStore = null;
@@ -39,6 +39,7 @@ public class LocalStore(immediateRecovery:Boolean) {
     
     public def this(active:PlaceGroup, immediateRecovery:Boolean) {
     	property(immediateRecovery);
+    	lock = new Lock();
     	
         if (active.contains(here)) {
         	this.activePlaces = active;
@@ -48,9 +49,7 @@ public class LocalStore(immediateRecovery:Boolean) {
                 slaveStore = new SlaveStore(active.prev(here));
                 this.slave = active.next(here);
             }
-            lock = new Lock();
-        }
-        //else, I am a spare place, initialize me using joinAsMaster(...)
+        } //else, I am a spare place, initialize me using joinAsMaster(...)
     }
     
     /*used when a spare place joins*/
@@ -63,7 +62,6 @@ public class LocalStore(immediateRecovery:Boolean) {
             slaveStore = new SlaveStore(active.prev(here));
             this.slave = active.next(here);
         }
-        lock = new Lock();
     }
     
     public def getTxLoggingMap() {
@@ -75,6 +73,7 @@ public class LocalStore(immediateRecovery:Boolean) {
     public def setPLH(plh:PlaceLocalHandle[LocalStore]) {
         this.plh = plh;
     }
+    
     /**************     ActivePlaces utility methods     ****************/
     public def getVirtualPlaceId() {
         try {
@@ -93,6 +92,20 @@ public class LocalStore(immediateRecovery:Boolean) {
     		unlock();
     	}
     }
+    
+    public def getActivePlacesCopy() {
+    	try {
+    		lock();
+    		val rail = new Rail[Place](activePlaces.size());
+    		for (var i:Long = 0 ; i < activePlaces.size(); i++) {
+    			rail(i) = activePlaces(i);
+    		}
+    		return new SparsePlaceGroup(rail);
+    	}finally {
+    		unlock();
+    	}
+    }
+    
 
     public def replace(dead:Place, spare:Place) {
     	try {
@@ -107,7 +120,7 @@ public class LocalStore(immediateRecovery:Boolean) {
     		}
     		activePlaces = new SparsePlaceGroup(rail);
     		
-    		if (TM_DEBUG) {
+    		if (TxConfig.get().TM_DEBUG) {
     			var str:String = "";
     		    for (p in activePlaces)
     		    	str += p + ",  " ;
@@ -149,7 +162,7 @@ public class LocalStore(immediateRecovery:Boolean) {
     	try {
     		lock();
     		val result = activePlaces == active;
-    		if (TM_DEBUG) Console.OUT.println(here + " - sameActivePlaces returned " + result);
+    		if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " - sameActivePlaces returned " + result);
     		return result;
     	}finally {
     		unlock();
@@ -157,14 +170,57 @@ public class LocalStore(immediateRecovery:Boolean) {
     }
     
     
+    public def getMembersIndices(members:PlaceGroup):Rail[Long] {
+    	try {
+    		lock();
+    		val rail = new Rail[Long](members.size());
+    		for (var i:Long = 0; i <  members.size(); i++)
+    			rail(i) = activePlaces.indexOf(members(i));
+    		return rail;
+    	} finally {
+    		unlock();
+    	}
+    }
+    
+    public def getMembers(members:Rail[Long]):PlaceGroup {
+    	try {
+    		lock();
+	        val list = new ArrayList[Place]();
+	        for (var i:Long = 0; i < members.size; i++) {
+	            if (!activePlaces(members(i)).isDead())
+	                list.add(activePlaces(members(i)));
+	        }
+	        return new SparsePlaceGroup(list.toRail());
+    	} finally {
+    		unlock();
+    	}
+    }
+    
     /*******************************************/
     public def lock() {
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             lock.lock();
     }
     
     public def unlock() {
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             lock.unlock();
     }
+    
+    /********************Transparent Recovery methods********************************/
+    public def asyncSlaveRecovery() {
+    	if (!immediateRecovery)
+    		return;
+    	
+    	assert (slave.isDead()) : "bug in LocalStore, calling asyncSlaveRecovery although the slave is alive";
+    	assert (virtualPlaceId != -1) : "bug in LocalStore, virtualPlaceId ("+virtualPlaceId+") = -1";
+    	
+    	if ( masterStore.isActive() ) {
+    		 masterStore.pause();
+    		@Uncounted async {
+    			DistributedRecoveryHelper.recoverSlave(plh);
+    		}
+    	}
+    }
+    
 }

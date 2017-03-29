@@ -13,7 +13,6 @@ import x10.util.resilient.localstore.CloneableLong;
 import x10.util.resilient.localstore.LockManager;
 
 public class IntSet2AsyncLocking {
-	private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
 
 	public static def main(args:Rail[String]) {
         if (args.size != 4) {
@@ -101,7 +100,7 @@ public class IntSet2AsyncLocking {
 	                val startLock = Timer.milliTime();
 	                val tx = locker.startBlockingTransaction();
             		val txId = tx.id;
-	                if (TM_DEBUG) Console.OUT.println(here + " OP["+i+"] Start{{ keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");
+	                if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " OP["+i+"] Start{{ keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");
                     if (read)
                     	locker.lockRead(p1, key1, p2, key2, txId); //sort and lock
                     else
@@ -138,7 +137,7 @@ public class IntSet2AsyncLocking {
 	                
 	                tx.totalElapsedTime = Timer.milliTime() - startLock;
 	                
-	                if (TM_DEBUG) Console.OUT.println(here + " OP["+i+"] End}} keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");                
+	                if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " OP["+i+"] End}} keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");                
 	            }
             }
         }

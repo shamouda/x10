@@ -28,7 +28,8 @@ import x10.util.concurrent.Lock;
 
 public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup) extends AbstractTx {
     private val root = GlobalRef[Tx](this);
-
+    private val commitHandler:CommitHandler;
+    
     public transient val startTime:Long = Timer.milliTime();
     public transient var commitTime:Long = -1;
     public transient var abortTime:Long = -1;
@@ -41,41 +42,29 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     /* resilient mode variables */
     private transient var aborted:Boolean = false;
     private transient var txDescMap:ResilientNativeMap;
-    private transient var activePlaces:PlaceGroup;
     
-    /* Constants */
-    private static val DISABLE_SLAVE = System.getenv("DISABLE_SLAVE") != null && System.getenv("DISABLE_SLAVE").equals("1");
-    private static val DISABLE_DESC = System.getenv("DISABLE_DESC") != null && System.getenv("DISABLE_DESC").equals("1");
-    
-    public static val SUCCESS = 0n;
-    public static val SUCCESS_RECOVER_STORE = 1n;
-
-    private val commitHandler:CommitHandler;
-    
-    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, 
-            activePlaces:PlaceGroup, txDescMap:ResilientNativeMap) {
+    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, txDescMap:ResilientNativeMap) {
         property(plh, id, mapName, members);
-        if (!DISABLE_DESC) //enable desc requires enable slave
-            assert(!DISABLE_SLAVE);
+        if (!TxConfig.get().DISABLE_TX_LOGGING) //enable desc requires enable slave
+            assert(!TxConfig.get().DISABLE_SLAVE);
         
         if (resilient) {
-            this.activePlaces = activePlaces;
             this.txDescMap = txDescMap;
         }
         var membersStr:String = "";
         for (p in members)
             membersStr += p +" ";
-        if (TM_DEBUG) Console.OUT.println("TX["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] started members["+membersStr+"]");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("TX["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] started members["+membersStr+"]");
         	
         if (resilient) {
-        	if (TxConfig.getInstance().TM_REP.equals("lazy")) {
-        		commitHandler = new LazyReplicationCommitHandler();
+        	if (TxConfig.get().TM_REP.equals("lazy")) {
+        		commitHandler = new LazyReplicationCommitHandler(plh, id, mapName, members, txDescMap);
         	}
         	else
-        		commitHandler = new EagerReplicationCommitHandler();
+        		commitHandler = new EagerReplicationCommitHandler(plh, id, mapName, members, txDescMap);
         }
         else
-        	commitHandler = new NonResilientCommitHandler();
+        	commitHandler = new NonResilientCommitHandler(plh, id, mapName, members, txDescMap);
     }
     
     /********** Setting the pre-commit time for statistical analysis **********/   
@@ -85,6 +74,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     
     public def getPhase1ElapsedTime() = commitHandler.phase1ElapsedTime;
     public def getPhase2ElapsedTime() = commitHandler.phase2ElapsedTime;
+    public def getTxLoggingElapsedTime() = commitHandler.txLoggingElapsedTime;
     
     public def noop(key:String):Cloneable {
         return null;
@@ -179,7 +169,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     private def execute(op:Int, dest:Place, key:String, value:Cloneable, closure_void:()=>void, closure_return:()=>Any, 
             plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, root:GlobalRef[Tx]):TxOpResult {
         assert (members.contains(dest));
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] key["+key+"] value["+value+"] ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] key["+key+"] value["+value+"] ...");
         val startExec = Timer.milliTime();
         try {
             if (op == GET_LOCAL) {
@@ -214,7 +204,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                 return new TxOpResult(at (dest) closure_return());
             }
             else {  /*Remote Async Operations*/
-            	if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] (2) ...");
+            	if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] (2) ...");
                 val future = Future.make[Any](() => 
                     at (dest) {
                         var result:Any = null;
@@ -231,14 +221,14 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                             result = keySetLocal(plh, id, mapName);
                         }
                         else if (op == ASYNC_AT_VOID) {
-                        	if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] moved to here["+here+"] (3) ...");
+                        	if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] moved to here["+here+"] (3) ...");
                             closure_void();
-                            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] finished here["+dest+"] (4) ...");
+                            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] finished here["+dest+"] (4) ...");
                         }
                         else if (op == ASYNC_AT_RETURN) {
-                        	if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] moved to here["+here+"] (3) ...");
+                        	if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] moved to here["+here+"] (3) ...");
                             result = closure_return();
-                            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] finished here["+dest+"] (4) ...");
+                            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] finished here["+dest+"] (4) ...");
                         }
                         return result;
                     }
@@ -246,14 +236,14 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                 return new TxOpResult(future);
             }
         }catch (ex:Exception) {
-            if (TM_DEBUG) {
+            if (TxConfig.get().TM_DEBUG) {
                 Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Failed Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] key["+key+"] value["+value+"] ...");
                 ex.printStackTrace();
             }
             throw ex;  // someone must call Tx.abort
         } finally {
             val endExec = Timer.milliTime();
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " execute Op["+opDesc(op)+"] time: [" + ((endExec-startExec)) + "] ms");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " execute Op["+opDesc(op)+"] time: [" + ((endExec-startExec)) + "] ms");
         }
         
     }
@@ -263,12 +253,12 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     }
     
     @Pinned public def abort(ex:Exception) {
-        val list = getDeadAndConflictingPlaces(ex);
+        val list = CommitHandler.getDeadAndConflictingPlaces(ex);
         abort(list);
     }
     
     @Pinned private def abort(abortedPlaces:ArrayList[Place]) {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " abort (abortPlaces.size = " + abortedPlaces.size() + ") alreadyAborted = " + aborted);
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " abort (abortPlaces.size = " + abortedPlaces.size() + ") alreadyAborted = " + aborted);
         if (!aborted)
             aborted = true;
         else 
@@ -278,7 +268,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         
         if (abortTime == -1) {
             abortTime = Timer.milliTime();
-          if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " aborted, allTxTime ["+(abortTime-startTime)+"] ms");
+          if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " aborted, allTxTime ["+(abortTime-startTime)+"] ms");
         }
     }
 
@@ -288,43 +278,15 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         return commit(false);
     }
     
-    @Pinned public def commit(skipPhaseOne:Boolean):Int {
+    @Pinned public def commit(skipPhaseOne:Boolean) {
         assert(here.id == root.home.id);
         
-        commitHandler.commit(skipPhaseOne);
+        val success = commitHandler.commit(skipPhaseOne);
 
         commitTime = Timer.milliTime();
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " committed, allTxTime [" + (commitTime-startTime) + "] ms");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " committed, allTxTime [" + (commitTime-startTime) + "] ms");
+        
+        return success;
     }
-    
-    
-    
-    private static def getDeadAndConflictingPlaces(ex:Exception) {
-        val list = new ArrayList[Place]();
-        if (ex != null) {
-            if (ex instanceof DeadPlaceException) {
-                list.add((ex as DeadPlaceException).place);
-            }
-            else if (ex instanceof ConflictException) {
-                list.add((ex as ConflictException).place);
-            }
-            else {
-                val mulExp = ex as MultipleExceptions;
-                val deadExList = mulExp.getExceptionsOfType[DeadPlaceException]();
-                if (deadExList != null) {
-                    for (dpe in deadExList) {
-                        list.add(dpe.place);
-                    }
-                }
-                val confExList = mulExp.getExceptionsOfType[ConflictException]();
-                if (confExList != null) {
-                    for (ce in confExList) {
-                        list.add(ce.place);
-                    }
-                }
-            }
-        }
-        return list;
-    }
-    
+        
 }

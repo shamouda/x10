@@ -15,12 +15,12 @@ public class MapData {
     val metadata:SafeBucketHashMap[String,MemoryUnit];
 
     public def this() {
-        metadata = new SafeBucketHashMap[String,MemoryUnit](TxConfig.getInstance().BUCKETS_COUNT);
+        metadata = new SafeBucketHashMap[String,MemoryUnit](TxConfig.get().BUCKETS_COUNT);
     }
     
     public def this(values:HashMap[String,Cloneable]) {
-        metadata = new SafeBucketHashMap[String,MemoryUnit](TxConfig.getInstance().BUCKETS_COUNT);
-        if (!TxConfig.getInstance().LOCK_FREE)
+        metadata = new SafeBucketHashMap[String,MemoryUnit](TxConfig.get().BUCKETS_COUNT);
+        if (!TxConfig.get().LOCK_FREE)
             metadata.lockAll();
         
         val iter = values.keySet().iterator();
@@ -30,7 +30,7 @@ public class MapData {
             metadata.putUnsafe(k, new MemoryUnit(v));
         }
         
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             metadata.unlockAll();
     }
     
@@ -85,22 +85,22 @@ public class MapData {
     }
     
     private def lockAll(){
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             metadata.lockAll();
     }
     
     private def unlockAll() {
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             metadata.unlockAll();
     }
     
     private def lockKey(key:String){
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             metadata.lock(key);
     }
     
     private def unlockKey(key:String) {
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             metadata.unlock(key);
     }
     

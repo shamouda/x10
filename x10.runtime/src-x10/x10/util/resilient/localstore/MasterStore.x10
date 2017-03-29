@@ -109,9 +109,10 @@ public class MasterStore {
     }
     
     public def filterCommitted(txList:ArrayList[Long]) {
+    	if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " started MasterStore.filterCommitted ...");
         val list = new ArrayList[Long]();
         val metadata = txManager.data.getMap();
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             metadata.lockAll();
         
         for (txId in txList) {
@@ -120,8 +121,20 @@ public class MasterStore {
                 list.add(txId);
             }
         }
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             metadata.unlockAll();
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " completed MasterStore.filterCommitted ...");
         return list;
     }
+    
+    public def isActive() = txManager.isActive();
+    
+    public def pause() {
+    	txManager.pause();
+    }
+    
+    public def waitUntilPaused() {
+    	txManager.waitUntilPaused();
+    }
+    
 }

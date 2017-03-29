@@ -10,7 +10,6 @@ import x10.util.Set;
 import x10.xrx.Runtime;
 
 public class RASyncLocking {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     public static def main(args:Rail[String]) {
         if (args.size != 3) {

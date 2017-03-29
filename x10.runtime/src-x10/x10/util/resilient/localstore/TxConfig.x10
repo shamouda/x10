@@ -15,10 +15,16 @@ package x10.util.resilient.localstore;
 public class TxConfig {
     public val TM:String; //baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB
     public val TM_REP:String; //lazy|eager
+	public val TM_DEBUG:Boolean; //lazy|eager
     public val VALIDATION_REQUIRED:Boolean;
     public val BUCKETS_COUNT:Long;
     public val DISABLE_INCR_PARALLELISM:Boolean;
-    
+
+    //used for performance testing only
+	public val DISABLE_SLAVE:Boolean; 
+	public val DISABLE_TX_LOGGING:Boolean;
+
+
     public val BASELINE:Boolean;
     public val STM:Boolean;
     public val LOCKING:Boolean;
@@ -59,9 +65,12 @@ public class TxConfig {
         LOCK_FREE = BASELINE || (System.getenv("LOCK_FREE") == null || System.getenv("LOCK_FREE").equals("")) ? false : Long.parseLong(System.getenv("LOCK_FREE")) == 1;
         
         TM_REP = System.getenv("TM_REP") == null ? "lazy" : System.getenv("TM_REP");
+        DISABLE_SLAVE = System.getenv("DISABLE_SLAVE") != null && System.getenv("DISABLE_SLAVE").equals("1");
+    	DISABLE_TX_LOGGING = System.getenv("DISABLE_TX_LOGGING") != null && System.getenv("DISABLE_TX_LOGGING").equals("1");
+    	TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     }
     
-    public static def getInstance() = instance;
+    public static def get() = instance;
     
     
     public static def getTxPlaceId(txId:Long):Int {

@@ -43,7 +43,7 @@ public class SafeBucketHashMap[K,V] {V haszero} implements x10.io.Unserializable
     }
     
     public def this(bucketsCnt:Long) {
-        val initLock = !TxConfig.getInstance().LOCK_FREE;
+        val initLock = !TxConfig.get().LOCK_FREE;
         buckets = new Rail[Bucket[K,V]](bucketsCnt, (i:Long)=> new Bucket[K,V](initLock));
         this.bucketsCnt = bucketsCnt;
     }
@@ -241,7 +241,7 @@ public class SafeBucketHashMap[K,V] {V haszero} implements x10.io.Unserializable
     
     /**************** Locking Methods ****************/
     public def lockAll() {
-        if (!TxConfig.getInstance().LOCK_FREE) {
+        if (!TxConfig.get().LOCK_FREE) {
             for (var i:Long = 0; i < bucketsCnt; i++) {
                 buckets(i).lock();
             }
@@ -249,7 +249,7 @@ public class SafeBucketHashMap[K,V] {V haszero} implements x10.io.Unserializable
     }
     
     public def unlockAll() {
-        if (!TxConfig.getInstance().LOCK_FREE) {
+        if (!TxConfig.get().LOCK_FREE) {
             for (var i:Long = 0; i < bucketsCnt; i++) {
                 buckets(i).unlock();
             }
@@ -258,12 +258,12 @@ public class SafeBucketHashMap[K,V] {V haszero} implements x10.io.Unserializable
 
     public def lock(k:K):void {
         val indx = hashInternal(k) % bucketsCnt;
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             buckets(indx).lock();
     }
     
     public def unlock(k:K):void {
-        if (!TxConfig.getInstance().LOCK_FREE) {
+        if (!TxConfig.get().LOCK_FREE) {
             val indx = hashInternal(k) % bucketsCnt;
             buckets(indx).unlock();
         }
@@ -272,13 +272,13 @@ public class SafeBucketHashMap[K,V] {V haszero} implements x10.io.Unserializable
     private def lockInternal(k:K):Bucket[K,V] {
         val indx = hashInternal(k) % bucketsCnt;
         val bucket = buckets(indx); 
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             bucket.lock();
         return bucket;
     }
     
     private def unlockInternal(bucket:Bucket[K,V]):void {
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             bucket.unlock();
     }
     

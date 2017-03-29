@@ -25,7 +25,6 @@ import x10.xrx.Runtime;
  * When it comes back, it can use a different thread than the one used while locking the semaphor. 
  * */
 public class TxLockCREWBlocking extends TxLock {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     private var sem:ReadWriteSemaphoreBlocking;
     private var readers:Int; // 0 ... N
@@ -35,11 +34,11 @@ public class TxLockCREWBlocking extends TxLock {
     private val BWEnabled:Boolean;
     
     public def this() {
-        if (TxConfig.getInstance().TM.startsWith("lockingBW")) {
+        if (TxConfig.get().TM.startsWith("lockingBW")) {
             lock = new Lock();
             readers = 0n;
             writer = 0n;
-            val mode = TxConfig.getInstance().TM;
+            val mode = TxConfig.get().TM;
             BWSleepTime = Long.parseLong(mode.substring(9n, mode.length()));
             BWEnabled = true;
         }

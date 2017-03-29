@@ -1,31 +1,51 @@
 package x10.util.resilient.localstore.tx;
 
+import x10.util.Timer;
 import x10.util.ArrayList;
+import x10.util.resilient.localstore.LocalStore;
+import x10.util.resilient.localstore.TxConfig;
+import x10.util.resilient.localstore.ResilientNativeMap;
+
 
 public abstract class CommitHandler {
-	protected transient var phase1ElapsedTime:Long = 0;
-    protected transient var phase2ElapsedTime:Long = 0;
+	public transient var phase1ElapsedTime:Long = 0;
+    public transient var phase2ElapsedTime:Long = 0;
+	public transient var txLoggingElapsedTime:Long = 0;
 
     public abstract def abort(abortedPlaces:ArrayList[Place]):void;
-    public abstract def commit(skipPhaseOne:Boolean):void;
-    protected static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
+    public abstract def commit(skipPhaseOne:Boolean):Int;
+    
+    protected plh:PlaceLocalHandle[LocalStore];
+    protected id:Long;
+    protected mapName:String;
+    protected members:PlaceGroup;
+    protected txDescMap:ResilientNativeMap;
+    
+    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, txDescMap:ResilientNativeMap) {
+    	this.plh = plh;
+    	this.id = id;
+    	this.mapName = mapName;
+    	this.members = members;
+    	this.txDescMap = txDescMap;
+    }
     
     protected def updateTxDesc(status:Long){
         val start = Timer.milliTime();
         val localTx = txDescMap.startLocalTransaction();
         try {
-            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " updateTxDesc localTx["+localTx.id+"] started ...");
+            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " updateTxDesc localTx["+localTx.id+"] started ...");
             val desc = localTx.get("tx"+id) as TxDesc;
             //while recovering a transaction, the current place will not have the TxDesc stored, NPE can be thrown
             if (desc != null) {
                 desc.status = status;
                 localTx.put("tx"+id, desc);
             }
-            localTx.commit();
-            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " updateTxDesc localTx["+localTx.id+"] completed ...");
+            val ignoreDeadSlave = true;
+            localTx.commit(ignoreDeadSlave);
+            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " updateTxDesc localTx["+localTx.id+"] completed ...");
     
         } catch(ex:Exception) {
-            if(TM_DEBUG) {
+            if(TxConfig.get().TM_DEBUG) {
                 Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " updateTxDesc localTx["+localTx.id+"] failed exception["+ex.getMessage()+"] ...");
                 ex.printStackTrace();
             }
@@ -40,10 +60,11 @@ public abstract class CommitHandler {
         val start = Timer.milliTime();
         try {
             val localTx = txDescMap.startLocalTransaction();
-            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " deleteTxDesc localTx["+localTx.id+"] started ...");
+            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " deleteTxDesc localTx["+localTx.id+"] started ...");
             localTx.put("tx"+id, null);
-            localTx.commit();
-            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " deleteTxDesc localTx["+localTx.id+"] completed ...");
+            val ignoreDeadSlave = true;
+            localTx.commit(ignoreDeadSlave);
+            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " deleteTxDesc localTx["+localTx.id+"] completed ...");
         }catch(ex:Exception) {
             Console.OUT.println("Warning: ignoring exception during deleteTxDesc: " + ex.getMessage());
             ex.printStackTrace();
@@ -66,4 +87,31 @@ public abstract class CommitHandler {
         return list;
     }
 
+    public static def getDeadAndConflictingPlaces(ex:Exception) {
+        val list = new ArrayList[Place]();
+        if (ex != null) {
+            if (ex instanceof DeadPlaceException) {
+                list.add((ex as DeadPlaceException).place);
+            }
+            else if (ex instanceof ConflictException) {
+                list.add((ex as ConflictException).place);
+            }
+            else {
+                val mulExp = ex as MultipleExceptions;
+                val deadExList = mulExp.getExceptionsOfType[DeadPlaceException]();
+                if (deadExList != null) {
+                    for (dpe in deadExList) {
+                        list.add(dpe.place);
+                    }
+                }
+                val confExList = mulExp.getExceptionsOfType[ConflictException]();
+                if (confExList != null) {
+                    for (ce in confExList) {
+                        list.add(ce.place);
+                    }
+                }
+            }
+        }
+        return list;
+    }
 }

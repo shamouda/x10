@@ -11,11 +11,14 @@ import x10.util.concurrent.Future;
 import x10.util.resilient.localstore.TxConfig;
 
 public abstract class TxManager(data:MapData) {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     private static val PAUSE_WAIT_MS = System.getenv("PAUSE_WAIT_MS") == null ? 10 : Long.parseLong(System.getenv("PAUSE_WAIT_MS"));
     
-    protected var paused:Long; // 0 (not paused), 1 (preparing to pause), 2 (paused)
+    protected var status:Long; // 0 (not paused), 1 (preparing to pause), 2 (paused)
     
+    private val STATUS_ACTIVE = 0;
+    private val STATUS_PAUSING = 1;
+    private val STATUS_PAUSED = 2;
+    private var resilientStatusLock:Lock;
     //stm
     protected val txLogs:SafeBucketHashMap[Long,TxLog];
     //locking
@@ -24,36 +27,38 @@ public abstract class TxManager(data:MapData) {
     
     public def this(data:MapData) {
         property(data);
-        if (TxConfig.getInstance().BASELINE) {
+        if (TxConfig.get().BASELINE) {
             txLogs = null;
             lockingTxLogs = null;
         }
-        else if (TxConfig.getInstance().STM ){
-            txLogs = new SafeBucketHashMap[Long,TxLog](TxConfig.getInstance().BUCKETS_COUNT);
+        else if (TxConfig.get().STM ){
+            txLogs = new SafeBucketHashMap[Long,TxLog](TxConfig.get().BUCKETS_COUNT);
             lockingTxLogs = null;
         }
         else {
             txLogs = null;
-            lockingTxLogs = new SafeBucketHashMap[Long,LockingTxLog](TxConfig.getInstance().BUCKETS_COUNT);
+            lockingTxLogs = new SafeBucketHashMap[Long,LockingTxLog](TxConfig.get().BUCKETS_COUNT);
         }
+        if (resilient)
+        	resilientStatusLock = new Lock();
     }
     
     public static def make(data:MapData):TxManager {
-        if (TxConfig.getInstance().BASELINE )
+        if (TxConfig.get().BASELINE )
              return new TxManager_Baseline(data);
-        else if (TxConfig.getInstance().LOCKING )
+        else if (TxConfig.get().LOCKING )
             return new TxManager_Locking(data);
-        else if (TxConfig.getInstance().TM.equals("RL_EA_UL"))
+        else if (TxConfig.get().TM.equals("RL_EA_UL"))
             return new TxManager_RL_EA_UL(data);
-        else if (TxConfig.getInstance().TM.equals("RL_EA_WB"))
+        else if (TxConfig.get().TM.equals("RL_EA_WB"))
             return new TxManager_RL_EA_WB(data);
-        else if (TxConfig.getInstance().TM.equals("RL_LA_WB"))
+        else if (TxConfig.get().TM.equals("RL_LA_WB"))
             return new TxManager_RL_LA_WB(data);
-        else if (TxConfig.getInstance().TM.equals("RV_EA_UL"))
+        else if (TxConfig.get().TM.equals("RV_EA_UL"))
             return new TxManager_RV_EA_UL(data);
-        else if (TxConfig.getInstance().TM.equals("RV_EA_WB"))
+        else if (TxConfig.get().TM.equals("RV_EA_WB"))
             return new TxManager_RV_EA_WB(data);
-        else if (TxConfig.getInstance().TM.equals("RV_LA_WB"))
+        else if (TxConfig.get().TM.equals("RV_LA_WB"))
             return new TxManager_RV_LA_WB(data);
         else
             throw new Exception("Wrong Tx Manager Configuration (undo logging can not be selected with late acquire");
@@ -71,7 +76,7 @@ public abstract class TxManager(data:MapData) {
         
         try {
             log.lock();
-            if (TxConfig.getInstance().TM.contains("WB")) { //write buffering
+            if (TxConfig.get().TM.contains("WB")) { //write buffering
                 return log.removeReadOnlyKeys();
             }
             else {
@@ -94,7 +99,7 @@ public abstract class TxManager(data:MapData) {
         var log:TxLog = null;
         try {
             txLogs.lock(id);
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] ");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] ");
             log = txLogs.getOrElseUnsafe(id, null);
             if (log == null) {
             	ensureNotPaused(); // do not add new transactions is the store is paused
@@ -127,54 +132,87 @@ public abstract class TxManager(data:MapData) {
     }
     
     /**************   Pausing for Recovery    ****************/
+    public def waitUntilPaused() {
+    	val buckets = TxConfig.get().BUCKETS_COUNT;
+    	try {
+	        Runtime.increaseParallelism();
+	        
+	        var stopped:Boolean;
+	        do{
+	        	stopped = true;
+		        for (var i:Long = 0; i < buckets; i++) {
+		        	val bucket = txLogs.getBucket(i);
+		    		bucket.lock();
+		        	val iter = bucket.bucketMap.keySet().iterator();
+		        	while (iter.hasNext()) {
+		        		val key = iter.next();
+		        		val log = bucket.bucketMap.getOrThrow(key);
+		        		if (!log.aborted && log.writeValidated){
+		        			stopped = false;
+		        			break;
+		        		}
+		        	}
+		        	bucket.unlock();
+		        	if (!stopped)
+		        		break;
+		        }
+		        
+		        if (!stopped)
+		        	System.threadSleep(PAUSE_WAIT_MS);
+	        } while (!stopped);
+        
+    	}finally {
+    		Runtime.decreaseParallelism(1n);
+    	}
+        paused();
+    }
     
     private def ensureNotPaused() {
-        if ( resilient && paused > 0 )
-            throw new StorePausedException("Local store paused for recovery");
+    	if (1 == 1)
+    		throw new StorePausedException("Local store paused for recovery");
     }
-    
-    public def isPaused() = (paused == 2);
     
     public def pause() {
-    	paused = 1; //preparing to pause
-    	waitForRunningTransactions();
-    	paused = 2;
+    	try {
+    		statusLock();
+    		assert(status == STATUS_ACTIVE);
+    		status = STATUS_PAUSING;
+    	}
+    	finally {
+    		statusUnlock();
+    	}
     }
     
-    public def resume() {
-    	paused = 0;
+    public def paused() {
+    	try {
+    		statusLock();
+    		assert(status == STATUS_PAUSING);
+    		status = STATUS_PAUSED;
+    	}
+    	finally {
+    		statusUnlock();
+    	}
     }
     
-    private def waitForRunningTransactions() {
-    	val buckets = TxConfig.getInstance().BUCKETS_COUNT;
-    	
-        Runtime.increaseParallelism();
-        
-        var stopped:Boolean;
-        do{
-        	stopped = true;
-	        for (var i:Long = 0; i < buckets; i++) {
-	        	val bucket = txLogs.getBucket(i);
-	    		bucket.lock();
-	        	val iter = bucket.bucketMap.keySet().iterator();
-	        	while (iter.hasNext()) {
-	        		val key = iter.next();
-	        		val log = bucket.bucketMap.getOrThrow(key);
-	        		if (!log.aborted){
-	        			stopped = false;
-	        			break;
-	        		}
-	        	}
-	        	bucket.unlock();
-	        	if (!stopped)
-	        		break;
-	        }
-	        
-	        if (!stopped)
-	        	System.threadSleep(PAUSE_WAIT_MS);
-        } while (!stopped);
-        
-        Runtime.decreaseParallelism(1n);
+    public def reactivate() {
+    	try {
+    		statusLock();
+    		assert(status == STATUS_PAUSED);
+    		status = STATUS_ACTIVE;
+    	}
+    	finally {
+    		statusUnlock();
+    	}
+    }
+    
+    public def isActive() {
+    	try {
+    		statusLock();
+    		return status == STATUS_ACTIVE;
+    	}
+    	finally {
+    		statusUnlock();
+    	}
     }
     
     /********************************************************/
@@ -182,7 +220,7 @@ public abstract class TxManager(data:MapData) {
     public static def checkDeadCoordinator(txId:Long) {
         val placeId = TxConfig.getTxPlaceId(txId);
         if (Place(placeId as Long).isDead()) {
-            if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + txIdToString (txId)+ " coordinator place["+Place(placeId)+"] died !!!!");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + txIdToString (txId)+ " coordinator place["+Place(placeId)+"] died !!!!");
             throw new DeadPlaceException(Place(placeId));
         }
     }
@@ -208,7 +246,13 @@ public abstract class TxManager(data:MapData) {
         val log = txLogs.getOrElseSafe(id, null);
         if (log == null)
             return;
-        validate(log);
+        
+        try {
+            log.lock();
+            validate(log);
+        } finally {
+            log.unlock();
+        }
     }
     
     public def commit(id:Long) {
@@ -216,7 +260,12 @@ public abstract class TxManager(data:MapData) {
         if (log == null)
             return;
         
-        commit(log);
+        try {
+            log.lock();
+            commit(log);
+        } finally {
+            log.unlock();
+        }
         
         //delete log to avoid repeated commit if a recovery commit is called
         txLogs.deleteSafe(id);
@@ -282,7 +331,7 @@ public abstract class TxManager(data:MapData) {
     protected def abortAndThrowException(log:TxLog, ex:Exception) {
         if (log != null) {
             abort(log);
-            if (TM_DEBUG) Console.OUT.println("Tx["+log.id+"] " + txIdToString (log.id)+ " " + here + "   TxManager.abortAndThrowException   throwing exception["+ex.getMessage()+"] ");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+log.id+"] " + txIdToString (log.id)+ " " + here + "   TxManager.abortAndThrowException   throwing exception["+ex.getMessage()+"] ");
         }
         throw ex;
     }
@@ -331,7 +380,7 @@ public abstract class TxManager(data:MapData) {
     }
     
     protected def put_RV_EA_WB(id:Long, key:String, value:Cloneable):Cloneable {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RV_EA_WB started");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RV_EA_WB started");
         var log:TxLog = null;
         try {     	
             val cont = logInitialIfNotLogged(id, key, false);        	
@@ -352,12 +401,12 @@ public abstract class TxManager(data:MapData) {
         } finally {
             if (log != null)
                 log.unlock();
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RV_EA_WB completed");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RV_EA_WB completed");
         }
     }
     
     protected def put_RL_EA_WB(id:Long, key:String, value:Cloneable):Cloneable {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RL_EA_WB started");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RL_EA_WB started");
         var log:TxLog = null;
         try {
             val cont = logInitialIfNotLogged(id, key, false);
@@ -378,12 +427,12 @@ public abstract class TxManager(data:MapData) {
         } finally {
             if (log != null)
                 log.unlock();
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RL_EA_WB completed");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RL_EA_WB completed");
         }
     }
     
     protected def put_RL_EA_UL(id:Long, key:String, value:Cloneable):Cloneable {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RL_EA_UL started");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RL_EA_UL started");
         var log:TxLog = null;
         try {
             val cont = logInitialIfNotLogged(id, key, false);
@@ -405,12 +454,12 @@ public abstract class TxManager(data:MapData) {
         } finally {
             if (log != null)
                 log.unlock();
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RL_EA_UL completed");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RL_EA_UL completed");
         }
     }
     
     protected def put_RV_EA_UL(id:Long, key:String, value:Cloneable):Cloneable {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RV_EA_UL started");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RV_EA_UL started");
         var log:TxLog = null;
         try {
             val cont = logInitialIfNotLogged(id, key, false);
@@ -431,13 +480,13 @@ public abstract class TxManager(data:MapData) {
         } finally {
             if (log != null)
                 log.unlock();
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RV_EA_UL completed");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RV_EA_UL completed");
         }
     }
     
     
     protected def put_LA_WB(id:Long, key:String, value:Cloneable):Cloneable {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_LA_WB started");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_LA_WB started");
         var log:TxLog = null;
         try {
             val cont = logInitialIfNotLogged(id, key, false);
@@ -458,14 +507,14 @@ public abstract class TxManager(data:MapData) {
         } finally {
             if (log != null)
                 log.unlock();
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_LA_WB completed");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_LA_WB completed");
         }
     }
     
     /********************* End of put operations  *********************/
     
     protected def get_RL_UL(id:Long, key:String):Cloneable {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RL_UL started");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RL_UL started");
         var log:TxLog = null;
         try {
             /*** Read Locking ***/
@@ -476,7 +525,7 @@ public abstract class TxManager(data:MapData) {
             
             /*** Undo Logging ***/
             val atomicV = memory.getAtomicValueLocked(true, key, id);
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " getvv  ver["+atomicV.version+"] value["+atomicV.value+"]");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " getvv  ver["+atomicV.version+"] value["+atomicV.value+"]");
             return atomicV.value; //send a different copy to use to avoid manipulating the log or the original data
         } catch(ex:AbortedTransactionException) {
             return null;
@@ -486,12 +535,12 @@ public abstract class TxManager(data:MapData) {
         } finally {
             if (log != null)
                 log.unlock();
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RL_UL completed");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RL_UL completed");
         }
     }
     
     protected def get_RL_WB(id:Long, key:String):Cloneable {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RL_WB started");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RL_WB started");
         var log:TxLog = null;
         try {
             val cont = logInitialIfNotLogged(id, key, true);
@@ -509,12 +558,12 @@ public abstract class TxManager(data:MapData) {
         } finally {
             if (log != null)
                 log.unlock();
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RL_WB completed");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RL_WB completed");
         }
     }
     
     protected def get_RV_WB(id:Long, key:String):Cloneable {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RV_WB started");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RV_WB started");
         var log:TxLog = null;
         try {
             /*** ReadValidatoin: DO NOT ACQUIRE READ LOCK HERE ***/
@@ -533,12 +582,12 @@ public abstract class TxManager(data:MapData) {
         } finally {
             if (log != null)
                 log.unlock();
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RV_WB completed");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RV_WB completed");
         }
     }
     
     protected def get_RV_UL(id:Long, key:String):Cloneable {
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RV_UL started");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RV_UL started");
         var log:TxLog = null;
         try {
             /*** ReadValidatoin: DO NOT ACQUIRE READ LOCK HERE ***/
@@ -557,7 +606,7 @@ public abstract class TxManager(data:MapData) {
         } finally {
             if (log != null)
                 log.unlock();
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RV_UL completed");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RV_UL completed");
         }
     }
     
@@ -565,9 +614,9 @@ public abstract class TxManager(data:MapData) {
     
     protected def validate_RL_LA_WB(log:TxLog) {
         val id = log.id;
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RL_LA_WB started");
+        var writeTx:Boolean = false;
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RL_LA_WB started");
         try {
-            
             val logMap = log.transLog;
             val sortedKeys = log.getSortedKeys();
             for (var i:Int = 0n; i < sortedKeys.size; i++){
@@ -575,22 +624,27 @@ public abstract class TxManager(data:MapData) {
                 val memory = log.getMemoryUnit(key);
                 
                 if (!log.getReadOnly(key)) {
-                    lockWriteRL(id, key, new LogContainer( memory, log));                                   
+                    lockWriteRL(id, key, new LogContainer( memory, log));
+                    writeTx = true;
                 }
                 else {
                     assert(log.getLockedRead(key));                    
                 }
             }
+            
+            if (writeTx)
+            	log.writeValidated = true;
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
         } finally{
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RL_LA_WB completed");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RL_LA_WB completed");
         }
     }
     
     protected def validate_RV_LA_WB(log:TxLog) {
         val id = log.id;
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RV_LA_WB started");
+        var writeTx:Boolean = false;
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RV_LA_WB started");
         try {
             val logMap = log.transLog;
             val sortedKeys = log.getSortedKeys();
@@ -600,8 +654,10 @@ public abstract class TxManager(data:MapData) {
                 
                 if (log.getReadOnly(key))
                     memory.lockRead(id, key); 
-                else
-                    memory.lockWrite(id, key); 
+                else {
+                    memory.lockWrite(id, key);
+                    writeTx = true;
+                }
                 
                 /*Read Validation*/
                 val initVer = logMap.getOrThrow(key).getInitVersion();
@@ -620,18 +676,21 @@ public abstract class TxManager(data:MapData) {
                 else
                     log.setLockedWrite(key, true);
             }
+            
+            if (writeTx)
+            	log.writeValidated = true;
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
         } finally {
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RV_LA_WB completed");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RV_LA_WB completed");
         }
     }
     
     protected def validate_RV_EA(log:TxLog) {
         val id = log.id;
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RV_EA_UL started");
+        var writeTx:Boolean = false;
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RV_EA_UL started");
         try {
-            
             val logMap = log.transLog;
             val sortedKeys = log.getSortedKeys();
             for (var i:Int = 0n; i < sortedKeys.size; i++){
@@ -639,7 +698,7 @@ public abstract class TxManager(data:MapData) {
                 val memory = log.getMemoryUnit(key);
                 
                 //lock read only key
-                if (!log.getLockedWrite(key)){
+                if (!log.getLockedWrite(key)) {
                     memory.lockRead(id, key); 
                         
                     /*Read Validation*/
@@ -653,11 +712,15 @@ public abstract class TxManager(data:MapData) {
                     }
                     log.setLockedRead(key, true);
                 }
+                else
+                	writeTx = true;
             }
+            if (writeTx)
+            	log.writeValidated = true; // we can not start migratoin until all writeValidated transactions commit or abort
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
         } finally {
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RV_EA_UL completed");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RV_EA_UL completed");
         }
     }
     
@@ -665,7 +728,7 @@ public abstract class TxManager(data:MapData) {
     
     protected def commit_WB(log:TxLog) {
         val id = log.id;
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_WB started");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_WB started");
         val logMap = log.transLog;
         val iter = logMap.keySet().iterator();
         while (iter.hasNext()) {
@@ -679,12 +742,12 @@ public abstract class TxManager(data:MapData) {
                 memory.unlockWrite(log.id, key);
             }
         }
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_WB completed");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_WB completed");
     }
     
     protected def commit_UL(log:TxLog) {
         val id = log.id;
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_UL started");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_UL started");
         val logMap = log.transLog;
         val iter = logMap.keySet().iterator();
         while (iter.hasNext()) {
@@ -696,15 +759,15 @@ public abstract class TxManager(data:MapData) {
             else 
                 memory.unlockWrite(log.id, key);
         }
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_UL completed");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_UL completed");
     }
     
     /********************* End of commit operations  *********************/
     protected def abort_UL(log:TxLog) {
         val id = log.id;
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_UL started");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_UL started");
         if (log.aborted) {
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " WARNING: an attempt to abort an already aborted transaction");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " WARNING: an attempt to abort an already aborted transaction");
             return;
         }
         
@@ -723,19 +786,19 @@ public abstract class TxManager(data:MapData) {
                 memory.unlockWrite(log.id, key);
             }
             else {
-                if (TM_DEBUG) Console.OUT.println("Tx["+log.id+"] " + txIdToString (id)+ " abort_UL key "+key+" is NOT locked !!!!");
+                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+log.id+"] " + txIdToString (id)+ " abort_UL key "+key+" is NOT locked !!!!");
             }
         }
         log.clearAborted();
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_UL completed");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_UL completed");
     }
     
     /** With write buffering: memory is not impacted, just unlock the locked keys*/
     protected def abort_WB(log:TxLog) {
         val id = log.id;
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_WB started");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_WB started");
         if (log.aborted) {
-            if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " WARNING: an attempt to abort an already aborted transaction");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " WARNING: an attempt to abort an already aborted transaction");
             return;
         }
         val logMap = log.transLog;
@@ -750,7 +813,7 @@ public abstract class TxManager(data:MapData) {
                 memory.unlockWrite(log.id, key);
         }
         log.aborted = true;
-        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_WB completed");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_WB completed");
     }
     
     /********************* End of abort operations  *********************/
@@ -851,6 +914,19 @@ public abstract class TxManager(data:MapData) {
         val placeId =  ((txId >> 32) as Int);
         val txSeq = (txId as Int);
         return "TX["+ (placeId*100000000 + txSeq)+"] TXPLC["+placeId+"] TXSEQ["+txSeq+"]";
+    }
+    
+    /*********************************************/
+    private def statusLock(){
+    	assert(resilient);
+        if (!TxConfig.get().LOCK_FREE)
+        	resilientStatusLock.lock();
+    }
+    
+    private def statusUnlock(){
+    	assert(resilient);
+        if (!TxConfig.get().LOCK_FREE)
+        	resilientStatusLock.unlock();
     }
 }
 

@@ -10,8 +10,6 @@ import x10.xrx.Runtime;
 import x10.util.Timer;
 
 public class BankAsyncLocking {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-    
     public static def main(args:Rail[String]) {
         if (args.size != 3) {
             Console.OUT.println("Parameters missing exp_accounts_per_place exp_transfers_per_place progress");

@@ -17,7 +17,6 @@ import x10.xrx.Runtime;
 import x10.util.concurrent.Future;
 
 public abstract class AbstractTx {
-    protected static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     protected static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     /* Constants */
@@ -39,6 +38,10 @@ public abstract class AbstractTx {
     protected static val ASYNC_AT_RETURN = 15n;
     protected static val LOCK = 20n;
     protected static val UNLOCK = 21n;
+    
+    public static val SUCCESS = 0n;
+    public static val SUCCESS_RECOVER_STORE = 1n;
+    
         
     /***************** Get ********************/
     public abstract def get(key:String):Cloneable;

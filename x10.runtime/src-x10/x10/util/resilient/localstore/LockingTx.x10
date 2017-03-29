@@ -36,7 +36,7 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
     public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, requests:ArrayList[LockingRequest]) {
         property(plh, id, mapName, requests);
 
-        if (TM_DEBUG) {
+        if (TxConfig.get().TM_DEBUG) {
             var membersStr:String = "";
             for (p in members)
                 membersStr += p + " ";
@@ -146,7 +146,7 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
     /***************** Execution of All Operations ********************/
     private def execute(op:Int, dest:Place, key:String, value:Cloneable, closure_void:()=>void, closure_return:()=>Any, 
             plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, requests:ArrayList[LockingRequest]):TxOpResult {
-        if(TM_DEBUG) Console.OUT.println("Tx["+id+"] Start Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] key["+key+"] value["+value+"] ...");
+        if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] Start Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] key["+key+"] value["+value+"] ...");
         val startExec = Timer.milliTime();
         try {
             if (op == GET_LOCAL) {
@@ -186,37 +186,37 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
                 if (requests.size() == 1 && requests.get(0).dest.id == here.id) {//local locking
                     val req = requests.get(0);
                     
-                    if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && !TxConfig.getInstance().LOCK_FREE)
+                    if (!TxConfig.get().DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
                         Runtime.increaseParallelism();
                     
                     for (var i:Long = 0; i < req.keys.size ; i++) {
-                        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read);
+                        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read);
                         if (req.keys(i).read)
                             plh().masterStore.lockRead(mapName, id, req.keys(i).key);
                         else
                             plh().masterStore.lockWrite(mapName, id, req.keys(i).key);
-                        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
+                        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
                     }
                     
-                    if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && !TxConfig.getInstance().LOCK_FREE)
+                    if (!TxConfig.get().DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
                         Runtime.decreaseParallelism(1n);
                 }
                 else {
                     finish for (req in requests) {
                         at (req.dest) {
-                            if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && !TxConfig.getInstance().LOCK_FREE)
+                            if (!TxConfig.get().DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
                                 Runtime.increaseParallelism();
                             
                             for (var i:Long = 0; i < req.keys.size ; i++) {
-                                if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read);
+                                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read);
                                 if (req.keys(i).read)
                                     plh().masterStore.lockRead(mapName, id, req.keys(i).key);
                                 else
                                     plh().masterStore.lockWrite(mapName, id, req.keys(i).key);
-                                if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
+                                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
                             }
                             
-                            if (!TxConfig.getInstance().DISABLE_INCR_PARALLELISM && !TxConfig.getInstance().LOCK_FREE)
+                            if (!TxConfig.get().DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
                                 Runtime.decreaseParallelism(1n);
                         }
                     }
@@ -229,24 +229,24 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
                 if (requests.size() == 1 && requests.get(0).dest.id == here.id) {//local locking
                     val req = requests.get(0);
                     for (var i:Long = 0; i < req.keys.size ; i++) {
-                        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read);
+                        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read);
                         if (req.keys(i).read)
                             plh().masterStore.unlockRead(mapName, id, req.keys(i).key);
                         else
                             plh().masterStore.unlockWrite(mapName, id, req.keys(i).key);
-                        if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
+                        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
                     }
                 }
                 else {
                     finish for (req in requests) {
                         at (req.dest) async {
                             for (var i:Long = 0; i < req.keys.size ; i++) {
-                                if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read);
+                                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read);
                                 if (req.keys(i).read)
                                     plh().masterStore.unlockRead(mapName, id, req.keys(i).key);
                                 else
                                     plh().masterStore.unlockWrite(mapName, id, req.keys(i).key);
-                                if (TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
+                                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
                             }
                         }
                     }
@@ -283,14 +283,14 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
                 return new TxOpResult(future);
             }
         }catch (ex:Exception) {
-            if(TM_DEBUG) {
+            if(TxConfig.get().TM_DEBUG) {
                 Console.OUT.println("Tx["+id+"]  Failed Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] key["+key+"] value["+value+"] ...");
                 ex.printStackTrace();
             }
             throw ex;  // someone must call Tx.abort
         } finally {
             val endExec = Timer.milliTime();
-            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] execute Op["+opDesc(op)+"] time: [" + ((endExec-startExec)) + "] ms");
+            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] execute Op["+opDesc(op)+"] time: [" + ((endExec-startExec)) + "] ms");
         }
         
     }

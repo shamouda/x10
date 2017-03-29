@@ -22,7 +22,6 @@ import x10.io.Unserializable;
     private val wrt = new Semaphore(1n);
     private val mutex = new Lock();
     private var readCount:Int = 0n;
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     public def tryAcquireRead(txId:Long) {
     	mutex.lock();

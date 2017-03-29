@@ -9,7 +9,6 @@ import x10.util.Set;
 import x10.xrx.Runtime;
 
 public class RAMoveData {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     public static def main(args:Rail[String]) {
         if (args.size != 3) {
@@ -83,7 +82,7 @@ public class RAMoveData {
                     val amount = requests.values1(i-1);
                     val members = STMAppUtils.createGroup(p1);
                     map.executeTransaction(members, (tx:Tx) => {
-                        if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc+"] place["+p1+"] amount["+amount+"]");
+                        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc+"] place["+p1+"] amount["+amount+"]");
                         val obj = tx.getRemote(p1, randAcc);
                         var acc:BankAccount = null;
                         if (obj == null)

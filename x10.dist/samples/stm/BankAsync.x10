@@ -10,8 +10,6 @@ import x10.xrx.Runtime;
 import x10.util.Timer;
 
 public class BankAsync {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-    
     public static def main(args:Rail[String]) {
         if (args.size != 3) {
             Console.OUT.println("Parameters missing exp_accounts_per_place exp_transfers_per_place");
@@ -79,7 +77,7 @@ public class BankAsync {
                 val amount = Math.abs(rand.nextLong()%100);
                 val members = STMAppUtils.createGroup(p1, p2);
                 map.executeTransaction(members, (tx:Tx) => {
-                    if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"] amount["+amount+"] ");
+                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"] amount["+amount+"] ");
                     val f1 = tx.asyncAt(p1, () => {
                         var acc1:BankAccount = tx.get(randAcc1) as BankAccount;
                         if (acc1 == null)
@@ -98,7 +96,7 @@ public class BankAsync {
                     f1.force();
                     f2.force();
                     tx.setWaitElapsedTime(Timer.milliTime() - startWait);
-                    if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitElapsedTime +"] ms");
+                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitElapsedTime +"] ms");
                     return null;
                 });
             }

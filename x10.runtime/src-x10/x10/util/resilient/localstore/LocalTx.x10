@@ -78,24 +78,31 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     
     /***********************   Local Commit Protocol ************************/  
     public def commit():Int {
-        var success:Int = Tx.SUCCESS;
+        return commit(true); //by default we can ignore the slave
+    }
+    
+    public def commit(ignoreDeadSlave:Boolean):Int {
+        var success:Int = AbstractTx.SUCCESS;
         val id = this.id;
         val mapName = this.mapName;
         val plh = this.plh;
-        val placeIndex = plh().virtualPlaceId;
+        val ownerPlaceIndex = plh().virtualPlaceId;
         try {
-            if (TxConfig.getInstance().VALIDATION_REQUIRED)
+            if (TxConfig.get().VALIDATION_REQUIRED)
                 plh().masterStore.validate(id);
             
             val log = plh().masterStore.getTxCommitLog(id);
             try {
                 if (resilient && log != null && log.size() > 0) {
                     finish at (plh().slave) async {
-                        plh().slaveStore.commit(id, log, placeIndex);
+                        plh().slaveStore.commit(id, log, ownerPlaceIndex);
                     }
                 }
-            }catch(exSl:Exception) {
-                success = Tx.SUCCESS_RECOVER_STORE;                
+            } catch(exSl:Exception) {
+            	plh().asyncSlaveRecovery();
+            	if (!ignoreDeadSlave)
+            		throw exSl;
+                success = AbstractTx.SUCCESS_RECOVER_STORE;
             }
             
             if (log != null) {

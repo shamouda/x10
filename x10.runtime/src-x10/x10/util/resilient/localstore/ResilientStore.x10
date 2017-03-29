@@ -31,7 +31,6 @@ import x10.compiler.Uncounted;
  * the next/prev operations on the activePlaces PlaceGroup.
  */
 public class ResilientStore {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     public val plh:PlaceLocalHandle[LocalStore];

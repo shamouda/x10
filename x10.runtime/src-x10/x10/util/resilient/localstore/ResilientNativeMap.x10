@@ -12,7 +12,6 @@ import x10.xrx.Runtime;
 import x10.util.Timer;
 
 public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     private static val TM_STAT_ALL = System.getenv("TM_STAT_ALL") != null && System.getenv("TM_STAT_ALL").equals("1");
     private static val TM_SLEEP = System.getenv("TM_SLEEP") == null ? 0 : Long.parseLong(System.getenv("TM_SLEEP"));
     
@@ -80,80 +79,14 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
         return executeLocalTransaction((tx:LocalTx) => { tx.put(key, value); tx.put(key2, value2) });
     }
     
+    /***********************   Local Transactions ****************************/
+    
     public def startLocalTransaction():LocalTx {
         assert(plh().virtualPlaceId != -1);
         val id = plh().masterStore.getNextTransactionId();
         val tx = new LocalTx(plh, id, name);
         plh().txList.addLocalTx(tx);
         return tx;
-    }
-    
-    private def startGlobalTransaction(members:PlaceGroup):Tx {
-        assert(plh().virtualPlaceId != -1);
-        val id = plh().masterStore.getNextTransactionId();
-        val activePlaces = plh().getActivePlaces();
-        if (resilient) {
-            val localTx = plh().getTxLoggingMap().startLocalTransaction();
-            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] startGlobalTransaction localTx["+localTx.id+"] started ...");
-            localTx.put("tx"+id, new TxDesc(id, name, getMembersIndices(members, activePlaces), TxDesc.STARTED));
-            localTx.commit();
-            if(TM_DEBUG) Console.OUT.println("Tx["+id+"] startGlobalTransaction localTx["+localTx.id+"] completed ...");
-        }
-        val tx = new Tx(plh, id, name, members, activePlaces, plh().getTxLoggingMap());
-        plh().txList.addGlobalTx(tx);
-        return tx;
-    }
-    
-    private def startLockingTransaction(members:PlaceGroup, requests:ArrayList[LockingRequest]):LockingTx {
-        assert(plh().virtualPlaceId != -1);
-        val id = plh().masterStore.getNextTransactionId();
-        val tx = new LockingTx(plh, id, name, members, requests);
-        plh().txList.addLockingTx(tx);
-        return tx;
-    }
-      
-    public def executeTransaction(members:PlaceGroup, closure:(Tx)=>Any):TxResult {
-        while(true) {
-            val tx = startGlobalTransaction(members);
-            var commitCalled:Boolean = false;
-            val start = Timer.milliTime();
-            try {
-                val out:Any;
-                finish {
-                    out = closure(tx);
-                }
-                tx.processingElapsedTime = Timer.milliTime() - start ;
-                
-                if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} succeeded  preCommitTime["+tx.processingElapsedTime+"] ms");
-                commitCalled = true;
-                return new TxResult(tx.commit(), out);
-            } catch(ex:Exception) {
-                if (!commitCalled) {
-                    tx.processingElapsedTime = Timer.milliTime() - start;
-                    tx.abort(ex); // tx.commit() aborts automatically if needed
-                }
-                
-                if (TM_DEBUG) {
-                    Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] preCommitTime["+tx.processingElapsedTime+"] ms");
-                    ex.printStackTrace();
-                }
-                throwIfNotConflictException(ex);
-                System.threadSleep(TM_SLEEP);
-            }
-        }
-    }
-    
-    public def executeLockingTransaction(members:PlaceGroup, lockRequests:ArrayList[LockingRequest], closure:(LockingTx)=>Any) {
-        val tx = startLockingTransaction(members, lockRequests);
-        
-        tx.lock();
-        
-        val start = Timer.milliTime();
-        val out = closure(tx);
-        tx.processingElapsedTime = Timer.milliTime() - start;
-        
-        tx.unlock();
-        return new TxResult(Tx.SUCCESS, out);
     }
     
     public def executeLocalTransaction(closure:(LocalTx)=>Any) {
@@ -217,6 +150,84 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
         return txResult;
     }
     
+    /***********************   Global Transactions ****************************/
+    private def startGlobalTransaction(members:PlaceGroup):Tx {
+        assert(plh().virtualPlaceId != -1);
+        val id = plh().masterStore.getNextTransactionId();
+        if (resilient) {
+            val localTx = plh().getTxLoggingMap().startLocalTransaction();
+            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] startGlobalTransaction localTx["+localTx.id+"] started ...");
+            localTx.put("tx"+id, new TxDesc(id, name, plh().getMembersIndices(members), TxDesc.STARTED));
+            val ignoreDeadSlave = false;
+            localTx.commit(ignoreDeadSlave);
+            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] startGlobalTransaction localTx["+localTx.id+"] completed ...");
+        }
+        val tx = new Tx(plh, id, name, members, plh().getTxLoggingMap());
+        plh().txList.addGlobalTx(tx);
+        return tx;
+    }
+    
+    public def restartGlobalTransaction(txDesc:TxDesc):Tx {
+        assert(plh().virtualPlaceId != -1);
+        val tx = new Tx(plh, txDesc.id, name, plh().getMembers(txDesc.members), plh().getTxLoggingMap());
+        plh().txList.addGlobalTx(tx);
+        return tx;
+    }
+    
+    public def executeTransaction(members:PlaceGroup, closure:(Tx)=>Any):TxResult {
+        while(true) {
+            val tx = startGlobalTransaction(members);
+            var commitCalled:Boolean = false;
+            val start = Timer.milliTime();
+            try {
+                val out:Any;
+                finish {
+                    out = closure(tx);
+                }
+                tx.processingElapsedTime = Timer.milliTime() - start ;
+                
+                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} succeeded  preCommitTime["+tx.processingElapsedTime+"] ms");
+                commitCalled = true;
+                return new TxResult(tx.commit(), out);
+            } catch(ex:Exception) {
+                if (!commitCalled) {
+                    tx.processingElapsedTime = Timer.milliTime() - start;
+                    tx.abort(ex); // tx.commit() aborts automatically if needed
+                }
+                
+                if (TxConfig.get().TM_DEBUG) {
+                    Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] preCommitTime["+tx.processingElapsedTime+"] ms");
+                    ex.printStackTrace();
+                }
+                throwIfNotConflictException(ex);
+                System.threadSleep(TM_SLEEP);
+            }
+        }
+    }
+    
+    /***********************   Lock-based Transactions ****************************/
+    
+    private def startLockingTransaction(members:PlaceGroup, requests:ArrayList[LockingRequest]):LockingTx {
+        assert(plh().virtualPlaceId != -1);
+        val id = plh().masterStore.getNextTransactionId();
+        val tx = new LockingTx(plh, id, name, members, requests);
+        plh().txList.addLockingTx(tx);
+        return tx;
+    }
+    
+    public def executeLockingTransaction(members:PlaceGroup, lockRequests:ArrayList[LockingRequest], closure:(LockingTx)=>Any) {
+        val tx = startLockingTransaction(members, lockRequests);
+        
+        tx.lock();
+        
+        val start = Timer.milliTime();
+        val out = closure(tx);
+        tx.processingElapsedTime = Timer.milliTime() - start;
+        
+        tx.unlock();
+        return new TxResult(Tx.SUCCESS, out);
+    }
+    
     /**************Baseline Operations*****************/
     private def startBaselineTransaction(members:PlaceGroup):BaselineTx {
         assert(plh().virtualPlaceId != -1);
@@ -241,30 +252,6 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
             throw ex;
     }
     
-    public def restartGlobalTransaction(txDesc:TxDesc):Tx {
-        assert(plh().virtualPlaceId != -1);
-        val activePlaces = plh().getActivePlaces();
-        val tx = new Tx(plh, txDesc.id, name, getMembers(txDesc.members, activePlaces), activePlaces, plh().getTxLoggingMap());
-        plh().txList.addGlobalTx(tx);
-        return tx;
-    }
-    
-    public def getMembersIndices(members:PlaceGroup, activePlaces:PlaceGroup):Rail[Long] {
-        val rail = new Rail[Long](members.size());
-        for (var i:Long = 0; i <  members.size(); i++)
-            rail(i) = activePlaces.indexOf(members(i));
-        return rail;
-    }
-    
-    public static def getMembers(members:Rail[Long], activePlaces:PlaceGroup):PlaceGroup {
-        val list = new ArrayList[Place]();
-        for (var i:Long = 0; i < members.size; i++) {
-            if (!activePlaces(members(i)).isDead())
-                list.add(activePlaces(members(i)));
-        }
-        return new SparsePlaceGroup(list.toRail());
-    }
-    
     public def printTxStatistics() {
         Console.OUT.println("Calculating execution statistics ...");
         val pl_stat = new ArrayList[TxPlaceStatistics]();
@@ -286,9 +273,9 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
                         g_commitList.add(tx.commitTime - tx.startTime);
                         g_commitProcList.add(tx.processingElapsedTime);
                         g_waitList.add(tx.waitElapsedTime);
-                        g_commitPH1List.add(tx.phase1ElapsedTime);
-                        g_commitPH2List.add(tx.phase2ElapsedTime);
-                        g_txLoggingList.add(tx.txLoggingElapsedTime);
+                        g_commitPH1List.add(tx.getPhase1ElapsedTime());
+                        g_commitPH2List.add(tx.getPhase2ElapsedTime());
+                        g_txLoggingList.add(tx.getTxLoggingElapsedTime());
                     }
                     else if (tx.abortTime != -1) {
                         g_abortList.add(tx.abortTime - tx.startTime);

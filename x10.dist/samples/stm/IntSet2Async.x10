@@ -11,7 +11,6 @@ import x10.util.resilient.localstore.CloneableLong;
 import x10.util.Timer;
 
 public class IntSet2Async {
-	private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
 
 	public static def main(args:Rail[String]) {
         if (args.size != 4) {
@@ -99,7 +98,7 @@ public class IntSet2Async {
 	                
 	                val members = STMAppUtils.createGroup(p1, p2);
 	                
-	                if (TM_DEBUG) Console.OUT.println(here + " OP["+i+"] Start{{ keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");
+	                if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " OP["+i+"] Start{{ keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");
 	                map.executeTransaction(members, (tx:Tx) => {
 	                    val f1 = tx.asyncAt(p1, () => {
 	                    	if (read)
@@ -117,9 +116,9 @@ public class IntSet2Async {
 	                    f1.force();
 	                    f2.force();
 	                    tx.setWaitElapsedTime(Timer.milliTime() - startWait);
-	                    if (TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitForFuturesElapsedTime +"] ms");
+	                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitForFuturesElapsedTime +"] ms");
 	                });
-	                if (TM_DEBUG) Console.OUT.println(here + " OP["+i+"] End}} keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");                
+	                if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " OP["+i+"] End}} keys["+key1+","+key2+"] places["+p1+","+p2+"] values["+val1+","+val2+"] read["+read+"] ");                
 	            }
             }
         }

@@ -17,7 +17,6 @@ import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.TxConfig;
 
 public class MemoryUnit {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     
     private var version:Int;
     private var value:Cloneable;
@@ -27,11 +26,11 @@ public class MemoryUnit {
     
     public def this(v:Cloneable) {
         value = v;
-        if (TxConfig.getInstance().BASELINE) { //Baseline
+        if (TxConfig.get().BASELINE) { //Baseline
             txLock = null;
             internalLock = null;
         }
-        else if (TxConfig.getInstance().LOCKING) { //Locking
+        else if (TxConfig.get().LOCKING) { //Locking
             txLock = new TxLockCREWBlocking();
             internalLock = new Lock();
         }
@@ -48,7 +47,7 @@ public class MemoryUnit {
             if (copy) {
                 v = value == null?null:value.clone();
             }
-            if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " getvv key["+key+"] ver["+version+"] val["+v+"]");
+            if (TxConfig.get().TM_DEBUG && txId != -1) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " getvv key["+key+"] ver["+version+"] val["+v+"]");
             return new AtomicValue(version, v);
         }
         finally {
@@ -61,33 +60,33 @@ public class MemoryUnit {
         if (copy) {
             v = value == null?null:value.clone();
         }
-        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " getvv key["+key+"] ver["+version+"] val["+v+"]");
+        if (TxConfig.get().TM_DEBUG && txId != -1) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " getvv key["+key+"] ver["+version+"] val["+v+"]");
         return new AtomicValue(version, v);
     }
     
     public def rollbackValueLocked(oldValue:Cloneable, oldVersion:Int, key:String, txId:Long) {
         version = oldVersion; 
         value = oldValue;
-        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " rollsetvv key["+key+"] ver["+version+"] val["+value+"]");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " rollsetvv key["+key+"] ver["+version+"] val["+value+"]");
     }
        
     public def lockRead(txId:Long, key:String) {
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             txLock.lockRead(txId, key);
     }
     
     public def unlockRead(txId:Long, key:String) {
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             txLock.unlockRead(txId, key);
     }
     
     public def lockWrite(txId:Long, key:String) {
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             txLock.lockWrite(txId, key);
     }
     
     public def unlockWrite(txId:Long, key:String) {
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             txLock.unlockWrite(txId, key);
     }
 
@@ -101,7 +100,7 @@ public class MemoryUnit {
         if (copy) {
             v = value == null?null:value.clone();
         }
-        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " getvv key["+key+"] ver["+version+"] val["+v+"]");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " getvv key["+key+"] ver["+version+"] val["+v+"]");
         return v;
     }
     
@@ -109,18 +108,18 @@ public class MemoryUnit {
         val oldValue = value;
         version++;
         value = v;
-        if (TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " setvv key["+key+"] ver["+version+"] val["+value+"]");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " setvv key["+key+"] ver["+version+"] val["+value+"]");
         return oldValue;
     }
     
     /**************************************/
     private def lockExclusive() {
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             internalLock.lock();
     }
     
     private def unlockExclusive() {
-        if (!TxConfig.getInstance().LOCK_FREE)
+        if (!TxConfig.get().LOCK_FREE)
             internalLock.unlock();
     }
     

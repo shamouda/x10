@@ -25,7 +25,6 @@ import x10.util.HashSet;
 import x10.compiler.Uncounted;
 
 public class STMBench {
-    private static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     public static def main(args:Rail[String]) {
@@ -73,7 +72,7 @@ public class STMBench {
         
         assert (h <= activePlaces.size()) : "invalid value for parameter h, h should not exceed the number of active places" ;
 
-        if (TxConfig.getInstance().LOCK_FREE) {
+        if (TxConfig.get().LOCK_FREE) {
             assert (p * t == 1): "lock free mode can only be used with only 1 producer thread";
         }
         
@@ -200,7 +199,7 @@ public class STMBench {
                 return null;
             };
             
-            if (TxConfig.getInstance().LOCKING ) {
+            if (TxConfig.get().LOCKING ) {
                 val rail = membersOperations.toRail();
                 RailUtils.sort(rail);
                 for (memReq in rail) {
@@ -210,25 +209,25 @@ public class STMBench {
             
             //time starts here
             val start = System.nanoTime();
-            if (members.size() > 1 && TxConfig.getInstance().STM ) { //STM distributed
+            if (members.size() > 1 && TxConfig.get().STM ) { //STM distributed
                 map.executeTransaction(members, distClosure);
             }
-            else if (members.size() > 1 && TxConfig.getInstance().LOCKING ) { //locking distributed
+            else if (members.size() > 1 && TxConfig.get().LOCKING ) { //locking distributed
                 map.executeLockingTransaction(members, lockRequests, distClosure);
             }
-            else if (members.size() == 1 && producersCount == 1 && TxConfig.getInstance().STM ) { // STM local
+            else if (members.size() == 1 && producersCount == 1 && TxConfig.get().STM ) { // STM local
                 //local transaction
                 assert (members(0) == here) : "local transactions are not supported at remote places in this benchmark" ;
                 map.executeLocalTransaction(localClosure);
             }
-            else if (members.size() == 1 && producersCount == 1 && TxConfig.getInstance().LOCKING ) { //Locking local
+            else if (members.size() == 1 && producersCount == 1 && TxConfig.get().LOCKING ) { //Locking local
                 assert (members(0) == here) : "local transactions are not supported at remote places in this benchmark" ;
                 map.executeLockingTransaction(members, lockRequests, localClosure);
             }
-            else if (members.size() == 1 && producersCount == 1 && TxConfig.getInstance().BASELINE ) { //baseline local
+            else if (members.size() == 1 && producersCount == 1 && TxConfig.get().BASELINE ) { //baseline local
                 map.executeBaselineTransaction(members, localClosure);
             }
-            else if (members.size() > 1 && TxConfig.getInstance().BASELINE ) { //baseline distributed
+            else if (members.size() > 1 && TxConfig.get().BASELINE ) { //baseline distributed
                 map.executeBaselineTransaction(members, distClosure);
             }
             else
