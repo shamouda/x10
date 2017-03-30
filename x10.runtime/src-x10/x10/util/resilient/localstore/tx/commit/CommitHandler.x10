@@ -1,7 +1,8 @@
-package x10.util.resilient.localstore.tx;
+package x10.util.resilient.localstore.tx.commit;
 
 import x10.util.Timer;
 import x10.util.ArrayList;
+import x10.util.resilient.localstore.tx.*;
 import x10.util.resilient.localstore.LocalStore;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.ResilientNativeMap;

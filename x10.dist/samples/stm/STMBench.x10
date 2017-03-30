@@ -112,7 +112,8 @@ public class STMBench {
 
     private static def startPlace(pl:Place, map:ResilientNativeMap, activePlaces:PlaceGroup, producersCount:Long, 
     		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, resultGR:GlobalRef[ArrayList[ProducerThroughput]]) {
-    	at (pl) async {
+    	    
+        at (pl) async {
             for (thrd in 1..t) async {
                 val throughput = produce(map, activePlaces, producersCount, thrd, d, a, r, u, t, h, o, g, victims, resultGR);
                 at (resultGR) async {

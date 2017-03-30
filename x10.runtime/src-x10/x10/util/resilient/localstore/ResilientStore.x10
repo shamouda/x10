@@ -23,6 +23,7 @@ import x10.util.resilient.localstore.tx.TxDesc;
 import x10.util.resilient.localstore.tx.TransactionsList;
 import x10.util.concurrent.Lock;
 import x10.compiler.Uncounted;
+import x10.util.resilient.localstore.recovery.*;
 
 /**
  * A store that maintains a master + 1 backup (slave) copy
@@ -43,7 +44,12 @@ public class ResilientStore {
     }
     
     public static def make(pg:PlaceGroup, immediateRecovery:Boolean):ResilientStore {
-        val plh = PlaceLocalHandle.make[LocalStore](Place.places(), ()=> new LocalStore(pg, immediateRecovery) );
+        var temp:Boolean = immediateRecovery;
+        if (TxConfig.get().TESTING && !immediateRecovery)
+            temp = true;
+        val ir = temp;
+        Console.OUT.println("Creating a resilient store with "+pg.size()+" active places, immediateRecovery = " + ir);
+        val plh = PlaceLocalHandle.make[LocalStore](Place.places(), ()=> new LocalStore(pg, ir) );
         val store = new ResilientStore(plh);
         
         Place.places().broadcastFlat(()=> { 
@@ -71,7 +77,10 @@ public class ResilientStore {
     public def sameActivePlaces(active:PlaceGroup) = plh().sameActivePlaces(active);
 
     public def updateForChangedPlaces(changes:ChangeDescription):void {
-        CentralizedRecoveryHelper.recover(plh, changes);
+        if (TxConfig.get().TESTING)
+            TestingCentralizedRecoveryHelper.recover(plh, changes);
+        else
+            CentralizedRecoveryHelper.recover(plh, changes);
         plh().activePlaces = changes.newActivePlaces;
     }
     

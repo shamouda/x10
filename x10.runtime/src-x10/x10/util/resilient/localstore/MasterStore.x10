@@ -22,16 +22,17 @@ import x10.xrx.Runtime;
 import x10.util.resilient.localstore.tx.*;
 import x10.util.resilient.localstore.Cloneable;
 
-public class MasterStore {
+public class MasterStore(immediateRecovery:Boolean) {
     /*Each map has an object of TxManager (same object even after failures)*/
     private val txManager:TxManager;
     private val sequence:AtomicInteger;
 
     public static val TX_FACTOR=1000000;
     
-    public def this(masterMap:HashMap[String,Cloneable]) {
+    public def this(masterMap:HashMap[String,Cloneable], immediateRecovery:Boolean) {
+        property(immediateRecovery);
         this.sequence = new AtomicInteger();
-        this.txManager = TxManager.make(new MapData(masterMap));
+        this.txManager = TxManager.make(new MapData(masterMap), immediateRecovery);
     }   
     
     public def getTxCommitLog(id:Long) {
@@ -127,13 +128,23 @@ public class MasterStore {
         return list;
     }
     
-    public def isActive() = txManager.isActive();
+    public def isActive() {
+        assert (immediateRecovery);
+        return txManager.isActive();
+    }
     
-    public def pause() {
-    	txManager.pause();
+    public def pausing() {
+        assert (immediateRecovery);
+    	txManager.pausing();
+    }
+    
+    public def reactivate() {
+        assert (immediateRecovery);
+        txManager.reactivate();
     }
     
     public def waitUntilPaused() {
+        assert (immediateRecovery);
     	txManager.waitUntilPaused();
     }
     

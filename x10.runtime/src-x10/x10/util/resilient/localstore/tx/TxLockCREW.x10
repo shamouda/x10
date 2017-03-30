@@ -31,8 +31,6 @@ import x10.util.resilient.localstore.TxConfig;
  * when the lock is being acquired by a dead place's transaction.
  * */
 public class TxLockCREW extends TxLock {
-    private static val LOCK_WAIT_MS = System.getenv("LOCK_WAIT_MS") == null ? 10 : Long.parseLong(System.getenv("LOCK_WAIT_MS"));
-    
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     private val lock = new Lock();
     private val readers = new HashSet[Long]();
@@ -173,7 +171,7 @@ public class TxLockCREW extends TxLock {
             if (resilient)
                 checkDeadLockers();
             lock.unlock();
-            System.threadSleep(LOCK_WAIT_MS);                   
+            TxConfig.waitSleep();                   
             lock.lock();
         }
         
@@ -205,7 +203,7 @@ public class TxLockCREW extends TxLock {
             if (resilient)
                 checkDeadLockers();
             lock.unlock();
-            System.threadSleep(LOCK_WAIT_MS);                   
+            TxConfig.waitSleep();                     
             lock.lock();
         }
         
@@ -234,7 +232,7 @@ public class TxLockCREW extends TxLock {
             if (resilient)
                 checkDeadLockers();
             lock.unlock();
-            System.threadSleep(LOCK_WAIT_MS);
+            TxConfig.waitSleep();   
             lock.lock();
         }
         

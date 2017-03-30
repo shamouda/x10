@@ -12,8 +12,8 @@ import x10.util.ArrayList;
  * */
 public class TxManager_RL_LA_WB extends TxManager {
 
-    public def this(map:MapData) {
-        super(map);
+    public def this(data:MapData, immediateRecovery:Boolean) {
+        super(data, immediateRecovery);
         if (here.id == 0) Console.OUT.println("TxManager_RL_LA_WB");
     }
     

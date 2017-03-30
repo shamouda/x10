@@ -20,6 +20,7 @@ import x10.compiler.Pinned;
 import x10.util.GrowableRail;
 import x10.util.Timer;
 import x10.util.resilient.localstore.tx.*;
+import x10.util.resilient.localstore.tx.commit.*;
 import x10.compiler.Uncounted;
 import x10.compiler.Immediate;
 import x10.util.resilient.localstore.Cloneable;

@@ -10,9 +10,7 @@ import x10.xrx.Runtime;
 import x10.util.concurrent.Future;
 import x10.util.resilient.localstore.TxConfig;
 
-public abstract class TxManager(data:MapData) {
-    private static val PAUSE_WAIT_MS = System.getenv("PAUSE_WAIT_MS") == null ? 10 : Long.parseLong(System.getenv("PAUSE_WAIT_MS"));
-    
+public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     protected var status:Long; // 0 (not paused), 1 (preparing to pause), 2 (paused)
     
     private val STATUS_ACTIVE = 0;
@@ -25,8 +23,8 @@ public abstract class TxManager(data:MapData) {
     protected val lockingTxLogs:SafeBucketHashMap[Long,LockingTxLog];
     protected static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
-    public def this(data:MapData) {
-        property(data);
+    public def this(data:MapData, immediateRecovery:Boolean) {
+        property(data, immediateRecovery);
         if (TxConfig.get().BASELINE) {
             txLogs = null;
             lockingTxLogs = null;
@@ -43,23 +41,23 @@ public abstract class TxManager(data:MapData) {
         	resilientStatusLock = new Lock();
     }
     
-    public static def make(data:MapData):TxManager {
+    public static def make(data:MapData, immediateRecovery:Boolean):TxManager {
         if (TxConfig.get().BASELINE )
-             return new TxManager_Baseline(data);
+             return new TxManager_Baseline(data, immediateRecovery);
         else if (TxConfig.get().LOCKING )
-            return new TxManager_Locking(data);
+            return new TxManager_Locking(data, immediateRecovery);
         else if (TxConfig.get().TM.equals("RL_EA_UL"))
-            return new TxManager_RL_EA_UL(data);
+            return new TxManager_RL_EA_UL(data, immediateRecovery);
         else if (TxConfig.get().TM.equals("RL_EA_WB"))
-            return new TxManager_RL_EA_WB(data);
+            return new TxManager_RL_EA_WB(data, immediateRecovery);
         else if (TxConfig.get().TM.equals("RL_LA_WB"))
-            return new TxManager_RL_LA_WB(data);
+            return new TxManager_RL_LA_WB(data, immediateRecovery);
         else if (TxConfig.get().TM.equals("RV_EA_UL"))
-            return new TxManager_RV_EA_UL(data);
+            return new TxManager_RV_EA_UL(data, immediateRecovery);
         else if (TxConfig.get().TM.equals("RV_EA_WB"))
-            return new TxManager_RV_EA_WB(data);
+            return new TxManager_RV_EA_WB(data, immediateRecovery);
         else if (TxConfig.get().TM.equals("RV_LA_WB"))
-            return new TxManager_RV_LA_WB(data);
+            return new TxManager_RV_LA_WB(data, immediateRecovery);
         else
             throw new Exception("Wrong Tx Manager Configuration (undo logging can not be selected with late acquire");
     }
@@ -102,7 +100,6 @@ public abstract class TxManager(data:MapData) {
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] ");
             log = txLogs.getOrElseUnsafe(id, null);
             if (log == null) {
-            	ensureNotPaused(); // do not add new transactions is the store is paused
                 log = new TxLog(id);
                 txLogs.putUnsafe(id, log);
             }
@@ -120,7 +117,6 @@ public abstract class TxManager(data:MapData) {
 
             log = lockingTxLogs.getOrElseUnsafe(id, null);
             if (log == null) {
-            	ensureNotPaused(); // do not add new transactions is the store is paused
                 log = new LockingTxLog(id);
                 lockingTxLogs.putUnsafe(id, log);
             }
@@ -133,6 +129,7 @@ public abstract class TxManager(data:MapData) {
     
     /**************   Pausing for Recovery    ****************/
     public def waitUntilPaused() {
+        Console.OUT.println(here + " TxManager.waitUntilPaused started ...");
     	val buckets = TxConfig.get().BUCKETS_COUNT;
     	try {
 	        Runtime.increaseParallelism();
@@ -158,25 +155,33 @@ public abstract class TxManager(data:MapData) {
 		        }
 		        
 		        if (!stopped)
-		        	System.threadSleep(PAUSE_WAIT_MS);
+		            TxConfig.waitSleep();
 	        } while (!stopped);
         
     	}finally {
     		Runtime.decreaseParallelism(1n);
     	}
         paused();
+        Console.OUT.println(here + " TxManager.waitUntilPaused completed ...");
     }
     
-    private def ensureNotPaused() {
-    	if (1 == 1)
-    		throw new StorePausedException("Local store paused for recovery");
+    private def ensureActiveStatus() {
+        try {
+            statusLock();
+            if (status != STATUS_ACTIVE)
+                throw new StorePausedException("Local store paused for recovery");
+        }
+        finally {
+            statusUnlock();
+        }
     }
     
-    public def pause() {
+    public def pausing() {
     	try {
     		statusLock();
     		assert(status == STATUS_ACTIVE);
     		status = STATUS_PAUSING;
+    		Console.OUT.println(here + " TxManager changed status from STATUS_ACTIVE to STATUS_PAUSING");
     	}
     	finally {
     		statusUnlock();
@@ -188,6 +193,7 @@ public abstract class TxManager(data:MapData) {
     		statusLock();
     		assert(status == STATUS_PAUSING);
     		status = STATUS_PAUSED;
+    		Console.OUT.println(here + " TxManager changed status from STATUS_PAUSING to STATUS_PAUSED");
     	}
     	finally {
     		statusUnlock();
@@ -199,6 +205,7 @@ public abstract class TxManager(data:MapData) {
     		statusLock();
     		assert(status == STATUS_PAUSED);
     		status = STATUS_ACTIVE;
+    		Console.OUT.println(here + " TxManager changed status from STATUS_PAUSED to STATUS_ACTIVE");
     	}
     	finally {
     		statusUnlock();
@@ -387,6 +394,9 @@ public abstract class TxManager(data:MapData) {
             val memory = cont.memory;
             log = cont.log;
             
+            if (resilient && immediateRecovery)
+                ensureActiveStatus();
+            
             /*** EarlyAcquire ***/
             lockWriteRV(id, key, cont);
             
@@ -413,6 +423,9 @@ public abstract class TxManager(data:MapData) {
             val memory = cont.memory;
             log = cont.log;
             
+            if (resilient && immediateRecovery)
+                ensureActiveStatus();
+            
             /*** EarlyAcquire ***/
             lockWriteRL(id, key, cont);
             
@@ -438,6 +451,9 @@ public abstract class TxManager(data:MapData) {
             val cont = logInitialIfNotLogged(id, key, false);
             val memory = cont.memory;
             log = cont.log;
+            
+            if (resilient && immediateRecovery)
+                ensureActiveStatus();
             
             /*** Early Acquire ***/
             lockWriteRL(id, key, cont);
@@ -466,6 +482,9 @@ public abstract class TxManager(data:MapData) {
             val memory = cont.memory;
             log = cont.log;
             
+            if (resilient && immediateRecovery)
+                ensureActiveStatus();
+            
             /*** EarlyAcquire ***/
             val atomicV = lockWriteRV(id, key, cont);
             
@@ -492,6 +511,9 @@ public abstract class TxManager(data:MapData) {
             val cont = logInitialIfNotLogged(id, key, false);
             val memory = cont.memory;
             log = cont.log;
+            
+            if (resilient && immediateRecovery)
+                ensureActiveStatus();
             
             /*** DO NOT ACQUIRE WRITE LOCK HERE ***/
             
@@ -611,7 +633,7 @@ public abstract class TxManager(data:MapData) {
     }
     
     /********************* End of get operations  *********************/
-    
+        
     protected def validate_RL_LA_WB(log:TxLog) {
         val id = log.id;
         var writeTx:Boolean = false;
@@ -632,8 +654,11 @@ public abstract class TxManager(data:MapData) {
                 }
             }
             
-            if (writeTx)
+            if (writeTx) {
+                if (resilient && immediateRecovery)
+                    ensureActiveStatus();
             	log.writeValidated = true;
+            }
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
         } finally{
@@ -677,8 +702,11 @@ public abstract class TxManager(data:MapData) {
                     log.setLockedWrite(key, true);
             }
             
-            if (writeTx)
+            if (writeTx) {
+                if (resilient && immediateRecovery)
+                    ensureActiveStatus();
             	log.writeValidated = true;
+            }
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
         } finally {
@@ -715,8 +743,11 @@ public abstract class TxManager(data:MapData) {
                 else
                 	writeTx = true;
             }
-            if (writeTx)
+            if (writeTx) {
+                if (resilient && immediateRecovery)
+                    ensureActiveStatus();
             	log.writeValidated = true; // we can not start migratoin until all writeValidated transactions commit or abort
+            }
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
         } finally {

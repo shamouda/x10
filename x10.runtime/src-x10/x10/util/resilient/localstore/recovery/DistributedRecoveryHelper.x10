@@ -1,10 +1,11 @@
-package x10.util.resilient.localstore;
+package x10.util.resilient.localstore.recovery;
 
 import x10.util.ArrayList;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.tx.TxDesc;
 import x10.compiler.Uncounted;
+import x10.util.resilient.localstore.*;
 /**
  * Should be called by the local store when it detects that its slave has died.
  **/
@@ -13,30 +14,36 @@ public class DistributedRecoveryHelper {
     public static def recoverSlave(plh:PlaceLocalHandle[LocalStore]) {
     	Console.OUT.println(here + " DistributedRecoveryHelper.recoverSlave started ...");
     	val deadSlave = plh().slave;
-    	val oldActivePlaces = plh().getActivePlacesCopy(); // we got a copy in case another place updates in the activePlaces list
+    	val oldActivePlaces = plh().getActivePlaces();
     	val deadPlaceVirtualPlaceId = oldActivePlaces.indexOf(deadSlave);
     	val spare = allocateSparePlace(plh, deadPlaceVirtualPlaceId, oldActivePlaces);
-    	Console.OUT.println(here + " DistributedRecoveryHelper.spare place allocated " + spare);
-    	
-    	val slaveOfDeadMaster = oldActivePlaces.next(deadSlave);
-        if (slaveOfDeadMaster.isDead())
-        	throw new Exception(here + " Fatal error, two consecutive places died together : " + deadSlave + "  and " + slaveOfDeadMaster);
-    	
-    	finish {
-    		at (slaveOfDeadMaster) async createMasterStoreAtSpare(plh, spare, oldActivePlaces);
-    		async createSlaveStoreAtSpare(plh, spare);
-    	}
-    	
-    	Console.OUT.println(here + " DistributedRecoveryHelper  spare place now have all needed data ...");
-    	
-    	val newActivePlaces = plh().replace(deadPlaceVirtualPlaceId, spare);
-    	at (spare) @Uncounted async {
-			plh().handshake(newActivePlaces, deadPlaceVirtualPlaceId);
-		}
-    	
-		//FIXME: how to make sure that the list of active places remains consistent at all places    	
-    	//FIXME: do we keep a connection from slave to master, and from master to slave?
+    	recoverSlave(plh, spare);
     }
+    
+    public static def recoverSlave(plh:PlaceLocalHandle[LocalStore], spare:Place) {
+        Console.OUT.println(here + " DistributedRecoveryHelper.recoverSlave started given already allocated spare " + spare);
+        val deadSlave = plh().slave;
+        val oldActivePlaces = plh().getActivePlaces();
+        val deadPlaceVirtualPlaceId = oldActivePlaces.indexOf(deadSlave);
+        
+        val slaveOfDeadMaster = oldActivePlaces.next(deadSlave);
+        if (slaveOfDeadMaster.isDead())
+            throw new Exception(here + " Fatal error, two consecutive places died together : " + deadSlave + "  and " + slaveOfDeadMaster);
+        
+        finish {
+            at (slaveOfDeadMaster) async createMasterStoreAtSpare(plh, spare, oldActivePlaces);
+            async createSlaveStoreAtSpare(plh, spare);
+        }
+        
+        Console.OUT.println(here + " DistributedRecoveryHelper  spare place now have all needed data ...");
+        val newActivePlaces = computeNewActivePlaces(oldActivePlaces, deadPlaceVirtualPlaceId, spare);
+        finish at (spare) async {
+            plh().handshake(newActivePlaces, deadPlaceVirtualPlaceId);
+        }
+        //the application layer can now recognize a change in the places configurations
+        plh().replace(deadPlaceVirtualPlaceId, spare);
+    }
+    
     
     private static def createMasterStoreAtSpare(plh:PlaceLocalHandle[LocalStore], spare:Place, oldActivePlaces:PlaceGroup) {
     	completeInitiatedTransactions(plh);
@@ -49,7 +56,7 @@ public class DistributedRecoveryHelper {
         val map = plh().slaveStore.getSlaveMasterState();
         val me = here;
         at (spare) async {
-        	plh().masterStore = new MasterStore(map);
+        	plh().masterStore = new MasterStore(map, plh().immediateRecovery);
         	plh().slave = me;
         }
     }
@@ -60,6 +67,7 @@ public class DistributedRecoveryHelper {
         at (spare) {
             plh().slaveStore = new SlaveStore(masterState);
         }
+        plh().masterStore.reactivate();
     }
     
     private static def allocateSparePlace(plh:PlaceLocalHandle[LocalStore], deadPlaceVirtualPlaceId:Long, oldActivePlaces:PlaceGroup) {
@@ -195,4 +203,17 @@ public class DistributedRecoveryHelper {
     	}
     	return new SparsePlaceGroup(rail);
     }
+    
+    private static def computeNewActivePlaces(oldActivePlaces:PlaceGroup, virtualId:Long, spare:Place) {
+        val size = oldActivePlaces.size();
+        val rail = new Rail[Place](size);
+        for (var i:Long = 0; i< size; i++) {
+            if (virtualId == i)
+                rail(i) = spare;
+            else
+                rail(i) = oldActivePlaces(i);
+        }
+        return new SparsePlaceGroup(rail);
+    }
+    
 }

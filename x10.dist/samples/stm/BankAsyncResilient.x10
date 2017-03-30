@@ -12,6 +12,7 @@ import x10.util.resilient.localstore.tx.ConflictException;
 import x10.util.Timer;
 import x10.util.resilient.localstore.TxConfig;
 
+// TM_TESTING=1 TM=RV_LA_WB KILL_PLACES=2,5 KILL_TIMES=5,5 X10_NPLACES=10 X10_RESILIENT_MODE=1 TM_REP=lazy ./BankAsyncResilient.o 10 10 1 2 &> output.txt
 public class BankAsyncResilient {
     private static val DISABLE_CKPT = System.getenv("DISABLE_CKPT") != null && System.getenv("DISABLE_CKPT").equals("1");
     
@@ -98,7 +99,10 @@ public class BankAsyncResilient {
             var start:Long = 1;
             if (recovered) {
                 start = STMAppUtils.restoreProgress(map, placeIndex, 0) + 1;
-                Console.OUT.println(here + " continue transfering from " + start + "   slave:" + map.plh().slave);
+                var str:String = "";
+                for (pp in activePG)
+                    str += pp.id + ", ";
+                Console.OUT.println(here + " continue transfering from " + start + "   slave:" + map.plh().slave + "   active list {"+str+"} ");
             }
             val rand = new Random(placeIndex);
             for (i in start..transfersPerPlace) {

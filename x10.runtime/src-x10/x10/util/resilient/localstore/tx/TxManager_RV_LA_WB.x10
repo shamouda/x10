@@ -12,9 +12,9 @@ import x10.util.ArrayList;
  * Write: Write Buffering
  **/
 public class TxManager_RV_LA_WB extends TxManager {
-
-    public def this(data:MapData) {
-        super(data);
+    
+    public def this(data:MapData, immediateRecovery:Boolean) {
+        super(data, immediateRecovery);
         if (here.id == 0) Console.OUT.println("TxManager_RV_LA_WB");
     }
     

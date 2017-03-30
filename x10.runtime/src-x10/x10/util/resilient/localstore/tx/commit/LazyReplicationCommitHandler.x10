@@ -1,26 +1,36 @@
-package x10.util.resilient.localstore.tx;
+package x10.util.resilient.localstore.tx.commit;
 
 import x10.util.Timer;
 import x10.util.ArrayList;
+import x10.util.resilient.localstore.tx.*;
 import x10.util.resilient.localstore.LocalStore;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.AbstractTx;
 
 /*
- * In eager replication, transaction side effects are applied at the slave immediately by the master.
- * If the master is dead, the transaction coordinator applies the changes at the slave, on behalf of the master.
- * The coordinator does not need to remember the committed transactions.
+ * In lazy replication, transaction side effects are NOT applied at the slave until a master dies. 
+ * The master sends a change-log to the slave during the validation phase of the 2PC protocol.
+ * The slave keeps these logs in order of arrival.
+ * When the master dies, the slave contacts the coordinators of each transaction, for which it has a log, to know if that transaction was committed or aborted.
+ * Because of that, each coordinator has to remember all the committed transactions.
+ * The slave applies the side effects of the committed transactions to the master's data, 
+ * before copying this data to the spare place that will replace the master.
+ * 
+ * In the 2PC, the slave is completely ignored after the validation phase.
  * 
  * Tx logging is as follows (by the coordinator only):  
- * -->  committed transaction: STARTED, COMMITTING, NULL (Tx log removed)
- * -->  aborted transaction: STARTED, NULL (Tx log removed)
+ * --> committed transaction: STARTED, COMMITTING, COMMITTED   (log not removed,  GC required)
+ * --> aborted transaction: STARTED, NULL (Tx log removed)
  * 
- * Should be used in resilient mode only.
+ * Known issue: we did not implement a garbage collection mechanism, 
+ * so the list of committed transactions at each coordinator can grow very large and cause out-of-memory errors.
+ *  
+ * Should be used in resilient mode only
  * */
-public class EagerReplicationCommitHandler extends CommitHandler {
+public class LazyReplicationCommitHandler extends CommitHandler {
 	
-	private val root = GlobalRef[EagerReplicationCommitHandler](this);
+	private val root = GlobalRef[LazyReplicationCommitHandler](this);
 	private var nonFatalDeadPlace:Boolean = false;
 	
 	public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, txDescMap:ResilientNativeMap) {
@@ -33,15 +43,8 @@ public class EagerReplicationCommitHandler extends CommitHandler {
             finalize(false, abortedPlaces, plh, id, members);
         }
         catch(ex:MultipleExceptions) {
-            try {
-                val deadMasters = getDeadPlaces(ex, members);
-                //some masters died while rolling back,ask slaves to abort
-                finalizeSlaves(false, deadMasters, plh, id, members);
-            }
-            catch(ex2:Exception) {
-                Console.OUT.println("Warning: ignoring exception during finalizeSlaves(false): " + ex2.getMessage());
-                ex2.printStackTrace();
-            }
+            Console.OUT.println("Warning: ignoring exception during finalize(false): " + ex.getMessage());
+            ex.printStackTrace();
         }
         
         if (!TxConfig.get().DISABLE_TX_LOGGING)
@@ -53,10 +56,9 @@ public class EagerReplicationCommitHandler extends CommitHandler {
     public def commit(skipPhaseOne:Boolean):Int {
         if (!skipPhaseOne) {
             try {
-            	commitPhaseOne(plh, id, members); // failures are fatal
+                commitPhaseOne(plh, id, members); // master failure is fatal, slave failure is not fatal
                 if (!TxConfig.get().DISABLE_TX_LOGGING)
                     updateTxDesc(TxDesc.COMMITTING);
-                
             } catch(ex:Exception) {
                 val list = getDeadAndConflictingPlaces(ex);
                 abort(list);
@@ -75,16 +77,17 @@ public class EagerReplicationCommitHandler extends CommitHandler {
         
         
         if (!TxConfig.get().DISABLE_TX_LOGGING ){
-            deleteTxDesc();
+        	/* if we don't mark the committed transaction, 
+        	 * we will have to recommit all transactions that are already committed */
+            updateTxDesc(TxDesc.COMMITTED); 
         }
-
+        
         if (nonFatalDeadPlace)
         	return AbstractTx.SUCCESS_RECOVER_STORE;
         else
         	return AbstractTx.SUCCESS;
-    
     }
-   
+
     private def commitPhaseOne(plh:PlaceLocalHandle[LocalStore], id:Long, members:PlaceGroup) {
         val start = Timer.milliTime();
         try {
@@ -124,7 +127,7 @@ public class EagerReplicationCommitHandler extends CommitHandler {
 	                }
                 }catch(e:Exception) {
                 	ex = e;
-                	//ignoring dead slave: if we ignore it later during commit, why not ignore it during validation!!
+                	//ignoring dead slave
                 }
                 
                 if (ex != null) {
@@ -149,16 +152,6 @@ public class EagerReplicationCommitHandler extends CommitHandler {
                 Console.OUT.println(here + "commitPhaseTwo Exception[" + ex.getMessage() + "]");
                 ex.printStackTrace();
             }
-            try {
-            	val deadMasters = getDeadPlaces(ex, members);
-            	//some masters have died after validation, ask slaves to commit
-                finalizeSlaves(true, deadMasters, plh, id, members);
-            }
-            catch(ex2:Exception) {
-                ex2.printStackTrace();
-                //FATAL Exception
-                throw new Exception("FATAL ERROR: Master and Slave died together, Exception["+ex2.getMessage()+"] ");
-            }
         } finally {
             phase2ElapsedTime = Timer.milliTime() - start;
         }
@@ -181,60 +174,10 @@ public class EagerReplicationCommitHandler extends CommitHandler {
     
     private def finalizeLocal(commit:Boolean, plh:PlaceLocalHandle[LocalStore], id:Long) {
         if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeLocal  here["+here+"] " + ( commit? " Commit Local Started ": " Abort Local Started " ) + " ...");
-        var ex:Exception = null;
-        if (!TxConfig.get().DISABLE_SLAVE) {
-            val log = plh().masterStore.getTxCommitLog(id);
-            if (log != null && log.size() > 0) {
-                //ask slave to commit, slave's death is not fatal
-                try {
-                    if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeLocal here["+here+"] moving to slave["+plh().slave+"] to " + ( commit? "commit": "abort" ));
-                    finish at (plh().slave) async {
-                        if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeLocal here["+here+"] moved to slave["+here+"] to " + ( commit? "commit": "abort" ));
-                        if (commit)
-                            plh().slaveStore.commit(id);
-                        else
-                            plh().slaveStore.abort(id);
-                    }
-                }catch (e:Exception) {
-                	ex = e;
-                    //ignore dead slave
-                }
-            }
-        }
-            
         if (commit)
             plh().masterStore.commit(id);
         else
             plh().masterStore.abort(id);
-        
-        if (ex != null) {
-            at (root) async {
-                root().nonFatalDeadPlace = true;
-            }
-        }
-    }
-    
-    
-    private def finalizeSlaves(commit:Boolean, deadMasters:ArrayList[Place], 
-            plh:PlaceLocalHandle[LocalStore], id:Long, members:PlaceGroup) {
-        
-        if (TxConfig.get().DISABLE_SLAVE)
-            return;
-        
-        //ask slaves to commit (their master died, 
-        //and we need to resolve the slave's pending transactions)
-        finish for (p in deadMasters) {
-            assert(members.contains(p));
-            val slave = plh().getSlave(p);
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeSlaves here["+here+"] moving to slave["+plh().slave+"] to " + ( commit? "commit": "abort" ));
-            at (slave) async {
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeSlaves here["+here+"] moved to slave["+here+"] to " + ( commit? "commit": "abort" ));
-                if (commit)
-                    plh().slaveStore.commit(id);
-                else
-                    plh().slaveStore.abort(id);
-            }
-        }
     }
 
 }

@@ -18,6 +18,7 @@ import x10.compiler.Ifdef;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.localstore.tx.*;
 import x10.util.resilient.localstore.Cloneable;
+import x10.xrx.Runtime;
 
 /* Slave methods are being called by only one place at a time,
  * either its master during normal execution, or the store coordinator during failure recovery */
@@ -217,7 +218,21 @@ public class SlaveStore {
     }
     
     public def waitUntilPaused() {
-    	
+        assert (!TxConfig.get().TM_REP.equals("lazy")) : "bug, SlaveStore.waitUntilPaused should not be called with lazy replication";
+        try {
+            slaveLock();
+            Runtime.increaseParallelism();
+            
+            while (logs.size() != 0) {
+                slaveUnlock();
+                TxConfig.waitSleep();
+                slaveLock();
+            }
+        
+        }finally {
+            Runtime.decreaseParallelism(1n);
+            slaveUnlock();
+        }
     }
     
 }
