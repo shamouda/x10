@@ -29,9 +29,8 @@ public class SlaveStore {
     // TODO: change to a HashMap[place index, list]
     private var logs:ArrayList[TxSlaveLog]; 
     private transient val lock:Lock;
-    public var master:Place;
     
-    public def this(master:Place) {
+    public def this() {
         assert(resilient);
         masterState = new HashMap[String,Cloneable]();
         logs = new ArrayList[TxSlaveLog]();
@@ -39,7 +38,16 @@ public class SlaveStore {
             lock = new Lock();
         else
             lock = null;
-        this.master = master;
+    }
+    
+    public def this(state:HashMap[String,Cloneable]) {
+        assert(resilient);
+        masterState = state;
+        logs = new ArrayList[TxSlaveLog]();
+        if (!TxConfig.get().LOCK_FREE)
+            lock = new Lock();
+        else
+            lock = null;
     }
     
     /******* Recovery functions (called by one place) , no risk of race condition *******/

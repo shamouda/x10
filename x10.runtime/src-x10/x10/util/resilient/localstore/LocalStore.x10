@@ -46,22 +46,94 @@ public class LocalStore(immediateRecovery:Boolean) {
             this.virtualPlaceId = active.indexOf(here);
             masterStore = new MasterStore(new HashMap[String,Cloneable]());
             if (resilient) {
-                slaveStore = new SlaveStore(active.prev(here));
+                slaveStore = new SlaveStore();
                 this.slave = active.next(here);
             }
         } //else, I am a spare place, initialize me using joinAsMaster(...)
     }
     
-    /*used when a spare place joins*/
+    /*CentralizedRecovery method: used when a spare place joins*/
     public def joinAsMaster (active:PlaceGroup, data:HashMap[String,Cloneable]) {
-        assert(resilient);
+        plh().lock();
+        assert(resilient && virtualPlaceId == -1) : "virtualPlaceId  is not -1 (="+virtualPlaceId+") ";
         this.activePlaces = active;
         this.virtualPlaceId = active.indexOf(here);
         masterStore = new MasterStore(data);
         if (resilient) {
-            slaveStore = new SlaveStore(active.prev(here));
+            slaveStore = new SlaveStore();
             this.slave = active.next(here);
         }
+        plh().unlock();
+    }
+    
+    /************************Distributed Recovery Methods****************************************/
+    
+    public def allocate(vPlace:Long) {
+        try {
+            plh().lock();
+            Console.OUT.println(here + " received allocation request to replace virtual place ["+vPlace+"] ");
+            if (plh().virtualPlaceId == -1) {
+                plh().virtualPlaceId = vPlace;
+                Console.OUT.println(here + " allocation request succeeded");
+                return true;
+            }
+            Console.OUT.println(here + " allocation request failed, already allocated for virtual place ["+plh().virtualPlaceId+"] ");
+            return false;
+        }
+        finally {
+            plh().unlock();
+        }
+    }
+    
+    public static struct PlaceChange {
+        public val virtualPlaceId:Long;
+        public val newPlace:Place;
+        
+        def this(virtualPlaceId:Long, newPlace:Place) {
+            this.virtualPlaceId = virtualPlaceId;
+            this.newPlace = newPlace;
+        }
+    };
+    
+    public def handshake (oldActivePlaces:PlaceGroup, vId:Long) {
+    	 try {
+    		 plh().lock();
+    		 assert (this.virtualPlaceId == vId) : " bug, spare place (" + here + ") is assumed to be allocated at this point " ;
+    		 this.activePlaces = oldActivePlaces;
+    		 this.virtualPlaceId = vId;
+    		 //update other places according to the version of active places that my master is aware of
+    		 val newAddedPlaces = new GlobalRef[ArrayList[PlaceChange]](new ArrayList[PlaceChange]());
+    		 val me = here;
+    		 try {
+	    		 finish for (p in oldActivePlaces) {
+	    			 val expectedSlave = oldActivePlaces.next(p);
+	    			 if (p.isDead())
+	    				 continue;
+	    			 at (p) async {
+	    				 //at handshare receiver
+	    				 plh().replace(vId, me);
+	    				 if (plh().slave.id != expectedSlave.id){
+	    					 val slaveVId = plh().virtualPlaceId + 1;
+	    					 at (newAddedPlaces) {
+	    						 atomic newAddedPlaces().add(new PlaceChange(slaveVId, plh().slave));
+	    					 }
+	    				 }
+	    			 }
+	    		 }
+    		 }catch(e:Exception) {/*ignore dead places at this point*/}
+    		 
+    		 if (newAddedPlaces().size() > 0) {
+    			 Console.OUT.println(here + " My master gave me outdated information");
+    		     //my master was not aware of some place changes
+    			 for (change in newAddedPlaces()) {
+    				 plh().replace(change.virtualPlaceId, change.newPlace);
+    			 }
+    		 }
+    		 
+         
+    	 }finally {
+    		 plh().unlock();
+    	 }
     }
     
     public def getTxLoggingMap() {
@@ -107,13 +179,14 @@ public class LocalStore(immediateRecovery:Boolean) {
     }
     
 
-    public def replace(dead:Place, spare:Place) {
+    public def replace(virtualId:Long, spare:Place) {
+    	Console.OUT.println(here + " replacing : vId["+virtualId+"] spare["+spare+"] ..." );
     	try {
     		lock();
     		val size = activePlaces.size();
     		val rail = new Rail[Place](size);
     		for (var i:Long = 0; i< size; i++) {
-    			if (activePlaces(i).id == dead.id)
+    			if (virtualId == i)
     				rail(i) = spare;
     			else
     				rail(i) = activePlaces(i);
@@ -126,9 +199,12 @@ public class LocalStore(immediateRecovery:Boolean) {
     		    	str += p + ",  " ;
     			Console.OUT.println(here + " - updated activePlaces to be: " + str);
     		}
+    		return activePlaces;
     	}finally {
     		unlock();
+    		Console.OUT.println(here + " replacing : vId["+virtualId+"] spare["+spare+"] done ..." );
     	}
+    	
     }
     
     public def getMaster(p:Place) {
