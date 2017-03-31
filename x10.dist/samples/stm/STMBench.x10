@@ -85,13 +85,13 @@ public class STMBench {
         
         val startWarmup = Timer.milliTime();
         Console.OUT.println("warmup started");
-        runIteration(map, activePlaces, producersCount, w, a, r, u, t, h, o, g, victimsList, throughputPLH, false);
+        runIteration(map, activePlaces, producersCount, w, a, r, u, t, h, o, g, victimsList, throughputPLH, false, null);
         Console.OUT.println("warmup completed, warmup elapsed time ["+(Timer.milliTime() - startWarmup)+"]  ms ");
         
-
         for (iter in 1..n) {
+            //fixme: reinit throughputPLH
         	val startIter = Timer.milliTime();
-            runIteration(map, activePlaces, producersCount, d, a, r, u, t, h, o, g, victimsList, throughputPLH, true);
+            runIteration(map, activePlaces, producersCount, d, a, r, u, t, h, o, g, victimsList, throughputPLH, true, null);
             printThroughput(map, iter, throughputPLH, d, a, t, h, o);
             Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
         }
@@ -99,17 +99,20 @@ public class STMBench {
     
     public static def runIteration(map:ResilientNativeMap, activePlaces:PlaceGroup, producersCount:Long, 
     		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, 
-    		throughput:PlaceLocalHandle[PlaceThroughput], recordThroughput:Boolean) {
+    		throughput:PlaceLocalHandle[PlaceThroughput], recordThroughput:Boolean, oldThroughput:PlaceThroughput) {
         finish for (var i:Long = 0; i < producersCount; i++) {
-        	startPlace(activePlaces(i), map, activePlaces, producersCount, d, a, r, u, t, h, o, g, victims, throughput, recordThroughput);
+        	startPlace(activePlaces(i), map, activePlaces, producersCount, d, a, r, u, t, h, o, g, victims, throughput, recordThroughput, oldThroughput);
         }
     }
 
     private static def startPlace(pl:Place, map:ResilientNativeMap, activePlaces:PlaceGroup, producersCount:Long, 
     		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, 
-    		throughput:PlaceLocalHandle[PlaceThroughput], recordThroughput:Boolean) {
+    		throughput:PlaceLocalHandle[PlaceThroughput], recordThroughput:Boolean, oldThroughput:PlaceThroughput) {
         
         at (pl) async {
+            if (oldThroughput != null)
+                throughput().reinit(oldThroughput);
+            
             for (thrd in 1..t) async {
                 produce(map, activePlaces, producersCount, thrd-1, d, a, r, u, t, h, o, g, victims, throughput, recordThroughput);
             }
@@ -141,10 +144,11 @@ public class STMBench {
     public static def produce(map:ResilientNativeMap, active:PlaceGroup, producersCount:Long, producerId:Long, 
     		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, 
     		throughput:PlaceLocalHandle[PlaceThroughput], recordThroughput:Boolean) {
-        var timeNS:Long = 0;
         var txCount:Long = 0;
         val rand = new Random((here.id+1) * producerId);
         val myThroughput = throughput().thrds(producerId);
+        var timeNS:Long = myThroughput.elapsedTimeNS;
+        Console.OUT.println("producer  "+here.id+"x" + producerId + "   starting with elapsed time " + timeNS);
         
         /*****   for resilience   ******/
         var nextPlace:Place = map.plh().getNextPlace();
@@ -251,9 +255,10 @@ public class STMBench {
             if (resilient && !map.plh().sameActivePlaces(activePlaces)) {
             	activePlaces = map.plh().getActivePlaces();
             	val nxt = activePlaces.next(here);
+            	val nxtThr = throughput().rightPlaceThroughput;
             	if (nxt.id != nextPlace.id) {
             		nextPlace = nxt;
-            		startPlace(nextPlace, map, activePlaces, producersCount, d, a, r, u, t, h, o, g, victims, throughput, recordThroughput);
+            		startPlace(nextPlace, map, activePlaces, producersCount, d, a, r, u, t, h, o, g, victims, throughput, recordThroughput, nxtThr);
             	}
             }
         }
@@ -503,7 +508,7 @@ class ProducerThroughput {
 
 
 class PlaceThroughput(threads:Long, slices:Long) {
-    public val thrds:Rail[ProducerThroughput];
+    public var thrds:Rail[ProducerThroughput];
     public var rightPlaceThroughput:PlaceThroughput;
 
     public def this(placeId:Long, threads:Long, slices:Long) {
@@ -511,8 +516,7 @@ class PlaceThroughput(threads:Long, slices:Long) {
         thrds = new Rail[ProducerThroughput](threads, (i:Long)=> new ProducerThroughput( placeId, i , slices));
     }
     
-    public def this(other:PlaceThroughput) {
-        property(other.threads, other.slices);
+    public def reinit(other:PlaceThroughput) {
         thrds = other.thrds;
     }
 }
