@@ -58,7 +58,7 @@ public final class SparsePlaceGroup extends PlaceGroup {
             val seen:HashSet[Place] = new HashSet[Place]();
             for (p in places) {
                 if (seen.contains(p)) {
-                    throw new IllegalArgumentException("Argument rail was not sorted");
+                    throw new IllegalArgumentException("Argument rail was not sorted, or repeated places found " + p);
                 }
                 seen.add(p);
             }

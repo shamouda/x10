@@ -13,7 +13,7 @@ import x10.util.Timer;
 
 public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) {
     private static val TM_STAT_ALL = System.getenv("TM_STAT_ALL") != null && System.getenv("TM_STAT_ALL").equals("1");
-    private static val TM_SLEEP = System.getenv("TM_SLEEP") == null ? 0 : Long.parseLong(System.getenv("TM_SLEEP"));
+    private static val DPE_SLEEP_MS = System.getenv("DPE_SLEEP_MS") == null ? 10 : Long.parseLong(System.getenv("DPE_SLEEP_MS"));
     
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     private var baselineTxId:Long = 0;
@@ -108,9 +108,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
                     tx.processingElapsedTime = Timer.milliTime() - start;
                     //no need to call abort, abort occurs automatically in local tx all the time
                 }
-                throwIfNotConflictException(ex);
-                
-                System.threadSleep(TM_SLEEP);
+                throwIfFatalSleepIfRequired(ex, tx.plh().immediateRecovery);
             }
         }
 
@@ -139,12 +137,9 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
                         tx.processingElapsedTime = Timer.milliTime() - start;
                         //no need to call abort, abort occurs automatically in local tx all the time
                     }
-                    throwIfNotConflictException(ex);
+                    throwIfFatalSleepIfRequired(ex, tx.plh().immediateRecovery);
                 }
-                System.threadSleep(0);
             }
-
-            
             new TxResult(commitStatus, out)
         };
         return txResult;
@@ -169,7 +164,8 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     
     public def restartGlobalTransaction(txDesc:TxDesc):Tx {
         assert(plh().virtualPlaceId != -1);
-        val tx = new Tx(plh, txDesc.id, name, plh().getMembers(txDesc.members), plh().getTxLoggingMap());
+        val includeDead = true; // The commitHandler will take the correct actions regarding the dead master
+        val tx = new Tx(plh, txDesc.id, name, plh().getMembers(txDesc.members, includeDead), plh().getTxLoggingMap());
         plh().txList.addGlobalTx(tx);
         return tx;
     }
@@ -199,8 +195,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
                     Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] preCommitTime["+tx.processingElapsedTime+"] ms");
                     ex.printStackTrace();
                 }
-                throwIfNotConflictException(ex);
-                System.threadSleep(TM_SLEEP);
+                throwIfFatalSleepIfRequired(ex, tx.plh().immediateRecovery);
             }
         }
     }
@@ -242,14 +237,37 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     }
     /**************End of Baseline Operations*****************/
     
-    private static def throwIfNotConflictException(ex:Exception) {
+    private static def throwIfFatalSleepIfRequired(ex:Exception, immediateRecovery:Boolean) {
         if (ex instanceof MultipleExceptions) {
             val deadExList = (ex as MultipleExceptions).getExceptionsOfType[DeadPlaceException]();
-            if (deadExList != null && deadExList.size != 0)
+            val confExList = (ex as MultipleExceptions).getExceptionsOfType[ConflictException]();
+            val pauseExList = (ex as MultipleExceptions).getExceptionsOfType[StorePausedException]();
+            val abortedExList = (ex as MultipleExceptions).getExceptionsOfType[AbortedTransactionException]();
+            
+            if ((ex as MultipleExceptions).exceptions.size > (deadExList.size + confExList.size + pauseExList.size + abortedExList.size)){
                 throw ex;
+            }
+            
+            if (deadExList != null && deadExList.size != 0) {
+                if (!immediateRecovery || TxConfig.get().TESTING) {
+                    throw ex;
+                }
+                else {
+                    System.threadSleep(DPE_SLEEP_MS);
+                }
+            }
         } 
-        else if (!(ex instanceof ConflictException))
+        else if (ex instanceof DeadPlaceException) {
+            if (!immediateRecovery  || TxConfig.get().TESTING) {
+                throw ex;
+            }
+            else {
+                System.threadSleep(DPE_SLEEP_MS);
+            }
+        }
+        else if (!(ex instanceof ConflictException || ex instanceof StorePausedException || ex instanceof AbortedTransactionException  )) {
             throw ex;
+        }
     }
     
     public def printTxStatistics() {

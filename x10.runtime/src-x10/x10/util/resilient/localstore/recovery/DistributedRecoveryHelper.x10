@@ -12,7 +12,7 @@ import x10.util.resilient.localstore.*;
 public class DistributedRecoveryHelper {
     
     public static def recoverSlave(plh:PlaceLocalHandle[LocalStore]) {
-    	Console.OUT.println(here + " DistributedRecoveryHelper.recoverSlave started ...");
+    	Console.OUT.println(here + " DistributedRecoveryHelper.recoverSlave: started ...");
     	val deadSlave = plh().slave;
     	val oldActivePlaces = plh().getActivePlaces();
     	val deadPlaceVirtualPlaceId = oldActivePlaces.indexOf(deadSlave);
@@ -21,7 +21,7 @@ public class DistributedRecoveryHelper {
     }
     
     public static def recoverSlave(plh:PlaceLocalHandle[LocalStore], spare:Place) {
-        Console.OUT.println(here + " DistributedRecoveryHelper.recoverSlave started given already allocated spare " + spare);
+        Console.OUT.println(here + " DistributedRecoveryHelper.recoverSlave: started given already allocated spare " + spare);
         val deadSlave = plh().slave;
         val oldActivePlaces = plh().getActivePlaces();
         val deadPlaceVirtualPlaceId = oldActivePlaces.indexOf(deadSlave);
@@ -35,13 +35,15 @@ public class DistributedRecoveryHelper {
             async createSlaveStoreAtSpare(plh, spare);
         }
         
-        Console.OUT.println(here + " DistributedRecoveryHelper  spare place now have all needed data ...");
+        Console.OUT.println(here + " DistributedRecoveryHelper.recoverSlave: now spare place has all needed data, let it handshake with other places ...");
         val newActivePlaces = computeNewActivePlaces(oldActivePlaces, deadPlaceVirtualPlaceId, spare);
         finish at (spare) async {
             plh().handshake(newActivePlaces, deadPlaceVirtualPlaceId);
         }
         //the application layer can now recognize a change in the places configurations
         plh().replace(deadPlaceVirtualPlaceId, spare);
+        
+        Console.OUT.println(here + " DistributedRecoveryHelper.recoverSlave: completed successfully ...");
     }
     
     
@@ -67,6 +69,7 @@ public class DistributedRecoveryHelper {
         at (spare) {
             plh().slaveStore = new SlaveStore(masterState);
         }
+        plh().slave = spare;
         plh().masterStore.reactivate();
     }
     
@@ -106,37 +109,28 @@ public class DistributedRecoveryHelper {
     }
 
     private static def completeInitiatedTransactions(plh:PlaceLocalHandle[LocalStore]) {
-    	Console.OUT.println("completeInitiatedTransactions: slave["+here+"] acting as master to complete pending transactions ...");
-    	val masterMap = plh().slaveStore.getSlaveMasterState();
-        if (masterMap != null) {
-            val set = masterMap.keySet();
-            val iter = set.iterator();
-            while (iter.hasNext()) {
-                val txId = iter.next();
-                if (txId.contains("_TxDesc_")) {
-                    val obj = masterMap.get(txId);
-                    if (obj != null) {
-                        val txDesc = obj as TxDesc;
-                        val map = new ResilientNativeMap(txDesc.mapName, plh);
-                        if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " recovering txdesc " + txDesc);
-                        val tx = map.restartGlobalTransaction(txDesc);
-                        if (txDesc.status == TxDesc.COMMITTING) {
-                            if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] commit it");
-                            tx.commit(true); //ignore phase one
-                        }
-                        else if (txDesc.status == TxDesc.STARTED) {
-                            if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] abort it");
-                            tx.abort();
-                        }
-                    }
-                }
+    	Console.OUT.println(here + " slave acting as master to complete dead master's transactions ...");
+    	val txDescs = plh().slaveStore.getTransDescriptors();
+    	for (txDesc in txDescs) {
+    	    val map = new ResilientNativeMap(txDesc.mapName, plh);
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " recovering txdesc " + txDesc);
+            val tx = map.restartGlobalTransaction(txDesc);
+            if (txDesc.status == TxDesc.COMMITTING) {
+                //if (TxConfig.get().TM_DEBUG) 
+                    Console.OUT.println(here + " recovering Tx["+tx.id+"] commit it");
+                tx.commit(true); //ignore phase one
             }
-        }
-        Console.OUT.println("completeInitiatedTransactions: slave["+here+"] done ...");
+            else if (txDesc.status == TxDesc.STARTED) {
+                //if (TxConfig.get().TM_DEBUG) 
+                    Console.OUT.println(here + " recovering Tx["+tx.id+"] abort it");
+                tx.abort();
+            }
+    	}
+        Console.OUT.println(here + " slave acting as master to complete dead master's transactions done ...");
     }
     
     private static def updateSlaveData(plh:PlaceLocalHandle[LocalStore], oldActivePlaces:PlaceGroup) {
-    	Console.OUT.println("updateSlaveData: slave["+here+"] is asking other masters about the status of prepared transactions ...");
+    	Console.OUT.println(here+ " updateSlaveData: slave["+here+"] is asking other masters about the status of prepared transactions ...");
         val committed = GlobalRef(new ArrayList[Long]());
         val committedLock = GlobalRef(new Lock());
         
@@ -175,7 +169,7 @@ public class DistributedRecoveryHelper {
             }
         }
         
-        Console.OUT.println("updateSlaveData: slave["+here+"] got full knowledge of committed transactions ...");
+        Console.OUT.println(here + " updateSlaveData: slave["+here+"] got full knowledge of committed transactions ...");
         
         val orderedTx = plh().slaveStore.getPendingTransactions();
         if (TxConfig.get().VALIDATION_REQUIRED) {
@@ -189,7 +183,7 @@ public class DistributedRecoveryHelper {
         else
             plh().slaveStore.commitAll(orderedTx);
         
-        Console.OUT.println("updateSlaveData: slave["+here+"] done ...");
+        Console.OUT.println(here + " updateSlaveData: slave["+here+"] done ...");
     }
     
     

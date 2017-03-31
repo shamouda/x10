@@ -26,4 +26,8 @@ public class TxSlaveLog(id:Long, ownerPlaceIndex:Long) {
     	property(id, ownerPlaceIndex);
     	this.transLog = transLog;
     }
+    
+    public def toString() {
+        return TxManager.txIdToString(id) + " ownerIndx:" + ownerPlaceIndex;
+    }
 }

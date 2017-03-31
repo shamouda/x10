@@ -221,18 +221,52 @@ public class SlaveStore {
         assert (!TxConfig.get().TM_REP.equals("lazy")) : "bug, SlaveStore.waitUntilPaused should not be called with lazy replication";
         try {
             slaveLock();
+            Console.OUT.println(here + " - SlaveStore.waitUntil paused started logsSize["+logs.size() +"] ...");
             Runtime.increaseParallelism();
-            
+            var count:Long = 0;
             while (logs.size() != 0) {
                 slaveUnlock();
                 TxConfig.waitSleep();
                 slaveLock();
+                if (count++ == 1000){
+                    var str:String = "";
+                    for (log in logs){
+                        str += "log{" + log.toString() + "}  , " ;
+                    }
+                    Console.OUT.println(here + " maybe a bug, waited too long ..." + str);
+                    
+                }
             }
         
         }finally {
+            Console.OUT.println(here + " - SlaveStore.waitUntil paused started logsSize["+logs.size() +"] done ...");
             Runtime.decreaseParallelism(1n);
             slaveUnlock();
         }
     }
     
+    
+    public def getTransDescriptors():ArrayList[TxDesc] {
+        val result = new ArrayList[TxDesc]();
+        try {
+            slaveLock();
+            if (masterState != null) {
+                val set = masterState.keySet();
+                val iter = set.iterator();
+                while (iter.hasNext()) {
+                    val txId = iter.next();
+                    if (txId.contains("_TxDesc_")) {
+                        val obj = masterState.get(txId);
+                        if (obj != null) {
+                            result.add(obj as TxDesc);
+                        }
+                    }
+                }
+            }
+        }
+        finally {
+            slaveUnlock();
+        }
+        return result;
+    }
 }

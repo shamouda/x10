@@ -113,8 +113,9 @@ public class LocalStore(immediateRecovery:Boolean) {
                          plh().replace(vId, me);
                          if (plh().slave.id != expectedSlave.id){
                              val slaveVId = plh().virtualPlaceId + 1;
+                             val newSlave = plh().slave;
                              at (newAddedPlaces) {
-                                 atomic newAddedPlaces().add(new PlaceChange(slaveVId, plh().slave));
+                                 atomic newAddedPlaces().add(new PlaceChange(slaveVId, newSlave));
                              }
                          }
                      }
@@ -179,7 +180,7 @@ public class LocalStore(immediateRecovery:Boolean) {
     
 
     public def replace(virtualId:Long, spare:Place) {
-        Console.OUT.println(here + " replacing : vId["+virtualId+"] spare["+spare+"] ..." );
+        //Console.OUT.println(here + " replacing : vId["+virtualId+"] spare["+spare+"] ..." );
         try {
             lock();
             val size = activePlaces.size();
@@ -201,7 +202,7 @@ public class LocalStore(immediateRecovery:Boolean) {
             return activePlaces;
         }finally {
             unlock();
-            Console.OUT.println(here + " replacing : vId["+virtualId+"] spare["+spare+"] done ..." );
+            Console.OUT.println(here + " - Handshake with new place ["+spare+"]  at virtualId ["+virtualId+"] ..." );
         }
         
     }
@@ -257,12 +258,12 @@ public class LocalStore(immediateRecovery:Boolean) {
         }
     }
     
-    public def getMembers(members:Rail[Long]):PlaceGroup {
+    public def getMembers(members:Rail[Long], includeDead:Boolean):PlaceGroup {
         try {
             lock();
             val list = new ArrayList[Place]();
             for (var i:Long = 0; i < members.size; i++) {
-                if (!activePlaces(members(i)).isDead())
+                if (includeDead || !activePlaces(members(i)).isDead())
                     list.add(activePlaces(members(i)));
             }
             return new SparsePlaceGroup(list.toRail());
@@ -300,6 +301,7 @@ public class LocalStore(immediateRecovery:Boolean) {
 
     //synchronized version of asyncSlaveRecovery
     public def recoverSlave(spare:Place) {
+        Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+")");
         if (!immediateRecovery)
             return;
         
@@ -307,9 +309,12 @@ public class LocalStore(immediateRecovery:Boolean) {
         assert (virtualPlaceId != -1) : "bug in LocalStore, virtualPlaceId ("+virtualPlaceId+") = -1";
         
         if ( masterStore.isActive() ) {
+             Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+") master is active");
              masterStore.pausing();
              DistributedRecoveryHelper.recoverSlave(plh, spare);
         }
+        else
+            Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+") master is not active");
     }
     
 }

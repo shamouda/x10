@@ -144,7 +144,7 @@ public class LazyReplicationCommitHandler extends CommitHandler {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseTwo ...");
         val start = Timer.milliTime();
         try {
-            //ask masters and slaves to commit
+            //ask masters and slaves to commit, ignore dead slaves or masters
             finalize(true, null, plh, id, members);
         }
         catch(ex:MultipleExceptions) {

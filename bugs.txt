@@ -1,0 +1,143 @@
+==========================================================================
+Tx[12884901909] here[Place(4)] SlaveStore.commit1() committed ...
+Tx[12884901909] TX[300000021] TXPLC[3] TXSEQ[21] here[Place(3)] commit_WB started
+Tx[12884901909] TX[300000021] TXPLC[3] TXSEQ[21] setvv key[_TxDesc_tx8589934605] ver[1] val[null]
+Tx[12884901909] TXLOCK key[_TxDesc_tx8589934605] unlockWrite done
+Tx[12884901909] TX[300000021] TXPLC[3] TXSEQ[21] here[Place(3)] commit_WB completed
+Tx[8589934605] TX[200000013] TXPLC[2] TXSEQ[13] deleteTxDesc localTx[12884901909] completed ...
+Tx[8589934605] TX[200000013] TXPLC[2] TXSEQ[13] committed, allTxTime [55] ms
+Place(3) slave acting as master to complete dead master's transactions done ...
+Place(3) - SlaveStore.waitUntil paused started logsSize[0] ...
+Place(3) - SlaveStore.waitUntil paused started logsSize[0] done ...
+Place(1) TxManager changed status from STATUS_PAUSED to STATUS_ACTIVE
+Place(4) TxManager changed status from STATUS_PAUSED to STATUS_ACTIVE
+Place(1) DistributedRecoveryHelper.recoverSlave: now spare place has all needed data, let it handshake with other places ...
+Place(0) - updated activePlaces to be: Place(0),  Place(1),  Place(10),  Place(3),  Place(4),  Place(5),  Place(6),  Place(7),  Place(8),  Place(9),  
+Place(0) - Handshake with new place [Place(10)]  at virtualId [2] ...
+Place(9) - updated activePlaces to be: Place(0),  Place(1),  Place(10),  Place(3),  Place(4),  Place(5),  Place(6),  Place(7),  Place(8),  Place(9),  
+Place(9) - Handshake with new place [Place(10)]  at virtualId [2] ...
+Place(3) - updated activePlaces to be: Place(0),  Place(1),  Place(10),  Place(3),  Place(4),  Place(5),  Place(6),  Place(7),  Place(8),  Place(9),  
+Place(3) - Handshake with new place [Place(10)]  at virtualId [2] ...
+Place(4) - updated activePlaces to be: Place(0),  Place(1),  Place(10),  Place(3),  Place(4),  Place(5),  Place(6),  Place(7),  Place(8),  Place(9),  
+Place(4) - Handshake with new place [Place(10)]  at virtualId [2] ...
+Place(6) - updated activePlaces to be: Place(0),  Place(1),  Place(10),  Place(3),  Place(4),  Place(5),  Place(6),  Place(7),  Place(8),  Place(9),  
+Place(6) - Handshake with new place [Place(10)]  at virtualId [2] ...
+Place(7) - updated activePlaces to be: Place(0),  Place(1),  Place(10),  Place(3),  Place(4),  Place(5),  Place(6),  Place(7),  Place(8),  Place(9),  
+Place(7) - Handshake with new place [Place(10)]  at virtualId [2] ...
+Place(8) - updated activePlaces to be: Place(0),  Place(1),  Place(10),  Place(3),  Place(4),  Place(5),  Place(6),  Place(7),  Place(8),  Place(9),  
+Place(8) - Handshake with new place [Place(10)]  at virtualId [2] ...
+Place(10) My master gave me outdated information
+Place(10) - updated activePlaces to be: Place(0),  Place(1),  Place(10),  Place(3),  Place(4),  Place(11),  Place(6),  Place(7),  Place(8),  Place(9),  
+Place(10) - Handshake with new place [Place(11)]  at virtualId [5] ...
+Place(1) - updated activePlaces to be: Place(0),  Place(1),  Place(10),  Place(3),  Place(4),  Place(5),  Place(6),  Place(7),  Place(8),  Place(9),  
+Place(1) - Handshake with new place [Place(10)]  at virtualId [2] ...
+Place(1) DistributedRecoveryHelper.recoverSlave: completed successfully ...
+ ! Test Failed ! Exception thrown  [null] 
+java.lang.RuntimeException: Your code has a concurrency bug! You updated the hashmap 1 times since you created the iterator.
+    at x10.util.HashMap$EntriesIterator.next(HashMap.java:1638)
+    at x10.util.HashMap$EntriesIterator.next$G(HashMap.java:1423)
+    at x10.util.HashMap$EntriesIterator.next$G(HashMap.java:1)
+    at x10.util.MapIterator.next$G(MapIterator.java:124)
+    at x10.util.resilient.localstore.recovery.DistributedRecoveryHelper.completeInitiatedTransactions__0$1x10$util$resilient$localstore$LocalStore$2(DistributedRecoveryHelper.java:626)
+    at x10.util.resilient.localstore.recovery.DistributedRecoveryHelper.createMasterStoreAtSpare__0$1x10$util$resilient$localstore$LocalStore$2(DistributedRecoveryHelper.java:231)
+    at x10.util.resilient.localstore.recovery.DistributedRecoveryHelper.access$0(DistributedRecoveryHelper.java:228)
+    at x10.util.resilient.localstore.recovery.DistributedRecoveryHelper$$Closure$403.$apply(DistributedRecoveryHelper.java:1296)
+    at x10.xrx.FinishResilientPlace0$$Closure$438.$apply(FinishResilientPlace0.java:8273)
+    at x10.xrx.Activity.run(Activity.java:333)
+    at x10.xrx.Worker.loop$O(Worker.java:431)
+    at x10.xrx.Worker.$apply(Worker.java:234)
+    at x10.core.Thread$X10WorkerThread.run(Thread.java:60)
+Launcher 5: cleanup complete, exit code=1.  Goodbye!
+Launcher 2: cleanup complete, exit code=1.  Goodbye!
+Hammer calling killHere at 1490939308483
+Place 10 exited unexpectedly with exit code: 1
+Launcher 10: cleanup complete, exit code=1.  Goodbye!
+
+
+
+
+
+============================================================================
+Place(0) continue transfering from 438   slave:Place(1)   active list {0, 1, 12, 3, 4, 11, 6, 7, 8, 9, } 
+Place(1) continue transfering from 409   slave:Place(12)   active list {0, 1, 12, 3, 4, 11, 6, 7, 8, 9, } 
+Place(12) continue transfering from 413   slave:Place(3)   active list {0, 1, 12, 3, 4, 11, 6, 7, 8, 9, } 
+Place(4) continue transfering from 398   slave:Place(11)   active list {0, 1, 12, 3, 4, 11, 6, 7, 8, 9, } 
+Place(6) continue transfering from 404   slave:Place(7)   active list {0, 1, 12, 3, 4, 11, 6, 7, 8, 9, } 
+Place(7) continue transfering from 419   slave:Place(8)   active list {0, 1, 12, 3, 4, 11, 6, 7, 8, 9, } 
+Place(11) continue transfering from 422   slave:Place(6)   active list {0, 1, 12, 3, 4, 11, 6, 7, 8, 9, } 
+Place(9) continue transfering from 332   slave:Place(0)   active list {0, 1, 12, 3, 4, 11, 6, 7, 8, 9, } 
+Place(8) continue transfering from 416   slave:Place(9)   active list {0, 1, 12, 3, 4, 11, 6, 7, 8, 9, } 
+Place(3) continue transfering from 397   slave:Place(4)   active list {0, 1, 12, 3, 4, 11, 6, 7, 8, 9, } 
+Place(4) progress 400
+Place(3) progress 400
+Place(9) progress 400
+Place 7 exited unexpectedly with signal: Segmentation fault
+Launcher 7: cleanup complete, exit code=139.  Goodbye!
+Launcher 3: child launcher gave return code 139.  Forwarding.
+a-4
+a-4
+a-4
+a-4
+a-4
+x10.lang.DeadPlaceException: DeadPlaceException at Place(7)
+
+
+===========================================================
+Thread 1 (Thread 0x7fb0cecaa700 (LWP 20172)):
+---Type <return> to continue, or q <return> to quit---
+#0  0x0000000000000000 in ?? ()
+#1  0x00007fb0d56852e5 in x10::lang::forgetGlobalReference (obj=0x21d3200) at x10/lang/GlobalRef.cc:44
+#2  0x00007fb0d547af0e in x10::lang::GlobalRef<x10::xrx::Activity*>::forget() () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#3  0x00007fb0d555e807 in x10_xrx_FinishResilientPlace0__closure__4::__apply() () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#4  0x00007fb0d482afd6 in x10::lang::VoidFun_0_0::__apply(x10::lang::VoidFun_0_0*) () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#5  0x00007fb0d5670b38 in receive_async(x10rt_msg_params const*) () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#6  0x00007fb0d30a41e7 in probe(bool, bool) () from /home/u5482878/git/code_x10_stm_finish/x10.dist/lib/libx10rt_sockets.so
+#7  0x00007fb0d30a3ad2 in x10rt_net_blocking_probe () from /home/u5482878/git/code_x10_stm_finish/x10.dist/lib/libx10rt_sockets.so
+#8  0x00007fb0d30ae773 in x10rt_lgl_blocking_probe () from /home/u5482878/git/code_x10_stm_finish/x10.dist/lib/libx10rt_sockets.so
+#9  0x00007fb0d30abb25 in x10rt_blocking_probe () from /home/u5482878/git/code_x10_stm_finish/x10.dist/lib/libx10rt_sockets.so
+#10 0x00007fb0d54a9887 in x10aux::blocking_probe() () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#11 0x00007fb0d54a8b99 in x10::xrx::Worker::immediatePollLoop() () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#12 0x00007fb0d54a880e in x10::xrx::Worker::__apply() () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#13 0x00007fb0d54af679 in x10::xrx::Pool::run() () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#14 0x00007fb0d546097f in x10::xrx::Runtime::start(x10::lang::VoidFun_0_0*) () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#15 0x00007fb0d566a419 in real_x10_main_inner(void*) () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#16 0x00007fb0d391d493 in GC_inner_start_routine (sb=<error reading variable: value has been optimised out>, arg=<error reading variable: value has been optimised out>) at pthread_start.c:57
+#17 0x00007fb0d3918532 in GC_call_with_stack_base (fn=<optimised out>, arg=<optimised out>) at misc.c:1840
+#18 0x00007fb0d36e7184 in start_thread (arg=0x7fb0cecaa700) at pthread_create.c:312
+#19 0x00007fb0d25ac37d in clone () at ../sysdeps/unix/sysv/linux/x86_64/clone.S:111
+(gdb) 
+(gdb) 
+(gdb) 
+(gdb) 
+(gdb) 
+(gdb) 
+
+
+========================================
+Program terminated with signal SIGSEGV, Segmentation fault.
+
+Thread 1 (Thread 0x7fae238e7700 (LWP 28270)):
+#0  0x0000000000000000 in ?? ()
+#1  0x00007fae2a2c2315 in x10::lang::forgetGlobalReference (obj=0x17fea40) at x10/lang/GlobalRef.cc:47
+#2  0x00007fae2a0b7f0e in x10::lang::GlobalRef<x10::xrx::Activity*>::forget() () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#3  0x00007fae2a19b807 in x10_xrx_FinishResilientPlace0__closure__4::__apply() () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#4  0x00007fae29467fd6 in x10::lang::VoidFun_0_0::__apply(x10::lang::VoidFun_0_0*) () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#5  0x00007fae2a2adb38 in receive_async(x10rt_msg_params const*) () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#6  0x00007fae27ce11e7 in probe(bool, bool) () from /home/u5482878/git/code_x10_stm_finish/x10.dist/lib/libx10rt_sockets.so
+#7  0x00007fae27ce0ad2 in x10rt_net_blocking_probe () from /home/u5482878/git/code_x10_stm_finish/x10.dist/lib/libx10rt_sockets.so
+#8  0x00007fae27ceb773 in x10rt_lgl_blocking_probe () from /home/u5482878/git/code_x10_stm_finish/x10.dist/lib/libx10rt_sockets.so
+#9  0x00007fae27ce8b25 in x10rt_blocking_probe () from /home/u5482878/git/code_x10_stm_finish/x10.dist/lib/libx10rt_sockets.so
+#10 0x00007fae2a0e6887 in x10aux::blocking_probe() () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#11 0x00007fae2a0e5b99 in x10::xrx::Worker::immediatePollLoop() () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#12 0x00007fae2a0e580e in x10::xrx::Worker::__apply() () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#13 0x00007fae2a0ec679 in x10::xrx::Pool::run() () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#14 0x00007fae2a09d97f in x10::xrx::Runtime::start(x10::lang::VoidFun_0_0*) () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+#15 0x00007fae2a2a7419 in real_x10_main_inner(void*) () from /home/u5482878/git/code_x10_stm_finish/x10.dist/stdlib/lib/libx10.so
+---Type <return> to continue, or q <return> to quit---
+#16 0x00007fae2855a493 in GC_inner_start_routine (sb=<error reading variable: value has been optimised out>, arg=<error reading variable: value has been optimised out>) at pthread_start.c:57
+#17 0x00007fae28555532 in GC_call_with_stack_base (fn=<optimised out>, arg=<optimised out>) at misc.c:1840
+#18 0x00007fae28324184 in start_thread (arg=0x7fae238e7700) at pthread_create.c:312
+#19 0x00007fae271e937d in clone () at ../sysdeps/unix/sysv/linux/x86_64/clone.S:111
+(gdb) 
+(gdb) 
+(gdb) 

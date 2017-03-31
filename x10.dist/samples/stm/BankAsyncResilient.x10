@@ -12,7 +12,8 @@ import x10.util.resilient.localstore.tx.ConflictException;
 import x10.util.Timer;
 import x10.util.resilient.localstore.TxConfig;
 
-// TM_TESTING=1 TM=RV_LA_WB KILL_PLACES=2,5 KILL_TIMES=5,5 X10_NPLACES=10 X10_RESILIENT_MODE=1 TM_REP=lazy ./BankAsyncResilient.o 10 10 1 2 &> output.txt
+// TM_TESTING=1 TM_DEBUG=0 TM=RV_LA_WB KILL_PLACES=2,5,10 KILL_TIMES=2,2,10 X10_NPLACES=13 X10_RESILIENT_MODE=1 TM_REP=lazy ./BankAsyncResilient.o 10 10 200 3
+
 public class BankAsyncResilient {
     private static val DISABLE_CKPT = System.getenv("DISABLE_CKPT") != null && System.getenv("DISABLE_CKPT").equals("1");
     
@@ -132,16 +133,22 @@ public class BankAsyncResilient {
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] here["+here+"] TXSTART"+ (recovered?"RECOVER":"")+" accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"]");
                     //val amount = tx.id;
                     val f1 = tx.asyncAt(p1, () => {
-                        var acc1:BankAccount = tx.get(randAcc1) as BankAccount;
-                        if (acc1 == null)
+                        val obj = tx.get(randAcc1);
+                        var acc1:BankAccount;
+                        if (obj == null) 
                             acc1 = new BankAccount(0);
+                        else
+                            acc1 = obj as BankAccount;
                         acc1.account -= amount;
                         tx.put(randAcc1, acc1);
                     });
                     val f2 = tx.asyncAt(p2, () => {
-                        var acc2:BankAccount = tx.get(randAcc2) as BankAccount;
-                        if (acc2 == null)
+                        val obj = tx.get(randAcc2);
+                        var acc2:BankAccount;
+                        if (obj == null) 
                             acc2 = new BankAccount(0);
+                        else
+                            acc2 = obj as BankAccount;
                         acc2.account += amount;
                         tx.put(randAcc2, acc2);
                     });
