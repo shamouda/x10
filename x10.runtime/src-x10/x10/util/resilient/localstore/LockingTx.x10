@@ -185,7 +185,7 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
             else if (op == LOCK) {
                 val startLock = Timer.milliTime();
                 
-                if (requests.size() == 1 && requests.get(0).dest.id == here.id) {//local locking
+                if (requests.size() == 1 && requests.get(0).dest == here.id) {//local locking
                     val req = requests.get(0);
                     
                     if (!TxConfig.get().DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
@@ -205,7 +205,7 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
                 }
                 else {
                     finish for (req in requests) {
-                        at (req.dest) {
+                        at (Place(req.dest)) {
                             if (!TxConfig.get().DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
                                 Runtime.increaseParallelism();
                             
@@ -228,7 +228,7 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
             }
             else if (op == UNLOCK) {
                 val startUnlock = Timer.milliTime();
-                if (requests.size() == 1 && requests.get(0).dest.id == here.id) {//local locking
+                if (requests.size() == 1 && requests.get(0).dest == here.id) {//local locking
                     val req = requests.get(0);
                     for (var i:Long = 0; i < req.keys.size ; i++) {
                         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read);
@@ -241,7 +241,7 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
                 }
                 else {
                     finish for (req in requests) {
-                        at (req.dest) async {
+                        at (Place(req.dest)) async {
                             for (var i:Long = 0; i < req.keys.size ; i++) {
                                 if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read);
                                 if (req.keys(i).read)

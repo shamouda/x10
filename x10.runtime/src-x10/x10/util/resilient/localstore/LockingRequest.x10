@@ -15,9 +15,9 @@ import x10.util.RailUtils;
 
 public class LockingRequest {
     public val keys:Rail[KeyInfo];
-    public val dest:Place;
+    public val dest:Long;
 
-    public def this(dest:Place, keys:Rail[KeyInfo]) {
+    public def this(dest:Long, keys:Rail[KeyInfo]) {
         this.dest = dest;
         RailUtils.sort(keys);
         this.keys = keys;
