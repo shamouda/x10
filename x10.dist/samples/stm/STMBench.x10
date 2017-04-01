@@ -175,12 +175,11 @@ public class STMBench {
             val virtualMembers = nextTransactionMembers(rand, activePlacesCount, h);
             val membersOperations = nextRandomOperations(rand, activePlacesCount, virtualMembers, r, u, o);
             val lockRequests = new ArrayList[LockingRequest]();
-            val members = Place.places();
-            
+           
             val distClosure = (tx:AbstractTx) => {
                 val futuresList = new ArrayList[Future[Any]]();
                 
-                for (var m:Long = 0; m < members.size(); m++) {
+                for (var m:Long = 0; m < virtualMembers.size; m++) {
                     val operations = membersOperations.get(m);
                     val f1 = tx.asyncAt(operations.dest, () => {
                         for (var x:Long = 0; x < o; x++) {
@@ -227,29 +226,29 @@ public class STMBench {
             
             //time starts here
             val start = System.nanoTime();
-            if (members.size() > 1 && TxConfig.get().STM ) { //STM distributed
-                map.executeTransaction(members, distClosure);
+            if (virtualMembers.size > 1 && TxConfig.get().STM ) { //STM distributed
+                map.executeTransaction(virtualMembers, distClosure);
             }
-            else if (members.size() > 1 && TxConfig.get().LOCKING ) { //locking distributed
-                map.executeLockingTransaction(members, lockRequests, distClosure);
+            else if (virtualMembers.size > 1 && TxConfig.get().LOCKING ) { //locking distributed
+                map.executeLockingTransaction(lockRequests, distClosure);
             }
-            else if (members.size() == 1 && producersCount == 1 && TxConfig.get().STM ) { // STM local
+            else if (virtualMembers.size == 1 && producersCount == 1 && TxConfig.get().STM ) { // STM local
                 //local transaction
-                assert (members(0) == here) : "local transactions are not supported at remote places in this benchmark" ;
+                assert (virtualMembers(0) == here.id) : "local transactions are not supported at remote places in this benchmark" ;
                 map.executeLocalTransaction(localClosure);
             }
-            else if (members.size() == 1 && producersCount == 1 && TxConfig.get().LOCKING ) { //Locking local
-                assert (members(0) == here) : "local transactions are not supported at remote places in this benchmark" ;
-                map.executeLockingTransaction(members, lockRequests, localClosure);
+            else if (virtualMembers.size == 1 && producersCount == 1 && TxConfig.get().LOCKING ) { //Locking local
+                assert (virtualMembers(0) == here.id) : "local transactions are not supported at remote places in this benchmark" ;
+                map.executeLockingTransaction(lockRequests, localClosure);
             }
-            else if (members.size() == 1 && producersCount == 1 && TxConfig.get().BASELINE ) { //baseline local
-                map.executeBaselineTransaction(members, localClosure);
+            else if (virtualMembers.size == 1 && producersCount == 1 && TxConfig.get().BASELINE ) { //baseline local
+                map.executeBaselineTransaction(localClosure);
             }
-            else if (members.size() > 1 && TxConfig.get().BASELINE ) { //baseline distributed
-                map.executeBaselineTransaction(members, distClosure);
+            else if (virtualMembers.size > 1 && TxConfig.get().BASELINE ) { //baseline distributed
+                map.executeBaselineTransaction(distClosure);
             }
             else
-                assert (false) : "wrong or unsupported configurations, members= " + members.size();
+                assert (false) : "wrong or unsupported configurations, members= " + virtualMembers.size;
             
             txCount++;    
             if (g != -1 && txCount%g == 0)

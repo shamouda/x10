@@ -34,14 +34,10 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
     public transient var unlockingElapsedTime:Long = 0; ///////
     public transient var totalElapsedTime:Long = 0; //////
    
-    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, requests:ArrayList[LockingRequest]) {
+    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, requests:ArrayList[LockingRequest]) {
         property(plh, id, mapName, requests);
-
         if (TxConfig.get().TM_DEBUG) {
-            var membersStr:String = "";
-            for (p in members)
-                membersStr += p + " ";
-            Console.OUT.println("LockingTx["+id+"] here["+here+"] started members["+membersStr+"]");
+            Console.OUT.println("LockingTx["+id+"] here["+here+"] started ");
         }
     }
     

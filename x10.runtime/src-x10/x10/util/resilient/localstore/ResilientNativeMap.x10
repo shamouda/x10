@@ -203,16 +203,16 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     
     /***********************   Lock-based Transactions ****************************/
     
-    private def startLockingTransaction(members:PlaceGroup, requests:ArrayList[LockingRequest]):LockingTx {
+    private def startLockingTransaction(requests:ArrayList[LockingRequest]):LockingTx {
         assert(plh().virtualPlaceId != -1);
         val id = plh().masterStore.getNextTransactionId();
-        val tx = new LockingTx(plh, id, name, members, requests);
+        val tx = new LockingTx(plh, id, name, requests);
         plh().txList.addLockingTx(tx);
         return tx;
     }
     
-    public def executeLockingTransaction(members:PlaceGroup, lockRequests:ArrayList[LockingRequest], closure:(LockingTx)=>Any) {
-        val tx = startLockingTransaction(members, lockRequests);
+    public def executeLockingTransaction(lockRequests:ArrayList[LockingRequest], closure:(LockingTx)=>Any) {
+        val tx = startLockingTransaction(lockRequests);
         
         tx.lock();
         
@@ -225,14 +225,14 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     }
     
     /**************Baseline Operations*****************/
-    private def startBaselineTransaction(members:PlaceGroup):BaselineTx {
+    private def startBaselineTransaction():BaselineTx {
         assert(plh().virtualPlaceId != -1);
         val id = baselineTxId ++;
-        val tx = new BaselineTx(plh, id, name, members);
+        val tx = new BaselineTx(plh, id, name);
         return tx;
     }
-    public def executeBaselineTransaction(members:PlaceGroup, closure:(BaselineTx)=>Any) {
-        val tx = startBaselineTransaction(members);
+    public def executeBaselineTransaction(closure:(BaselineTx)=>Any) {
+        val tx = startBaselineTransaction();
         val out = closure(tx);
         return out;
     }

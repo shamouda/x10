@@ -28,7 +28,7 @@ import x10.util.concurrent.Future;
 /*should be used in non-resilient mode only*/
 public class BaselineTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String) extends AbstractTx {  
 
-    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup) {
+    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String) {
         property(plh, id, mapName);
     }
     
