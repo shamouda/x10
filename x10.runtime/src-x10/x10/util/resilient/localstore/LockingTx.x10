@@ -48,16 +48,16 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
     /****************lock and unlock all keys**********************/
 
     public def lock() {
-        execute(LOCK, -1, null, null, null, null, plh, id, mapName, requests);
+        execute(LOCK, here.id, null, null, null, null, plh, id, mapName, requests);
     }
 
     public def unlock() {
-        execute(UNLOCK, -1, null, null, null, null, plh, id, mapName, requests);
+        execute(UNLOCK, here.id, null, null, null, null, plh, id, mapName, requests);
     }
     
     /***************** Get ********************/
     public def get(key:String):Cloneable {
-        return execute(GET_LOCAL, -1, key, null, null, null, plh, id, mapName, null).value as Cloneable;
+        return execute(GET_LOCAL, here.id, key, null, null, null, plh, id, mapName, null).value as Cloneable;
     }
     
     public def getRemote(dest:Long, key:String):Cloneable {
@@ -74,7 +74,7 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
     
     /***************** PUT ********************/
     public def put(key:String, value:Cloneable):Cloneable {
-        return execute(PUT_LOCAL, -1, key, value, null, null, plh, id, mapName, null).value as Cloneable;
+        return execute(PUT_LOCAL, here.id, key, value, null, null, plh, id, mapName, null).value as Cloneable;
     }
     
     public def putRemote(dest:Long, key:String, value:Cloneable):Cloneable {
@@ -91,7 +91,7 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
     
     /***************** Delete ********************/
     public def delete(key:String):Cloneable {
-        return execute(DELETE_LOCAL, -1, key, null, null, null, plh, id, mapName, null).value as Cloneable;
+        return execute(DELETE_LOCAL, here.id, key, null, null, null, plh, id, mapName, null).value as Cloneable;
     }
     
     public def deleteRemote(dest:Long, key:String):Cloneable {
@@ -108,7 +108,7 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
     
     /***************** KeySet ********************/
     public def keySet():Set[String] {
-        return execute(KEYSET_LOCAL, -1, null, null, null, null, plh, id, mapName, null).set; 
+        return execute(KEYSET_LOCAL, here.id, null, null, null, null, plh, id, mapName, null).set; 
     }
     
     public def keySetRemote(dest:Long):Set[String] {

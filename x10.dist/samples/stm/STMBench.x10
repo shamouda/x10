@@ -111,8 +111,10 @@ public class STMBench {
         }catch(e:Exception) {
             if (!resilient)
                 throw e;
-            else
+            else {
                 Console.OUT.println("iteration failed with exception " + e.getMessage());
+                //e.printStackTrace();
+            }
         }
     }
 

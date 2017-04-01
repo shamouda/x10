@@ -43,8 +43,10 @@ public class LazyReplicationCommitHandler extends CommitHandler {
             finalize(false, abortedPlaces, plh, id, members);
         }
         catch(ex:MultipleExceptions) {
-            Console.OUT.println("Warning: ignoring exception during finalize(false): " + ex.getMessage());
-            ex.printStackTrace();
+            if (TxConfig.get().TM_DEBUG) {
+                Console.OUT.println("Warning: ignoring exception during finalize(false): " + ex.getMessage());
+                ex.printStackTrace();
+            }
         }
         
         if (!TxConfig.get().DISABLE_TX_LOGGING)

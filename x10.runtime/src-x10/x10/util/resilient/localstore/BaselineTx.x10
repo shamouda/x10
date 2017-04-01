@@ -34,7 +34,7 @@ public class BaselineTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Stri
     
     /***************** Get ********************/
     public def get(key:String):Cloneable {
-        return execute(GET_LOCAL, -1, key, null, null, null, plh, id, mapName).value as Cloneable;
+        return execute(GET_LOCAL, here.id, key, null, null, null, plh, id, mapName).value as Cloneable;
     }
     
     public def getRemote(dest:Long, key:String):Cloneable {
@@ -51,7 +51,7 @@ public class BaselineTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Stri
     
     /***************** PUT ********************/
     public def put(key:String, value:Cloneable):Cloneable {
-        return execute(PUT_LOCAL, -1, key, value, null, null, plh, id, mapName).value as Cloneable;
+        return execute(PUT_LOCAL, here.id, key, value, null, null, plh, id, mapName).value as Cloneable;
     }
     
     public def putRemote(dest:Long, key:String, value:Cloneable):Cloneable {
@@ -68,7 +68,7 @@ public class BaselineTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Stri
     
     /***************** Delete ********************/
     public def delete(key:String):Cloneable {
-        return execute(DELETE_LOCAL, -1, key, null, null, null, plh, id, mapName).value as Cloneable;
+        return execute(DELETE_LOCAL, here.id, key, null, null, null, plh, id, mapName).value as Cloneable;
     }
     
     public def deleteRemote(dest:Long, key:String):Cloneable {
@@ -85,7 +85,7 @@ public class BaselineTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Stri
     
     /***************** KeySet ********************/
     public def keySet():Set[String] {
-        return execute(KEYSET_LOCAL, -1, null, null, null, null, plh, id, mapName).set; 
+        return execute(KEYSET_LOCAL, here.id, null, null, null, null, plh, id, mapName).set; 
     }
     
     public def keySetRemote(dest:Long):Set[String] {

@@ -34,7 +34,7 @@ public class TxMembers(size:Long) {
             if ( virtual(i) == indx)
                 return places(i);
         }
-        throw new Exception("illegal transaction configurations ...");
+        throw new Exception("illegal transaction configurations indx("+indx+") given("+toString()+")");
     }
     
     public def contains(indx:Long) {

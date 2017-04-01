@@ -41,8 +41,10 @@ public class EagerReplicationCommitHandler extends CommitHandler {
                 finalizeSlaves(false, deadMasters, plh, id, members);
             }
             catch(ex2:Exception) {
-                Console.OUT.println("Warning: ignoring exception during finalizeSlaves(false): " + ex2.getMessage());
-                ex2.printStackTrace();
+                if (TxConfig.get().TM_DEBUG) {
+                    Console.OUT.println("Warning: ignoring exception during finalizeSlaves(false): " + ex2.getMessage());
+                    ex2.printStackTrace();
+                }
             }
         }
         
