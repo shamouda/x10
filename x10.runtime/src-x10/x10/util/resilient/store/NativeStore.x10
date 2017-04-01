@@ -57,7 +57,7 @@ public class NativeStore[V]{V haszero, V <: Cloneable} extends Store[V] {
           store.updateForChangedPlaces(changes);
       }
   
-      public def executeTransaction(members:PlaceGroup, closure:(Tx)=>Any):TxResult {
+      public def executeTransaction(members:Rail[Long], closure:(Tx)=>Any):TxResult {
           return map.executeTransaction(members, closure);
       }
 }

@@ -6,7 +6,7 @@ import x10.util.resilient.localstore.tx.*;
 import x10.util.resilient.localstore.LocalStore;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.ResilientNativeMap;
-
+import x10.util.resilient.localstore.TxMembers;
 
 public abstract class CommitHandler {
 	public transient var phase1ElapsedTime:Long = 0;
@@ -19,10 +19,10 @@ public abstract class CommitHandler {
     protected plh:PlaceLocalHandle[LocalStore];
     protected id:Long;
     protected mapName:String;
-    protected members:PlaceGroup;
+    protected members:TxMembers;
     protected txDescMap:ResilientNativeMap;
     
-    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, txDescMap:ResilientNativeMap) {
+    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers, txDescMap:ResilientNativeMap) {
     	this.plh = plh;
     	this.id = id;
     	this.mapName = mapName;
@@ -76,7 +76,7 @@ public abstract class CommitHandler {
     }
     
     
-    protected def getDeadPlaces(mulExp:MultipleExceptions, members:PlaceGroup) {
+    protected def getDeadPlaces(mulExp:MultipleExceptions, members:TxMembers) {
         val list = new ArrayList[Place]();
         val deadExList = mulExp.getExceptionsOfType[DeadPlaceException]();
         if (deadExList != null) {

@@ -119,40 +119,40 @@ public class LocalTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String)
     }
     
     /***************** Unsupported Methods ********************/
-    public def getRemote(dest:Place, key:String):Cloneable {
+    public def getRemote(dest:Long, key:String):Cloneable {
         throw new Exception("Unsupported method");
     }
-    public def asyncGetRemote(dest:Place, key:String):Future[Any] {
+    public def asyncGetRemote(dest:Long, key:String):Future[Any] {
         throw new Exception("Unsupported method");
     }    
-    public def putRemote(dest:Place, key:String, value:Cloneable):Cloneable {
+    public def putRemote(dest:Long, key:String, value:Cloneable):Cloneable {
         throw new Exception("Unsupported method");
     }    
-    public def asyncPutRemote(dest:Place, key:String, value:Cloneable):Future[Any] {
+    public def asyncPutRemote(dest:Long, key:String, value:Cloneable):Future[Any] {
         throw new Exception("Unsupported method");
     }    
-    public def deleteRemote(dest:Place, key:String):Cloneable {
+    public def deleteRemote(dest:Long, key:String):Cloneable {
         throw new Exception("Unsupported method");
     }    
-    public def asyncDeleteRemote(dest:Place, key:String):Future[Any] {
+    public def asyncDeleteRemote(dest:Long, key:String):Future[Any] {
         throw new Exception("Unsupported method");
     }    
-    public def keySetRemote(dest:Place):Set[String] {
+    public def keySetRemote(dest:Long):Set[String] {
         throw new Exception("Unsupported method");
     }    
-    public def asyncKeySetRemote(dest:Place):Future[Any] {
+    public def asyncKeySetRemote(dest:Long):Future[Any] {
         throw new Exception("Unsupported method");
     }    
-    public def syncAt(dest:Place, closure:()=>void) {
+    public def syncAt(dest:Long, closure:()=>void) {
         throw new Exception("Unsupported method");
     }    
-    public def syncAt(dest:Place, closure:()=>Any):Cloneable {
+    public def syncAt(dest:Long, closure:()=>Any):Cloneable {
         throw new Exception("Unsupported method");
     }    
-    public def asyncAt(dest:Place, closure:()=>void):Future[Any] {
+    public def asyncAt(dest:Long, closure:()=>void):Future[Any] {
         throw new Exception("Unsupported method");
     }    
-    public def asyncAt(dest:Place, closure:()=>Any):Future[Any] {
+    public def asyncAt(dest:Long, closure:()=>Any):Future[Any] {
         throw new Exception("Unsupported method");
     }
     public def setWaitElapsedTime(t:Long) {

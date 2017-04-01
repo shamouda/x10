@@ -15,20 +15,20 @@ package x10.util.resilient.localstore.tx;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.LocalStore;
 
-public class TxDesc(id:Long, mapName:String, members:Rail[Long]) implements Cloneable{
+public class TxDesc(id:Long, mapName:String, virtualMembers:Rail[Long]) implements Cloneable{
     public var status:Long = STARTED;
     
     public static val STARTED=1;
     public static val COMMITTING=2;
     public static val COMMITTED=3;
 
-    public def this(id:Long, mapName:String, members:Rail[Long], status:Long) {
-        property (id, mapName, members);
+    public def this(id:Long, mapName:String, virtualMembers:Rail[Long], status:Long) {
+        property (id, mapName, virtualMembers);
         this.status = status;
     }
     
     public def clone():Cloneable {
-        return new TxDesc(id, mapName, members, status);
+        return new TxDesc(id, mapName, virtualMembers, status);
     }
     public def getStatusDesc() {
         if (status == STARTED)
@@ -42,8 +42,8 @@ public class TxDesc(id:Long, mapName:String, members:Rail[Long]) implements Clon
     
     public def toString() {
         var str:String = "";
-        for ( p in members )
+        for ( p in virtualMembers )
             str += p + " ";
-        return "TxDesc id["+id+"] mapName["+mapName+"] status["+getStatusDesc()+"] members["+str+"]";
+        return "TxDesc id["+id+"] mapName["+mapName+"] status["+getStatusDesc()+"] virtualMembers["+str+"]";
     }
 }

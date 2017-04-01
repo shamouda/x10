@@ -88,6 +88,5 @@ public class TxConfig {
     
     public static def waitSleep() {
         System.threadSleep(WAIT_MS);
-    }
-    
+    }    
 }

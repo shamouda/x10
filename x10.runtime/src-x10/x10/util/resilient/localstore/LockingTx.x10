@@ -25,6 +25,7 @@ import x10.compiler.Immediate;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Future;
 
+/*should be used in non-resilient mode only*/
 public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, requests:ArrayList[LockingRequest]) extends AbstractTx {
     public transient val startTime:Long = Timer.milliTime(); ////
     public transient var lockingElapsedTime:Long = 0;  //////
@@ -51,23 +52,23 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
     /****************lock and unlock all keys**********************/
 
     public def lock() {
-        execute(LOCK, here, null, null, null, null, plh, id, mapName, requests);
+        execute(LOCK, -1, null, null, null, null, plh, id, mapName, requests);
     }
 
     public def unlock() {
-        execute(UNLOCK, here, null, null, null, null, plh, id, mapName, requests);
+        execute(UNLOCK, -1, null, null, null, null, plh, id, mapName, requests);
     }
     
     /***************** Get ********************/
     public def get(key:String):Cloneable {
-        return execute(GET_LOCAL, here, key, null, null, null, plh, id, mapName, null).value as Cloneable;
+        return execute(GET_LOCAL, -1, key, null, null, null, plh, id, mapName, null).value as Cloneable;
     }
     
-    public def getRemote(dest:Place, key:String):Cloneable {
+    public def getRemote(dest:Long, key:String):Cloneable {
         return execute(GET_REMOTE, dest, key, null, null, null, plh, id, mapName, null).value as Cloneable;
     }
     
-    public def asyncGetRemote(dest:Place, key:String):Future[Any] {
+    public def asyncGetRemote(dest:Long, key:String):Future[Any] {
         return execute(ASYNC_GET, dest, key, null, null, null, plh, id, mapName, null).future;
     }
     
@@ -77,14 +78,14 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
     
     /***************** PUT ********************/
     public def put(key:String, value:Cloneable):Cloneable {
-        return execute(PUT_LOCAL, here, key, value, null, null, plh, id, mapName, null).value as Cloneable;
+        return execute(PUT_LOCAL, -1, key, value, null, null, plh, id, mapName, null).value as Cloneable;
     }
     
-    public def putRemote(dest:Place, key:String, value:Cloneable):Cloneable {
+    public def putRemote(dest:Long, key:String, value:Cloneable):Cloneable {
         return execute(PUT_REMOTE, dest, key, value, null, null, plh, id, mapName, null).value as Cloneable;
     }
     
-    public def asyncPutRemote(dest:Place, key:String, value:Cloneable):Future[Any] {
+    public def asyncPutRemote(dest:Long, key:String, value:Cloneable):Future[Any] {
         return execute(ASYNC_PUT, dest, key, value, null, null, plh, id, mapName, null).future;
     }
     
@@ -94,14 +95,14 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
     
     /***************** Delete ********************/
     public def delete(key:String):Cloneable {
-        return execute(DELETE_LOCAL, here, key, null, null, null, plh, id, mapName, null).value as Cloneable;
+        return execute(DELETE_LOCAL, -1, key, null, null, null, plh, id, mapName, null).value as Cloneable;
     }
     
-    public def deleteRemote(dest:Place, key:String):Cloneable {
+    public def deleteRemote(dest:Long, key:String):Cloneable {
         return execute(DELETE_REMOTE, dest, key, null, null, null, plh, id, mapName, null).value as Cloneable;
     }
     
-    public def asyncDeleteRemote(dest:Place, key:String):Future[Any] {
+    public def asyncDeleteRemote(dest:Long, key:String):Future[Any] {
         return execute(ASYNC_DELETE, dest, key, null, null, null, plh, id, mapName, null).future;
     }
     
@@ -111,14 +112,14 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
     
     /***************** KeySet ********************/
     public def keySet():Set[String] {
-        return execute(KEYSET_LOCAL, here, null, null, null, null, plh, id, mapName, null).set; 
+        return execute(KEYSET_LOCAL, -1, null, null, null, null, plh, id, mapName, null).set; 
     }
     
-    public def keySetRemote(dest:Place):Set[String] {
+    public def keySetRemote(dest:Long):Set[String] {
         return execute(KEYSET_REMOTE, dest, null, null, null, null, plh, id, mapName, null).set; 
     }
     
-    public def asyncKeySetRemote(dest:Place):Future[Any] {
+    public def asyncKeySetRemote(dest:Long):Future[Any] {
         return execute(ASYNC_KEYSET, dest, null, null, null, null, plh, id, mapName, null).future; 
     }
     
@@ -127,25 +128,26 @@ public class LockingTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Strin
     }
     
     /***************** At ********************/
-    public def syncAt(dest:Place, closure:()=>void) {
+    public def syncAt(dest:Long, closure:()=>void) {
         execute(AT_VOID, dest, null, null, closure, null, plh, id, mapName, null);
     }
     
-    public def syncAt(dest:Place, closure:()=>Any):Cloneable {
+    public def syncAt(dest:Long, closure:()=>Any):Cloneable {
         return execute(AT_RETURN, dest, null, null, null, closure, plh, id, mapName, null).value as Cloneable;
     }
     
-    public def asyncAt(dest:Place, closure:()=>void):Future[Any] {
+    public def asyncAt(dest:Long, closure:()=>void):Future[Any] {
         return execute(ASYNC_AT_VOID, dest, null, null, closure, null, plh, id, mapName, null).future;
     }
     
-    public def asyncAt(dest:Place, closure:()=>Any):Future[Any] {
+    public def asyncAt(dest:Long, closure:()=>Any):Future[Any] {
         return execute(ASYNC_AT_RETURN, dest, null, null, null, closure, plh, id, mapName, null).future;
     }
     
     /***************** Execution of All Operations ********************/
-    private def execute(op:Int, dest:Place, key:String, value:Cloneable, closure_void:()=>void, closure_return:()=>Any, 
+    private def execute(op:Int, destIndx:Long, key:String, value:Cloneable, closure_void:()=>void, closure_return:()=>Any, 
             plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, requests:ArrayList[LockingRequest]):TxOpResult {
+        val dest = Place(destIndx);
         if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] Start Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] key["+key+"] value["+value+"] ...");
         val startExec = Timer.milliTime();
         try {

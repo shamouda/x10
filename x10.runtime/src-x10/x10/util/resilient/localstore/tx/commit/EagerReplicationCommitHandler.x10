@@ -7,6 +7,7 @@ import x10.util.resilient.localstore.LocalStore;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.AbstractTx;
+import x10.util.resilient.localstore.TxMembers;
 
 /*
  * In eager replication, transaction side effects are applied at the slave immediately by the master.
@@ -24,7 +25,7 @@ public class EagerReplicationCommitHandler extends CommitHandler {
 	private val root = GlobalRef[EagerReplicationCommitHandler](this);
 	private var nonFatalDeadPlace:Boolean = false;
 	
-	public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, txDescMap:ResilientNativeMap) {
+	public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers, txDescMap:ResilientNativeMap) {
 	    super(plh, id, mapName, members, txDescMap);	
 	}
 	
@@ -86,12 +87,12 @@ public class EagerReplicationCommitHandler extends CommitHandler {
     
     }
    
-    private def commitPhaseOne(plh:PlaceLocalHandle[LocalStore], id:Long, members:PlaceGroup) {
+    private def commitPhaseOne(plh:PlaceLocalHandle[LocalStore], id:Long, members:TxMembers) {
         val start = Timer.milliTime();
         try {
             if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseOne ...");
             if (!TxConfig.get().DISABLE_SLAVE || TxConfig.get().VALIDATION_REQUIRED) {
-            	finish for (p in members) {
+            	finish for (p in members.pg()) {
                 	if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseOne going to move to ["+p+"] ...");
                     at (p) async {
                     	commitPhaseOne_local(plh, id);
@@ -138,7 +139,7 @@ public class EagerReplicationCommitHandler extends CommitHandler {
         }
     }
     
-    private def commitPhaseTwo(plh:PlaceLocalHandle[LocalStore], id:Long, members:PlaceGroup) {
+    private def commitPhaseTwo(plh:PlaceLocalHandle[LocalStore], id:Long, members:TxMembers) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseTwo ...");
         val start = Timer.milliTime();
         try {
@@ -167,10 +168,10 @@ public class EagerReplicationCommitHandler extends CommitHandler {
     
     //used for both commit and abort
     private def finalize(commit:Boolean, abortedPlaces:ArrayList[Place], 
-            plh:PlaceLocalHandle[LocalStore], id:Long, members:PlaceGroup) {
+            plh:PlaceLocalHandle[LocalStore], id:Long, members:TxMembers) {
         if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] " + ( commit? " Commit Started ": " Abort Started " ) + " ...");
         //if one of the masters die, let the exception be thrown to the caller, but hide dying slves
-        finish for (p in members) {
+        finish for (p in members.pg()) {
             /*skip aborted places*/
             if (!commit && abortedPlaces.contains(p))
                 continue;
@@ -217,7 +218,7 @@ public class EagerReplicationCommitHandler extends CommitHandler {
     
     
     private def finalizeSlaves(commit:Boolean, deadMasters:ArrayList[Place], 
-            plh:PlaceLocalHandle[LocalStore], id:Long, members:PlaceGroup) {
+            plh:PlaceLocalHandle[LocalStore], id:Long, members:TxMembers) {
         
         if (TxConfig.get().DISABLE_SLAVE)
             return;

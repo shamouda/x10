@@ -53,7 +53,7 @@ public class LocalStore(immediateRecovery:Boolean) {
         } //else, I am a spare place, initialize me using joinAsMaster(...)
     }
     
-    /*CentralizedRecovery method: used when a spare place joins*/
+    /*CentralizedRecovery: used when a spare place joins*/
     public def joinAsMaster (active:PlaceGroup, data:HashMap[String,Cloneable]) {
         plh().lock();
         assert(resilient && virtualPlaceId == -1) : "virtualPlaceId  is not -1 (="+virtualPlaceId+") ";
@@ -246,7 +246,7 @@ public class LocalStore(immediateRecovery:Boolean) {
     }
     
     
-    public def getMembersIndices(members:PlaceGroup):Rail[Long] {
+    public def physicalToVirtual(members:PlaceGroup):Rail[Long] {
         try {
             lock();
             val rail = new Rail[Long](members.size());
@@ -258,19 +258,36 @@ public class LocalStore(immediateRecovery:Boolean) {
         }
     }
     
-    public def getMembers(members:Rail[Long], includeDead:Boolean):PlaceGroup {
+    public def getTxMembers(virtualMembers:Rail[Long], includeDead:Boolean):TxMembers {
         try {
             lock();
-            val list = new ArrayList[Place]();
-            for (var i:Long = 0; i < members.size; i++) {
-                if (includeDead || !activePlaces(members(i)).isDead())
-                    list.add(activePlaces(members(i)));
+            val members = new TxMembers(virtualMembers.size);
+            for (var i:Long = 0; i < virtualMembers.size; i++) {
+                val pl = activePlaces(virtualMembers(i));
+                if (includeDead || !pl.isDead()){
+                    members.addPlace(virtualMembers(i), pl);
+                }
             }
-            return new SparsePlaceGroup(list.toRail());
+            return members;
         } finally {
             unlock();
         }
     }
+    
+    public def physicalToVirtual(p1:Place, p2:Place) {
+        try {
+            lock();
+            val indx1 = activePlaces.indexOf(p1);
+            val indx2 = activePlaces.indexOf(p2);
+            val rail = new Rail[Long](2);
+            rail(0) = indx1;
+            rail(1) = indx2;
+            return rail;
+        } finally {
+            unlock();
+        }
+    }
+    
     
     /*******************************************/
     public def lock() {

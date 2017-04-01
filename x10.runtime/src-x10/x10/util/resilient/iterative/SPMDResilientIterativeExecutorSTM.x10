@@ -224,8 +224,9 @@ public class SPMDResilientIterativeExecutorSTM (home:Place) {
         val startCheckpoint = Timer.milliTime();
         if (VERBOSE) Console.OUT.println("checkpointing at iter " + plh().globalIter);
         val members = manager().activePlaces();
-        nativeStore.executeTransaction(members, (tx:Tx) => {
-	        for (p in members) {
+        val virtualPlaces = new Rail[Long](members.size(), (i:Long)=>i);
+        nativeStore.executeTransaction(virtualPlaces, (tx:Tx) => {
+	        for (var p:Long = 0; p < members.size; p++) {
 	            tx.asyncAt(p, ()=> {
 	                val ckptMap = app.getCheckpointData_local();
 	                if (ckptMap != null) {

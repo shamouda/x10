@@ -63,12 +63,9 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
             set2(key, value, key2, value2);
         }
         else {
-            val rail = new Rail[Place](2);
-            rail(0) = here;
-            rail(1) = place;
-            val members = new SparsePlaceGroup(rail);
+            val members = plh().physicalToVirtual(here, place);
             executeTransaction (members, (tx:Tx)=>{
-                tx.asyncAt(place, ()=> {tx.put(key2, value2);});
+                tx.asyncAt(members(1), ()=> {tx.put(key2, value2);});
                 tx.put(key, value);
                 return null;
             });
@@ -146,13 +143,13 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     }
     
     /***********************   Global Transactions ****************************/
-    private def startGlobalTransaction(members:PlaceGroup):Tx {
+    private def startGlobalTransaction(members:TxMembers):Tx {
         assert(plh().virtualPlaceId != -1);
         val id = plh().masterStore.getNextTransactionId();
         if (resilient) {
             val localTx = plh().getTxLoggingMap().startLocalTransaction();
             if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] startGlobalTransaction localTx["+localTx.id+"] started ...");
-            localTx.put("tx"+id, new TxDesc(id, name, plh().getMembersIndices(members), TxDesc.STARTED));
+            localTx.put("tx"+id, new TxDesc(id, name, members.virtual, TxDesc.STARTED));
             val ignoreDeadSlave = false;
             localTx.commit(ignoreDeadSlave);
             if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] startGlobalTransaction localTx["+localTx.id+"] completed ...");
@@ -165,12 +162,14 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     public def restartGlobalTransaction(txDesc:TxDesc):Tx {
         assert(plh().virtualPlaceId != -1);
         val includeDead = true; // The commitHandler will take the correct actions regarding the dead master
-        val tx = new Tx(plh, txDesc.id, name, plh().getMembers(txDesc.members, includeDead), plh().getTxLoggingMap());
+        val tx = new Tx(plh, txDesc.id, name,  plh().getTxMembers(txDesc.virtualMembers, includeDead), plh().getTxLoggingMap());
         plh().txList.addGlobalTx(tx);
         return tx;
     }
     
-    public def executeTransaction(members:PlaceGroup, closure:(Tx)=>Any):TxResult {
+    public def executeTransaction(virtualMembers:Rail[Long], closure:(Tx)=>Any):TxResult {
+        val includeDead = true; 
+        var members:TxMembers = plh().getTxMembers(virtualMembers, includeDead);
         while(true) {
             val tx = startGlobalTransaction(members);
             var commitCalled:Boolean = false;
@@ -195,7 +194,9 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
                     Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] preCommitTime["+tx.processingElapsedTime+"] ms");
                     ex.printStackTrace();
                 }
-                throwIfFatalSleepIfRequired(ex, tx.plh().immediateRecovery);
+                val dpe = throwIfFatalSleepIfRequired(ex, tx.plh().immediateRecovery);
+                if (dpe)
+                    members = plh().getTxMembers(virtualMembers, includeDead);
             }
         }
     }
@@ -238,6 +239,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     /**************End of Baseline Operations*****************/
     
     private static def throwIfFatalSleepIfRequired(ex:Exception, immediateRecovery:Boolean) {
+        var dpe:Boolean = false;
         if (ex instanceof MultipleExceptions) {
             val deadExList = (ex as MultipleExceptions).getExceptionsOfType[DeadPlaceException]();
             val confExList = (ex as MultipleExceptions).getExceptionsOfType[ConflictException]();
@@ -254,6 +256,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
                 }
                 else {
                     System.threadSleep(DPE_SLEEP_MS);
+                    dpe = true;
                 }
             }
         } 
@@ -263,11 +266,13 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
             }
             else {
                 System.threadSleep(DPE_SLEEP_MS);
+                dpe = true;
             }
         }
         else if (!(ex instanceof ConflictException || ex instanceof StorePausedException || ex instanceof AbortedTransactionException  )) {
             throw ex;
         }
+        return dpe;
     }
     
     public def printTxStatistics() {

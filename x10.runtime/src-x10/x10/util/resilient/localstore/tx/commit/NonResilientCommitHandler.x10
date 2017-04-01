@@ -7,10 +7,11 @@ import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.AbstractTx;
 import x10.util.resilient.localstore.tx.*;
+import x10.util.resilient.localstore.TxMembers;
 
 public class NonResilientCommitHandler extends CommitHandler {
 	
-	public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:PlaceGroup, txDescMap:ResilientNativeMap) {
+	public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers, txDescMap:ResilientNativeMap) {
 	    super(plh, id, mapName, members, txDescMap);
 	}
 	
@@ -46,12 +47,12 @@ public class NonResilientCommitHandler extends CommitHandler {
         return AbstractTx.SUCCESS;
     }
    
-    private def commitPhaseOne(plh:PlaceLocalHandle[LocalStore], id:Long, members:PlaceGroup) {
+    private def commitPhaseOne(plh:PlaceLocalHandle[LocalStore], id:Long, members:TxMembers) {
         val start = Timer.milliTime();
         try {
             if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseOne ...");
             if (TxConfig.get().VALIDATION_REQUIRED) {
-	            finish for (p in members) {
+	            finish for (p in members.pg()) {
                 	if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseOne going to move to ["+p+"] ...");
                     at (p) async {
                     	commitPhaseOne_local(plh, id);
@@ -73,7 +74,7 @@ public class NonResilientCommitHandler extends CommitHandler {
         }
     }
     
-    private def commitPhaseTwo(plh:PlaceLocalHandle[LocalStore], id:Long, members:PlaceGroup) {
+    private def commitPhaseTwo(plh:PlaceLocalHandle[LocalStore], id:Long, members:TxMembers) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseTwo ...");
         val start = Timer.milliTime();
         try {
@@ -93,10 +94,10 @@ public class NonResilientCommitHandler extends CommitHandler {
     
     //used for both commit and abort
     private def finalize(commit:Boolean, abortedPlaces:ArrayList[Place], 
-            plh:PlaceLocalHandle[LocalStore], id:Long, members:PlaceGroup) {
+            plh:PlaceLocalHandle[LocalStore], id:Long, members:TxMembers) {
         if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] " + ( commit? " Commit Started ": " Abort Started " ) + " ...");
         //if one of the masters die, let the exception be thrown to the caller, but hide dying slves
-        finish for (p in members) {
+        finish for (p in members.pg()) {
             /*skip aborted places*/
             if (!commit && abortedPlaces.contains(p))
                 continue;

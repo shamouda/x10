@@ -85,36 +85,48 @@ public class STMBench {
         
         val startWarmup = Timer.milliTime();
         Console.OUT.println("warmup started");
-        runIteration(map, activePlaces, producersCount, w, a, r, u, t, h, o, g, victimsList, throughputPLH, false, null);
+        runIteration(map, activePlaces, producersCount, w, a, r, u, t, h, o, g, victimsList, throughputPLH, null);
+        resetStatistics(map, throughputPLH);
         Console.OUT.println("warmup completed, warmup elapsed time ["+(Timer.milliTime() - startWarmup)+"]  ms ");
         
         for (iter in 1..n) {
             //fixme: reinit throughputPLH
         	val startIter = Timer.milliTime();
-            runIteration(map, activePlaces, producersCount, d, a, r, u, t, h, o, g, victimsList, throughputPLH, true, null);
+            runIteration(map, activePlaces, producersCount, d, a, r, u, t, h, o, g, victimsList, throughputPLH, null);
             printThroughput(map, iter, throughputPLH, d, a, t, h, o);
+            resetStatistics(map, throughputPLH);
             Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
         }
     }
     
     public static def runIteration(map:ResilientNativeMap, activePlaces:PlaceGroup, producersCount:Long, 
     		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, 
-    		throughput:PlaceLocalHandle[PlaceThroughput], recordThroughput:Boolean, oldThroughput:PlaceThroughput) {
-        finish for (var i:Long = 0; i < producersCount; i++) {
-        	startPlace(activePlaces(i), map, activePlaces, producersCount, d, a, r, u, t, h, o, g, victims, throughput, recordThroughput, oldThroughput);
+    		throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
+        try {
+            
+            finish for (var i:Long = 0; i < producersCount; i++) {
+            	startPlace(activePlaces(i), map, producersCount, d, a, r, u, t, h, o, g, victims, throughput, recoveryThroughput);
+            }
+            
+        }catch(e:Exception) {
+            if (!resilient)
+                throw e;
+            else
+                Console.OUT.println("iteration failed with exception " + e.getMessage());
         }
     }
 
-    private static def startPlace(pl:Place, map:ResilientNativeMap, activePlaces:PlaceGroup, producersCount:Long, 
+    private static def startPlace(pl:Place, map:ResilientNativeMap, producersCount:Long, 
     		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, 
-    		throughput:PlaceLocalHandle[PlaceThroughput], recordThroughput:Boolean, oldThroughput:PlaceThroughput) {
+    		throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
+        
         
         at (pl) async {
-            if (oldThroughput != null)
-                throughput().reinit(oldThroughput);
+            if (recoveryThroughput != null)
+                throughput().reinit(recoveryThroughput);
             
             for (thrd in 1..t) async {
-                produce(map, activePlaces, producersCount, thrd-1, d, a, r, u, t, h, o, g, victims, throughput, recordThroughput);
+                produce(map, producersCount, thrd-1, d, a, r, u, t, h, o, g, victims, throughput);
             }
             
             if (resilient) {
@@ -130,10 +142,13 @@ public class STMBench {
             			
             			val prev = map.plh().getMaster(here);
             			val myThroughput = throughput();
+            			val me = here;
             			at (prev) {
             			    throughput().rightPlaceThroughput = myThroughput;
+            			    throughput().rightPlaceDeathTimeNS =  System.nanoTime();
+            			    Console.OUT.println(here + " received suicide note from " + me + " througputValues: " + myThroughput);
             			}
-            			Console.OUT.println("Hammer calling killHere at "+System.currentTimeMillis());
+            			Console.OUT.println(here + " Hammer calling killHere" );
             			System.killHere();
             		}
             	}
@@ -141,24 +156,26 @@ public class STMBench {
         }
     }
     
-    public static def produce(map:ResilientNativeMap, active:PlaceGroup, producersCount:Long, producerId:Long, 
+    public static def produce(map:ResilientNativeMap, producersCount:Long, producerId:Long, 
     		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, 
-    		throughput:PlaceLocalHandle[PlaceThroughput], recordThroughput:Boolean) {
+    		throughput:PlaceLocalHandle[PlaceThroughput]) {
         var txCount:Long = 0;
         val rand = new Random((here.id+1) * producerId);
         val myThroughput = throughput().thrds(producerId);
         var timeNS:Long = myThroughput.elapsedTimeNS;
-        Console.OUT.println("producer  "+here.id+"x" + producerId + "   starting with elapsed time " + timeNS);
+        
+        Console.OUT.println("Producer: " + myThroughput);
         
         /*****   for resilience   ******/
         var nextPlace:Place = map.plh().getNextPlace();
-        var activePlaces:PlaceGroup = active;
+        var activePlaces:PlaceGroup = map.plh().getActivePlaces();
         val activePlacesCount = activePlaces.size();
         while (timeNS < d*1e6) {
             //do not include the time to select the random operations as part of the time//
-            val members = nextTransactionMembers(rand, activePlaces, h);
-            val membersOperations = nextRandomOperations(rand, activePlacesCount, members, r, u, o);
+            val virtualMembers = nextTransactionMembers(rand, activePlacesCount, h);
+            val membersOperations = nextRandomOperations(rand, activePlacesCount, virtualMembers, r, u, o);
             val lockRequests = new ArrayList[LockingRequest]();
+            val members = Place.places();
             
             val distClosure = (tx:AbstractTx) => {
                 val futuresList = new ArrayList[Future[Any]]();
@@ -241,24 +258,26 @@ public class STMBench {
             val elapsedNS = System.nanoTime() - start; 
             timeNS += elapsedNS;
             
-            if (recordThroughput) {
-                /*time slice statistics*/
-                var slice:Long = (timeNS / (a*1e6)) as Long;
-                if (slice > myThroughput.counts.size -1 )
-                    slice = myThroughput.counts.size -1;
-                myThroughput.counts(slice) += 1;
-                myThroughput.timesNS(slice) += elapsedNS;
-                myThroughput.elapsedTimeNS = elapsedNS;
-                //Console.OUT.println("[" + here + "] slice["+slice+"]  counts["+counts(slice)+"] timesMS["+times(slice)+"]");
-            }
+            /*time slice statistics*/
+            var slice:Long = (timeNS / (a*1e6)) as Long;
+            if (slice > myThroughput.counts.size -1 )
+                slice = myThroughput.counts.size -1;
+            myThroughput.counts(slice) += 1;
+            myThroughput.timesNS(slice) += elapsedNS;
+            myThroughput.elapsedTimeNS = timeNS;
+            //Console.OUT.println("[" + here + "] slice["+slice+"]  counts["+counts(slice)+"] timesMS["+times(slice)+"]");
 
             if (resilient && !map.plh().sameActivePlaces(activePlaces)) {
+                assert (throughput().rightPlaceDeathTimeNS == -1) : "assertion error, did not receive suicide note ...";
             	activePlaces = map.plh().getActivePlaces();
             	val nxt = activePlaces.next(here);
-            	val nxtThr = throughput().rightPlaceThroughput;
             	if (nxt.id != nextPlace.id) {
             		nextPlace = nxt;
-            		startPlace(nextPlace, map, activePlaces, producersCount, d, a, r, u, t, h, o, g, victims, throughput, recordThroughput, nxtThr);
+            		val nxtThr = throughput().rightPlaceThroughput;
+                    val recoveryTime = System.nanoTime() - throughput().rightPlaceDeathTimeNS;
+                    Console.OUT.println(here + " calculated recovery time = " + (recoveryTime/ 1e9) + " seconds" );
+                    nxtThr.shiftElapsedTime(recoveryTime);
+            		startPlace(nextPlace, map, producersCount, d, a, r, u, t, h, o, g, victims, throughput, nxtThr);
             	}
             }
         }
@@ -266,7 +285,6 @@ public class STMBench {
 
     public static def printThroughput(map:ResilientNativeMap, iteration:Long, plh:PlaceLocalHandle[PlaceThroughput], d:Long, a:Long, t:Long, h:Long, o:Long ) {
     	map.printTxStatistics();
-        map.resetTxStatistics();
         
         val throughputList = new ArrayList[ProducerThroughput]();
         val activePlcs = map.plh().getActivePlaces();
@@ -311,9 +329,12 @@ public class STMBench {
         Console.OUT.println("iteration:" + iteration + ":globalthroughput(op/MS):"+throughput);
     }
     
+    public static def resetStatistics(map:ResilientNativeMap, plh:PlaceLocalHandle[PlaceThroughput]) {
+        map.resetTxStatistics();
+        Place.places().broadcastFlat(()=>{plh().reset();}, (p:Place)=>true);
+    }
     
-    public static def nextTransactionMembers(rand:Random, activePlaces:PlaceGroup, h:Long) {
-        val activePlacesCount = activePlaces.size();
+    public static def nextTransactionMembers(rand:Random, activePlacesCount:Long, h:Long) {
         val selectedPlaces = new HashSet[Long]();
         selectedPlaces.add(here.id);
         while (selectedPlaces.size() < h) {
@@ -325,19 +346,19 @@ public class STMBench {
             rail(c) = iter.next();
         }
         RailUtils.sort(rail);
-        return new SparsePlaceGroup(new Rail[Place](h, (i:Long) => activePlaces(rail(i))));
+        return rail;
     }
     
-    public static def nextRandomOperations(rand:Random, activePlacesCount:Long, members:PlaceGroup, r:Long, u:Float, o:Long) {
+    public static def nextRandomOperations(rand:Random, activePlacesCount:Long, virtualMembers:Rail[Long], r:Long, u:Float, o:Long) {
         val list = new ArrayList[MemberOperations]();
         
         val keysPerPlace = r / activePlacesCount;
         
-        for (pl in members) {
+        for (pl in virtualMembers) {
             val keys = new Rail[KeyInfo](o);
             val values = new Rail[Long](o);
             
-            val baseKey = pl.id * keysPerPlace;
+            val baseKey = pl * keysPerPlace;
             val uniqueKeys = new HashSet[String]();
             for (var x:Long = 0; x < o; x++) {
                 val read = rand.nextFloat() > u;
@@ -356,25 +377,25 @@ public class STMBench {
     
     /*********************  Structs ********************/
     public static struct MemberOperations implements Comparable[MemberOperations] {
-        val dest:Place;
+        val dest:Long;
         val keys:Rail[KeyInfo];
         val values:Rail[Long];
-        public def this(dest:Place, keys:Rail[KeyInfo], values:Rail[Long]) {
+        public def this(dest:Long, keys:Rail[KeyInfo], values:Rail[Long]) {
             this.dest = dest;
             this.keys = keys;
             this.values = values;
         }
         public def toString() {
-            var str:String = "memberOperations:" + dest + ":";
+            var str:String = "memberOperations:" /*+ dest*/ + ":";
             for (k in keys)
                 str += "("+k.key+","+k.read+")" ;
             return str;
         }
         
         public def compareTo(that:MemberOperations):Int {
-            if (dest.id == that.dest.id)
+            if (dest == that.dest)
                 return 0n;
-            else if ( dest.id < that.dest.id)
+            else if ( dest < that.dest)
                 return -1n;
             else
                 return 1n;
@@ -418,7 +439,8 @@ public class STMBench {
     	
         public def this(vp:String, vt:String) {
         	assert (vp == null && vt == null || vp != null && vt != null) : "wrong victims configurations" ;
-        	if (vp != null) {
+        	if (vp != null && !vp.equals("")) {
+        	    assert (resilient) : "assertion error, set X10_RESILIENT_MODE to a non-zero value";
         	    val tmp = vp.split(",");
         	    places = new Rail[Long](tmp.size);
         	    for (var i:Long = 0; i < tmp.size; i++) {
@@ -428,7 +450,8 @@ public class STMBench {
         	else
         		places = null;
         	
-        	if (vt != null) {
+        	if (vt != null && !vt.equals("")) {
+        	    assert (resilient) : "assertion error, set X10_RESILIENT_MODE to a non-zero value";
         		val tmp = vt.split(",");
         		seconds = new Rail[Long](tmp.size);
         	    for (var i:Long = 0; i < tmp.size; i++) {
@@ -504,19 +527,49 @@ class ProducerThroughput {
         timesNS = new Rail[Long](slices);
         counts = new Rail[Long](slices);
     }
+    
+    public def toString() {
+        var cstr:String = ", slices(";
+        for (var i:Long = 0; i< counts.size; i++){
+            cstr += counts(i) ;
+            if (i != counts.size -1)
+                cstr += ",";
+        }
+        cstr += ")";
+        return placeId+"x"+threadId +": elapsedTimeNS=" + elapsedTimeNS + cstr;
+    }
 }
 
 
-class PlaceThroughput(threads:Long, slices:Long) {
+class PlaceThroughput(placeId:Long, threads:Long, slices:Long) {
     public var thrds:Rail[ProducerThroughput];
     public var rightPlaceThroughput:PlaceThroughput;
+    public var rightPlaceDeathTimeNS:Long = -1;
 
     public def this(placeId:Long, threads:Long, slices:Long) {
-        property(threads, slices);
+        property(placeId, threads, slices);
+        thrds = new Rail[ProducerThroughput](threads, (i:Long)=> new ProducerThroughput( placeId, i , slices));
+    }
+    
+    public def reset() {
         thrds = new Rail[ProducerThroughput](threads, (i:Long)=> new ProducerThroughput( placeId, i , slices));
     }
     
     public def reinit(other:PlaceThroughput) {
         thrds = other.thrds;
+    }
+    
+    public def toString() {
+        var str:String = "PlaceThroughput[Place"+placeId+"] ";
+        for (thrd in thrds) {
+            str += "{" + thrd + "} ";
+        }
+        return str;
+    }
+    
+    public def shiftElapsedTime(timeNS:Long) {
+        for (t in thrds) {
+            t.elapsedTimeNS += timeNS;
+        }
     }
 }

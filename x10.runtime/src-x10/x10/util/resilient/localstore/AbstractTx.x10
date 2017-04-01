@@ -46,39 +46,39 @@ public abstract class AbstractTx {
     /***************** Get ********************/
     public abstract def get(key:String):Cloneable;
     
-    public abstract def getRemote(dest:Place, key:String):Cloneable;
+    public abstract def getRemote(dest:Long, key:String):Cloneable;
     
-    public abstract def asyncGetRemote(dest:Place, key:String):Future[Any];
+    public abstract def asyncGetRemote(dest:Long, key:String):Future[Any];
     
     /***************** PUT ********************/
     public abstract def put(key:String, value:Cloneable):Cloneable;
     
-    public abstract def putRemote(dest:Place, key:String, value:Cloneable):Cloneable;
+    public abstract def putRemote(dest:Long, key:String, value:Cloneable):Cloneable;
     
-    public abstract def asyncPutRemote(dest:Place, key:String, value:Cloneable):Future[Any];
+    public abstract def asyncPutRemote(dest:Long, key:String, value:Cloneable):Future[Any];
     
     /***************** Delete ********************/
     public abstract def delete(key:String):Cloneable;
     
-    public abstract def deleteRemote(dest:Place, key:String):Cloneable;
+    public abstract def deleteRemote(dest:Long, key:String):Cloneable;
     
-    public abstract def asyncDeleteRemote(dest:Place, key:String):Future[Any];
+    public abstract def asyncDeleteRemote(dest:Long, key:String):Future[Any];
     
     /***************** KeySet ********************/
     public abstract def keySet():Set[String];
     
-    public abstract def keySetRemote(dest:Place):Set[String];
+    public abstract def keySetRemote(dest:Long):Set[String];
     
-    public abstract def asyncKeySetRemote(dest:Place):Future[Any] ;
+    public abstract def asyncKeySetRemote(dest:Long):Future[Any] ;
     
     /***************** At ********************/
-    public abstract def syncAt(dest:Place, closure:()=>void):void;
+    public abstract def syncAt(dest:Long, closure:()=>void):void;
     
-    public abstract def syncAt(dest:Place, closure:()=>Any):Cloneable ;
+    public abstract def syncAt(dest:Long, closure:()=>Any):Cloneable ;
     
-    public abstract def asyncAt(dest:Place, closure:()=>void):Future[Any] ;
+    public abstract def asyncAt(dest:Long, closure:()=>void):Future[Any] ;
     
-    public abstract def asyncAt(dest:Place, closure:()=>Any):Future[Any] ;
+    public abstract def asyncAt(dest:Long, closure:()=>Any):Future[Any] ;
  
     public abstract def setWaitElapsedTime(t:Long):void;
     
