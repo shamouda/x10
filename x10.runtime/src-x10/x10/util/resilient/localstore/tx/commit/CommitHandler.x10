@@ -99,7 +99,7 @@ public abstract class CommitHandler {
             else if (ex instanceof ConflictException) {
                 list.add((ex as ConflictException).place);
             }
-            else {
+            else if (ex instanceof MultipleExceptions) {
                 val mulExp = ex as MultipleExceptions;
                 val deadExList = mulExp.getExceptionsOfType[DeadPlaceException]();
                 if (deadExList != null) {
