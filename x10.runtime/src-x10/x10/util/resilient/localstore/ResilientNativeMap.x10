@@ -13,8 +13,7 @@ import x10.util.Timer;
 
 public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) {
     private static val TM_STAT_ALL = System.getenv("TM_STAT_ALL") != null && System.getenv("TM_STAT_ALL").equals("1");
-    private static val DPE_SLEEP_MS = System.getenv("DPE_SLEEP_MS") == null ? 10 : Long.parseLong(System.getenv("DPE_SLEEP_MS"));
-    
+
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     private var baselineTxId:Long = 0;
     
@@ -267,7 +266,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
                     throw ex;
                 }
                 else {
-                    System.threadSleep(DPE_SLEEP_MS);
+                    System.threadSleep(TxConfig.get().DPE_SLEEP_MS);
                     dpe = true;
                 }
             }
@@ -278,11 +277,13 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
                 throw ex;
             }
             else {
-                System.threadSleep(DPE_SLEEP_MS);
+                System.threadSleep(TxConfig.get().DPE_SLEEP_MS);
                 dpe = true;
             }
         }
-        else if (!(ex instanceof ConflictException || ex instanceof StorePausedException || ex instanceof AbortedTransactionException  )) {
+        else if (ex instanceof StorePausedException) {
+            System.threadSleep(TxConfig.get().DPE_SLEEP_MS);
+        } else if (!(ex instanceof ConflictException || ex instanceof AbortedTransactionException  )) {
             Console.OUT.println(here + " FATAL EXCEPTION  [" + ex + "] ");
             throw ex;
         }

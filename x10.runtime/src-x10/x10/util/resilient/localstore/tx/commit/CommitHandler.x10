@@ -67,8 +67,10 @@ public abstract class CommitHandler {
             localTx.commit(ignoreDeadSlave);
             if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " deleteTxDesc localTx["+localTx.id+"] completed ...");
         }catch(ex:Exception) {
-            Console.OUT.println("Warning: ignoring exception during deleteTxDesc: " + ex.getMessage());
-            ex.printStackTrace();
+            if(TxConfig.get().TM_DEBUG) {
+                Console.OUT.println("Warning: ignoring exception during deleteTxDesc: " + ex.getMessage());
+                ex.printStackTrace();
+            }
         }
         finally {
             txLoggingElapsedTime += Timer.milliTime() - start;

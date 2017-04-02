@@ -39,7 +39,7 @@
     <property name="NO_CHECKS" value="false" />
     <property name="FLATTEN_EXPRESSIONS" value="false" />
     <property name="HOMOGENEOUS" value="true" />
-    <property name="GCC_SYMBOLS" value="true" />
+    <property name="GCC_SYMBOLS" value="false" />
     <property name="INCLUDE_JAVA_SOURCE" value="false" />
     <path id="project.classpath">
         <path refid="mainproject.classpath"/>
