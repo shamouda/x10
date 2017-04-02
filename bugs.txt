@@ -141,3 +141,117 @@ Thread 1 (Thread 0x7fae238e7700 (LWP 28270)):
 (gdb) 
 (gdb) 
 (gdb) 
+
+
+===========================================Hanging=======================================
+Thread 10 (Thread 0x7f30763ba700 (LWP 11526)):
+#0  0x00007f30777ba0d4 in (anonymous namespace)::Synchronized::Synchronized (this=0x7f30763b9bd0, l=...) at common/x10rt_emu_coll.cc:55
+#1  0x00007f30777ba716 in (anonymous namespace)::TeamDB::fifo_size (this=0x7f30779dcde0 <(anonymous namespace)::gtdb>) at common/x10rt_emu_coll.cc:231
+#2  0x00007f30777bda9a in x10rt_emu_coll_probe () at common/x10rt_emu_coll.cc:1360
+#3  0x00007f30777b8778 in x10rt_lgl_blocking_probe () at common/x10rt_logical.cc:910
+#4  0x00007f30777b5b25 in x10rt_blocking_probe () at common/x10rt_front.cc:165
+#5  0x00007f3079bb7a05 in x10aux::blocking_probe () at ./x10aux/network.h:73
+#6  0x00007f3079bb6d17 in x10::xrx::Worker::immediatePollLoop (this=0x27f1b40) at gen/x10/xrx/Worker.cc:439
+#7  0x00007f3079bb698c in x10::xrx::Worker::__apply (this=0x27f1b40) at gen/x10/xrx/Worker.cc:282
+#8  0x00007f3079bbd7f7 in x10::xrx::Pool::run (this=0x27f2d70) at gen/x10/xrx/Pool.cc:170
+#9  0x00007f3079b6eafd in x10::xrx::Runtime::start (job=0x27f60c0) at gen/x10/xrx/Runtime.cc:3337
+#10 0x00007f3079d78597 in real_x10_main_inner (_main_args=0x2708040) at x10aux/bootstrap.cc:171
+#11 0x00007f3078027493 in GC_inner_start_routine (sb=<error reading variable: value has been optimised out>, arg=<error reading variable: value has been optimised out>) at pthread_start.c:57
+#12 0x00007f3078022532 in GC_call_with_stack_base (fn=<optimised out>, arg=<optimised out>) at misc.c:1840
+---Type <return> to continue, or q <return> to quit---
+#13 0x00007f3077df1184 in start_thread (arg=0x7f30763ba700) at pthread_create.c:312
+#14 0x00007f3076cb637d in clone () at ../sysdeps/unix/sysv/linux/x86_64/clone.S:111
+
+=======================================================================================
+
+Thread 7 (Thread 0x7f15e18ae700 (LWP 4312)):
+#0  0x00007f15e19e49ef in determine_info (symbolp=0x0, mapp=0x7f15e18acab0, info=0x7f15e18ac9c8, match=0x7f15e539c7c8, addr=139732007175617) at dl-addr.c:61
+#1  __GI__dl_addr (address=0x7f15e4a6c5c1 <real_x10_main_inner(void*)+346>, info=info@entry=0x7f15e18ac9c8, mapp=mapp@entry=0x7f15e18acab0, symbolp=symbolp@entry=0x0) at dl-addr.c:137
+#2  0x00007f15e19b9f43 in __backtrace_symbols (array=0x185ae8790, size=20) at backtracesyms.c:51
+#3  0x00007f15e4a8492a in x10::lang::CheckedThrowable::getStackTrace (this=0x185e06900) at x10/lang/CheckedThrowable.cc:206
+#4  0x00007f15e4a8417d in x10::lang::CheckedThrowable::_serialize_body (this=0x185e06900, buf=...) at x10/lang/CheckedThrowable.cc:39
+#5  0x00007f15e4671edf in x10::lang::CheckedException::_serialize_body (this=0x185e06900, buf=...) at gen/x10/lang/CheckedException.cc:106
+#6  0x00007f15e460afa5 in x10::lang::Exception::_serialize_body (this=0x185e06900, buf=...) at gen/x10/lang/Exception.cc:144
+#7  0x00007f15e46d199f in x10::lang::DeadPlaceException::_serialize_body (this=0x185e06900, buf=...) at gen/x10/lang/DeadPlaceException.cc:131
+#8  0x00007f15e4a7dca1 in x10aux::serialization_buffer::serialize_reference (buf=..., this_=0x185e06900) at x10aux/serialization.cc:112
+#9  0x00007f15e4299cab in x10aux::serialization_buffer::Write<x10::lang::CheckedThrowable*>::_ (buf=..., val=0x185e06900) at ./x10aux/serialization_buffer.h:242
+#10 0x00007f15e4290fe2 in x10aux::serialization_buffer::write<x10::lang::CheckedThrowable*> (this=0x7f15e18ad4a0, val=@0x185e26850: 0x185e06900) at ./x10aux/serialization_buffer.h:280
+#11 0x00007f15e428def5 in x10::lang::Rail<x10::lang::CheckedThrowable*>::_serialize_body (this=0x185e26840, buf=...) at ./x10/lang/Rail.h:542
+#12 0x00007f15e4a7dca1 in x10aux::serialization_buffer::serialize_reference (buf=..., this_=0x185e26840) at x10aux/serialization.cc:112
+#13 0x00007f15e42af941 in x10aux::serialization_buffer::Write<x10::lang::Rail<x10::lang::CheckedThrowable*>*>::_ (buf=..., val=0x185e26840) at ./x10aux/serialization_buffer.h:242
+#14 0x00007f15e42ac038 in x10aux::serialization_buffer::write<x10::lang::Rail<x10::lang::CheckedThrowable*>*> (this=0x7f15e18ad4a0, val=@0x185e06828: 0x185e26840) at ./x10aux/serialization_buffer.h:280
+#15 0x00007f15e4965245 in x10_xrx_FinishResilientPlace0__State__closure__19::_serialize_body (this=0x185e06800, buf=...) at gen/x10/xrx/FinishResilientPlace0.cc:3985
+#16 0x00007f15e4a7114f in x10aux::run_closure_at (p=2, body_fun=0x185e06800, prof=0x0, preSendAction=0x0) at x10aux/network.cc:266
+#17 0x00007f15e485f794 in x10::xrx::Runtime::x10rtSendMessage (id=2, msgBody=0x185e06800, prof=0x0, preSendAction=0x0) at gen/x10/xrx/Runtime.cc:2735
+#18 0x00007f15e4863b1d in x10::xrx::Runtime::runImmediateAsync (place=..., body=0x185e06800, prof=0x0) at gen/x10/xrx/Runtime.cc:3936
+#19 0x00007f15e4941635 in x10::xrx::FinishResilientPlace0__State::releaseLatch (this=0x185dbbb00) at gen/x10/xrx/FinishResilientPlace0.cc:4504
+#20 0x00007f15e4941351 in x10::xrx::FinishResilientPlace0__State::liveToCompleted (this=0x185dbbb00, placeId=2, kind=1) at gen/x10/xrx/FinishResilientPlace0.cc:4423
+#21 0x00007f15e4962b01 in x10_xrx_FinishResilientPlace0__closure__10::__apply (this=0x185e0a630) at gen/x10/xrx/FinishResilientPlace0.cc:1222
+#22 0x00007f15e3c2abb6 in x10::lang::VoidFun_0_0::__apply (fun=0x185e0a630) at ./x10/lang/VoidFun_0_0.h:44
+#23 0x00007f15e4a72ce0 in receive_async (p=0x7f15e18adbe0) at x10aux/network.cc:315
+#24 0x00007f15e24a11e7 in probe (onlyProcessAccept=false, block=false) at sockets/x10rt_sockets.cc:1281
+#25 0x00007f15e24a0ae1 in x10rt_net_blocking_probe () at sockets/x10rt_sockets.cc:1113
+#26 0x00007f15e24ab773 in x10rt_lgl_blocking_probe () at common/x10rt_logical.cc:906
+#27 0x00007f15e24a8b25 in x10rt_blocking_probe () at common/x10rt_front.cc:165
+#28 0x00007f15e48aba2f in x10aux::blocking_probe () at ./x10aux/network.h:73
+#29 0x00007f15e48aad41 in x10::xrx::Worker::immediatePollLoop (this=0x1f33b40) at gen/x10/xrx/Worker.cc:439
+#30 0x00007f15e48aa9b6 in x10::xrx::Worker::__apply (this=0x1f33b40) at gen/x10/xrx/Worker.cc:282
+#31 0x00007f15e48b1821 in x10::xrx::Pool::run (this=0x1f34d70) at gen/x10/xrx/Pool.cc:170
+#32 0x00007f15e4862b27 in x10::xrx::Runtime::start (job=0x1f38080) at gen/x10/xrx/Runtime.cc:3337
+#33 0x00007f15e4a6c5c1 in real_x10_main_inner (_main_args=0x1e4a040) at x10aux/bootstrap.cc:171
+#34 0x00007f15e2d1a493 in GC_inner_start_routine (sb=<error reading variable: value has been optimised out>, arg=<error reading variable: value has been optimised out>) at pthread_start.c:57
+#35 0x00007f15e2d15532 in GC_call_with_stack_base (fn=<optimised out>, arg=<optimised out>) at misc.c:1840
+#36 0x00007f15e2ae4184 in start_thread (arg=0x7f15e18ae700) at pthread_create.c:312
+#37 0x00007f15e19a937d in clone () at ../sysdeps/unix/sysv/linux/x86_64/clone.S:111
+
+Thread 6 (Thread 0x7f15e0ea2700 (LWP 4343)):
+#0  pthread_cond_wait@@GLIBC_2.3.2 () at ../nptl/sysdeps/unix/sysv/linux/x86_64/pthread_cond_wait.S:185
+#1  0x00007f15e4a9f567 in x10::xrx::Thread::park () at x10/xrx/Thread.cc:461
+#2  0x00007f15e48ab1ff in x10::xrx::Worker::park () at gen/x10/xrx/Worker.cc:650
+#3  0x00007f15e4534479 in x10::util::concurrent::SimpleLatch::await (this=0x1f2e420) at gen/x10/util/concurrent/SimpleLatch.cc:96
+#4  0x00007f15e493f5c0 in x10::xrx::FinishResilientPlace0::waitForFinish (this=0x1f65070) at gen/x10/xrx/FinishResilientPlace0.cc:3168
+#5  0x00007f15e4865ea3 in x10::xrx::Runtime::stopFinish (f=0x1f65f50) at gen/x10/xrx/Runtime.cc:5165
+#6  0x00000000004c5050 in STMBench::runIteration(x10::util::resilient::localstore::ResilientNativeMap*, x10::lang::PlaceGroup*, long, long, long, long, float, long, long, long, long, STMBench__VictimsList,---Type <return> to continue, or q <return> to quit---
+ x10::lang::PlaceLocalHandle<PlaceThroughput*>, PlaceThroughput*) ()
+#7  0x00000000004c4e2b in STMBench::main(x10::lang::Rail<x10::lang::String*>*) ()
+#8  0x00007f15e4a6d5df in x10aux::BootStrapClosure::__apply (this=0x1f38080) at ./x10aux/bootstrap.h:46
+#9  0x00007f15e3c2abb6 in x10::lang::VoidFun_0_0::__apply (fun=0x1f38080) at ./x10/lang/VoidFun_0_0.h:44
+#10 0x00007f15e486cb5c in x10_xrx_Runtime__closure__5::__apply (this=0x1f66fa0) at gen/x10/xrx/Runtime.cc:252
+#11 0x00007f15e3c2abb6 in x10::lang::VoidFun_0_0::__apply (fun=0x1f66fa0) at ./x10/lang/VoidFun_0_0.h:44
+#12 0x00007f15e48afe03 in x10::xrx::Activity::run (this=0x1f2ba40) at gen/x10/xrx/Activity.cc:231
+#13 0x00007f15e48ab1b3 in x10::xrx::Worker::loop2 (this=0x1f33900, epoch=42, latch=0x1f2ed80) at gen/x10/xrx/Worker.cc:630
+#14 0x00007f15e48ab081 in x10::xrx::Worker::join (this=0x1f33900, latch=0x1f2ed80) at gen/x10/xrx/Worker.cc:581
+#15 0x00007f15e493f56c in x10::xrx::FinishResilientPlace0::waitForFinish (this=0x1f65f50) at gen/x10/xrx/FinishResilientPlace0.cc:3158
+#16 0x00007f15e4865ea3 in x10::xrx::Runtime::stopFinish (f=0x1f2d790) at gen/x10/xrx/Runtime.cc:5165
+#17 0x00007f15e486cd52 in x10_xrx_Runtime__closure__4::__apply (this=0x1f64f20) at gen/x10/xrx/Runtime.cc:328
+#18 0x00007f15e3c2abb6 in x10::lang::VoidFun_0_0::__apply (fun=0x1f64f20) at ./x10/lang/VoidFun_0_0.h:44
+#19 0x00007f15e48afe03 in x10::xrx::Activity::run (this=0x1f2ba80) at gen/x10/xrx/Activity.cc:231
+#20 0x00007f15e48aacc1 in x10::xrx::Worker::loop (this=0x1f33900) at gen/x10/xrx/Worker.cc:410
+#21 0x00007f15e48aa9c8 in x10::xrx::Worker::__apply (this=0x1f33900) at gen/x10/xrx/Worker.cc:290
+#22 0x00007f15e4a9ea00 in x10::xrx::Thread::thread_start_routine (arg=0x1f33900) at x10/xrx/Thread.cc:79
+#23 0x00007f15e2d1a493 in GC_inner_start_routine (sb=<error reading variable: value has been optimised out>, arg=<error reading variable: value has been optimised out>) at pthread_start.c:57
+#24 0x00007f15e2d15532 in GC_call_with_stack_base (fn=<optimised out>, arg=<optimised out>) at misc.c:1840
+#25 0x00007f15e2ae4184 in start_thread (arg=0x7f15e0ea2700) at pthread_create.c:312
+#26 0x00007f15e19a937d in clone () at ../sysdeps/unix/sysv/linux/x86_64/clone.S:111
+
+Thread 5 (Thread 0x7f15dbfff700 (LWP 4345)):
+#0  0x00007f15e3f2ec6f in x10aux::nullCheck<x10::lang::Rail<x10::util::resilient::localstore::tx::SafeBucketHashMap__Bucket<x10::lang::String*, x10::util::resilient::localstore::tx::MemoryUnit*>*> > (
+    obj=0x7f15e4244361 <x10::util::resilient::localstore::TxConfig::get()+9>) at ./x10aux/throw.h:80
+#1  0x00007f15e3f2e4b4 in x10::util::resilient::localstore::tx::SafeBucketHashMap<x10::lang::String*, x10::util::resilient::localstore::tx::MemoryUnit*>::lock (this=0x1ffce20, k=0x185e41020)
+    at gen/x10/util/resilient/localstore/tx/SafeBucketHashMap.h:1276
+#2  0x00007f15e3f1dc19 in x10::util::resilient::localstore::tx::MapData::lockKey (this=0x1ffce40, key=0x185e41020) at gen/x10/util/resilient/localstore/tx/MapData.cc:409
+#3  0x00007f15e3f1d832 in x10::util::resilient::localstore::tx::MapData::getMemoryUnit (this=0x1ffce40, k=0x185e41020) at gen/x10/util/resilient/localstore/tx/MapData.cc:219
+#4  0x00007f15e4064925 in x10::util::resilient::localstore::tx::TxManager::logInitialIfNotLogged (this=0x1f2ea20, id=8410660, key=0x185e41020, lockRead=false)
+    at gen/x10/util/resilient/localstore/tx/TxManager.cc:1255
+#5  0x00007f15e4066f9a in x10::util::resilient::localstore::tx::TxManager::put_LA_WB (this=0x1f2ea20, id=8410660, key=0x185e41020, value=0x185e47de0)
+    at gen/x10/util/resilient/localstore/tx/TxManager.cc:2353
+#6  0x00007f15e4152120 in x10::util::resilient::localstore::tx::TxManager_RV_LA_WB::put (this=0x1f2ea20, id=8410660, key=0x185e41020, value=0x185e47de0)
+    at gen/x10/util/resilient/localstore/tx/TxManager_RV_LA_WB.cc:67
+#7  0x00007f15e4248a37 in x10::util::resilient::localstore::MasterStore::put (this=0x1fe4ba0, mapName=0x7f15e510a6b0 <x10::util::resilient::localstore::LocalStore_Strings::sl__256011>, id=8410660, 
+    key=0x185e41040, value=0x185e47de0) at gen/x10/util/resilient/localstore/MasterStore.cc:96
+#8  0x00007f15e4245f0a in x10::util::resilient::localstore::LocalTx::put (this=0x185e3f900, key=0x185e41040, value=0x185e47de0) at gen/x10/util/resilient/localstore/LocalTx.cc:141
+#9  0x00007f15e3e73f95 in x10::util::resilient::localstore::ResilientNativeMap::startGlobalTransaction (this=0x23381c0, members=0x245ed20) at gen/x10/util/resilient/localstore/ResilientNativeMap.cc:1389
+#10 0x00007f15e3e74300 in x10::util::resilient::localstore::ResilientNativeMap::executeTransaction (this=0x23381c0, virtualMembers=0x266c660, closure=0x2318860)
+    at gen/x10/util/resilient/localstore/ResilientNativeMap.cc:1482
+#11 0x00000000004c57ad in STMBench::produce(x10::util::resilient::localstore::ResilientNativeMap*, long, long, long, long, long, long, float, long, long, long, long, STMBench__VictimsList, x10::lang::PlaceLocalHandle<PlaceThroughput*>) ()
+

@@ -6,6 +6,7 @@ import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.tx.TxDesc;
 import x10.compiler.Uncounted;
 import x10.util.resilient.localstore.*;
+import x10.xrx.Runtime;
 /**
  * Should be called by the local store when it detects that its slave has died.
  **/
@@ -13,14 +14,16 @@ public class DistributedRecoveryHelper {
     
     public static def recoverSlave(plh:PlaceLocalHandle[LocalStore]) {
     	Console.OUT.println(here + " DistributedRecoveryHelper.recoverSlave: started ...");
+    	val start = System.nanoTime();
     	val deadSlave = plh().slave;
     	val oldActivePlaces = plh().getActivePlaces();
     	val deadPlaceVirtualPlaceId = oldActivePlaces.indexOf(deadSlave);
     	val spare = allocateSparePlace(plh, deadPlaceVirtualPlaceId, oldActivePlaces);
-    	recoverSlave(plh, spare);
+    	recoverSlave(plh, spare, start);
     }
     
-    public static def recoverSlave(plh:PlaceLocalHandle[LocalStore], spare:Place) {
+    public static def recoverSlave(plh:PlaceLocalHandle[LocalStore], spare:Place, timeStartRecoveryNS:Long) {
+        val startTimeNS = timeStartRecoveryNS == -1? System.nanoTime() : timeStartRecoveryNS;
         Console.OUT.println(here + " DistributedRecoveryHelper.recoverSlave: started given already allocated spare " + spare);
         val deadSlave = plh().slave;
         val oldActivePlaces = plh().getActivePlaces();
@@ -42,8 +45,7 @@ public class DistributedRecoveryHelper {
         }
         //the application layer can now recognize a change in the places configurations
         plh().replace(deadPlaceVirtualPlaceId, spare);
-        
-        Console.OUT.println(here + " DistributedRecoveryHelper.recoverSlave: completed successfully ...");
+        Console.OUT.println(here + " DistributedRecoveryHelper.recoverSlave: completed successfully, recoveryTime:" + ((System.nanoTime()-startTimeNS)/1e9)+" seconds");
     }
     
     
@@ -88,14 +90,14 @@ public class DistributedRecoveryHelper {
             }
             
             if (!allocated)
-                Console.OUT.println(here + " - Failed to allocate " + Place(i) + ", is it dead? " + Place(i).isDead());
+                Console.OUT.println(here + " Failed to allocate " + Place(i) + ", is it dead? " + Place(i).isDead());
             else {
-                Console.OUT.println(here + " - Succeeded to allocate " + Place(i) );
+                Console.OUT.println(here + " Succeeded to allocate " + Place(i) );
                 placeIndx = i;
                 break;
             }
         }
-        assert(placeIndx != -1) : here + " no available spare places to allocate ";
+        assert(placeIndx != -1) : here + " No available spare places to allocate ";
         return Place(placeIndx);
     }
     
@@ -130,7 +132,7 @@ public class DistributedRecoveryHelper {
     }
     
     private static def updateSlaveData(plh:PlaceLocalHandle[LocalStore], oldActivePlaces:PlaceGroup) {
-    	Console.OUT.println(here+ " updateSlaveData: slave["+here+"] is asking other masters about the status of prepared transactions ...");
+    	Console.OUT.println(here+ " UpdateSlaveData: slave["+here+"] is asking other masters about the status of prepared transactions ...");
         val committed = GlobalRef(new ArrayList[Long]());
         val committedLock = GlobalRef(new Lock());
         

@@ -80,7 +80,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     
     /***************** Get ********************/
     public def get(key:String):Cloneable {
-        return execute(GET_LOCAL, here.id, key, null, null, null, plh, id, mapName, members, root).value as Cloneable;
+        return execute(GET_LOCAL, -1, key, null, null, null, plh, id, mapName, members, root).value as Cloneable;
     }
     
     public def getRemote(dest:Long, key:String):Cloneable {
@@ -97,7 +97,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     
     /***************** PUT ********************/
     public def put(key:String, value:Cloneable):Cloneable {
-        return execute(PUT_LOCAL, here.id, key, value, null, null, plh, id, mapName, members, root).value as Cloneable;
+        return execute(PUT_LOCAL, -1, key, value, null, null, plh, id, mapName, members, root).value as Cloneable;
     }
     
     public def putRemote(dest:Long, key:String, value:Cloneable):Cloneable {
@@ -114,7 +114,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     
     /***************** Delete ********************/
     public def delete(key:String):Cloneable {
-        return execute(DELETE_LOCAL, here.id, key, null, null, null, plh, id, mapName, members, root).value as Cloneable;
+        return execute(DELETE_LOCAL, -1, key, null, null, null, plh, id, mapName, members, root).value as Cloneable;
     }
     
     public def deleteRemote(dest:Long, key:String):Cloneable {
@@ -131,7 +131,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     
     /***************** KeySet ********************/
     public def keySet():Set[String] {
-        return execute(KEYSET_LOCAL, here.id, null, null, null, null, plh, id, mapName, members, root).set; 
+        return execute(KEYSET_LOCAL, -1, null, null, null, null, plh, id, mapName, members, root).set; 
     }
     
     public def keySetRemote(dest:Long):Set[String] {
@@ -166,9 +166,13 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     /***************** Execution of All Operations ********************/
     private def execute(op:Int, destIndx:Long, key:String, value:Cloneable, closure_void:()=>void, closure_return:()=>Any, 
             plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers, root:GlobalRef[Tx]):TxOpResult {
-        val dest = members.getPlace(destIndx);
-        assert (members.contains(dest));
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] key["+key+"] value["+value+"] ...");
+        var dest:Place = here;
+        if (destIndx != -1){
+            dest = members.getPlace(destIndx);
+            assert (members.contains(dest));
+        }
+        
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] here["+here+"] destIndx["+destIndx+"] key["+key+"] value["+value+"] ...");
         val startExec = Timer.milliTime();
         try {
             if (op == GET_LOCAL) {
@@ -204,8 +208,9 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
             }
             else {  /*Remote Async Operations*/
             	if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] (2) ...");
+            	val destVal = dest;
                 val future = Future.make[Any](() => 
-                    at (dest) {
+                    at (destVal) {
                         var result:Any = null;
                         if (op == ASYNC_GET) {
                             result = getLocal(key, plh, id, mapName);
@@ -220,14 +225,10 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                             result = keySetLocal(plh, id, mapName);
                         }
                         else if (op == ASYNC_AT_VOID) {
-                        	if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] moved to here["+here+"] (3) ...");
                             closure_void();
-                            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] finished here["+dest+"] (4) ...");
                         }
                         else if (op == ASYNC_AT_RETURN) {
-                        	if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] moved to here["+here+"] (3) ...");
                             result = closure_return();
-                            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] finished here["+dest+"] (4) ...");
                         }
                         return result;
                     }

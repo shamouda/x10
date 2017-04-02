@@ -76,6 +76,11 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
         return executeLocalTransaction((tx:LocalTx) => { tx.put(key, value); tx.put(key2, value2) });
     }
     
+    /***********************  Places functions ****************************/
+    public def getVirtualPlaceId() = plh().getVirtualPlaceId();
+    
+    public def getActivePlaces() = plh().getActivePlaces();
+    
     /***********************   Local Transactions ****************************/
     
     public def startLocalTransaction():LocalTx {
@@ -171,10 +176,11 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
         val includeDead = true; 
         var members:TxMembers = plh().getTxMembers(virtualMembers, includeDead);
         while(true) {
-            val tx = startGlobalTransaction(members);
+            var tx:Tx = null; 
             var commitCalled:Boolean = false;
             val start = Timer.milliTime();
             try {
+                tx = startGlobalTransaction(members);
                 val out:Any;
                 finish {
                     out = closure(tx);
@@ -185,16 +191,17 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
                 commitCalled = true;
                 return new TxResult(tx.commit(), out);
             } catch(ex:Exception) {
-                if (!commitCalled) {
+                if (tx != null && !commitCalled) {
                     tx.processingElapsedTime = Timer.milliTime() - start;
                     tx.abort(ex); // tx.commit() aborts automatically if needed
                 }
                 
                 if (TxConfig.get().TM_DEBUG) {
-                    Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] preCommitTime["+tx.processingElapsedTime+"] ms");
+                    val txId = tx == null? -1 : tx.id;
+                    Console.OUT.println("Tx[" + txId + "] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] ");
                     ex.printStackTrace();
                 }
-                val dpe = throwIfFatalSleepIfRequired(ex, tx.plh().immediateRecovery);
+                val dpe = throwIfFatalSleepIfRequired(ex, plh().immediateRecovery);
                 if (dpe)
                     members = plh().getTxMembers(virtualMembers, includeDead);
             }
@@ -247,11 +254,16 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
             val abortedExList = (ex as MultipleExceptions).getExceptionsOfType[AbortedTransactionException]();
             
             if ((ex as MultipleExceptions).exceptions.size > (deadExList.size + confExList.size + pauseExList.size + abortedExList.size)){
+                Console.OUT.println(here + " FATAL MULTIPLE EXCEPTION   SIZE("+(ex as MultipleExceptions).exceptions.size + ")  (" 
+                        + deadExList.size + " + " + confExList.size + " + " + pauseExList.size + " + " + abortedExList.size + ")");
+                ex.printStackTrace();
                 throw ex;
             }
             
             if (deadExList != null && deadExList.size != 0) {
                 if (!immediateRecovery || TxConfig.get().TESTING) {
+                    Console.OUT.println(here + " FATAL DEAP PLACE EXCEPTION");
+                    ex.printStackTrace();
                     throw ex;
                 }
                 else {
@@ -262,6 +274,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
         } 
         else if (ex instanceof DeadPlaceException) {
             if (!immediateRecovery  || TxConfig.get().TESTING) {
+                Console.OUT.println(here + " FATAL DEAP PLACE EXCEPTION   TESTING");
                 throw ex;
             }
             else {
@@ -270,6 +283,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
             }
         }
         else if (!(ex instanceof ConflictException || ex instanceof StorePausedException || ex instanceof AbortedTransactionException  )) {
+            Console.OUT.println(here + " FATAL EXCEPTION  [" + ex + "] ");
             throw ex;
         }
         return dpe;

@@ -165,19 +165,6 @@ public class LocalStore(immediateRecovery:Boolean) {
         }
     }
     
-    public def getActivePlacesCopy() {
-        try {
-            lock();
-            val rail = new Rail[Place](activePlaces.size());
-            for (var i:Long = 0 ; i < activePlaces.size(); i++) {
-                rail(i) = activePlaces(i);
-            }
-            return new SparsePlaceGroup(rail);
-        }finally {
-            unlock();
-        }
-    }
-    
 
     public def replace(virtualId:Long, spare:Place) {
         //Console.OUT.println(here + " replacing : vId["+virtualId+"] spare["+spare+"] ..." );
@@ -261,6 +248,7 @@ public class LocalStore(immediateRecovery:Boolean) {
     public def getTxMembers(virtualMembers:Rail[Long], includeDead:Boolean):TxMembers {
         try {
             lock();
+            try {
             val members = new TxMembers(virtualMembers.size);
             for (var i:Long = 0; i < virtualMembers.size; i++) {
                 val pl = activePlaces(virtualMembers(i));
@@ -269,6 +257,19 @@ public class LocalStore(immediateRecovery:Boolean) {
                 }
             }
             return members;
+            }catch(ex:Exception) {
+                var str:String = "";
+                for (var i:Long = 0 ; i < virtualMembers.size; i++)
+                    str += virtualMembers(i) + " ";
+                
+                
+                var astr:String = "";
+                for (var i:Long = 0 ; i < activePlaces.size(); i++)
+                    astr += activePlaces(i) + " ";
+                
+                Console.OUT.println(here + " ERROR: getTxMembers failed parameters = members("+str+") includeDead("+includeDead+") activePlaces(" + astr + ") ");
+                throw ex;
+            }
         } finally {
             unlock();
         }
@@ -328,7 +329,7 @@ public class LocalStore(immediateRecovery:Boolean) {
         if ( masterStore.isActive() ) {
              Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+") master is active");
              masterStore.pausing();
-             DistributedRecoveryHelper.recoverSlave(plh, spare);
+             DistributedRecoveryHelper.recoverSlave(plh, spare, -1);
         }
         else
             Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+") master is not active");

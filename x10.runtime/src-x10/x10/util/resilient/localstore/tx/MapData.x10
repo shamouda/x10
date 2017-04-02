@@ -94,7 +94,7 @@ public class MapData {
             metadata.unlockAll();
     }
     
-    private def lockKey(key:String){
+    private def lockKey(key:String) {
         if (!TxConfig.get().LOCK_FREE)
             metadata.lock(key);
     }

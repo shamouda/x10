@@ -129,7 +129,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     
     /**************   Pausing for Recovery    ****************/
     public def waitUntilPaused() {
-        Console.OUT.println(here + " TxManager.waitUntilPaused started ...");
+        Console.OUT.println(here + " MasterStore.waitUntilPaused started ...");
     	val buckets = TxConfig.get().BUCKETS_COUNT;
     	try {
 	        Runtime.increaseParallelism();
@@ -162,14 +162,14 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     		Runtime.decreaseParallelism(1n);
     	}
         paused();
-        Console.OUT.println(here + " TxManager.waitUntilPaused completed ...");
+        Console.OUT.println(here + " MasterStore.waitUntilPaused completed ...");
     }
     
     private def ensureActiveStatus() {
         try {
             statusLock();
             if (status != STATUS_ACTIVE)
-                throw new StorePausedException("Local store paused for recovery");
+                throw new StorePausedException(here + " MasterStore paused for recovery");
         }
         finally {
             statusUnlock();
