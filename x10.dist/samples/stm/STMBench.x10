@@ -95,6 +95,8 @@ public class STMBench {
             resetStatistics(map, throughputPLH);
             Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
         }
+        
+        Console.OUT.println("+++ STMBench Succeeded +++");
     }
     
     public static def runIteration(map:ResilientNativeMap, activePlaces:PlaceGroup, producersCount:Long, 
