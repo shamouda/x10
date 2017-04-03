@@ -106,13 +106,14 @@ public class LocalStore(immediateRecovery:Boolean) {
             try {
                  finish for (p in oldActivePlaces) {
                      val expectedSlave = oldActivePlaces.next(p);
+                     val activeSize = oldActivePlaces.size();
                      if (p.isDead() || expectedSlave.id == here.id /*p is my master*/ || p.id == here.id /* p is me*/)
                          continue;
                      at (p) async {
                          //at handshare receiver
                          plh().replace(vId, me);
                          if (plh().slave.id != expectedSlave.id){
-                             val slaveVId = plh().virtualPlaceId + 1;
+                             val slaveVId = (plh().virtualPlaceId + 1)%activeSize;
                              val newSlave = plh().slave;
                              at (newAddedPlaces) {
                                  atomic newAddedPlaces().add(new PlaceChange(slaveVId, newSlave));

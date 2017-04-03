@@ -276,7 +276,7 @@ public class STMBench {
             myThroughput.timesNS(slice) += elapsedNS;
             myThroughput.elapsedTimeNS = timeNS;
             
-            if (resilient && !map.plh().sameActivePlaces(activePlaces)) {
+            if (resilient && producerId == 0 && !map.plh().sameActivePlaces(activePlaces)) {
                 //update activePlaces
                 activePlaces = map.getActivePlaces();
             	val nxt = activePlaces.next(here);
@@ -323,6 +323,7 @@ public class STMBench {
         	}
         	allOperations += localCount * h * o;
         	allTimeNS     += localTimeNS;
+        	assert (localTimeNS != 0) : "invalid run, a segmentation fault probably caused one place to fail";
         	val localThroughput = (localCount as Double ) * h * o / (localTimeNS / 1e6);
             Console.OUT.println("iteration:" + iteration +":producer:"+producer.placeId+"x"+producer.threadId+ ":localthroughput(op/MS):"+localThroughput);
         }
