@@ -167,9 +167,9 @@ public class STMBench {
         val recovering = timeNS == 0? false : true;
         
         if (recovering)
-            Console.OUT.println("RecoveredProducer: " myVirtualPlaceId +"x"+producerId + " starting");
+            Console.OUT.println("RecoveredProducer: " + myVirtualPlaceId +"x"+producerId + " starting");
         else
-            Console.OUT.println("Producer: " myVirtualPlaceId +"x"+producerId + " starting");
+            Console.OUT.println("Producer: " + myVirtualPlaceId +"x"+producerId + " starting");
         
         /*****   for resilience   ******/
         var nextPlace:Place = map.plh().getNextPlace();
