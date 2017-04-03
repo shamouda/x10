@@ -83,7 +83,7 @@ public class STMBench {
         
         val startWarmup = Timer.milliTime();
         Console.OUT.println("warmup started");
-        runIteration(map, activePlaces, p, w, a, r, u, t, h, o, g, victimsList, throughputPLH, null);
+        runIteration(map, activePlaces, p, w, a, r, u, t, h, o, g, null, throughputPLH, null);
         resetStatistics(map, throughputPLH);
         Console.OUT.println("warmup completed, warmup elapsed time ["+(Timer.milliTime() - startWarmup)+"]  ms ");
         
@@ -129,7 +129,7 @@ public class STMBench {
                 produce(map, myVirtualPlaceId, producersCount, thrd-1, d, a, r, u, t, h, o, g, victims, throughput);
             }
             
-            if (resilient) {
+            if (resilient && victims != null) {
             	val killTime = victims.getKillTime(here);
             	if (killTime != -1) {
             		@Uncounted async {
