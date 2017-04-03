@@ -120,8 +120,6 @@ public class STMBench {
     		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, 
     		throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
         
-        Console.OUT.println("starting STMBench at place " + pl + " recoveryThroughput " + recoveryThroughput);
-        
         at (pl) async {
             val myVirtualPlaceId = map.getVirtualPlaceId();
             if (recoveryThroughput != null)
@@ -169,9 +167,9 @@ public class STMBench {
         val recovering = timeNS == 0? false : true;
         
         if (recovering)
-            Console.OUT.println("RecoveryProducer: " + myThroughput);
+            Console.OUT.println("RecoveredProducer: " myVirtualPlaceId +"x"+producerId + " starting");
         else
-            Console.OUT.println("Producer: " + myThroughput);
+            Console.OUT.println("Producer: " myVirtualPlaceId +"x"+producerId + " starting");
         
         /*****   for resilience   ******/
         var nextPlace:Place = map.plh().getNextPlace();
