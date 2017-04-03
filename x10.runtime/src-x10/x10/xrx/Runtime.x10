@@ -88,6 +88,9 @@ public final class Runtime {
     public static native def x10rtSendMessageInternal(id:Long, msgBody:()=>void, prof:Profile, preSendAction:()=>void):void;
 
     public static def x10rtSendMessage(id:Long, msgBody:()=>void, prof:Profile, preSendAction:()=>void):void {
+        if (id >= Place.numPlaces() || id < 0)
+            throw new Exception("FATAL exception invalid place id " + id );
+        
         var body:()=>void = msgBody;
         if (CANCELLABLE) {
             val epoch = epoch();
