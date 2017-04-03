@@ -213,6 +213,18 @@ public class LocalStore(immediateRecovery:Boolean) {
         }
     }
     
+    
+    public def getSlave(virtualId:Long) {
+        try {
+            lock();
+            val size = activePlaces.size();
+            return activePlaces((virtualId+1)%size);
+        }finally {
+            unlock();
+        }
+    }
+    
+    
     public def getNextPlace() {
         try {
             lock();

@@ -37,6 +37,15 @@ public class TxMembers(size:Long) {
         throw new Exception("illegal transaction configurations indx("+indx+") given("+toString()+")");
     }
     
+    public def getVirtualPlaceId(p:Place) {
+        for (var i :Long = 0; i < size; i++) {
+            if ( places(i).id == p.id)
+                return virtual(i);
+        }
+        throw new Exception("illegal transaction configurations place("+p+") given("+toString()+")");
+    }
+    
+    
     public def contains(indx:Long) {
         for (var i :Long = 0; i < size; i++) {
             if ( virtual(i) == indx)

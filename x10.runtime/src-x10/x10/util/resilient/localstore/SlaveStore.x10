@@ -99,7 +99,10 @@ public class SlaveStore {
             while (iter.hasNext()) {
                 val key = iter.next();
                 val value = txLog.transLog.getOrThrow(key);
-                data.put(key, value);
+                if (value == null)
+                    data.delete(key);
+                else
+                    data.put(key, value);
             }
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] here["+here+"] SlaveStore.commitLockAcquired() completed ...");
         }catch(ex:Exception){
