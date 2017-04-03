@@ -8,6 +8,7 @@ import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.AbstractTx;
 import x10.util.resilient.localstore.TxMembers;
+import x10.util.GrowableRail;
 
 /*
  * In eager replication, transaction side effects are applied at the slave immediately by the master.
@@ -154,8 +155,8 @@ public class EagerReplicationCommitHandler extends CommitHandler {
                 ex.printStackTrace();
             }
             try {
-            	val deadMasters = getDeadPlaces(ex, members);
-            	//some masters have died after validation, ask slaves to commit
+                val deadMasters = getDeadPlaces(ex, members);
+                //some masters have died after validation, ask slaves to commit
                 finalizeSlaves(true, deadMasters, plh, id, members);
             }
             catch(ex2:Exception) {
@@ -173,13 +174,28 @@ public class EagerReplicationCommitHandler extends CommitHandler {
             plh:PlaceLocalHandle[LocalStore], id:Long, members:TxMembers) {
         if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] " + ( commit? " Commit Started ": " Abort Started " ) + " ...");
         //if one of the masters die, let the exception be thrown to the caller, but hide dying slves
+        val deadMasters = new ArrayList[Place]();
         finish for (p in members.pg()) {
             /*skip aborted places*/
-            if (!commit && abortedPlaces.contains(p))
+            if (!commit && abortedPlaces.contains(p) && !p.isDead())
                 continue;
-        	at (p) async {
-        		finalizeLocal(commit, plh, id);
-        	}
+            
+            if (p.isDead()) {
+                deadMasters.add(p);
+            }
+            else {
+                at (p) async {
+                    finalizeLocal(commit, plh, id);
+                }
+            }
+        }
+        
+        if (deadMasters.size() > 0) {
+            val rail = new GrowableRail[CheckedThrowable](deadMasters.size());
+            for (var i:Long = 0 ; i < deadMasters.size() ; i ++){
+                rail(i) = new DeadPlaceException(deadMasters.get(i));
+            }
+            throw new MultipleExceptions(rail);
         }
     }
     
@@ -225,12 +241,26 @@ public class EagerReplicationCommitHandler extends CommitHandler {
         if (TxConfig.get().DISABLE_SLAVE)
             return;
         
+        /*
+        var str:String = "";
+        for ( p in deadMasters )
+            str += p + " ";
+        Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeSlaves here["+here+"]  deadMasters["+str+"] " );
+        */
+        
         //ask slaves to commit (their master died, 
         //and we need to resolve the slave's pending transactions)
         finish for (p in deadMasters) {
             assert(members.contains(p));
-            val slave = plh().getSlave(p);
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeSlaves here["+here+"] moving to slave["+plh().slave+"] to " + ( commit? "commit": "abort" ));
+            val virtualPlace = members.getVirtualPlaceId(p);
+            val slave = plh().getSlave(virtualPlace);
+            if (slave.id == -1) {
+                var str:String = "";
+                for ( k in deadMasters )
+                    str += k + " ";
+                Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeSlaves here["+here+"]  deadMasters["+str+"]  handling dead master p= " + p );
+            }
+            if (TxConfig.get().TM_DEBUG || slave.id == -1) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeSlaves here["+here+"] moving to slave["+slave+"] to " + ( commit? "commit": "abort" ));
             at (slave) async {
                 if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeSlaves here["+here+"] moved to slave["+here+"] to " + ( commit? "commit": "abort" ));
                 if (commit)

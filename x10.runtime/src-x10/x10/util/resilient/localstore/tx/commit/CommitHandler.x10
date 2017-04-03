@@ -62,7 +62,7 @@ public abstract class CommitHandler {
         try {
             val localTx = txDescMap.startLocalTransaction();
             if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " deleteTxDesc localTx["+localTx.id+"] started ...");
-            localTx.put("tx"+id, null);
+            localTx.delete("tx"+id);
             val ignoreDeadSlave = true;
             localTx.commit(ignoreDeadSlave);
             if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " deleteTxDesc localTx["+localTx.id+"] completed ...");
