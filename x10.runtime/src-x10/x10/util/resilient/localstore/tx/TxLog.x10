@@ -77,10 +77,10 @@ public class TxLog (id:Long) {
     }
     
     /*MUST be called before logPut and logDelete*/
-    public def logInitialValue(key:String, copiedValue:Cloneable, version:Int, txId:Long, lockedRead:Boolean, memU:MemoryUnit) {
+    public def logInitialValue(key:String, copiedValue:Cloneable, version:Int, txId:Long, lockedRead:Boolean, memU:MemoryUnit, added:Boolean) {
         var log:TxKeyChange = transLog.getOrElse(key, null);
         if (log == null) {
-            log = new TxKeyChange(copiedValue, version, txId, lockedRead, memU);
+            log = new TxKeyChange(copiedValue, version, txId, lockedRead, memU, added);
             transLog.put(key, log);
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " initial read ver["+version+"] val["+copiedValue+"]");
         }
@@ -88,6 +88,10 @@ public class TxLog (id:Long) {
     
     public def logPut(key:String, copiedValue:Cloneable) {
         return transLog.getOrThrow(key).update(copiedValue);
+    }
+    
+    public def logDelete(key:String) {
+        return transLog.getOrThrow(key).delete();
     }
     
     public def setReadOnly(key:String, ro:Boolean) {
@@ -98,7 +102,11 @@ public class TxLog (id:Long) {
     public def getReadOnly(key:String) {
         return transLog.getOrThrow(key).getReadOnly();
     }
-
+    
+    public def getDeleted(key:String) {
+        return transLog.getOrThrow(key).getDeleted();
+    }
+    
     // mark as locked for read
     public def setLockedRead(key:String, lr:Boolean) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + "here["+here+"] key["+key+"] setLockedRead("+lr+") ");
@@ -109,6 +117,11 @@ public class TxLog (id:Long) {
     public def setLockedWrite(key:String, lw:Boolean) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] key["+key+"] setLockedWrite("+lw+") ");
         transLog.getOrThrow(key).setLockedWrite(lw);
+    }
+    
+    public def setDeleted(key:String, d:Boolean) {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] key["+key+"] setDeleted("+d+") ");
+        transLog.getOrThrow(key).setDeleted(d);
     }
     
     public def getLockedRead(key:String) {

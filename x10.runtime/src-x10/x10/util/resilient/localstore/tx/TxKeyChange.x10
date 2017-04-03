@@ -34,18 +34,21 @@ public class TxKeyChange {
     private var lockedRead:Boolean = false;
     private var lockedWrite:Boolean = false;
 
+    private val added:Boolean;
+    private var deleted:Boolean = true;
     private val memU:MemoryUnit;
 
-    public def this(initValue:Cloneable, initVersion:Int, initTxId:Long, lockedRead:Boolean, memU:MemoryUnit) {
+    public def this(initValue:Cloneable, initVersion:Int, initTxId:Long, lockedRead:Boolean, memU:MemoryUnit, added:Boolean) {
         this.value = initValue;
         this.initVersion = initVersion;
         this.initTxId = initTxId;
         this.lockedRead = lockedRead;
         this.memU = memU;
+        this.added = added;
     }
     
     public def this (value:Cloneable, initVersion:Int, initTxId:Long,
-            readOnly:Boolean, lockedRead:Boolean, lockedWrite:Boolean, memU:MemoryUnit) {
+            readOnly:Boolean, lockedRead:Boolean, lockedWrite:Boolean, memU:MemoryUnit, added:Boolean) {
         this.value = value;
         this.initVersion = initVersion;
         this.initTxId = initTxId;
@@ -53,6 +56,7 @@ public class TxKeyChange {
         this.lockedRead = lockedRead;
         this.lockedWrite = lockedWrite;
         this.memU = memU;
+        this.added = added;
     }
     
     public def update(n:Cloneable) {
@@ -60,6 +64,14 @@ public class TxKeyChange {
         val oldValue = value;
         value = n;
         readOnly = false;
+        return oldValue;
+    }
+    
+    public def delete() {
+        val oldValue = value;
+        value = null;
+        readOnly = false;
+        deleted = true;
         return oldValue;
     }
     
@@ -75,18 +87,16 @@ public class TxKeyChange {
         lockedWrite = lw;
     }
     
-    /*
-    public def clone() {
-        return new TxKeyChange(value, initVersion, initTxId, readOnly, lockedRead, lockedWrite, memU);
+    public def setDeleted(d:Boolean) {
+        deleted = d;
     }
-    */
-    
     public def getMemoryUnit() = memU;
     public def getValue() = value;
     public def getReadOnly() = readOnly;
+    public def getDeleted() = deleted;
     public def getInitVersion() = initVersion;
     public def getInitTxId() = initTxId;
     public def getLockedRead() = lockedRead;
     public def getLockedWrite() = lockedWrite;
-    
+    public def getAdded() = added;
 }

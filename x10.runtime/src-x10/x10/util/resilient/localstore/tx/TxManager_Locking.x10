@@ -20,7 +20,7 @@ public class TxManager_Locking extends TxManager {
     }
     
     public def delete(id:Long, key:String):Cloneable {
-        return putLocked(id, key, null);
+        throw new Exception("operation not supported for lock based tx manager");
     }
     
     public def lockRead(id:Long, key:String) {

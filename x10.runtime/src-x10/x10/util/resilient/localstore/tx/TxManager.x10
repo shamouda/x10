@@ -83,8 +83,13 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 while (iter.hasNext()) {
                     val key = iter.next();
                     val memory = log.getMemoryUnit(key);
-                    val atomicV = memory.getAtomicValueLocked(true, key, id);
-                    map.put(key, atomicV.value);
+                    if (memory.isDeletedLocked()) {
+                        map.put(key, null);
+                    }
+                    else {
+                        val atomicV = memory.getAtomicValueLocked(true, key, id);
+                        map.put(key, atomicV.value);
+                    }
                 }
                 return map;
             }
@@ -308,7 +313,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             }
             var memory:MemoryUnit = log.getMemoryUnit(key);
             if (memory == null) {
-                memory = data.getMemoryUnit(key);
+                val memUResponse = data.getMemoryUnit(key);
+                memory = memUResponse.mem;
                 if (lockRead)
                     memory.lockRead(id, key);
                 
@@ -319,7 +325,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                     atomicV = memory.getAtomicValue(true, key, id); //will cause internal locking
                 val copy1 = atomicV.value;
                 val ver = atomicV.version;
-                log.logInitialValue(key, copy1, ver, id, lockRead, memory);
+                log.logInitialValue(key, copy1, ver, id, lockRead, memory, memUResponse.added);
             }
             return new LogContainer(memory, log);
         } catch(ex:AbortedTransactionException) {
@@ -344,7 +350,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     }
     
     /************  Common Implementations for Get/Put/Delete/Commit/Abort/Validate ****************/
-    private def lockWriteRV(id:Long, key:String, cont:LogContainer) {
+    private def lockWriteRV(id:Long, key:String, cont:LogContainer, delete:Boolean) {
         val memory = cont.memory;
         val log = cont.log;
         var atomicV:AtomicValue = null;
@@ -363,6 +369,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             }
             log.setLockedWrite(key, true);
             log.setReadOnly(key, false);
+            log.setDeleted(key, delete);
         }
         else 
             atomicV = memory.getAtomicValueLocked(false, key, id);
@@ -370,7 +377,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         return atomicV;
     }
     
-    private def lockWriteRL(id:Long, key:String, cont:LogContainer) {
+    private def lockWriteRL(id:Long, key:String, cont:LogContainer, delete:Boolean) {
         val memory = cont.memory;
         val log = cont.log;
         
@@ -383,11 +390,12 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             
             log.setLockedWrite(key, true);
             log.setReadOnly(key, false);
+            log.setDeleted(key, delete);
         }
     }
     
-    protected def put_RV_EA_WB(id:Long, key:String, value:Cloneable):Cloneable {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RV_EA_WB started");
+    protected def put_RV_EA_WB(id:Long, key:String, value:Cloneable, delete:Boolean):Cloneable {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RV_EA_WB started, key["+key+"] delete["+delete+"] ");
         var log:TxLog = null;
         try {     	
             val cont = logInitialIfNotLogged(id, key, false);        	
@@ -398,11 +406,15 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 ensureActiveStatus();
             
             /*** EarlyAcquire ***/
-            lockWriteRV(id, key, cont);
+            lockWriteRV(id, key, cont, delete);
             
-            /*** Write Buffering ***/            
-            val copy1 = (value == null)? null:value.clone();
-            return log.logPut(key, copy1);
+            /*** Write Buffering ***/
+            if (delete)
+                return log.logDelete(key);
+            else{
+                val copy1 = (value == null)? null:value.clone();
+                return log.logPut(key, copy1);
+            }
         } catch(ex:AbortedTransactionException) {
             return null;
         } catch(ex:Exception) {
@@ -415,8 +427,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         }
     }
     
-    protected def put_RL_EA_WB(id:Long, key:String, value:Cloneable):Cloneable {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RL_EA_WB started");
+    protected def put_RL_EA_WB(id:Long, key:String, value:Cloneable, delete:Boolean):Cloneable {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RL_EA_WB started, key["+key+"] delete["+delete+"] ");
         var log:TxLog = null;
         try {
             val cont = logInitialIfNotLogged(id, key, false);
@@ -427,11 +439,15 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 ensureActiveStatus();
             
             /*** EarlyAcquire ***/
-            lockWriteRL(id, key, cont);
+            lockWriteRL(id, key, cont, delete);
             
-            /*** Write Buffering ***/            
-            val copy1 = (value == null)? null:value.clone();
-            return log.logPut(key, copy1);
+            /*** Write Buffering ***/
+            if (delete)
+                return log.logDelete(key);
+            else {
+                val copy1 = (value == null)? null:value.clone();
+                return log.logPut(key, copy1);
+            }
         } catch(ex:AbortedTransactionException) {
             return null;
         } catch(ex:Exception) {
@@ -444,8 +460,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         }
     }
     
-    protected def put_RL_EA_UL(id:Long, key:String, value:Cloneable):Cloneable {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RL_EA_UL started");
+    protected def put_RL_EA_UL(id:Long, key:String, value:Cloneable, delete:Boolean):Cloneable {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RL_EA_UL started, key["+key+"] delete["+delete+"] ");
         var log:TxLog = null;
         try {
             val cont = logInitialIfNotLogged(id, key, false);
@@ -456,12 +472,16 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 ensureActiveStatus();
             
             /*** Early Acquire ***/
-            lockWriteRL(id, key, cont);
+            lockWriteRL(id, key, cont, delete);
             
             /*** Undo Logging ***/
-            val copy1 = (value == null)? null:value.clone();
-            return memory.setValueLocked(copy1, key, id);
-
+            if (delete){
+                return memory.setValueLocked(null, key, id, delete);
+            }
+            else {
+                val copy1 = (value == null)? null:value.clone();
+                return memory.setValueLocked(copy1, key, id, delete);
+            }
         } catch(ex:AbortedTransactionException) {
             return null;
         } catch(ex:Exception) {
@@ -474,8 +494,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         }
     }
     
-    protected def put_RV_EA_UL(id:Long, key:String, value:Cloneable):Cloneable {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RV_EA_UL started");
+    protected def put_RV_EA_UL(id:Long, key:String, value:Cloneable, delete:Boolean):Cloneable {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RV_EA_UL started, key["+key+"] delete["+delete+"] ");
         var log:TxLog = null;
         try {
             val cont = logInitialIfNotLogged(id, key, false);
@@ -486,11 +506,16 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 ensureActiveStatus();
             
             /*** EarlyAcquire ***/
-            val atomicV = lockWriteRV(id, key, cont);
+            val atomicV = lockWriteRV(id, key, cont, delete);
             
             /*** Undo Logging ***/
-            val copy1 = (value == null)? null:value.clone();
-            return memory.setValueLocked(copy1, key, id);
+            if (delete){
+                return memory.setValueLocked(null, key, id, delete);
+            }
+            else {
+                val copy1 = (value == null)? null:value.clone();
+                return memory.setValueLocked(copy1, key, id, delete);
+            }
         } catch(ex:AbortedTransactionException) {
             return null;
         } catch(ex:Exception) {
@@ -504,8 +529,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     }
     
     
-    protected def put_LA_WB(id:Long, key:String, value:Cloneable):Cloneable {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_LA_WB started");
+    protected def put_LA_WB(id:Long, key:String, value:Cloneable, delete:Boolean):Cloneable {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_LA_WB started, key["+key+"] delete["+delete+"] ");
         var log:TxLog = null;
         try {
             val cont = logInitialIfNotLogged(id, key, false);
@@ -520,7 +545,12 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             /*** Write Buffering ***/
             val copy1 = (value == null)? null:value.clone();            
             log.setReadOnly(key, false);
-            return log.logPut(key, copy1);
+            if (delete) {
+                return log.logDelete(key);
+            }
+            else
+                return log.logPut(key, copy1);
+            
         } catch(ex:AbortedTransactionException) {
             return null;
         } catch(ex:Exception) {
@@ -646,7 +676,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 val memory = log.getMemoryUnit(key);
                 
                 if (!log.getReadOnly(key)) {
-                    lockWriteRL(id, key, new LogContainer( memory, log));
+                    val deleted = log.getDeleted(key);
+                    lockWriteRL(id, key, new LogContainer( memory, log), deleted);
                     writeTx = true;
                 }
                 else {
@@ -769,7 +800,13 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             if (kLog.getLockedRead())
                 memory.unlockRead(log.id, key);
             else {
-                memory.setValueLocked(kLog.getValue(), key, log.id);
+                val deleted = kLog.getDeleted();
+                memory.setValueLocked(kLog.getValue(), key, log.id, deleted);
+                if (deleted) {
+                    memory.deleteLocked();
+                    data.deleteMemoryUnit(key);
+                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_WB key["+key+"] deleted");
+                }
                 memory.unlockWrite(log.id, key);
             }
         }
@@ -787,8 +824,15 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             val memory = log.getMemoryUnit(key);
             if (kLog.getLockedRead())
                 memory.unlockRead(log.id, key);
-            else 
+            else {
+                val deleted = kLog.getDeleted();
+                if (deleted) {
+                    memory.deleteLocked();
+                    data.deleteMemoryUnit(key);
+                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_UL key["+key+"] deleted");
+                }
                 memory.unlockWrite(log.id, key);
+            }
         }
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_UL completed");
     }
@@ -810,10 +854,21 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             val memory = log.getMemoryUnit(key);
            
             if (kLog.getLockedRead()) {
+                if (kLog.getAdded()){
+                    memory.deleteLocked();
+                    data.deleteMemoryUnit(key);
+                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_UL key["+key+"] deleted ");
+                }
                 memory.unlockRead(log.id, key);
             }
             else if (kLog.getLockedWrite()) {
-                memory.rollbackValueLocked(kLog.getValue(), kLog.getInitVersion(), key, log.id);
+                if (kLog.getAdded()){
+                    memory.deleteLocked();
+                    data.deleteMemoryUnit(key);
+                }
+                else { 
+                    memory.rollbackValueLocked(kLog.getValue(), kLog.getInitVersion(), key, log.id);    
+                }
                 memory.unlockWrite(log.id, key);
             }
             else {
@@ -840,8 +895,14 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             val memory = log.getMemoryUnit(key);
             if (kLog.getLockedRead())
                 memory.unlockRead(log.id, key);
-            else if (kLog.getLockedWrite()) 
+            else if (kLog.getLockedWrite()) {
+                if (kLog.getAdded()){
+                    memory.deleteLocked();
+                    data.deleteMemoryUnit(key);
+                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_WB key["+key+"] deleted ");
+                }
                 memory.unlockWrite(log.id, key);
+            }
         }
         log.aborted = true;
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_WB completed");
@@ -855,7 +916,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         val log = getOrAddLockingTxLog(id);
         var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
         if (memory == null) {
-            memory = data.getMemoryUnit(key);
+            memory = data.getMemoryUnit(key).mem;
             log.memUnits.put(key, memory);
         }
         memory.lockWrite(id, key);
@@ -866,7 +927,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         for (key in keys) {
             var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
             if (memory == null) {
-                memory = data.getMemoryUnit(key);
+                memory = data.getMemoryUnit(key).mem;
                 log.memUnits.put(key, memory);
             }
             memory.lockWrite(id, key);
@@ -877,7 +938,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         val log = getOrAddLockingTxLog(id);
         var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
         if (memory == null) {
-            memory = data.getMemoryUnit(key);
+            memory = data.getMemoryUnit(key).mem;
             log.memUnits.put(key, memory);
         }
         memory.lockRead(id, key);        
@@ -888,7 +949,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         for (key in keys) {
             var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
             if (memory == null) {
-                memory = data.getMemoryUnit(key);
+                memory = data.getMemoryUnit(key).mem;
                 log.memUnits.put(key, memory);
             }
             memory.lockRead(id, key);
@@ -938,7 +999,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         val log = getOrAddLockingTxLog(id);
         val memory = log.memUnits.getOrElse(key, null);
         assert (memory != null) : "locking mistake, putting a value before locking it";    
-        return memory.setValueLocked(value, key, id);
+        return memory.setValueLocked(value, key, id, false);
     }
     
     public static def txIdToString (txId:Long) {

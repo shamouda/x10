@@ -22,11 +22,11 @@ public class TxManager_RL_EA_UL extends TxManager {
     }
     
     public def put(id:Long, key:String, value:Cloneable):Cloneable {
-        return put_RL_EA_UL(id, key, value);
+        return put_RL_EA_UL(id, key, value, false);
     }
     
     public def delete(id:Long, key:String):Cloneable {
-        return put_RL_EA_UL(id, key, null);
+        return put_RL_EA_UL(id, key, null, true);
     }
     
     public def commit(log:TxLog) {

@@ -53,19 +53,35 @@ public class MapData {
         }
     }
     
-    public def getMemoryUnit(k:String):MemoryUnit {
+    public def getMemoryUnit(k:String):MemUnitResponse {
         var res:MemoryUnit = null;
+        var added:Boolean  = false;
         try {
             lockKey(k);
             res = metadata.getOrElseUnsafe(k, null);
             if (res == null) {
                 res = new MemoryUnit(null);
                 metadata.putUnsafe(k, res);
+                added = true;
+                val size = metadata.sizeUnsafe(); 
+                if (size %10000 == 0)
+                    Console.OUT.println(here + " MapData.size = " + size);
             }
+            res.ensureNotDeleted();
+            return new MemUnitResponse(res, added);
         }finally {
             unlockKey(k);
         }
-        return res;
+    }
+    
+    public def deleteMemoryUnit(k:String):void {
+        try {
+            lockKey(k);
+            metadata.deleteUnsafe(k);
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("MapData.delete(" + k + ")");
+        }finally {
+            unlockKey(k);
+        }
     }
     
     public def keySet(mapName:String) {
@@ -140,4 +156,13 @@ public class MapData {
         else
             return memU.baselineGet();
     }
+    
+    public static struct MemUnitResponse {
+        public val mem:MemoryUnit;
+        public val added:Boolean;
+        public def this(mem:MemoryUnit, added:Boolean) {
+            this.mem = mem;
+            this.added = added;
+        }
+    };
 }
