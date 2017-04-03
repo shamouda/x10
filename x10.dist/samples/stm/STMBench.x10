@@ -263,8 +263,6 @@ public class STMBench {
             txCount++;    
             if (g != -1 && txCount%g == 0) {
                 Console.OUT.println(here + " Progress "+myVirtualPlaceId+"x"+producerId + ":" + txCount );
-                if (recovering)
-                    Console.OUT.println("RecoveryProducer: " + myThroughput);
             }
             
             val elapsedNS = System.nanoTime() - start; 
@@ -305,7 +303,7 @@ public class STMBench {
             val plcTh = at(p) plh();
             for (i in 0..(t-1))
                 throughputList.add(plcTh.thrds(i));
-            Console.OUT.println(p + "==> " + plcTh);
+            //Console.OUT.println(p + "==> " + plcTh);
         }
         var allOperations:Long = 0;
         var allTimeNS:Long = 0;
