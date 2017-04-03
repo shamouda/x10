@@ -165,12 +165,12 @@ public class STMBench {
         val myThroughput = throughput().thrds(producerId);
         var timeNS:Long = myThroughput.elapsedTimeNS; // always 0 in non-resilient mode, non-zero for spare places in resilient mode
         val recovering = timeNS == 0? false : true;
-        
+        /*
         if (recovering)
             Console.OUT.println("RecoveredProducer: " + myVirtualPlaceId +"x"+producerId + " starting");
         else
             Console.OUT.println("Producer: " + myVirtualPlaceId +"x"+producerId + " starting");
-        
+        */
         /*****   for resilience   ******/
         var nextPlace:Place = map.plh().getNextPlace();
         var activePlaces:PlaceGroup = map.getActivePlaces();
