@@ -61,7 +61,7 @@ public class STMBench {
         val s = opts("s", 0);
         val vp = opts("vp", "");
         val vt = opts("vt", "");
-        val victimsList = new VictimsList(vp, vt, w);
+        val victimsList = new VictimsList(vp, vt);
         
         val mgr = new PlaceManager(s, false);
         val activePlaces = mgr.activePlaces();
@@ -448,7 +448,7 @@ public class STMBench {
     	private val places:Rail[Long];
 	    private val seconds:Rail[Long];
     	
-        public def this(vp:String, vt:String, w:Long) {
+        public def this(vp:String, vt:String) {
         	if (vp != null && !vp.equals("")) {
         	    assert (resilient) : "assertion error, set X10_RESILIENT_MODE to a non-zero value";
         	    val tmp = vp.split(",");
@@ -465,7 +465,7 @@ public class STMBench {
         		val tmp = vt.split(",");
         		seconds = new Rail[Long](tmp.size);
         	    for (var i:Long = 0; i < tmp.size; i++) {
-        	    	seconds(i) = Long.parseLong(tmp(i)) + w/1e3 as Long;
+        	    	seconds(i) = Long.parseLong(tmp(i));
         	    }
         	}
         	else
