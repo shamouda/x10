@@ -595,9 +595,10 @@ void x10rt_lgl_send_msg (x10rt_msg_params *p)
     x10rt_place d = p->dest_place;
 
     if (d >= x10rt_lgl_nplaces()) {
-         fatal("error, sending to place %u, while the total number of places %u.\n",
+         printf("error, sending to place %u, while the total number of places %u.\n",
                                    d, x10rt_lgl_nplaces());
     }
+    
     assert(d < x10rt_lgl_nplaces());
 
     if (d < x10rt_lgl_nhosts()) {
