@@ -325,7 +325,7 @@ public class STMBench {
         	}
         	allOperations += localCount * h * o;
         	allTimeNS     += localTimeNS;
-        	assert (localTimeNS != 0) : "invalid run, a segmentation fault probably caused one place to fail";
+        	//assert (localTimeNS != 0) : "invalid run, a segmentation fault probably caused one place to fail";
         	val localThroughput = (localCount as Double ) * h * o / (localTimeNS / 1e6);
             Console.OUT.println("iteration:" + iteration +":producer:"+producer.placeId+"x"+producer.threadId+ ":localthroughput(op/MS):"+localThroughput);
         }
