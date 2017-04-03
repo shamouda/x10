@@ -444,7 +444,7 @@ public class STMBench {
         }
     };
     
-    class VictimsList {
+    static class VictimsList {
     	private val places:Rail[Long];
 	    private val seconds:Rail[Long];
     	
