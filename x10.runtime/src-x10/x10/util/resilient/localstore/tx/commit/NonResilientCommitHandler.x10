@@ -28,8 +28,8 @@ public class NonResilientCommitHandler extends CommitHandler {
 
     
     /***********************   Two Phase Commit Protocol ************************/
-    public def commit(skipPhaseOne:Boolean):Int {
-    	assert (!skipPhaseOne) : "fatal error, skipPhaseOne must always be false in NonResilientCommitHandler";
+    public def commit(commitRecovery:Boolean):Int {
+    	assert (!commitRecovery) : "fatal error, commitRecovery must always be false in NonResilientCommitHandler";
         
         try {
         	commitPhaseOne(plh, id, members); // failures are fatal

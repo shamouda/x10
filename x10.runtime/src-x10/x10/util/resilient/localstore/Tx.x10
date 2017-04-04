@@ -104,13 +104,13 @@ public class Tx extends AbstractTx {
         return commit(false);
     }
     
-    @Pinned public def commit(skipPhaseOne:Boolean) {
+    @Pinned public def commit(commitRecovery:Boolean) {
         if (TxConfig.get().DISABLE_COMMIT)
             return AbstractTx.SUCCESS;
         
         assert(here.id == root.home.id);
         
-        val success = commitHandler.commit(skipPhaseOne);
+        val success = commitHandler.commit(commitRecovery);
 
         commitTime = Timer.milliTime();
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " committed, allTxTime [" + (commitTime-startTime) + "] ms");

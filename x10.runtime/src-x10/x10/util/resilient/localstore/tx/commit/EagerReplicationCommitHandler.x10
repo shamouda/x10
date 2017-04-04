@@ -54,8 +54,8 @@ public class EagerReplicationCommitHandler extends CommitHandler {
 
     
     /***********************   Two Phase Commit Protocol ************************/
-    public def commit(skipPhaseOne:Boolean):Int {
-        if (!skipPhaseOne) {
+    public def commit(commitRecovery:Boolean):Int {
+        if (!commitRecovery) {
             try {
             	commitPhaseOne(plh, id, members); // master failure is fatal, slave failure is not fatal
                 updateTxDesc(TxDesc.COMMITTING);

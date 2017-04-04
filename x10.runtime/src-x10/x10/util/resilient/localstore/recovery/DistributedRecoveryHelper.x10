@@ -31,7 +31,7 @@ public class DistributedRecoveryHelper {
         
         val slaveOfDeadMaster = oldActivePlaces.next(deadSlave);
         if (slaveOfDeadMaster.isDead())
-            throw new Exception(here + " Fatal error, two consecutive places died together : " + deadSlave + "  and " + slaveOfDeadMaster);
+            throw new Exception(here + " Fatal error, two consecutive places died : " + deadSlave + "  and " + slaveOfDeadMaster);
         
         finish {
             at (slaveOfDeadMaster) async createMasterStoreAtSpare(plh, spare, oldActivePlaces);
@@ -72,7 +72,6 @@ public class DistributedRecoveryHelper {
             plh().slaveStore = new SlaveStore(masterState);
         }
         plh().slave = spare;
-        Console.OUT.println(here + " slave changed to " + spare);
         plh().masterStore.reactivate();
     }
     
@@ -102,15 +101,6 @@ public class DistributedRecoveryHelper {
         return Place(placeIndx);
     }
     
-    private static def generateNewActivePlaces(deadPlace:Place, newPlace:Place, oldActivePlaces:PlaceGroup) {
-        val rail = new Rail[Place]();
-        for (var i:Long = 0; i < oldActivePlaces.size(); i++) {
-            if (oldActivePlaces(i).id == deadPlace.id)
-                rail(i) = newPlace;
-        }
-        return new SparsePlaceGroup(rail);
-    }
-
     private static def completeInitiatedTransactions(plh:PlaceLocalHandle[LocalStore]) {
     	Console.OUT.println(here + " slave acting as master to complete dead master's transactions ...");
     	val txDescs = plh().slaveStore.getTransDescriptors();

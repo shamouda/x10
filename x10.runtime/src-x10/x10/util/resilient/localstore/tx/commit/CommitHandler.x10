@@ -14,7 +14,7 @@ public abstract class CommitHandler {
 	public transient var txLoggingElapsedTime:Long = 0;
 
     public abstract def abort(abortedPlaces:ArrayList[Place], recovery:Boolean):void;
-    public abstract def commit(skipPhaseOne:Boolean):Int;
+    public abstract def commit(commitRecovery:Boolean):Int;
     
     protected plh:PlaceLocalHandle[LocalStore];
     protected id:Long;

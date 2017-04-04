@@ -129,22 +129,18 @@ public class MasterStore(immediateRecovery:Boolean) {
     }
     
     public def isActive() {
-        assert (immediateRecovery);
         return txManager.isActive();
     }
     
     public def pausing() {
-        assert (immediateRecovery);
     	txManager.pausing();
     }
     
     public def reactivate() {
-        assert (immediateRecovery);
         txManager.reactivate();
     }
     
     public def waitUntilPaused() {
-        assert (immediateRecovery);
     	txManager.waitUntilPaused();
     }
     

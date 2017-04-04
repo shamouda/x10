@@ -65,8 +65,8 @@ public class LazyReplicationCommitHandler extends CommitHandler {
 
     
     /***********************   Two Phase Commit Protocol ************************/
-    public def commit(skipPhaseOne:Boolean):Int {
-        if (!skipPhaseOne) {
+    public def commit(commitRecovery:Boolean):Int {
+        if (!commitRecovery) {
             try {
                 commitPhaseOne(plh, id, members); // master failure is fatal, slave failure is not fatal
                 updateTxDesc(TxDesc.COMMITTING);
@@ -77,7 +77,7 @@ public class LazyReplicationCommitHandler extends CommitHandler {
             }
         }
 
-        commitPhaseTwo(plh, id, members);
+        commitPhaseTwo(plh, id, members, commitRecovery);
         
     	/* if we don't mark the committed transaction, 
     	 * we will have to recommit all transactions that are already committed */
@@ -132,17 +132,22 @@ public class LazyReplicationCommitHandler extends CommitHandler {
         if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] send log to slave ["+plh().slave+"] DONE ...");
     }
     
-    private def commitPhaseTwo(plh:PlaceLocalHandle[LocalStore], id:Long, members:TxMembers) {
+    private def commitPhaseTwo(plh:PlaceLocalHandle[LocalStore], id:Long, members:TxMembers, commitRecovery:Boolean) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseTwo ...");
         val start = Timer.milliTime();
         try {
-            //ask masters and slaves to commit, ignore dead slaves or masters
             finalize(true, null, plh, id, members);
         }
-        catch(ex:MultipleExceptions) {
-            if (TxConfig.get().TM_DEBUG) {
-                Console.OUT.println(here + "commitPhaseTwo Exception[" + ex.getMessage() + "]");
-                ex.printStackTrace();
+        catch(ex:MultipleExceptions) {    
+            if (commitRecovery) {
+                try {
+                    val deadMasters = getDeadPlaces(ex, members); //some masters have died after validation, ask slaves to commit
+                    finalizeSlaves(true, deadMasters, plh, id, members);
+                }
+                catch(ex2:Exception) {
+                    ex2.printStackTrace();
+                    throw new Exception("FATAL ERROR: Master and Slave died together, Exception["+ex2.getMessage()+"] ");
+                }
             }
         } finally {
             phase2ElapsedTime = Timer.milliTime() - start;
