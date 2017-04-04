@@ -339,7 +339,7 @@ public class LocalStore(immediateRecovery:Boolean) {
     //synchronized version of asyncSlaveRecovery
     public def recoverSlave(spare:Place) {
         Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+")");
-        if (!immediateRecovery)
+        if (immediateRecovery)
             return;
         
         assert (slave.isDead()) : "bug in LocalStore, calling asyncSlaveRecovery although the slave is alive";
