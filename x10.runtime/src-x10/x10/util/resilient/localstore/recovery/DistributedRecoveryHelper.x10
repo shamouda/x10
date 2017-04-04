@@ -72,6 +72,7 @@ public class DistributedRecoveryHelper {
             plh().slaveStore = new SlaveStore(masterState);
         }
         plh().slave = spare;
+        Console.OUT.println(here + " slave changed to " + spare);
         plh().masterStore.reactivate();
     }
     
@@ -123,7 +124,7 @@ public class DistributedRecoveryHelper {
             }
             else if (txDesc.status == TxDesc.STARTED) {
                 if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] abort it");
-                tx.abort();
+                tx.abortRecovery();
             }
     	}
         Console.OUT.println(here + " slave acting as master to complete dead master's transactions done ...");

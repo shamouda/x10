@@ -31,13 +31,11 @@ public class STMAppUtils {
     }
     
     public static def sumAccounts(map:ResilientNativeMap, activePG:PlaceGroup){
-        var sum:Long = 0;
-        val list = new ArrayList[Future[Any]]();
-
         val members = new Rail[Long](activePG.size(), (i:Long)=> i);
-        map.executeTransaction(members, (tx:Tx) => {
+        val result = map.executeTransaction(members, (tx:Tx) => {
+            var sum:Long = 0;
 	        for (p in members) {
-	            val f = tx.asyncAt(p, () => {
+	            sum += tx.evalAt(p, () => {
 	                var localSum:Long = 0;
 	                val set = tx.keySet();
 	                val iter = set.iterator();
@@ -49,23 +47,18 @@ public class STMAppUtils {
 	                    }
 	                }
 	                return localSum;
-	            });
-	            list.add(f);
+	            }) as Long;
 	        }
-	        return null;
+	        return sum;
         });
-        
-        for (f in list)
-            sum += f.force() as Long;        
-        return sum;
+        return result.output;
     }
     
     public static def sumAccountsLocking(map:ResilientNativeMap, activePG:PlaceGroup){
 		val result = map.executeLockingTransaction(new ArrayList[LockingRequest](), (tx:LockingTx) => {
 			var sum:Long = 0;
-			val list = new ArrayList[Future[Any]]();
 	        for (var p:Long = 0; p < activePG.size(); p++) {
-	            val f = tx.asyncAt(p, () => {
+	            sum += tx.evalAt(p, () => {
 	                var localSum:Long = 0;
 	                val set = tx.keySet();
 	                val iter = set.iterator();
@@ -77,11 +70,9 @@ public class STMAppUtils {
 	                    }
 	                }
 	                return localSum;
-	            });
-	            list.add(f);
+	            }) as Long;
 	        }
-	        for (f in list)
-	            sum += f.force() as Long;
+	        
 	        return sum;
 		});
         return result.output;

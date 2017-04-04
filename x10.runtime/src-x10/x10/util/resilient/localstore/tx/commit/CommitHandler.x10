@@ -13,7 +13,7 @@ public abstract class CommitHandler {
     public transient var phase2ElapsedTime:Long = 0;
 	public transient var txLoggingElapsedTime:Long = 0;
 
-    public abstract def abort(abortedPlaces:ArrayList[Place]):void;
+    public abstract def abort(abortedPlaces:ArrayList[Place], recovery:Boolean):void;
     public abstract def commit(skipPhaseOne:Boolean):Int;
     
     protected plh:PlaceLocalHandle[LocalStore];
@@ -28,6 +28,26 @@ public abstract class CommitHandler {
     	this.mapName = mapName;
     	this.members = members;
     	this.txDescMap = txDescMap;
+    }
+    /***************************************************************************************/
+    protected def finalizeSlaves(commit:Boolean, deadMasters:ArrayList[Place], 
+            plh:PlaceLocalHandle[LocalStore], id:Long, members:TxMembers) {
+        
+        //ask slaves to commit (their master died, 
+        //and we need to resolve the slave's pending transactions)
+        finish for (p in deadMasters) {
+            assert(members.contains(p));
+            val virtualPlace = members.getVirtualPlaceId(p);
+            val slave = plh().getSlave(virtualPlace);
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeSlaves here["+here+"] moving to slave["+slave+"] to " + ( commit? "commit": "abort" ));
+            at (slave) async {
+                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeSlaves here["+here+"] moved to slave["+here+"] to " + ( commit? "commit": "abort" ));
+                if (commit)
+                    plh().slaveStore.commit(id);
+                else
+                    plh().slaveStore.abort(id);
+            }
+        }
     }
     
     protected def updateTxDesc(status:Long){

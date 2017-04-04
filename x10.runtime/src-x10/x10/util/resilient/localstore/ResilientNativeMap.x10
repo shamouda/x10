@@ -58,17 +58,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     }
     
     public def set2(key:String, value:Cloneable, place:Place, key2:String, value2:Cloneable) {
-        if (here.id == place.id) {
-            set2(key, value, key2, value2);
-        }
-        else {
-            val members = plh().physicalToVirtual(here, place);
-            executeTransaction (members, (tx:Tx)=>{
-                tx.asyncAt(members(1), ()=> {tx.put(key2, value2);});
-                tx.put(key, value);
-                return null;
-            });
-        }
+        throw new Exception("method deprecated");
     }
     
     public def set2(key:String, value:Cloneable, key2:String, value2:Cloneable) {        
@@ -80,10 +70,12 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     
     public def getActivePlaces() = plh().getActivePlaces();
     
+    public def getPlace(virtualId:Long) = plh().getPlace(virtualId);
+    
     /***********************   Local Transactions ****************************/
     
     public def startLocalTransaction():LocalTx {
-        assert(plh().virtualPlaceId != -1);
+        assert(plh().virtualPlaceId != -1) : here + " LocalTx assertion error  virtual place id = -1";
         val id = plh().masterStore.getNextTransactionId();
         val tx = new LocalTx(plh, id, name);
         plh().txList.addLocalTx(tx);
@@ -231,13 +223,13 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     }
     
     /**************Baseline Operations*****************/
-    private def startBaselineTransaction():BaselineTx {
+    private def startBaselineTransaction():AbstractTx {
         assert(plh().virtualPlaceId != -1);
         val id = baselineTxId ++;
-        val tx = new BaselineTx(plh, id, name);
+        val tx = new AbstractTx(plh, id, name);
         return tx;
     }
-    public def executeBaselineTransaction(closure:(BaselineTx)=>Any) {
+    public def executeBaselineTransaction(closure:(AbstractTx)=>Any) {
         val tx = startBaselineTransaction();
         val out = closure(tx);
         return out;
@@ -260,8 +252,8 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
             }
             
             if (deadExList != null && deadExList.size != 0) {
-                if (!immediateRecovery || TxConfig.get().TESTING) {
-                    Console.OUT.println(here + " FATAL DEAP PLACE EXCEPTION");
+                if (!immediateRecovery) {
+                    //Console.OUT.println(here + " FATAL DEAD PLACE EXCEPTION");
                     ex.printStackTrace();
                     throw ex;
                 }
@@ -272,8 +264,8 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
             }
         } 
         else if (ex instanceof DeadPlaceException) {
-            if (!immediateRecovery  || TxConfig.get().TESTING) {
-                Console.OUT.println(here + " FATAL DEAP PLACE EXCEPTION   TESTING");
+            if (!immediateRecovery) {
+                //Console.OUT.println(here + " FATAL DEAD PLACE EXCEPTION");
                 throw ex;
             }
             else {
@@ -284,7 +276,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
         else if (ex instanceof StorePausedException) {
             System.threadSleep(TxConfig.get().DPE_SLEEP_MS);
         } else if (!(ex instanceof ConflictException || ex instanceof AbortedTransactionException  )) {
-            Console.OUT.println(here + " FATAL EXCEPTION  [" + ex + "] ");
+            //Console.OUT.println(here + " FATAL EXCEPTION  [" + ex + "] ");
             throw ex;
         }
         return dpe;
@@ -298,7 +290,6 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
                 //####         Global TX         ####//
                 val g_commitList = new ArrayList[Double]();
                 val g_commitProcList = new ArrayList[Double]();
-                val g_waitList = new ArrayList[Double]();
                 val g_commitPH1List = new ArrayList[Double]();
                 val g_commitPH2List = new ArrayList[Double]();
                 val g_txLoggingList = new ArrayList[Double]();
@@ -310,7 +301,6 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
                     if (tx.commitTime != -1) {
                         g_commitList.add(tx.commitTime - tx.startTime);
                         g_commitProcList.add(tx.processingElapsedTime);
-                        g_waitList.add(tx.waitElapsedTime);
                         g_commitPH1List.add(tx.getPhase1ElapsedTime());
                         g_commitPH2List.add(tx.getPhase2ElapsedTime());
                         g_txLoggingList.add(tx.getTxLoggingElapsedTime());
@@ -342,27 +332,24 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
                 val lk_totalList = new ArrayList[Double]();
                 val lk_lockList = new ArrayList[Double]();
                 val lk_procList = new ArrayList[Double]();
-                val lk_waitList = new ArrayList[Double]();
                 val lk_unlockList = new ArrayList[Double]();
                 
                 for (tx in plh().txList.lockingTx) {
                     lk_totalList.add(tx.totalElapsedTime);
                     lk_lockList.add(tx.lockingElapsedTime);
                     lk_procList.add(tx.processingElapsedTime);
-                    lk_waitList.add(tx.waitElapsedTime);
                     lk_unlockList.add(tx.unlockingElapsedTime);
                 }
                  
-                new TxPlaceStatistics(here, g_commitList, g_commitProcList, g_waitList,  g_commitPH1List, g_commitPH2List, g_txLoggingList, g_abortList, g_abortProcList, 
+                new TxPlaceStatistics(here, g_commitList, g_commitProcList, g_commitPH1List, g_commitPH2List, g_txLoggingList, g_abortList, g_abortProcList, 
                                             l_commitList, l_commitProcList, l_abortList, l_abortProcList,
-                                            lk_totalList, lk_lockList, lk_procList, lk_waitList, lk_unlockList)
+                                            lk_totalList, lk_lockList, lk_procList, lk_unlockList)
             };
             pl_stat.add(pstat);
         }
         
         val g_allCommitList = new ArrayList[Double]();
         val g_allCommitProcList = new ArrayList[Double]();
-        val g_allWaitList = new ArrayList[Double]();
         val g_allPH1List = new ArrayList[Double]();
         val g_allPH2List = new ArrayList[Double]();
         val g_allTxLoggingList = new ArrayList[Double]();
@@ -381,7 +368,6 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
         val lk_allTotalList = new ArrayList[Double]();
         val lk_allLockList = new ArrayList[Double]();
         val lk_allProcList = new ArrayList[Double]();
-        val lk_allWaitList = new ArrayList[Double]();
         val lk_allUnlockList = new ArrayList[Double]();
         var lk_Places:Long = 0;
         
@@ -391,7 +377,6 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
                 Console.OUT.println(str);
             g_allCommitList.addAll(pstat.g_commitList);
             g_allCommitProcList.addAll(pstat.g_commitProcList);
-            g_allWaitList.addAll(pstat.g_waitList);
             g_allPH1List.addAll(pstat.g_ph1List);
             g_allPH2List.addAll(pstat.g_ph2List);
             g_allTxLoggingList.addAll(pstat.g_txLoggingList);
@@ -418,7 +403,6 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
             lk_allTotalList.addAll(pstat.lk_totalList);
             lk_allLockList.addAll(pstat.lk_lockList);
             lk_allProcList.addAll(pstat.lk_procList);
-            lk_allWaitList.addAll(pstat.lk_waitList);
             lk_allUnlockList.addAll(pstat.lk_unlockList);
             
             if (pstat.lk_totalList.size() > 0)
@@ -432,9 +416,6 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
         val g_cProcMean  = TxStatistics.mean(g_allCommitProcList);
         val g_cProcSTDEV = TxStatistics.stdev(g_allCommitProcList, g_cProcMean);
         val g_cProcBox   = TxStatistics.boxPlot(g_allCommitProcList);
-        val g_cWaitMean  = TxStatistics.mean(g_allWaitList);
-        val g_cWaitSTDEV = TxStatistics.stdev(g_allWaitList, g_cWaitMean);
-        val g_cWaitBox   = TxStatistics.boxPlot(g_allWaitList);
         val g_cPH1Mean   = TxStatistics.mean(g_allPH1List);
         val g_cPH1STDEV  = TxStatistics.stdev(g_allPH1List, g_cPH1Mean);
         val g_cPH1Box    = TxStatistics.boxPlot(g_allPH1List);
@@ -478,9 +459,6 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
         val lk_procMean  = TxStatistics.mean(lk_allProcList);
         val lk_procSTDEV = TxStatistics.stdev(lk_allProcList, lk_procMean);
         val lk_procBox   = TxStatistics.boxPlot(lk_allProcList);
-        val lk_waitMean  = TxStatistics.mean(lk_allWaitList);
-        val lk_waitSTDEV = TxStatistics.stdev(lk_allWaitList, lk_waitMean);
-        val lk_waitBox   = TxStatistics.boxPlot(lk_allWaitList);
         val lk_unlockMean  = TxStatistics.mean(lk_allUnlockList);
         val lk_unlockSTDEV = TxStatistics.stdev(lk_allUnlockList, lk_unlockMean);
         val lk_unlockBox   = TxStatistics.boxPlot(lk_allUnlockList);
@@ -489,7 +467,6 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
             Console.OUT.println("Summary:GLOBAL_TX:committedTxs:"     + g_cCnt       + ":committedPlaces:" + g_cPlaces ); 
             Console.OUT.println("Summary:GLOBAL_TX:commitMeanMS:"     + g_cMean      + ":commitSTDEV:"     + g_cSTDEV     + ":commitBox:(:"     + g_cBox + ":)" ); 
             Console.OUT.println("Summary:GLOBAL_TX:commitProcMeanMS:" + g_cProcMean  + ":commitProcSTDEV:" + g_cProcSTDEV + ":commitProcBox:(:" + g_cProcBox + ":)" );
-            Console.OUT.println("Summary:GLOBAL_TX:waitMeanMS:"       + g_cWaitMean  + ":waitSTDEV:"       + g_cWaitSTDEV + ":waitBox:(:"       + g_cWaitBox + ":)" );
             Console.OUT.println("Summary:GLOBAL_TX:ph1MeanMS:"        + g_cPH1Mean   + ":ph1STDEV:"        + g_cPH1STDEV  + ":ph1Box:(:"        + g_cPH1Box + ":)" );
             Console.OUT.println("Summary:GLOBAL_TX:ph2MeanMS:"        + g_cPH2Mean   + ":ph2STDEV:"        + g_cPH2STDEV  + ":ph2Box:(:"        + g_cPH2Box + ":)" );
             Console.OUT.println("Summary:GLOBAL_TX:logMeanMS:"        + g_cLogMean   + ":logSTDEV:"        + g_cLogSTDEV  + ":logBox:(:"        + g_cLogBox + ":)" );
@@ -512,7 +489,6 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
             Console.OUT.println("Summary:LOCKING_TX:totalMeanMS:"  + lk_totalMean  + ":totalSTDEV:"  + lk_totalSTDEV    + ":totalBox:(:"    + lk_totalBox + ":)" );
             Console.OUT.println("Summary:LOCKING_TX:lockMeanMS:"   + lk_lockMean   + ":lockSTDEV:"   + lk_lockSTDEV     + ":lockBox:(:"     + lk_lockBox + ":)" );
             Console.OUT.println("Summary:LOCKING_TX:procMeanMS:"   + lk_procMean   + ":procSTDEV:"   + lk_procSTDEV     + ":procBox:(:"     + lk_procBox + ":)" );
-            Console.OUT.println("Summary:LOCKING_TX:waitMeanMS:"   + lk_waitMean   + ":waitSTDEV:"   + lk_waitSTDEV     + ":waitBox:(:"     + lk_waitBox + ":)" );
             Console.OUT.println("Summary:LOCKING_TX:unlockMeanMS:" + lk_unlockMean + ":unlockSTDEV:" + lk_unlockSTDEV   + ":unlockBox:(:"   + lk_unlockBox + ":)" );
         }
     }
@@ -535,11 +511,11 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     
 }
 
-class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_commitProcList:ArrayList[Double], g_waitList:ArrayList[Double], 
+class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_commitProcList:ArrayList[Double],  
                                  g_ph1List:ArrayList[Double], g_ph2List:ArrayList[Double], g_txLoggingList:ArrayList[Double], 
                                  g_abortList:ArrayList[Double], g_abortProcList:ArrayList[Double], 
                                  l_commitList:ArrayList[Double], l_commitProcList:ArrayList[Double], l_abortList:ArrayList[Double], l_abortProcList:ArrayList[Double],
-                                 lk_totalList:ArrayList[Double], lk_lockList:ArrayList[Double], lk_procList:ArrayList[Double], lk_waitList:ArrayList[Double], lk_unlockList:ArrayList[Double]) {
+                                 lk_totalList:ArrayList[Double], lk_lockList:ArrayList[Double], lk_procList:ArrayList[Double], lk_unlockList:ArrayList[Double]) {
     public def toString() {
         
         val g_commitMean      = TxStatistics.mean(g_commitList);
@@ -548,9 +524,6 @@ class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_commitProcLis
         val g_commitProcMean  = TxStatistics.mean(g_commitProcList);
         val g_commitProcSTDEV = TxStatistics.stdev(g_commitProcList, g_commitProcMean);
         val g_commitProcBox   = TxStatistics.boxPlot(g_commitProcList);
-        val g_waitMean        = TxStatistics.mean(g_waitList);
-        val g_waitSTDEV       = TxStatistics.stdev(g_waitList, g_waitMean);
-        val g_waitBox         = TxStatistics.boxPlot(g_waitList);
         val g_ph1Mean         = TxStatistics.mean(g_ph1List);
         val g_ph1STDEV        = TxStatistics.stdev(g_ph1List, g_ph1Mean);
         val g_ph1Box          = TxStatistics.boxPlot(g_ph1List);
@@ -589,9 +562,6 @@ class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_commitProcLis
         val lk_procMean      = TxStatistics.mean(lk_procList);
         val lk_procSTDEV     = TxStatistics.stdev(lk_procList, lk_procMean);
         val lk_procBox       = TxStatistics.boxPlot(lk_procList);
-        val lk_waitMean      = TxStatistics.mean(lk_waitList);
-        val lk_waitSTDEV     = TxStatistics.stdev(lk_waitList, lk_waitMean);
-        val lk_waitBox       = TxStatistics.boxPlot(lk_waitList);
         val lk_unlockMean      = TxStatistics.mean(lk_unlockList);
         val lk_unlockSTDEV     = TxStatistics.stdev(lk_unlockList, lk_unlockMean);
         val lk_unlockBox       = TxStatistics.boxPlot(lk_unlockList);
@@ -600,7 +570,6 @@ class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_commitProcLis
         if (g_commitList.size() > 0) {
             str += p + ":GLOBAL_TX:commitCount:"+ g_commitList.size() + ":commitMeanMS:"     + g_commitMean    + ":commitSTDEV:"    + g_commitSTDEV    + ":commitBox:(:" + g_commitBox + ":)" 
                                                                       + ":commitProcMeanMS:" + g_commitProcMean + ":commitProcSTDEV:" + g_commitProcSTDEV + ":commitProcBox:(:" + g_commitProcBox + ":)"
-                                                                      + ":waitMeanMS:"       + g_waitMean      + ":waitSTDEV:"  + g_waitSTDEV   + ":waitBox:(:" + g_waitBox + ":)"
                                                                       + ":ph1MeanMS:"        + g_ph1Mean       + ":ph1STDEV:"   + g_ph1STDEV    + ":ph1Box:(:" + g_ph1Box + ":)"
                                                                       + ":ph2MeanMS:"        + g_ph2Mean       + ":ph2STDEV:"   + g_ph2STDEV    + ":ph2Box:(:" + g_ph2Box + ":)"
                                                                       + ":logMeanMS:"        + g_logMean       + ":logSTDEV:"   + g_logSTDEV    + ":logBox:(:" + g_logBox + ":)\n";
@@ -620,7 +589,6 @@ class TxPlaceStatistics(p:Place, g_commitList:ArrayList[Double], g_commitProcLis
                 + ":totalMeanMS:"    + lk_totalMean    + ":totalSTDEV:"    + lk_totalSTDEV    + ":totalBox:(:" + lk_totalBox + ":)"
                 + ":lockMeanMS:"    + lk_lockMean    + ":lockSTDEV:"    + lk_lockSTDEV    + ":lockBox:(:" + lk_lockBox + ":)" 
                 + ":procMeanMS:"    + lk_procMean    + ":procSTDEV:"    + lk_procSTDEV    + ":procBox:(:" + lk_procBox + ":)" 
-                + ":waitMeanMS:"    + lk_waitMean    + ":waitSTDEV:"    + lk_waitSTDEV    + ":waitBox:(:" + lk_waitBox + ":)" 
                 + ":unlockMeanMS:" + lk_unlockMean + ":unlockSTDEV:" + lk_unlockSTDEV + ":unlockBox:(:" + lk_unlockBox + ":)\n" ; 
         }
 

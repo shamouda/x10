@@ -24,10 +24,9 @@ import x10.util.resilient.localstore.tx.commit.*;
 import x10.compiler.Uncounted;
 import x10.compiler.Immediate;
 import x10.util.resilient.localstore.Cloneable;
-import x10.util.concurrent.Future;
 import x10.util.concurrent.Lock;
 
-public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers) extends AbstractTx {
+public class Tx extends AbstractTx {
     private val root = GlobalRef[Tx](this);
     private val commitHandler:CommitHandler;
     
@@ -37,21 +36,18 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     
     // consumed time
     public transient var processingElapsedTime:Long = 0; ////including waitTime
-    public transient var waitElapsedTime:Long = 0;
     public transient var txLoggingElapsedTime:Long = 0;
     
     /* resilient mode variables */
     private transient var aborted:Boolean = false;
     private transient var txDescMap:ResilientNativeMap;
     
+    private val members:TxMembers;
+    
     public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers, txDescMap:ResilientNativeMap) {
-        property(plh, id, mapName, members);
-        if (!TxConfig.get().DISABLE_TX_LOGGING) //enable desc requires enable slave
-            assert(!TxConfig.get().DISABLE_SLAVE);
+        super(plh, id, mapName);
+        this.members = members;
         
-        if (resilient) {
-            this.txDescMap = txDescMap;
-        }
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("TX["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] started members["+members.toString()+"]");
         	
         if (resilient) {
@@ -59,6 +55,7 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
                 commitHandler = new NonResilientCommitHandler(plh, id, mapName, members, txDescMap);
             }
             else {
+                this.txDescMap = txDescMap;
                 if (TxConfig.get().TM_REP.equals("lazy"))
                     commitHandler = new LazyReplicationCommitHandler(plh, id, mapName, members, txDescMap);
                 else   
@@ -70,205 +67,28 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     }
     
     /********** Setting the pre-commit time for statistical analysis **********/   
-    public def setWaitElapsedTime(t:Long) {
-        waitElapsedTime = t;
-    }
-    
     public def getPhase1ElapsedTime() = commitHandler.phase1ElapsedTime;
     public def getPhase2ElapsedTime() = commitHandler.phase2ElapsedTime;
     public def getTxLoggingElapsedTime() = commitHandler.txLoggingElapsedTime;
-    
-    public def noop(key:String):Cloneable {
-        return null;
-    }
-    
-    /***************** Get ********************/
-    public def get(key:String):Cloneable {
-        return execute(GET_LOCAL, -1, key, null, null, null, plh, id, mapName, members, root).value as Cloneable;
-    }
-    
-    public def getRemote(dest:Long, key:String):Cloneable {
-        return execute(GET_REMOTE, dest, key, null, null, null, plh, id, mapName, members, root).value as Cloneable;
-    }
-    
-    public def asyncGetRemote(dest:Long, key:String):Future[Any] {
-        return execute(ASYNC_GET, dest, key, null, null, null, plh, id, mapName, members, root).future;
-    }
-    
-    private def getLocal(key:String, plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String):Cloneable {
-        return plh().masterStore.get(mapName, id, key);
-    }
-    
-    /***************** PUT ********************/
-    public def put(key:String, value:Cloneable):Cloneable {
-        return execute(PUT_LOCAL, -1, key, value, null, null, plh, id, mapName, members, root).value as Cloneable;
-    }
-    
-    public def putRemote(dest:Long, key:String, value:Cloneable):Cloneable {
-        return execute(PUT_REMOTE, dest, key, value, null, null, plh, id, mapName, members, root).value as Cloneable;
-    }
-    
-    public def asyncPutRemote(dest:Long, key:String, value:Cloneable):Future[Any] {
-        return execute(ASYNC_PUT, dest, key, value, null, null, plh, id, mapName, members, root).future;
-    }
-    
-    private def putLocal(key:String, value:Cloneable, plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String):Cloneable {
-        return plh().masterStore.put(mapName, id, key, value);
-    }
-    
-    /***************** Delete ********************/
-    public def delete(key:String):Cloneable {
-        return execute(DELETE_LOCAL, -1, key, null, null, null, plh, id, mapName, members, root).value as Cloneable;
-    }
-    
-    public def deleteRemote(dest:Long, key:String):Cloneable {
-        return execute(DELETE_REMOTE, dest, key, null, null, null, plh, id, mapName, members, root).value as Cloneable;
-    }
-    
-    public def asyncDeleteRemote(dest:Long, key:String):Future[Any] {
-        return execute(ASYNC_DELETE, dest, key, null, null, null, plh, id, mapName, members, root).future;
-    }
-    
-    private def deleteLocal(key:String, plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String):Cloneable {
-        return plh().masterStore.delete(mapName, id, key);
-    }
-    
-    /***************** KeySet ********************/
-    public def keySet():Set[String] {
-        return execute(KEYSET_LOCAL, -1, null, null, null, null, plh, id, mapName, members, root).set; 
-    }
-    
-    public def keySetRemote(dest:Long):Set[String] {
-        return execute(KEYSET_REMOTE, dest, null, null, null, null, plh, id, mapName, members, root).set; 
-    }
-    
-    public def asyncKeySetRemote(dest:Long):Future[Any] {
-        return execute(ASYNC_KEYSET, dest, null, null, null, null, plh, id, mapName, members, root).future; 
-    }
-    
-    private def keySetLocal(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String):Set[String] {
-        return plh().masterStore.keySet(mapName, id);
-    }
-    
-    /***************** At ********************/
-    public def syncAt(dest:Long, closure:()=>void) {
-        execute(AT_VOID, dest, null, null, closure, null, plh, id, mapName, members, root);
-    }
-    
-    public def syncAt(dest:Long, closure:()=>Any):Cloneable {
-        return execute(AT_RETURN, dest, null, null, null, closure, plh, id, mapName, members, root).value as Cloneable;
-    }
-    
-    public def asyncAt(dest:Long, closure:()=>void):Future[Any] {
-        return execute(ASYNC_AT_VOID, dest, null, null, closure, null, plh, id, mapName, members, root).future;
-    }
-    
-    public def asyncAt(dest:Long, closure:()=>Any):Future[Any] {
-        return execute(ASYNC_AT_RETURN, dest, null, null, null, closure, plh, id, mapName, members, root).future;
-    }
-    
-    /***************** Execution of All Operations ********************/
-    private def execute(op:Int, destIndx:Long, key:String, value:Cloneable, closure_void:()=>void, closure_return:()=>Any, 
-            plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers, root:GlobalRef[Tx]):TxOpResult {
-        var dest:Place = here;
-        if (destIndx != -1){
-            dest = members.getPlace(destIndx);
-            assert (members.contains(dest));
-        }
-        
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] here["+here+"] destIndx["+destIndx+"] key["+key+"] value["+value+"] ...");
-        val startExec = Timer.milliTime();
-        try {
-            if (op == GET_LOCAL) {
-                return new TxOpResult(getLocal(key, plh, id, mapName));
-            }
-            else if (op == GET_REMOTE) {
-                return new TxOpResult (at (dest) getLocal(key, plh, id, mapName));
-            }
-            else if (op == PUT_LOCAL) {
-                return new TxOpResult(putLocal(key, value, plh, id, mapName)); 
-            }
-            else if (op == PUT_REMOTE) {
-                return new TxOpResult(at (dest) putLocal(key, value, plh, id, mapName));
-            }
-            else if (op == DELETE_LOCAL) {
-                return new TxOpResult(deleteLocal(key, plh, id, mapName)); 
-            }
-            else if (op == DELETE_REMOTE) {
-                return new TxOpResult(at (dest) deleteLocal(key, plh, id, mapName));
-            }
-            else if (op == KEYSET_LOCAL) {
-                return new TxOpResult(keySetLocal(plh, id, mapName));
-            }
-            else if (op == KEYSET_REMOTE) {
-                return new TxOpResult(at (dest) keySetLocal(plh, id, mapName));
-            }
-            else if (op == AT_VOID) {
-                at (dest) closure_void();
-                return null;
-            }
-            else if (op == AT_RETURN) {
-                return new TxOpResult(at (dest) closure_return());
-            }
-            else {  /*Remote Async Operations*/
-            	if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Start Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] (2) ...");
-            	val destVal = dest;
-                val future = Future.make[Any](() => 
-                    at (destVal) {
-                        var result:Any = null;
-                        if (op == ASYNC_GET) {
-                            result = getLocal(key, plh, id, mapName);
-                        }
-                        else if (op == ASYNC_PUT) {
-                            result = putLocal(key, value, plh, id, mapName);
-                        }
-                        else if (op == ASYNC_DELETE) {
-                            result = deleteLocal(key, plh, id, mapName);
-                        }
-                        else if (op == ASYNC_KEYSET) {
-                            result = keySetLocal(plh, id, mapName);
-                        }
-                        else if (op == ASYNC_AT_VOID) {
-                            closure_void();
-                        }
-                        else if (op == ASYNC_AT_RETURN) {
-                            result = closure_return();
-                        }
-                        return result;
-                    }
-                );
-                return new TxOpResult(future);
-            }
-        }catch (ex:Exception) {
-            if (TxConfig.get().TM_DEBUG) {
-                Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " Failed Op["+opDesc(op)+"] here["+here+"] dest["+dest+"] key["+key+"] value["+value+"] ...");
-                ex.printStackTrace();
-            }
-            throw ex;  // someone must call Tx.abort
-        } finally {
-            val endExec = Timer.milliTime();
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " execute Op["+opDesc(op)+"] time: [" + ((endExec-startExec)) + "] ms");
-        }
-        
-    }
+
     /*********************** Abort ************************/  
-    @Pinned public def abort() {
-        abort(new ArrayList[Place]());
+    @Pinned public def abortRecovery() {
+        abort(new ArrayList[Place](), true);
     }
     
     @Pinned public def abort(ex:Exception) {
         val list = CommitHandler.getDeadAndConflictingPlaces(ex);
-        abort(list);
+        abort(list, false);
     }
     
-    @Pinned private def abort(abortedPlaces:ArrayList[Place]) {
+    @Pinned private def abort(abortedPlaces:ArrayList[Place], recovery:Boolean) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " abort (abortPlaces.size = " + abortedPlaces.size() + ") alreadyAborted = " + aborted);
         if (!aborted)
             aborted = true;
         else 
             return;
         
-        commitHandler.abort(abortedPlaces);
+        commitHandler.abort(abortedPlaces, recovery);
         
         if (abortTime == -1) {
             abortTime = Timer.milliTime();

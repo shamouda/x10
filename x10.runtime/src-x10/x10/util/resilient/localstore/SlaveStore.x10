@@ -64,7 +64,7 @@ public class SlaveStore {
     /******* Prepare/Commit/Abort functions *******/
     /*Used by LocalTx to commit a transaction. TransLog is applied immediately and not saved in the logs map*/
     public def commit(id:Long, transLog:HashMap[String,Cloneable], ownerPlaceIndex:Long) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit1() started ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commitLocalTx() started ...");
         try {
             slaveLock();
             commitLockAcquired(new TxSlaveLog(id, ownerPlaceIndex, transLog));
@@ -72,12 +72,12 @@ public class SlaveStore {
         finally {
             slaveUnlock();
         }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit1() committed ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commitLocalTx() committed ...");
     }
     
     /*Used by Tx to commit a transaction that was previously prepared. TransLog is removed from the logs map after commit*/
     public def commit(id:Long) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit2() started ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commitGlobalTx() started ...");
         try {
             slaveLock();
             val txLog = getLog(id);
@@ -88,7 +88,7 @@ public class SlaveStore {
         } finally {
             slaveUnlock();
         }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commit2() committed ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commitGlobalTx() committed ...");
     }
     
     private def commitLockAcquired(txLog:TxSlaveLog) {

@@ -243,6 +243,14 @@ public class LocalStore(immediateRecovery:Boolean) {
         }
     }
     
+    public def getPlace(virtualId:Long) {
+        try {
+            lock();
+            return activePlaces(virtualId);
+        }finally {
+            unlock();
+        }
+    }
     
     public def physicalToVirtual(members:PlaceGroup):Rail[Long] {
         try {
@@ -314,7 +322,7 @@ public class LocalStore(immediateRecovery:Boolean) {
     
     /********************Transparent Recovery methods********************************/
     public def asyncSlaveRecovery() {
-        if (!immediateRecovery || TxConfig.get().TESTING)
+        if (!immediateRecovery)
             return;
         
         assert (slave.isDead()) : "bug in LocalStore, calling asyncSlaveRecovery although the slave is alive";

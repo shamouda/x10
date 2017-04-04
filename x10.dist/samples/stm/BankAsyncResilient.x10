@@ -12,7 +12,7 @@ import x10.util.resilient.localstore.tx.ConflictException;
 import x10.util.Timer;
 import x10.util.resilient.localstore.TxConfig;
 
-// TM_TESTING=1 TM_DEBUG=0 TM=RV_LA_WB KILL_PLACES=2,5,10 KILL_TIMES=2,2,10 X10_NPLACES=13 X10_RESILIENT_MODE=1 TM_REP=lazy ./BankAsyncResilient.o 10 10 200 3
+// TM_DEBUG=0 TM=RV_LA_WB KILL_PLACES=2,5,10 KILL_TIMES=2,2,10 X10_NPLACES=13 X10_RESILIENT_MODE=1 TM_REP=lazy ./BankAsyncResilient.o 10 10 200 3
 
 public class BankAsyncResilient {
     private static val DISABLE_CKPT = System.getenv("DISABLE_CKPT") != null && System.getenv("DISABLE_CKPT").equals("1");
@@ -123,7 +123,7 @@ public class BankAsyncResilient {
                 val p2 = tmpP2;
                 val randAcc1 = "acc"+rand1;
                 val randAcc2 = "acc"+rand2;
-                val amount = Math.abs(rand.nextLong()%100);
+                //val amount = Math.abs(rand.nextLong()%100);
                 
                 var pg:Rail[Long];
                 if (DISABLE_CKPT || placeIndex == p1 || placeIndex == p2){
@@ -141,8 +141,12 @@ public class BankAsyncResilient {
                 val members = pg;
                 val success = map.executeTransaction( members, (tx:Tx) => {
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] here["+here+"] TXSTART"+ (recovered?"RECOVER":"")+" accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"]");
-                    //val amount = tx.id;
-                    val f1 = tx.asyncAt(p1, () => {
+                    val txId = tx.id;
+                    val placeId =  ((txId >> 32) as Int);
+                    val txSeq = (txId as Int);
+                    val amount = (placeId*1000000 + txSeq);
+                    
+                    tx.asyncAt(p1, () => {
                         val obj = tx.get(randAcc1);
                         var acc1:BankAccount;
                         if (obj == null) 
@@ -153,7 +157,7 @@ public class BankAsyncResilient {
                         tx.put(randAcc1, acc1);
                     });
                     
-                    val f2 = tx.asyncAt(p2, () => {
+                    tx.asyncAt(p2, () => {
                         val obj = tx.get(randAcc2);
                         var acc2:BankAccount;
                         if (obj == null) 
@@ -167,12 +171,6 @@ public class BankAsyncResilient {
                     if (!DISABLE_CKPT) {
                         tx.put("p"+placeIndex, new CloneableLong(i));
                     }
-                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] start waitForFutures ");
-                    val startWait = Timer.milliTime();
-                    f1.force();
-                    f2.force();
-                    tx.setWaitElapsedTime(Timer.milliTime() - startWait);
-                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitElapsedTime +"] ms");
                     return null;
                 } );
                 

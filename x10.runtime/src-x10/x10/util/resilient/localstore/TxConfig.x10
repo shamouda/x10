@@ -19,7 +19,6 @@ public class TxConfig {
     public val VALIDATION_REQUIRED:Boolean;
     public val BUCKETS_COUNT:Long;
     public val DISABLE_INCR_PARALLELISM:Boolean;
-    public val TESTING:Boolean;
     public  val DPE_SLEEP_MS:Long;
 
 
@@ -75,8 +74,10 @@ public class TxConfig {
         DISABLE_SLAVE = System.getenv("DISABLE_SLAVE") != null && System.getenv("DISABLE_SLAVE").equals("1");
     	DISABLE_TX_LOGGING = System.getenv("DISABLE_TX_LOGGING") != null && System.getenv("DISABLE_TX_LOGGING").equals("1");
     	TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
-    	TESTING = System.getenv("TM_TESTING") != null && System.getenv("TM_TESTING").equals("1");
         DPE_SLEEP_MS = System.getenv("DPE_SLEEP_MS") == null ? 10 : Long.parseLong(System.getenv("DPE_SLEEP_MS"));
+        
+        if (!DISABLE_TX_LOGGING) //enable desc requires enable slave
+            assert(!DISABLE_SLAVE);
     }
     
     public static def get() = instance;

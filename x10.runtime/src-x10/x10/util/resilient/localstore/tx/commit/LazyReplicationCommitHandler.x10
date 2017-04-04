@@ -39,17 +39,27 @@ public class LazyReplicationCommitHandler extends CommitHandler {
 	    super(plh, id, mapName, members, txDescMap);	
 	}
 	
-	public def abort(abortedPlaces:ArrayList[Place]) {
-        try {
+	public def abort(abortedPlaces:ArrayList[Place], recovery:Boolean) {
+	    try {
             //ask masters to abort (a master will abort slave first, then abort itself)
             finalize(false, abortedPlaces, plh, id, members);
         }
         catch(ex:MultipleExceptions) {
-            if (TxConfig.get().TM_DEBUG) {
-                Console.OUT.println("Warning: ignoring exception during abort: " + ex.getMessage());
-                ex.printStackTrace();
+            if (recovery) {
+                try {
+                    val deadMasters = getDeadPlaces(ex, members);
+                    //some masters died while rolling back,ask slaves to abort
+                    finalizeSlaves(false, deadMasters, plh, id, members);
+                }
+                catch(ex2:Exception) {
+                    if (TxConfig.get().TM_DEBUG) {
+                        Console.OUT.println("Warning: ignoring exception during finalizeSlaves(false): " + ex2.getMessage());
+                        ex2.printStackTrace();
+                    }
+                }
             }
         }
+        
         deleteTxDesc();
     }
 
@@ -62,7 +72,7 @@ public class LazyReplicationCommitHandler extends CommitHandler {
                 updateTxDesc(TxDesc.COMMITTING);
             } catch(ex:Exception) {
                 val list = getDeadAndConflictingPlaces(ex);
-                abort(list);
+                abort(list, false);
                 throw ex;
             }
         }

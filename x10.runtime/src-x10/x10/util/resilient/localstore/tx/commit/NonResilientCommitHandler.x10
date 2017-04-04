@@ -15,7 +15,7 @@ public class NonResilientCommitHandler extends CommitHandler {
 	    super(plh, id, mapName, members, txDescMap);
 	}
 	
-    public def abort(abortedPlaces:ArrayList[Place]) {
+    public def abort(abortedPlaces:ArrayList[Place], recovery:Boolean) {
         try {
             //ask masters to abort (a master will abort slave first, then abort itself)
             finalize(false, abortedPlaces, plh, id, members);
@@ -36,7 +36,7 @@ public class NonResilientCommitHandler extends CommitHandler {
             
         } catch(ex:Exception) {
             val list = getDeadAndConflictingPlaces(ex);
-            abort(list);
+            abort(list, false);
             throw ex;
         }
         

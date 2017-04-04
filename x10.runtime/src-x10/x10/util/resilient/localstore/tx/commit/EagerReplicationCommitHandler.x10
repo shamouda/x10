@@ -30,7 +30,7 @@ public class EagerReplicationCommitHandler extends CommitHandler {
 	    super(plh, id, mapName, members, txDescMap);	
 	}
 	
-	public def abort(abortedPlaces:ArrayList[Place]) {
+	public def abort(abortedPlaces:ArrayList[Place], recovery:Boolean) {
         try {
             //ask masters to abort (a master will abort slave first, then abort itself)
             finalize(false, abortedPlaces, plh, id, members);
@@ -49,7 +49,6 @@ public class EagerReplicationCommitHandler extends CommitHandler {
             }
         }
         
-        
         deleteTxDesc();
     }
 
@@ -63,7 +62,7 @@ public class EagerReplicationCommitHandler extends CommitHandler {
                 
             } catch(ex:Exception) {
                 val list = getDeadAndConflictingPlaces(ex);
-                abort(list);
+                abort(list, false);
                 throw ex;
             }
         }
@@ -205,25 +204,5 @@ public class EagerReplicationCommitHandler extends CommitHandler {
         }
     }
     
-    
-    private def finalizeSlaves(commit:Boolean, deadMasters:ArrayList[Place], 
-            plh:PlaceLocalHandle[LocalStore], id:Long, members:TxMembers) {
-        
-        //ask slaves to commit (their master died, 
-        //and we need to resolve the slave's pending transactions)
-        finish for (p in deadMasters) {
-            assert(members.contains(p));
-            val virtualPlace = members.getVirtualPlaceId(p);
-            val slave = plh().getSlave(virtualPlace);
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeSlaves here["+here+"] moving to slave["+slave+"] to " + ( commit? "commit": "abort" ));
-            at (slave) async {
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeSlaves here["+here+"] moved to slave["+here+"] to " + ( commit? "commit": "abort" ));
-                if (commit)
-                    plh().slaveStore.commit(id);
-                else
-                    plh().slaveStore.abort(id);
-            }
-        }
-    }
 
 }
