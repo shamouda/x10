@@ -131,7 +131,7 @@ public class TxLog (id:Long) {
             result = false;
         else
             result = keyLog.getLockedRead();
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + "here["+here+"] key["+key+"] getLockedRead?["+result+"]");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] key["+key+"] getLockedRead?["+result+"]");
         return result;
     }
     

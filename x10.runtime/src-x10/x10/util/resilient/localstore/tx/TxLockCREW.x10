@@ -114,11 +114,11 @@ public class TxLockCREW extends TxLock {
             if (conflict) {
                 if (resilient)
                     checkDeadLockers();
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite CONFLICT, writer["+writer+"] readers["+readersAsString(readers)+"] ");
+                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] lockWrite CONFLICT, writer["+writer+"] readers["+readersAsString(readers)+"] ");
                 throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId) + " key ["+key+"] ", here);
             }
             else
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] lockWrite done");
+                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] lockWrite done");
         }
         finally {
             lock.unlock();
@@ -130,7 +130,7 @@ public class TxLockCREW extends TxLock {
         assert(readers.contains(txId) && writer == -1);
         readers.remove(txId);
         lock.unlock();
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] unlockRead done");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] unlockRead done");
     }
     
     public def unlockWrite(txId:Long, key:String) {
@@ -138,7 +138,7 @@ public class TxLockCREW extends TxLock {
         assert(readers.size() == 0 && writer == txId);
         writer = -1;
         lock.unlock();
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] TXLOCK key[" + key + "] unlockWrite done");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] unlockWrite done");
     }
     
     private static def readersAsString(set:HashSet[Long]) {
