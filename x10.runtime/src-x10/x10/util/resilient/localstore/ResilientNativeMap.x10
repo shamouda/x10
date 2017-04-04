@@ -150,7 +150,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     private def startGlobalTransaction(members:TxMembers):Tx {
         assert(plh().virtualPlaceId != -1);
         val id = plh().masterStore.getNextTransactionId();
-        if (resilient) {
+        if (resilient && !TxConfig.get().DISABLE_SLAVE && !TxConfig.get().DISABLE_TX_LOGGING) {
             val localTx = plh().getTxLoggingMap().startLocalTransaction();
             if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] startGlobalTransaction localTx["+localTx.id+"] started ...");
             localTx.put("tx"+id, new TxDesc(id, name, members.virtual, TxDesc.STARTED));
