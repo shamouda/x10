@@ -31,6 +31,8 @@ public abstract class CommitHandler {
     }
     
     protected def updateTxDesc(status:Long){
+        if (TxConfig.get().DISABLE_TX_LOGGING)
+            return;
         val start = Timer.milliTime();
         val localTx = txDescMap.startLocalTransaction();
         try {
@@ -58,6 +60,9 @@ public abstract class CommitHandler {
     }
     
     protected def deleteTxDesc(){
+        if (TxConfig.get().DISABLE_TX_LOGGING)
+            return;
+        
         val start = Timer.milliTime();
         try {
             val localTx = txDescMap.startLocalTransaction();

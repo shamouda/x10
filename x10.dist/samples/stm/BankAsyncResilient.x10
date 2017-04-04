@@ -107,26 +107,36 @@ public class BankAsyncResilient {
             }
             val rand = new Random(placeIndex);
             for (i in start..transfersPerPlace) {
-            	if (i%debugProgress == 0)
+            	if (i%debugProgress == 0) {
                     Console.OUT.println(here + " progress " + i);
+            	}
             	
                 val rand1 = Math.abs(rand.nextLong()% accountsMAX);
-                val p1 = STMAppUtils.getPlace(rand1, activePG, accountsPerPlace);
+                val p1 = rand1/accountsPerPlace;
+                
                 var rand2:Long = Math.abs(rand.nextLong()% accountsMAX);
-                var tmpP2:Place = STMAppUtils.getPlace(rand2, activePG, accountsPerPlace);
-                while (rand1 == rand2 || p1.id == tmpP2.id) {
+                var tmpP2:Long = rand2/accountsPerPlace;
+                while (rand1 == rand2 || p1 == tmpP2) {
                     rand2 = Math.abs(rand.nextLong()% accountsMAX);
-                    tmpP2 = STMAppUtils.getPlace(rand2, activePG, accountsPerPlace);
+                    tmpP2 = rand2/accountsPerPlace;
                 }
                 val p2 = tmpP2;
                 val randAcc1 = "acc"+rand1;
                 val randAcc2 = "acc"+rand2;
                 val amount = Math.abs(rand.nextLong()%100);
-                var pg:PlaceGroup;
-                if (DISABLE_CKPT)
-                    pg = STMAppUtils.createGroup(p1, p2);
-                else
-                    pg = STMAppUtils.createGroup(here, p1, p2);
+                
+                var pg:Rail[Long];
+                if (DISABLE_CKPT || placeIndex == p1 || placeIndex == p2){
+                    pg = new Rail[Long](2);
+                    pg(0) = p1; 
+                    pg(1) = p2;
+                }
+                else {
+                    pg = new Rail[Long](3);
+                    pg(0) = placeIndex;
+                    pg(1) = p1;
+                    pg(2) = p2;
+                }
                 
                 val members = pg;
                 val success = map.executeTransaction( members, (tx:Tx) => {
@@ -142,6 +152,7 @@ public class BankAsyncResilient {
                         acc1.account -= amount;
                         tx.put(randAcc1, acc1);
                     });
+                    
                     val f2 = tx.asyncAt(p2, () => {
                         val obj = tx.get(randAcc2);
                         var acc2:BankAccount;
@@ -152,8 +163,10 @@ public class BankAsyncResilient {
                         acc2.account += amount;
                         tx.put(randAcc2, acc2);
                     });
-                    if (!DISABLE_CKPT)
+                    
+                    if (!DISABLE_CKPT) {
                         tx.put("p"+placeIndex, new CloneableLong(i));
+                    }
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] start waitForFutures ");
                     val startWait = Timer.milliTime();
                     f1.force();
@@ -162,6 +175,7 @@ public class BankAsyncResilient {
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitElapsedTime +"] ms");
                     return null;
                 } );
+                
                 //Console.OUT.println(here + ":" + randAcc1 + ":" + randAcc2 + ":"+ amount);
                 if (success.commitStatus == Tx.SUCCESS_RECOVER_STORE)
                     throw new RecoverDataStoreException("RecoverDataStoreException", here);

@@ -46,7 +46,7 @@ public class LocalStore(immediateRecovery:Boolean) {
             this.activePlaces = active;
             this.virtualPlaceId = active.indexOf(here);
             masterStore = new MasterStore(new HashMap[String,Cloneable](), immediateRecovery);
-            if (resilient) {
+            if (resilient && !TxConfig.get().DISABLE_SLAVE) {
                 slaveStore = new SlaveStore();
                 this.slave = active.next(here);
             }
@@ -60,10 +60,8 @@ public class LocalStore(immediateRecovery:Boolean) {
         this.activePlaces = active;
         this.virtualPlaceId = active.indexOf(here);
         masterStore = new MasterStore(data, immediateRecovery);
-        if (resilient) {
-            slaveStore = new SlaveStore();
-            this.slave = active.next(here);
-        }
+        slaveStore = new SlaveStore();
+        this.slave = active.next(here);
         plh().unlock();
     }
     

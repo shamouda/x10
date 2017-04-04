@@ -55,11 +55,15 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("TX["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] started members["+members.toString()+"]");
         	
         if (resilient) {
-        	if (TxConfig.get().TM_REP.equals("lazy")) {
-        		commitHandler = new LazyReplicationCommitHandler(plh, id, mapName, members, txDescMap);
-        	}
-        	else
-        		commitHandler = new EagerReplicationCommitHandler(plh, id, mapName, members, txDescMap);
+            if (TxConfig.get().DISABLE_SLAVE) {
+                commitHandler = new NonResilientCommitHandler(plh, id, mapName, members, txDescMap);
+            }
+            else {
+                if (TxConfig.get().TM_REP.equals("lazy"))
+                    commitHandler = new LazyReplicationCommitHandler(plh, id, mapName, members, txDescMap);
+                else   
+                    commitHandler = new EagerReplicationCommitHandler(plh, id, mapName, members, txDescMap);
+            }
         }
         else
         	commitHandler = new NonResilientCommitHandler(plh, id, mapName, members, txDescMap);
@@ -275,10 +279,15 @@ public class Tx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, memb
     
     /***********************   Two Phase Commit Protocol ************************/
     @Pinned public def commit():Int {
+        if (TxConfig.get().DISABLE_COMMIT)
+            return AbstractTx.SUCCESS;
         return commit(false);
     }
     
     @Pinned public def commit(skipPhaseOne:Boolean) {
+        if (TxConfig.get().DISABLE_COMMIT)
+            return AbstractTx.SUCCESS;
+        
         assert(here.id == root.home.id);
         
         val success = commitHandler.commit(skipPhaseOne);

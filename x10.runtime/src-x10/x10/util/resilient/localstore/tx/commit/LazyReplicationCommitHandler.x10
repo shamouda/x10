@@ -8,6 +8,8 @@ import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.AbstractTx;
 import x10.util.resilient.localstore.TxMembers;
+import x10.util.GrowableRail;
+
 /*
  * In lazy replication, transaction side effects are NOT applied at the slave until a master dies. 
  * The master sends a change-log to the slave during the validation phase of the 2PC protocol.
@@ -44,13 +46,11 @@ public class LazyReplicationCommitHandler extends CommitHandler {
         }
         catch(ex:MultipleExceptions) {
             if (TxConfig.get().TM_DEBUG) {
-                Console.OUT.println("Warning: ignoring exception during finalize(false): " + ex.getMessage());
+                Console.OUT.println("Warning: ignoring exception during abort: " + ex.getMessage());
                 ex.printStackTrace();
             }
         }
-        
-        if (!TxConfig.get().DISABLE_TX_LOGGING)
-            deleteTxDesc();
+        deleteTxDesc();
     }
 
     
@@ -59,30 +59,19 @@ public class LazyReplicationCommitHandler extends CommitHandler {
         if (!skipPhaseOne) {
             try {
                 commitPhaseOne(plh, id, members); // master failure is fatal, slave failure is not fatal
-                if (!TxConfig.get().DISABLE_TX_LOGGING)
-                    updateTxDesc(TxDesc.COMMITTING);
+                updateTxDesc(TxDesc.COMMITTING);
             } catch(ex:Exception) {
                 val list = getDeadAndConflictingPlaces(ex);
                 abort(list);
                 throw ex;
             }
         }
-        /*Transaction MUST Commit (if master is dead, commit at slave)*/
-        if (skipPhaseOne && TxConfig.get().TM_DEBUG) {
-            Console.OUT.println("Tx["+id+"] skip phase one");
-        }
-        
-        val startP2 = Timer.milliTime();
+
         commitPhaseTwo(plh, id, members);
-        val endP2 = Timer.milliTime();
-        if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseTwo time [" + (endP2-startP2) + "] ms");
         
-        
-        if (!TxConfig.get().DISABLE_TX_LOGGING ){
-        	/* if we don't mark the committed transaction, 
-        	 * we will have to recommit all transactions that are already committed */
-            updateTxDesc(TxDesc.COMMITTED); 
-        }
+    	/* if we don't mark the committed transaction, 
+    	 * we will have to recommit all transactions that are already committed */
+        updateTxDesc(TxDesc.COMMITTED); 
         
         if (nonFatalDeadPlace)
         	return AbstractTx.SUCCESS_RECOVER_STORE;
@@ -94,16 +83,11 @@ public class LazyReplicationCommitHandler extends CommitHandler {
         val start = Timer.milliTime();
         try {
             if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseOne ...");
-            if (!TxConfig.get().DISABLE_SLAVE || TxConfig.get().VALIDATION_REQUIRED) {
-            	finish for (p in members.pg()) {
-                	if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseOne going to move to ["+p+"] ...");
-                    at (p) async {
-                    	commitPhaseOne_local(plh, id);
-                    }
-            	}
-            }
-            else
-                if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] commitPhaseOne : validate NOT required ...");
+        	finish for (p in members.pg()) {
+                at (p) async {
+                	commitPhaseOne_local(plh, id);
+                }
+        	}
         } finally {
             phase1ElapsedTime = Timer.milliTime() - start;
         }
@@ -112,34 +96,30 @@ public class LazyReplicationCommitHandler extends CommitHandler {
     private def commitPhaseOne_local(plh:PlaceLocalHandle[LocalStore], id:Long) {
     	val ownerPlaceIndex = plh().virtualPlaceId;
         if (TxConfig.get().VALIDATION_REQUIRED) {
-            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] commitPhaseOne : validate started ...");
             plh().masterStore.validate(id);
-            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] commitPhaseOne : validate done ...");
         }
-    
-        if (!TxConfig.get().DISABLE_SLAVE) {
-        	var ex:Exception = null;
-        	if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] send log to slave ["+plh().slave+"]  ...");
-            val log = plh().masterStore.getTxCommitLog(id);
-            if (log != null && log.size() > 0) {                            
-                //send txLog to slave (very important to be able to tolerate failures of masters just after prepare)
-                try {
-	            	finish at (plh().slave) async {
-	                    plh().slaveStore.prepare(id, log, ownerPlaceIndex);
-	                }
-                }catch(e:Exception) {
-                	ex = e;
-                	//ignoring dead slave
+
+    	var ex:Exception = null;
+    	if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] send log to slave ["+plh().slave+"]  ...");
+        val log = plh().masterStore.getTxCommitLog(id);
+        if (log != null && log.size() > 0) {                            
+            //send txLog to slave (very important to be able to tolerate failures of masters just after prepare)
+            try {
+            	finish at (plh().slave) async {
+                    plh().slaveStore.prepare(id, log, ownerPlaceIndex);
                 }
-                
-                if (ex != null) {
-                    at (root) async {
-                        root().nonFatalDeadPlace = true;
-                    }
+            }catch(e:Exception) {
+            	ex = e;
+            	//ignoring dead slave
+            }
+            
+            if (ex != null) {
+                at (root) async {
+                    root().nonFatalDeadPlace = true;
                 }
             }
-            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] send log to slave ["+plh().slave+"] DONE ...");
         }
+        if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] send log to slave ["+plh().slave+"] DONE ...");
     }
     
     private def commitPhaseTwo(plh:PlaceLocalHandle[LocalStore], id:Long, members:TxMembers) {
@@ -163,14 +143,29 @@ public class LazyReplicationCommitHandler extends CommitHandler {
     private def finalize(commit:Boolean, abortedPlaces:ArrayList[Place], 
             plh:PlaceLocalHandle[LocalStore], id:Long, members:TxMembers) {
         if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] " + ( commit? " Commit Started ": " Abort Started " ) + " ...");
+
         //if one of the masters die, let the exception be thrown to the caller, but hide dying slves
+        val deadMasters = new ArrayList[Place]();
         finish for (p in members.pg()) {
-            /*skip aborted places*/
-            if (!commit && abortedPlaces.contains(p))
+            if (!commit && abortedPlaces.contains(p) && !p.isDead()) /*skip aborted places*/
                 continue;
-        	at (p) async {
-        		finalizeLocal(commit, plh, id);
-        	}
+            
+            if (p.isDead()) {
+                deadMasters.add(p);
+            }
+            else {
+                at (p) async {
+                    finalizeLocal(commit, plh, id);
+                }
+            }
+        }
+        
+        if (deadMasters.size() > 0) {
+            val rail = new GrowableRail[CheckedThrowable](deadMasters.size());
+            for (var i:Long = 0 ; i < deadMasters.size() ; i ++){
+                rail(i) = new DeadPlaceException(deadMasters.get(i));
+            }
+            throw new MultipleExceptions(rail);
         }
     }
     

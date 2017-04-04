@@ -35,7 +35,7 @@ public class TxKeyChange {
     private var lockedWrite:Boolean = false;
 
     private val added:Boolean;
-    private var deleted:Boolean = true;
+    private var deleted:Boolean = false;
     private val memU:MemoryUnit;
 
     public def this(initValue:Cloneable, initVersion:Int, initTxId:Long, lockedRead:Boolean, memU:MemoryUnit, added:Boolean) {

@@ -91,8 +91,9 @@ public class MapData {
             val iter = metadata.keySetUnsafe().iterator();
             while (iter.hasNext()) {
                 val key = iter.next();
-                if (key.startsWith(mapName))
-                    set.add(key);
+                if (key.startsWith(mapName)) {
+                    set.add(key.substring(mapName.length() as Int , key.length() as Int));
+                }
             }
             return set;
         }finally {

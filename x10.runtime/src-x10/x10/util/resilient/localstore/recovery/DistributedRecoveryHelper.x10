@@ -118,13 +118,11 @@ public class DistributedRecoveryHelper {
             if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " recovering txdesc " + txDesc);
             val tx = map.restartGlobalTransaction(txDesc);
             if (txDesc.status == TxDesc.COMMITTING) {
-                //if (TxConfig.get().TM_DEBUG) 
-                    Console.OUT.println(here + " recovering Tx["+tx.id+"] commit it");
+                if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] commit it");
                 tx.commit(true); //ignore phase one
             }
             else if (txDesc.status == TxDesc.STARTED) {
-                //if (TxConfig.get().TM_DEBUG) 
-                    Console.OUT.println(here + " recovering Tx["+tx.id+"] abort it");
+                if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " recovering Tx["+tx.id+"] abort it");
                 tx.abort();
             }
     	}

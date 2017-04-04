@@ -12,10 +12,6 @@ import x10.util.resilient.localstore.TxConfig;
 
 public class STMAppUtils {
     
-    public static def getPlace(accId:Long, activePG:PlaceGroup, accountPerPlace:Long):Place{
-        return activePG(accId/accountPerPlace);
-    }
-    
     public static def restoreProgress(map:ResilientNativeMap, placeIndex:Long, defaultProg:Long){
         val tx = map.startLocalTransaction();
         try {
@@ -25,7 +21,7 @@ public class STMAppUtils {
             if (cl != null)
                 res = (cl as CloneableLong).v;
             
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("LocalTx["+tx.id+"] restoring progress here["+here+"] placeIndex["+placeIndex+"] progress["+res+"]");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("LocalTx["+tx.id+"] restoring progress here["+here+"] p"+placeIndex+" progress["+res+"]");
             return res;
         }
         catch(ex:Exception) {
@@ -34,40 +30,11 @@ public class STMAppUtils {
         }
     }
     
-    public static def createGroup(p1:Place) {
-        val rail = new Rail[Place](1);
-        rail(0) = p1;
-        return new SparsePlaceGroup(rail);
-    }
-    
-    public static def createGroup(p1:Place, p2:Place) {
-        if (p1.id == p2.id)
-            return createGroup(p1);
-        val rail = new Rail[Place](2);
-        rail(0) = p1;
-        rail(1) = p2;
-        return new SparsePlaceGroup(rail);
-    }
-    
-    public static def createGroup(p1:Place, p2:Place, p3:Place) {
-        if (p1.id == p2.id && p2.id == p3.id)
-            return createGroup(p1);
-        
-        if (p1.id == p2.id)
-            return createGroup(p1, p3);
-        else if (p2.id == p3.id || p1.id == p3.id)
-            return createGroup(p1, p2);
-        val rail = new Rail[Place](3);
-        rail(0) = p1;
-        rail(1) = p2;
-        rail(2) = p3;
-        return new SparsePlaceGroup(rail);
-    }
-    
-    public static def sumAccounts(map:ResilientNativeMap, members:PlaceGroup){
+    public static def sumAccounts(map:ResilientNativeMap, activePG:PlaceGroup){
         var sum:Long = 0;
         val list = new ArrayList[Future[Any]]();
 
+        val members = new Rail[Long](activePG.size(), (i:Long)=> i);
         map.executeTransaction(members, (tx:Tx) => {
 	        for (p in members) {
 	            val f = tx.asyncAt(p, () => {
@@ -94,10 +61,10 @@ public class STMAppUtils {
     }
     
     public static def sumAccountsLocking(map:ResilientNativeMap, activePG:PlaceGroup){
-		val result = map.executeLockingTransaction(activePG, new ArrayList[LockingRequest](), (tx:LockingTx) => {
+		val result = map.executeLockingTransaction(new ArrayList[LockingRequest](), (tx:LockingTx) => {
 			var sum:Long = 0;
 			val list = new ArrayList[Future[Any]]();
-	        for (p in activePG) {
+	        for (var p:Long = 0; p < activePG.size(); p++) {
 	            val f = tx.asyncAt(p, () => {
 	                var localSum:Long = 0;
 	                val set = tx.keySet();
