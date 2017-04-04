@@ -11,7 +11,6 @@ import x10.util.resilient.localstore.LockingRequest.KeyInfo;
 import x10.util.resilient.localstore.LockingTx;
 import x10.util.resilient.localstore.LocalTx;
 import x10.util.resilient.localstore.AbstractTx;
-import x10.util.resilient.localstore.BaselineTx;
 
 import x10.util.concurrent.Future;
 import x10.xrx.Runtime;
@@ -184,11 +183,10 @@ public class STMBench {
             val lockRequests = new ArrayList[LockingRequest]();
            
             val distClosure = (tx:AbstractTx) => {
-                val futuresList = new ArrayList[Future[Any]]();
                 
                 for (var m:Long = 0; m < virtualMembers.size; m++) {
                     val operations = membersOperations.get(m);
-                    val f1 = tx.asyncAt(operations.dest, () => {
+                    tx.asyncAt(operations.dest, () => {
                         for (var x:Long = 0; x < o; x++) {
                             val key = operations.keys(x).key;
                             val read = operations.keys(x).read;
@@ -196,19 +194,8 @@ public class STMBench {
                             read? tx.get(key): tx.put(key, new CloneableLong(value));
                         }
                     });
-                    futuresList.add(f1);
                 }
                 
-                //Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] start wait for futures ...");
-                
-                val startWait = Timer.milliTime();
-                for (f in futuresList) {
-                	assert ( f != null) : "bug future is null ...";
-                    f.force();
-                    //Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] future done ...");
-                }
-                tx.setWaitElapsedTime(Timer.milliTime() - startWait);
-                //Console.OUT.println("Tx["+(tx as Tx).id+"] here["+here+"] wait completed ");
                 return null;
             };
             
