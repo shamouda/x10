@@ -30,6 +30,7 @@ public class LocalStore(immediateRecovery:Boolean) {
     public transient var masterStore:MasterStore = null;
     public transient var virtualPlaceId:Long = -1; //-1 means a spare place
     public transient var slave:Place;
+    public transient var oldSlave:Place;
     public transient var slaveStore:SlaveStore = null;
     public transient var activePlaces:PlaceGroup;
     private var plh:PlaceLocalHandle[LocalStore];
@@ -49,6 +50,7 @@ public class LocalStore(immediateRecovery:Boolean) {
             if (resilient && !TxConfig.get().DISABLE_SLAVE) {
                 slaveStore = new SlaveStore();
                 this.slave = active.next(here);
+                this.oldSlave = this.slave;
             }
         } //else, I am a spare place, initialize me using joinAsMaster(...)
     }
@@ -62,6 +64,7 @@ public class LocalStore(immediateRecovery:Boolean) {
         masterStore = new MasterStore(data, immediateRecovery);
         slaveStore = new SlaveStore();
         this.slave = active.next(here);
+        this.oldSlave = this.slave;
         plh().unlock();
     }
     
@@ -93,6 +96,17 @@ public class LocalStore(immediateRecovery:Boolean) {
             this.newPlace = newPlace;
         }
     };
+    
+    public static struct SlaveChange {
+        public val changed:Boolean;
+        public val newSlave:Place;
+        
+        def this(changed:Boolean, newSlave:Place) {
+            this.changed = changed;
+            this.newSlave = newSlave;
+        }
+    };
+    
     
     public def handshake (oldActivePlaces:PlaceGroup, vId:Long) {
         try {
@@ -227,6 +241,20 @@ public class LocalStore(immediateRecovery:Boolean) {
         try {
             lock();
             return activePlaces.next(here);
+        }finally {
+            unlock();
+        }
+    }
+    
+    public def nextPlaceChange() {
+        try {
+            lock();
+            if (oldSlave.id != slave.id) {
+                oldSlave = slave;
+                return new SlaveChange(true, slave);
+            }
+            else
+                return new SlaveChange(false, slave);
         }finally {
             unlock();
         }

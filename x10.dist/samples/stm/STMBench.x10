@@ -104,7 +104,7 @@ public class STMBench {
         try {
             
             finish for (var i:Long = 0; i < producersCount; i++) {
-            	startPlace(activePlaces(i), map, producersCount, d, a, r, u, t, h, o, g, victims, throughput, recoveryThroughput);
+            	startPlace(activePlaces(i), map, activePlaces.size(), producersCount, d, a, r, u, t, h, o, g, victims, throughput, recoveryThroughput);
             }
             
         }catch(e:Exception) {
@@ -117,7 +117,7 @@ public class STMBench {
         }
     }
 
-    private static def startPlace(pl:Place, map:ResilientNativeMap, producersCount:Long, 
+    private static def startPlace(pl:Place, map:ResilientNativeMap, activePlacesCount:Long, producersCount:Long, 
     		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, 
     		throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
         
@@ -127,7 +127,7 @@ public class STMBench {
                 throughput().reinit(recoveryThroughput);
             
             for (thrd in 1..t) async {
-                produce(map, myVirtualPlaceId, producersCount, thrd-1, d, a, r, u, t, h, o, g, victims, throughput);
+                produce(map, activePlacesCount, myVirtualPlaceId, producersCount, thrd-1, d, a, r, u, t, h, o, g, victims, throughput);
             }
             
             if (resilient && victims != null) {
@@ -158,7 +158,7 @@ public class STMBench {
         }
     }
     
-    public static def produce(map:ResilientNativeMap, myVirtualPlaceId:Long, producersCount:Long, producerId:Long, 
+    public static def produce(map:ResilientNativeMap, activePlacesCount:Long, myVirtualPlaceId:Long, producersCount:Long, producerId:Long, 
     		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, 
     		throughput:PlaceLocalHandle[PlaceThroughput]) {
         var txCount:Long = 0;
@@ -166,16 +166,7 @@ public class STMBench {
         val myThroughput = throughput().thrds(producerId);
         var timeNS:Long = myThroughput.elapsedTimeNS; // always 0 in non-resilient mode, non-zero for spare places in resilient mode
         val recovering = timeNS == 0? false : true;
-        /*
-        if (recovering)
-            Console.OUT.println("RecoveredProducer: " + myVirtualPlaceId +"x"+producerId + " starting");
-        else
-            Console.OUT.println("Producer: " + myVirtualPlaceId +"x"+producerId + " starting");
-        */
-        /*****   for resilience   ******/
-        var nextPlace:Place = map.plh().getNextPlace();
-        var activePlaces:PlaceGroup = map.getActivePlaces();
-        val activePlacesCount = activePlaces.size();
+
         while (timeNS < d*1e6) {
             //do not include the time to select the random operations as part of the time//
             val virtualMembers = nextTransactionMembers(rand, activePlacesCount, h, myVirtualPlaceId);
@@ -265,19 +256,15 @@ public class STMBench {
             myThroughput.timesNS(slice) += elapsedNS;
             myThroughput.elapsedTimeNS = timeNS;
             
-            if (resilient && producerId == 0 && !map.plh().sameActivePlaces(activePlaces)) {
-                //update activePlaces
-                activePlaces = map.getActivePlaces();
-            	val nxt = activePlaces.next(here);
-            	if (nxt.id != nextPlace.id) {
-            	    assert (throughput().rightPlaceDeathTimeNS != -1) : here + " assertion error, did not receive suicide note ...";
-            		nextPlace = nxt;
-            		val oldThroughput = throughput().rightPlaceThroughput;
-                    val recoveryTime = System.nanoTime() - throughput().rightPlaceDeathTimeNS;
-                    Console.OUT.println(here + " Calculated recovery time = " + (recoveryTime/ 1e9) + " seconds" );
-                    oldThroughput.shiftElapsedTime(recoveryTime);
-            		startPlace(nextPlace, map, producersCount, d, a, r, u, t, h, o, g, victims, throughput, oldThroughput);
-            	}
+            val slaveChange = map.nextPlaceChange();
+            if (resilient && producerId == 0 && slaveChange.changed) {
+                val nextPlace = slaveChange.newSlave;
+        	    assert (throughput().rightPlaceDeathTimeNS != -1) : here + " assertion error, did not receive suicide note ...";
+        		val oldThroughput = throughput().rightPlaceThroughput;
+                val recoveryTime = System.nanoTime() - throughput().rightPlaceDeathTimeNS;
+                oldThroughput.shiftElapsedTime(recoveryTime);
+                Console.OUT.println(here + " Calculated recovery time = " + (recoveryTime/ 1e9) + " seconds" );
+        		startPlace(nextPlace, map, activePlacesCount, producersCount, d, a, r, u, t, h, o, g, victims, throughput, oldThroughput);
             }
         }
     }

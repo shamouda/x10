@@ -71,6 +71,8 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     public def getActivePlaces() = plh().getActivePlaces();
     
     public def getPlace(virtualId:Long) = plh().getPlace(virtualId);
+
+    public def nextPlaceChange() = plh().nextPlaceChange();
     
     /***********************   Local Transactions ****************************/
     
