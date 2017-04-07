@@ -213,7 +213,7 @@ public class STMBench {
             val start = System.nanoTime();
             try {
             if (virtualMembers.size > 1 && TxConfig.get().STM ) { //STM distributed
-                map.executeTransaction(virtualMembers, distClosure);
+                map.executeTransaction(distClosure);
             }
             else if (virtualMembers.size > 1 && TxConfig.get().LOCKING ) { //locking distributed
                 map.executeLockingTransaction(lockRequests, distClosure);
