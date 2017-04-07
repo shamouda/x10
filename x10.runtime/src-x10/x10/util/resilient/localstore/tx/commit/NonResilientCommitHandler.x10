@@ -12,20 +12,17 @@ import x10.util.HashSet;
 
 public class NonResilientCommitHandler extends CommitHandler {
 	
-    val OPERATION_ABORT = 1;
-    val OPERATION_VALIDATE = 2;
-    val OPERATION_COMMIT = 3;
-    
 	public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers) {
 	    super(plh, id, mapName, members);
 	}
 	
-    public def abort(abortedPlaces:ArrayList[Place], recovery:Boolean) {
+    public def abort(recovery:Boolean) {
+        val abort_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { abort_local(plh, id); } ;
         try {
             if (members != null)
-                finish executeFlat(abort_local);
+                finish executeFlat(abort_master, true);
             else
-                finish executeRecursively(abort_local, new HashSet[Long](), true);
+                finish executeRecursively(abort_master, new HashSet[Long](), true);
         }
         catch(ex:MultipleExceptions) {
             Console.OUT.println("Warning: ignoring exception during finalize(false): " + ex.getMessage());
@@ -36,34 +33,51 @@ public class NonResilientCommitHandler extends CommitHandler {
     
     /***********************   Two Phase Commit Protocol ************************/
     public def commit(commitRecovery:Boolean):Int {
-    	assert (!commitRecovery) : "fatal error, commitRecovery must always be false in NonResilientCommitHandler";
+    	commitPhaseOne();
+
+    	commitPhaseTwo();
         
-    	val startP1 = Timer.milliTime();
-    	if (TxConfig.get().VALIDATION_REQUIRED) {
-            try {
-                if (members != null)
-                    finish executeFlat(validate_local); // failures are fatal
-                else
-                    finish executeRecursively(validate_local, new HashSet[Long](), false);
-                
-            } catch(ex:Exception) {
-                val list = getDeadAndConflictingPlaces(ex);
-                abort(list, false);
-                throw ex;
-            }
-    	}
-    	phase1ElapsedTime = Timer.milliTime() - startP1;
-    	
-        val startP2 = Timer.milliTime();
-        if (members != null)
-            finish executeFlat(commit_local);
-        else {
-            finish executeRecursively(commit_local, new HashSet[Long](), true);
-        }
-        phase2ElapsedTime = Timer.milliTime() - startP2;
-        
-        return AbstractTx.SUCCESS;
+    	return AbstractTx.SUCCESS;
     }
    
+    private def commitPhaseOne() {
+        val validate_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { validate_local(plh, id); };
+        val startP1 = Timer.milliTime();
+        if (TxConfig.get().VALIDATION_REQUIRED) {
+            try {
+                if (members != null)
+                    finish executeFlat(validate_master, false); // failures are fatal
+                else
+                    finish executeRecursively(validate_master, new HashSet[Long](), false);
+                
+            } catch(ex:Exception) {
+                abort(false);
+                throw ex;
+            }
+        }
+        phase1ElapsedTime = Timer.milliTime() - startP1;
+    }
+    
+    private def commitPhaseTwo() {
+        val commit_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { commit_local(plh, id); } ;
+        val startP2 = Timer.milliTime();
+        if (members != null)
+            finish executeFlat(commit_master, true);
+        else
+            finish executeRecursively(commit_master, new HashSet[Long](), true);
+        phase2ElapsedTime = Timer.milliTime() - startP2;
+    }
+    
+    static def validate_local(plh:PlaceLocalHandle[LocalStore], id:Long) {
+        plh().masterStore.validate(id);
+    }
+    
+    static def commit_local(plh:PlaceLocalHandle[LocalStore], id:Long) {
+        plh().masterStore.commit(id);
+    }
+    
+    static def abort_local(plh:PlaceLocalHandle[LocalStore], id:Long) {
+        plh().masterStore.abort(id);
+    }
     
 }

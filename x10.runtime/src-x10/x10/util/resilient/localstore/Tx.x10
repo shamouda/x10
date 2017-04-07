@@ -76,27 +76,24 @@ public class Tx extends AbstractTx {
 
     /*********************** Abort ************************/  
     @Pinned public def abortRecovery() {
-        abort(new ArrayList[Place](), true);
+        abort(true);
     }
     
-    @Pinned public def abort(ex:Exception) {
-        val list = CommitHandler.getDeadAndConflictingPlaces(ex);
-        abort(list, false);
+    @Pinned public def abort() {
+        abort(false);
     }
     
-    @Pinned private def abort(abortedPlaces:ArrayList[Place], recovery:Boolean) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " abort (abortPlaces.size = " + abortedPlaces.size() + ") alreadyAborted = " + aborted);
+    @Pinned private def abort(recovery:Boolean) {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " abort started alreadyAborted = " + aborted);
         if (!aborted)
             aborted = true;
         else 
             return;
         
-        commitHandler.abort(abortedPlaces, recovery);
+        commitHandler.abort(recovery);
         
-        if (abortTime == -1) {
-            abortTime = Timer.milliTime();
-          if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " aborted, allTxTime ["+(abortTime-startTime)+"] ms");
-        }
+        abortTime = Timer.milliTime();
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " aborted, allTxTime ["+(abortTime-startTime)+"] ms");
     }
 
     

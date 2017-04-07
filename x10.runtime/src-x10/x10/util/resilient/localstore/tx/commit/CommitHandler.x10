@@ -14,17 +14,13 @@ public abstract class CommitHandler {
     public transient var phase2ElapsedTime:Long = 0;
 	public transient var txLoggingElapsedTime:Long = 0;
 
-    public abstract def abort(abortedPlaces:ArrayList[Place], recovery:Boolean):void;
+    public abstract def abort(recovery:Boolean):void;
     public abstract def commit(commitRecovery:Boolean):Int;
     
     protected plh:PlaceLocalHandle[LocalStore];
     protected id:Long;
     protected mapName:String;
     protected members:TxMembers;
-    
-    protected val validate_local = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { plh().masterStore.validate(id); };
-    protected val abort_local = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { plh().masterStore.abort(id); } ;
-    protected val commit_local = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { plh().masterStore.commit(id); } ;
     
     public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers) {
     	this.plh = plh;
@@ -94,12 +90,15 @@ public abstract class CommitHandler {
         return list;
     }
     
-    
-    protected def executeFlat(closure:(PlaceLocalHandle[LocalStore],Long)=>void) {
+    protected def executeFlat(closure:(PlaceLocalHandle[LocalStore],Long)=>void, deleteTxDesc:Boolean) {
         for (p in members.pg()) {
             async at (p) {
                 closure(plh, id);
             }
+        }
+        
+        if (deleteTxDesc) {
+            plh().txDescManager.delete(id, true);
         }
     }
     
@@ -125,4 +124,19 @@ public abstract class CommitHandler {
         }
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursively ended children ["+childCount+"] ...");
     }
+    
+    protected def executeFlatSlaves(deadMasters:ArrayList[Place], closure:(PlaceLocalHandle[LocalStore],Long)=>void, deleteTxDesc:Boolean) {
+        for (p in deadMasters) {
+            val virtualPlace = members.getVirtualPlaceId(p);
+            val slave = plh().getSlave(virtualPlace);
+            async at (slave) {
+                closure(plh, id);
+            }
+        }
+        
+        if (deleteTxDesc) {
+            plh().txDescManager.delete(id, true);
+        }
+    }
+    
 }
