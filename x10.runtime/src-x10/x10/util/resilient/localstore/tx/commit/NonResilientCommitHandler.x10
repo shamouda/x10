@@ -25,7 +25,7 @@ public class NonResilientCommitHandler extends CommitHandler {
             if (members != null)
                 finish executeFlat(abort_local);
             else
-                finish executeRecursively(abort_local, new HashSet[Long]());
+                finish executeRecursively(abort_local, new HashSet[Long](), true);
         }
         catch(ex:MultipleExceptions) {
             Console.OUT.println("Warning: ignoring exception during finalize(false): " + ex.getMessage());
@@ -44,7 +44,7 @@ public class NonResilientCommitHandler extends CommitHandler {
                 if (members != null)
                     finish executeFlat(validate_local); // failures are fatal
                 else
-                    finish executeRecursively(validate_local, new HashSet[Long]());
+                    finish executeRecursively(validate_local, new HashSet[Long](), false);
                 
             } catch(ex:Exception) {
                 val list = getDeadAndConflictingPlaces(ex);
@@ -58,7 +58,7 @@ public class NonResilientCommitHandler extends CommitHandler {
         if (members != null)
             finish executeFlat(commit_local);
         else {
-            finish executeRecursively(commit_local, new HashSet[Long]());
+            finish executeRecursively(commit_local, new HashSet[Long](), true);
         }
         phase2ElapsedTime = Timer.milliTime() - startP2;
         

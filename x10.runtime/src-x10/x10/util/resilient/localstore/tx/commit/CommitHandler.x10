@@ -103,7 +103,7 @@ public abstract class CommitHandler {
         }
     }
     
-    protected def executeRecursively(closure:(PlaceLocalHandle[LocalStore],Long)=>void, parents:HashSet[Long]) {
+    protected def executeRecursively(closure:(PlaceLocalHandle[LocalStore],Long)=>void, parents:HashSet[Long], deleteTxDesc:Boolean) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursively started ...");
         closure(plh, id);
         var childCount:Long = 0;
@@ -115,10 +115,13 @@ public abstract class CommitHandler {
             for (p in childrenPhysical.pg()) {
                 if (!parents.contains(p.id)) {
                     async at (p) {
-                        executeRecursively(closure, parents);
+                        executeRecursively(closure, parents, deleteTxDesc);
                     }
                 }
             }
+        }
+        if (deleteTxDesc) {
+            plh().txDescManager.delete(id, true);
         }
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursively ended children ["+childCount+"] ...");
     }
