@@ -8,6 +8,7 @@ import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.AbstractTx;
 import x10.util.resilient.localstore.TxMembers;
+import x10.util.resilient.localstore.tx.logging.TxDesc;
 import x10.util.GrowableRail;
 
 /*
@@ -35,8 +36,8 @@ public class LazyReplicationCommitHandler extends CommitHandler {
 	private val root = GlobalRef[LazyReplicationCommitHandler](this);
 	private var nonFatalDeadPlace:Boolean = false;
 	
-	public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers, txDescMap:ResilientNativeMap) {
-	    super(plh, id, mapName, members, txDescMap);	
+	public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers) {
+	    super(plh, id, mapName, members);	
 	}
 	
 	public def abort(abortedPlaces:ArrayList[Place], recovery:Boolean) {
@@ -60,7 +61,7 @@ public class LazyReplicationCommitHandler extends CommitHandler {
             }
         }
         
-        deleteTxDesc();
+	    plh().txDescManager.delete(id, true);
     }
 
     
@@ -69,7 +70,7 @@ public class LazyReplicationCommitHandler extends CommitHandler {
         if (!commitRecovery) {
             try {
                 commitPhaseOne(plh, id, members); // master failure is fatal, slave failure is not fatal
-                updateTxDesc(TxDesc.COMMITTING);
+                plh().txDescManager.updateStatus(id, TxDesc.COMMITTING, true);
             } catch(ex:Exception) {
                 val list = getDeadAndConflictingPlaces(ex);
                 abort(list, false);
@@ -81,8 +82,7 @@ public class LazyReplicationCommitHandler extends CommitHandler {
         
     	/* if we don't mark the committed transaction, 
     	 * we will have to recommit all transactions that are already committed */
-        updateTxDesc(TxDesc.COMMITTED); 
-        
+        plh().txDescManager.updateStatus(id, TxDesc.COMMITTED, true);
         if (nonFatalDeadPlace)
         	return AbstractTx.SUCCESS_RECOVER_STORE;
         else

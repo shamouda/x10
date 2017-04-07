@@ -21,6 +21,7 @@ import x10.compiler.Ifdef;
 import x10.xrx.Runtime;
 import x10.util.resilient.localstore.tx.*;
 import x10.util.resilient.localstore.Cloneable;
+import x10.util.resilient.localstore.tx.logging.TxDesc;
 
 public class MasterStore(immediateRecovery:Boolean) {
     /*Each map has an object of TxManager (same object even after failures)*/

@@ -3,7 +3,6 @@ import x10.util.ArrayList;
 import x10.util.resilient.PlaceManager;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.Tx;
-import x10.util.concurrent.Future;
 import x10.util.resilient.localstore.ResilientStore;
 import x10.util.Set;
 import x10.xrx.Runtime;
@@ -63,39 +62,34 @@ public class BankAsync {
                 if (i%debugProgress == 0)
                     Console.OUT.println(here + " progress " + i);
                 val rand1 = Math.abs(rand.nextLong()% accountsMAX);
-                val p1 = STMAppUtils.getPlace(rand1, activePG, accountsPerPlace);
+                val p1 = rand1/accountsPerPlace;
                 
                 var rand2:Long = Math.abs(rand.nextLong()% accountsMAX);
-                var tmpP2:Place = STMAppUtils.getPlace(rand2, activePG, accountsPerPlace);
-                while (rand1 == rand2 || p1.id == tmpP2.id) {
+                var tmpP2:Long = rand2/accountsPerPlace;
+                while (rand1 == rand2 || p1 == tmpP2) {
                     rand2 = Math.abs(rand.nextLong()% accountsMAX);
-                    tmpP2 = STMAppUtils.getPlace(rand2, activePG, accountsPerPlace);
+                    tmpP2 = rand2/accountsPerPlace;
                 }
                 val p2=  tmpP2;
                 val randAcc1 = "acc"+rand1;
                 val randAcc2 = "acc"+rand2;
                 val amount = Math.abs(rand.nextLong()%100);
-                val members = STMAppUtils.createGroup(p1, p2);
                 map.executeTransaction(members, (tx:Tx) => {
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"] amount["+amount+"] ");
-                    val f1 = tx.asyncAt(p1, () => {
+                    tx.asyncAt(p1, () => {
                         var acc1:BankAccount = tx.get(randAcc1) as BankAccount;
                         if (acc1 == null)
                             acc1 = new BankAccount(0);
                         acc1.account -= amount;
                         tx.put(randAcc1, acc1);
                     });
-                    val f2 = tx.asyncAt(p2, () => {
+                    tx.asyncAt(p2, () => {
                         var acc2:BankAccount = tx.get(randAcc2) as BankAccount;
                         if (acc2 == null)
                             acc2 = new BankAccount(0);
                         acc2.account += amount;
                         tx.put(randAcc2, acc2);
                     });
-                    val startWait = Timer.milliTime();
-                    f1.force();
-                    f2.force();
-                    tx.setWaitElapsedTime(Timer.milliTime() - startWait);
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitElapsedTime +"] ms");
                     return null;
                 });

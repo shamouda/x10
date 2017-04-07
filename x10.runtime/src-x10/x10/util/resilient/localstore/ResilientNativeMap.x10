@@ -10,6 +10,7 @@ import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Lock;
 import x10.xrx.Runtime;
 import x10.util.Timer;
+import x10.util.resilient.localstore.tx.logging.TxDesc;
 
 public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) {
     private static val TM_STAT_ALL = System.getenv("TM_STAT_ALL") != null && System.getenv("TM_STAT_ALL").equals("1");
@@ -141,18 +142,20 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     }
     
     /***********************   Global Transactions ****************************/
+    private def startGlobalTransaction():Tx {
+        return startGlobalTransaction(null);
+    }
+    
     private def startGlobalTransaction(members:TxMembers):Tx {
         assert(plh().virtualPlaceId != -1);
+        
         val id = plh().masterStore.getNextTransactionId();
-        if (resilient && !TxConfig.get().DISABLE_SLAVE && !TxConfig.get().DISABLE_TX_LOGGING) {
-            val localTx = plh().getTxLoggingMap().startLocalTransaction();
-            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] startGlobalTransaction localTx["+localTx.id+"] started ...");
-            localTx.put("tx"+id, new TxDesc(id, name, members.virtual, TxDesc.STARTED));
-            val ignoreDeadSlave = false;
-            localTx.commit(ignoreDeadSlave);
-            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] startGlobalTransaction localTx["+localTx.id+"] completed ...");
-        }
-        val tx = new Tx(plh, id, name, members, plh().getTxLoggingMap());
+        val tx = new Tx(plh, id, name, members);
+        var predefinedMembers:Rail[Long] = null;
+        if (members != null)
+            predefinedMembers = members.virtual;
+        plh().txDescManager.add(id, name, predefinedMembers, false);
+        
         plh().txList.addGlobalTx(tx);
         return tx;
     }
@@ -160,14 +163,20 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     public def restartGlobalTransaction(txDesc:TxDesc):Tx {
         assert(plh().virtualPlaceId != -1);
         val includeDead = true; // The commitHandler will take the correct actions regarding the dead master
-        val tx = new Tx(plh, txDesc.id, name,  plh().getTxMembers(txDesc.virtualMembers, includeDead), plh().getTxLoggingMap());
+        val tx = new Tx(plh, txDesc.id, name,  plh().getTxMembers(txDesc.virtualMembers.toRail(), includeDead));
         plh().txList.addGlobalTx(tx);
         return tx;
     }
     
+    public def executeTransaction(closure:(Tx)=>Any):TxResult {
+        return executeTransaction(null, closure);
+    }
+    
     public def executeTransaction(virtualMembers:Rail[Long], closure:(Tx)=>Any):TxResult {
-        val includeDead = true; 
-        var members:TxMembers = plh().getTxMembers(virtualMembers, includeDead);
+        var members:TxMembers = null;
+        if (virtualMembers != null) 
+            members = plh().getTxMembers(virtualMembers, true);
+        
         while(true) {
             var tx:Tx = null; 
             var commitCalled:Boolean = false;
@@ -195,8 +204,8 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
                     ex.printStackTrace();
                 }
                 val dpe = throwIfFatalSleepIfRequired(ex, plh().immediateRecovery);
-                if (dpe)
-                    members = plh().getTxMembers(virtualMembers, includeDead);
+                if (dpe && virtualMembers != null)
+                    members = plh().getTxMembers(virtualMembers, true);
             }
         }
     }

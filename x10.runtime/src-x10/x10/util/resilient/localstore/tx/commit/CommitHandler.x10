@@ -20,15 +20,18 @@ public abstract class CommitHandler {
     protected id:Long;
     protected mapName:String;
     protected members:TxMembers;
-    protected txDescMap:ResilientNativeMap;
     
-    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers, txDescMap:ResilientNativeMap) {
+    protected val validate_local = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { plh().masterStore.validate(id); };
+    protected val abort_local = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { plh().masterStore.abort(id); } ;
+    protected val commit_local = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { plh().masterStore.commit(id); } ;
+    
+    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers) {
     	this.plh = plh;
     	this.id = id;
     	this.mapName = mapName;
     	this.members = members;
-    	this.txDescMap = txDescMap;
     }
+    
     /***************************************************************************************/
     protected def finalizeSlaves(commit:Boolean, deadMasters:ArrayList[Place], 
             plh:PlaceLocalHandle[LocalStore], id:Long, members:TxMembers) {
@@ -49,59 +52,6 @@ public abstract class CommitHandler {
             }
         }
     }
-    
-    protected def updateTxDesc(status:Long){
-        if (TxConfig.get().DISABLE_TX_LOGGING)
-            return;
-        val start = Timer.milliTime();
-        val localTx = txDescMap.startLocalTransaction();
-        try {
-            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " updateTxDesc localTx["+localTx.id+"] started ...");
-            val desc = localTx.get("tx"+id) as TxDesc;
-            //while recovering a transaction, the current place will not have the TxDesc stored, NPE can be thrown
-            if (desc != null) {
-                desc.status = status;
-                localTx.put("tx"+id, desc);
-            }
-            val ignoreDeadSlave = true;
-            localTx.commit(ignoreDeadSlave);
-            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " updateTxDesc localTx["+localTx.id+"] completed ...");
-    
-        } catch(ex:Exception) {
-            if(TxConfig.get().TM_DEBUG) {
-                Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " updateTxDesc localTx["+localTx.id+"] failed exception["+ex.getMessage()+"] ...");
-                ex.printStackTrace();
-            }
-            throw ex;
-        }
-        finally {
-            txLoggingElapsedTime += Timer.milliTime() - start;
-        }
-    }
-    
-    protected def deleteTxDesc(){
-        if (TxConfig.get().DISABLE_TX_LOGGING)
-            return;
-        
-        val start = Timer.milliTime();
-        try {
-            val localTx = txDescMap.startLocalTransaction();
-            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " deleteTxDesc localTx["+localTx.id+"] started ...");
-            localTx.delete("tx"+id);
-            val ignoreDeadSlave = true;
-            localTx.commit(ignoreDeadSlave);
-            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " deleteTxDesc localTx["+localTx.id+"] completed ...");
-        }catch(ex:Exception) {
-            if(TxConfig.get().TM_DEBUG) {
-                Console.OUT.println("Warning: ignoring exception during deleteTxDesc: " + ex.getMessage());
-                ex.printStackTrace();
-            }
-        }
-        finally {
-            txLoggingElapsedTime += Timer.milliTime() - start;
-        }
-    }
-    
     
     protected def getDeadPlaces(mulExp:MultipleExceptions, members:TxMembers) {
         val list = new ArrayList[Place]();
@@ -141,5 +91,26 @@ public abstract class CommitHandler {
             }
         }
         return list;
+    }
+    
+    
+    protected def executeFlat(closure:(PlaceLocalHandle[LocalStore],Long)=>void) {
+        for (p in members.pg()) {
+            at (p) async {
+                closure(plh, id);
+            }
+        }
+    }
+    
+    protected def executeRecursively(closure:(PlaceLocalHandle[LocalStore],Long)=>void) {
+        closure(plh, id);
+        
+        val childrenVirtual = plh().txDescManager.getVirtualMembers(id);
+        val childrenPhysical = plh().getTxMembers( childrenVirtual , true);
+        for (p in childrenPhysical.pg()) {
+            at (p) async {
+                executeRecursively(closure);
+            }
+        }
     }
 }

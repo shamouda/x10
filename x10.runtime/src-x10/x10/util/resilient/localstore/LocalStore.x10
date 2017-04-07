@@ -19,10 +19,11 @@ import x10.xrx.Runtime;
 import x10.util.concurrent.AtomicLong;
 import x10.compiler.Ifdef;
 import x10.util.resilient.localstore.Cloneable;
-import x10.util.resilient.localstore.tx.TxDesc;
+import x10.util.resilient.localstore.tx.logging.TxDesc;
 import x10.util.resilient.localstore.tx.TransactionsList;
 import x10.compiler.Uncounted;
 import x10.util.resilient.localstore.recovery.DistributedRecoveryHelper;
+import x10.util.resilient.localstore.tx.logging.TxDescManager;
 
 public class LocalStore(immediateRecovery:Boolean) {
     private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
@@ -37,7 +38,8 @@ public class LocalStore(immediateRecovery:Boolean) {
     private transient var heartBeatOn:Boolean;
     private transient var lock:Lock;
     public transient val txList:TransactionsList = new TransactionsList();
-    private transient var txDescMap:ResilientNativeMap; //A resilient map for transactions' descriptors
+    
+    public transient var txDescManager:TxDescManager; //A resilient map for transactions' descriptors
     
     public def this(active:PlaceGroup, immediateRecovery:Boolean) {
         property(immediateRecovery);
@@ -148,14 +150,9 @@ public class LocalStore(immediateRecovery:Boolean) {
         }
     }
     
-    public def getTxLoggingMap() {
-        if (txDescMap == null)
-            txDescMap = new ResilientNativeMap("_TxDesc_", plh);
-        return txDescMap;
-    }
-    
     public def setPLH(plh:PlaceLocalHandle[LocalStore]) {
         this.plh = plh;
+        this.txDescManager = new TxDescManager(new ResilientNativeMap("_TxDesc_", plh));
     }
     
     /**************     ActivePlaces utility methods     ****************/
@@ -295,7 +292,6 @@ public class LocalStore(immediateRecovery:Boolean) {
     public def getTxMembers(virtualMembers:Rail[Long], includeDead:Boolean):TxMembers {
         try {
             lock();
-            try {
             val members = new TxMembers(virtualMembers.size);
             for (var i:Long = 0; i < virtualMembers.size; i++) {
                 val pl = activePlaces(virtualMembers(i));
@@ -304,19 +300,6 @@ public class LocalStore(immediateRecovery:Boolean) {
                 }
             }
             return members;
-            }catch(ex:Exception) {
-                var str:String = "";
-                for (var i:Long = 0 ; i < virtualMembers.size; i++)
-                    str += virtualMembers(i) + " ";
-                
-                
-                var astr:String = "";
-                for (var i:Long = 0 ; i < activePlaces.size(); i++)
-                    astr += activePlaces(i) + " ";
-                
-                Console.OUT.println(here + " ERROR: getTxMembers failed parameters = members("+str+") includeDead("+includeDead+") activePlaces(" + astr + ") ");
-                throw ex;
-            }
         } finally {
             unlock();
         }

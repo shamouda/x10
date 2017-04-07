@@ -3,10 +3,11 @@ package x10.util.resilient.localstore.recovery;
 import x10.util.ArrayList;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.PlaceManager.ChangeDescription;
-import x10.util.resilient.localstore.tx.TxDesc;
 import x10.compiler.Uncounted;
 import x10.util.resilient.localstore.*;
 import x10.xrx.Runtime;
+import x10.util.resilient.localstore.tx.logging.TxDesc;
+
 /**
  * Should be called by the local store when it detects that its slave has died.
  **/

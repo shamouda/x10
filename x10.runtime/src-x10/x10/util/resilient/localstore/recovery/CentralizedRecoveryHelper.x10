@@ -3,7 +3,7 @@ package x10.util.resilient.localstore.recovery;
 import x10.util.ArrayList;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.PlaceManager.ChangeDescription;
-import x10.util.resilient.localstore.tx.TxDesc;
+import x10.util.resilient.localstore.tx.logging.TxDesc;
 import x10.util.resilient.localstore.*;
 
 public class CentralizedRecoveryHelper {

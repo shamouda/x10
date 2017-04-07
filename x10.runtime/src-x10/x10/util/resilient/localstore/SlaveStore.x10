@@ -19,6 +19,7 @@ import x10.util.concurrent.Lock;
 import x10.util.resilient.localstore.tx.*;
 import x10.util.resilient.localstore.Cloneable;
 import x10.xrx.Runtime;
+import x10.util.resilient.localstore.tx.logging.TxDesc;
 
 /* Slave methods are being called by only one place at a time,
  * either its master during normal execution, or the store coordinator during failure recovery */

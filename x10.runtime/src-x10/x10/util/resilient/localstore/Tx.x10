@@ -40,11 +40,10 @@ public class Tx extends AbstractTx {
     
     /* resilient mode variables */
     private transient var aborted:Boolean = false;
-    private transient var txDescMap:ResilientNativeMap;
     
     private val members:TxMembers;
     
-    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers, txDescMap:ResilientNativeMap) {
+    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers) {
         super(plh, id, mapName);
         this.members = members;
         
@@ -52,18 +51,17 @@ public class Tx extends AbstractTx {
         	
         if (resilient) {
             if (TxConfig.get().DISABLE_SLAVE) {
-                commitHandler = new NonResilientCommitHandler(plh, id, mapName, members, txDescMap);
+                commitHandler = new NonResilientCommitHandler(plh, id, mapName, members);
             }
             else {
-                this.txDescMap = txDescMap;
                 if (TxConfig.get().TM_REP.equals("lazy"))
-                    commitHandler = new LazyReplicationCommitHandler(plh, id, mapName, members, txDescMap);
+                    commitHandler = new LazyReplicationCommitHandler(plh, id, mapName, members);
                 else   
-                    commitHandler = new EagerReplicationCommitHandler(plh, id, mapName, members, txDescMap);
+                    commitHandler = new EagerReplicationCommitHandler(plh, id, mapName, members);
             }
         }
         else
-        	commitHandler = new NonResilientCommitHandler(plh, id, mapName, members, txDescMap);
+        	commitHandler = new NonResilientCommitHandler(plh, id, mapName, members);
     }
     
     /********** Setting the pre-commit time for statistical analysis **********/   
@@ -116,6 +114,19 @@ public class Tx extends AbstractTx {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " committed, allTxTime [" + (commitTime-startTime) + "] ms");
         
         return success;
+    }
+    
+    
+    public def asyncAt(virtualPlace:Long, closure:()=>void) {
+        if (members == null){
+            val vMembers = new Rail[Long](1);
+            vMembers(0) = virtualPlace;
+            plh().txDescManager.addVirtualMembers(id, vMembers, false) ;
+        }
+        
+        val pl = plh().getPlace(virtualPlace);
+        assert (pl.id >= 0 && pl.id < Place.numPlaces()) : "fatal bug, wrong place id " + pl.id;
+        at (pl) async closure();
     }
         
 }
