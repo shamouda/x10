@@ -7,6 +7,8 @@ import x10.util.resilient.localstore.ResilientStore;
 import x10.util.Set;
 import x10.xrx.Runtime;
 import x10.util.Timer;
+import x10.util.resilient.localstore.TxConfig;
+
 
 public class BankAsync {
     public static def main(args:Rail[String]) {
@@ -25,7 +27,7 @@ public class BankAsync {
         
         val supportShrinking = false;
         val mgr = new PlaceManager(sparePlaces, supportShrinking);
-        val store = ResilientStore.make(mgr.activePlaces());
+        val store = ResilientStore.make(mgr.activePlaces(), false);
         val map = store.makeMap("mapA");
         try {
             val startTransfer = System.nanoTime();
@@ -74,8 +76,9 @@ public class BankAsync {
                 val randAcc1 = "acc"+rand1;
                 val randAcc2 = "acc"+rand2;
                 val amount = Math.abs(rand.nextLong()%100);
-                map.executeTransaction(members, (tx:Tx) => {
+                map.executeTransaction((tx:Tx) => {
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"] amount["+amount+"] ");
+                    
                     tx.asyncAt(p1, () => {
                         var acc1:BankAccount = tx.get(randAcc1) as BankAccount;
                         if (acc1 == null)
@@ -83,6 +86,7 @@ public class BankAsync {
                         acc1.account -= amount;
                         tx.put(randAcc1, acc1);
                     });
+                    
                     tx.asyncAt(p2, () => {
                         var acc2:BankAccount = tx.get(randAcc2) as BankAccount;
                         if (acc2 == null)
@@ -90,7 +94,7 @@ public class BankAsync {
                         acc2.account += amount;
                         tx.put(randAcc2, acc2);
                     });
-                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] waitForFutures ["+ tx.waitElapsedTime +"] ms");
+                    
                     return null;
                 });
             }

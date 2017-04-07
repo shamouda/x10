@@ -95,7 +95,7 @@ public class LocalTx extends AbstractTx {
             
             val log = plh().masterStore.getTxCommitLog(id);
             try {
-                if (resilient && log != null && log.size() > 0) {
+                if (resilient && log != null && log.size() > 0 && !TxConfig.get().DISABLE_SLAVE) {
                     finish at (plh().slave) async {
                         plh().slaveStore.commit(id, log, ownerPlaceIndex);
                     }

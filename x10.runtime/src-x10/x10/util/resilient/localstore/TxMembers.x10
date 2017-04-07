@@ -76,5 +76,8 @@ public class TxMembers(size:Long) {
         return str;
     }
     
-    public def pg() = new SparsePlaceGroup(places);
+    public def pg() {
+        assert (places != null && places.size != 0) : "bug in TxMembers.pg()";
+        return new SparsePlaceGroup(places);
+    }
 }

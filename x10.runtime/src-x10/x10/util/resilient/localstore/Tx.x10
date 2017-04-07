@@ -47,7 +47,12 @@ public class Tx extends AbstractTx {
         super(plh, id, mapName);
         this.members = members;
         
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("TX["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] started members["+members.toString()+"]");
+        if (TxConfig.get().TM_DEBUG) {
+            var memStr:String = "";
+            if (members != null)
+                memStr = members.toString();
+            Console.OUT.println("TX["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] started members["+memStr+"]");
+        }
         	
         if (resilient) {
             if (TxConfig.get().DISABLE_SLAVE) {

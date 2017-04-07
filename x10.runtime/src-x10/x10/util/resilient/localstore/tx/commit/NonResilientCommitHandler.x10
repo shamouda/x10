@@ -8,6 +8,7 @@ import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.AbstractTx;
 import x10.util.resilient.localstore.tx.*;
 import x10.util.resilient.localstore.TxMembers;
+import x10.util.HashSet;
 
 public class NonResilientCommitHandler extends CommitHandler {
 	
@@ -24,7 +25,7 @@ public class NonResilientCommitHandler extends CommitHandler {
             if (members != null)
                 finish executeFlat(abort_local);
             else
-                finish executeRecursively(abort_local);
+                finish executeRecursively(abort_local, new HashSet[Long]());
         }
         catch(ex:MultipleExceptions) {
             Console.OUT.println("Warning: ignoring exception during finalize(false): " + ex.getMessage());
@@ -43,7 +44,7 @@ public class NonResilientCommitHandler extends CommitHandler {
                 if (members != null)
                     finish executeFlat(validate_local); // failures are fatal
                 else
-                    finish executeRecursively(validate_local);
+                    finish executeRecursively(validate_local, new HashSet[Long]());
                 
             } catch(ex:Exception) {
                 val list = getDeadAndConflictingPlaces(ex);
@@ -57,7 +58,7 @@ public class NonResilientCommitHandler extends CommitHandler {
         if (members != null)
             finish executeFlat(commit_local);
         else {
-            finish executeRecursively(commit_local);
+            finish executeRecursively(commit_local, new HashSet[Long]());
         }
         phase2ElapsedTime = Timer.milliTime() - startP2;
         

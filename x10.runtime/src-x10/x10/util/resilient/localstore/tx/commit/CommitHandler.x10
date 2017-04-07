@@ -7,6 +7,7 @@ import x10.util.resilient.localstore.LocalStore;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.TxMembers;
+import x10.util.HashSet;
 
 public abstract class CommitHandler {
 	public transient var phase1ElapsedTime:Long = 0;
@@ -96,21 +97,29 @@ public abstract class CommitHandler {
     
     protected def executeFlat(closure:(PlaceLocalHandle[LocalStore],Long)=>void) {
         for (p in members.pg()) {
-            at (p) async {
+            async at (p) {
                 closure(plh, id);
             }
         }
     }
     
-    protected def executeRecursively(closure:(PlaceLocalHandle[LocalStore],Long)=>void) {
+    protected def executeRecursively(closure:(PlaceLocalHandle[LocalStore],Long)=>void, parents:HashSet[Long]) {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursively started ...");
         closure(plh, id);
-        
+        var childCount:Long = 0;
         val childrenVirtual = plh().txDescManager.getVirtualMembers(id);
-        val childrenPhysical = plh().getTxMembers( childrenVirtual , true);
-        for (p in childrenPhysical.pg()) {
-            at (p) async {
-                executeRecursively(closure);
+        if (childrenVirtual != null) {
+            parents.add(here.id);
+            childCount = childrenVirtual.size;
+            val childrenPhysical = plh().getTxMembers( childrenVirtual , true);
+            for (p in childrenPhysical.pg()) {
+                if (!parents.contains(p.id)) {
+                    async at (p) {
+                        executeRecursively(closure, parents);
+                    }
+                }
             }
         }
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursively ended children ["+childCount+"] ...");
     }
 }

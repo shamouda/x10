@@ -76,8 +76,8 @@ public class STMBench {
         val timeSlices = d / a;
         val throughputPLH = PlaceLocalHandle.make[PlaceThroughput](Place.places(), ()=> new PlaceThroughput(here.id, t, timeSlices) );
                 
-        val heartbeatOn = true;
-        val store = ResilientStore.make(activePlaces, heartbeatOn);
+        val immediateRecovery = true;
+        val store = ResilientStore.make(activePlaces, immediateRecovery);
         val map = store.makeMap("map");
         
         val startWarmup = Timer.milliTime();

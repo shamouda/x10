@@ -17,10 +17,11 @@ import x10.util.resilient.localstore.LocalStore;
 import x10.util.GrowableRail;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.tx.TxManager;
+import x10.util.ArrayList;
 
 public class TxDesc(id:Long, mapName:String) implements Cloneable{
     public var status:Long = STARTED;
-    public val virtualMembers:GrowableRail[Long];
+    public var virtualMembers:Rail[Long];
 
     public static val STARTED=1;
     public static val COMMITTING=2;
@@ -29,15 +30,14 @@ public class TxDesc(id:Long, mapName:String) implements Cloneable{
     public def this(id:Long, mapName:String) {
         property (id, mapName);
         this.status = STARTED;
-        this.virtualMembers = new GrowableRail[Long]();
+        this.virtualMembers = new Rail[Long]();
     }
     
     //used for clone only
-    private def this(id:Long, mapName:String, status:Long, rail:GrowableRail[Long]) {
+    private def this(id:Long, mapName:String, status:Long, rail:Rail[Long]) {
         property (id, mapName);
         this.status = status;
-        this.virtualMembers = new GrowableRail[Long](rail.size());
-        this.virtualMembers.addAll(rail);
+        this.virtualMembers = rail;
     }
     
     public def clone():Cloneable {
@@ -47,18 +47,38 @@ public class TxDesc(id:Long, mapName:String) implements Cloneable{
     public def addVirtualMembers(ids:Rail[Long]) {
         if (ids == null)
             return;
-        virtualMembers.addAll(ids);
+        val list = new ArrayList[Long]();
+        for (id in ids) {
+            var found:Boolean = false;
+            for (v in virtualMembers) {
+                if (v == id) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+                list.add(id);
+        }
+        val newSize = virtualMembers.size + list.size();
+        val newMembers = new Rail[Long] (newSize);
+        var lastIndex:Long = 0;
+        for (var i:Long = 0 ; i < newSize; i++) {
+            if (i < virtualMembers.size)
+                newMembers(i) = virtualMembers(i);
+            else 
+                newMembers(i) = list.get(lastIndex++);
+        }
+        virtualMembers = newMembers;
+        
         if (TxConfig.get().TM_DEBUG) {
             var str:String = "";
-            for (x in ids)
+            for (x in virtualMembers)
                 str += x + " ";
-            Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString (id) + " adding members ["+str+"]");
+            Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString (id) + " virtualMembers = ["+str+"]");
         }
     }
     
-    public def getVirtualMembers() {
-        return virtualMembers.toRail();
-    }
+    public def getVirtualMembers() = virtualMembers;
     
     public def getStatusDesc() {
         if (status == STARTED)
@@ -72,7 +92,7 @@ public class TxDesc(id:Long, mapName:String) implements Cloneable{
     
     public def toString() {
         var str:String = "";
-        for ( p in virtualMembers.toRail() )
+        for ( p in virtualMembers )
             str += p + " ";
         return "TxDesc id["+id+"] mapName["+mapName+"] status["+getStatusDesc()+"] virtualMembers["+str+"]";
     }
