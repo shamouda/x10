@@ -29,9 +29,7 @@ public class NonResilientCommitHandler extends CommitHandler {
             ex.printStackTrace();
         }
     }
-
     
-    /***********************   Two Phase Commit Protocol ************************/
     public def commit(commitRecovery:Boolean):Int {
     	commitPhaseOne();
 
@@ -68,16 +66,15 @@ public class NonResilientCommitHandler extends CommitHandler {
         phase2ElapsedTime = Timer.milliTime() - startP2;
     }
     
-    static def validate_local(plh:PlaceLocalHandle[LocalStore], id:Long) {
+    private def validate_local(plh:PlaceLocalHandle[LocalStore], id:Long) {
         plh().masterStore.validate(id);
     }
     
-    static def commit_local(plh:PlaceLocalHandle[LocalStore], id:Long) {
+    private def commit_local(plh:PlaceLocalHandle[LocalStore], id:Long) {
         plh().masterStore.commit(id);
     }
     
-    static def abort_local(plh:PlaceLocalHandle[LocalStore], id:Long) {
+    private def abort_local(plh:PlaceLocalHandle[LocalStore], id:Long) {
         plh().masterStore.abort(id);
     }
-    
 }

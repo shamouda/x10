@@ -12,8 +12,8 @@ import x10.util.resilient.localstore.TxConfig;
 
 public class BankAsync {
     public static def main(args:Rail[String]) {
-        if (args.size != 3) {
-            Console.OUT.println("Parameters missing exp_accounts_per_place exp_transfers_per_place");
+        if (args.size != 4) {
+            Console.OUT.println("Parameters missing exp_accounts_per_place exp_transfers_per_place progress optimized");
             return;
         }
         val expAccounts = Long.parseLong(args(0));
@@ -21,6 +21,8 @@ public class BankAsync {
         val debugProgress = Long.parseLong(args(2));
         val accountsPerPlace = Math.ceil(Math.pow(2, expAccounts)) as Long;
         val transfersPerPlace = Math.ceil(Math.pow(2, expTransfers)) as Long;
+        val optimized = Long.parseLong(args(3)) == 1;
+        
         val sparePlaces = 0;
         STMAppUtils.printBenchmarkStartingMessage("BankAsync", accountsPerPlace, transfersPerPlace, debugProgress, sparePlaces, -1F);
         val start = System.nanoTime();
@@ -31,7 +33,7 @@ public class BankAsync {
         val map = store.makeMap("mapA");
         try {
             val startTransfer = System.nanoTime();
-            randomTransfer(map, mgr.activePlaces(), accountsPerPlace, transfersPerPlace, debugProgress);
+            randomTransfer(map, mgr.activePlaces(), accountsPerPlace, transfersPerPlace, debugProgress, optimized);
             val endTransfer = System.nanoTime();
             
             map.printTxStatistics();
@@ -56,7 +58,7 @@ public class BankAsync {
         }
     }
     
-    public static def randomTransfer(map:ResilientNativeMap, activePG:PlaceGroup, accountsPerPlace:Long, transfersPerPlace:Long, debugProgress:Long){
+    public static def randomTransfer(map:ResilientNativeMap, activePG:PlaceGroup, accountsPerPlace:Long, transfersPerPlace:Long, debugProgress:Long, optimized:Boolean){
         val accountsMAX = accountsPerPlace * activePG.size();
         finish for (p in activePG) at (p) async {
             val rand = new Random(p.id);
@@ -76,7 +78,8 @@ public class BankAsync {
                 val randAcc1 = "acc"+rand1;
                 val randAcc2 = "acc"+rand2;
                 val amount = Math.abs(rand.nextLong()%100);
-                map.executeTransaction((tx:Tx) => {
+                
+                val bankClosure = (tx:Tx) => {
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"] amount["+amount+"] ");
                     
                     tx.asyncAt(p1, () => {
@@ -85,18 +88,25 @@ public class BankAsync {
                             acc1 = new BankAccount(0);
                         acc1.account -= amount;
                         tx.put(randAcc1, acc1);
+                        
+                        tx.asyncAt(p2, () => {
+                            var acc2:BankAccount = tx.get(randAcc2) as BankAccount;
+                            if (acc2 == null)
+                                acc2 = new BankAccount(0);
+                            acc2.account += amount;
+                            tx.put(randAcc2, acc2);
+                        });
                     });
                     
-                    tx.asyncAt(p2, () => {
-                        var acc2:BankAccount = tx.get(randAcc2) as BankAccount;
-                        if (acc2 == null)
-                            acc2 = new BankAccount(0);
-                        acc2.account += amount;
-                        tx.put(randAcc2, acc2);
-                    });
                     
                     return null;
-                });
+                };
+                if (optimized) {
+                    val members = STMAppUtils.createVirtualMembersRail(p1, p2);
+                    map.executeTransaction(members, bankClosure);
+                }
+                else
+                    map.executeTransaction(bankClosure);
             }
         }
     }

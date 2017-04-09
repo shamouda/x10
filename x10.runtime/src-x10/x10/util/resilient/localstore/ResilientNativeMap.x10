@@ -154,7 +154,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
         var predefinedMembers:Rail[Long] = null;
         if (members != null)
             predefinedMembers = members.virtual;
-        plh().txDescManager.add(id, name, predefinedMembers, false);
+        plh().txDescManager.add(id, predefinedMembers, false);
         
         plh().txList.addGlobalTx(tx);
         return tx;
@@ -195,7 +195,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
             } catch(ex:Exception) {
                 if (tx != null && !commitCalled) {
                     tx.processingElapsedTime = Timer.milliTime() - start;
-                    tx.abort(ex); // tx.commit() aborts automatically if needed
+                    tx.abort(); // tx.commit() aborts automatically if needed
                 }
                 
                 if (TxConfig.get().TM_DEBUG) {

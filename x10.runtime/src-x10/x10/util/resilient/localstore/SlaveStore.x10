@@ -272,4 +272,22 @@ public class SlaveStore {
         }
         return result;
     }
+    
+    public def getTransDescriptor(txId:Long):TxDesc {
+        var result:Cloneable = null;
+        try {
+            slaveLock();
+            if (masterState != null) {
+                result = masterState.getOrElse("_TxDesc_tx"+txId, null);
+            }
+        }
+        finally {
+            slaveUnlock();
+        }
+        if (result == null)
+            return null;
+        else
+            return result as TxDesc;
+    }
+    
 }

@@ -292,13 +292,18 @@ public class LocalStore(immediateRecovery:Boolean) {
     public def getTxMembers(virtualMembers:Rail[Long], includeDead:Boolean):TxMembers {
         try {
             lock();
+            var str:String = "";
+            var str1:String = "";
             val members = new TxMembers(virtualMembers.size);
             for (var i:Long = 0; i < virtualMembers.size; i++) {
+                str1 += virtualMembers(i) + " ";
                 val pl = activePlaces(virtualMembers(i));
                 if (includeDead || !pl.isDead()){
                     members.addPlace(virtualMembers(i), pl);
+                    str += pl + " ";
                 }
             }
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " - getTxMembers virtual["+str1+"] physical["+str+"]");
             return members;
         } finally {
             unlock();

@@ -44,6 +44,7 @@ public class STMBench {
             Option("g","progress","interval of progress reporting per producer (default no progress reporting)"),
             Option("vp","victims","victim places to kill (comma separated)"),
             Option("vt","victimsTimes","times to kill victim places(comma separated)"),
+            Option("opt","optimized","optimized runs use fixed pre-defined members list (default 0 (not optimized)"),
             Option("s","spare","Spare places (default 0)")
         ]);
         
@@ -60,6 +61,7 @@ public class STMBench {
         val s = opts("s", 0);
         val vp = opts("vp", "");
         val vt = opts("vt", "");
+        val optimized = opts("opt", 0) == 1;
         val victimsList = new VictimsList(vp, vt);
         
         val mgr = new PlaceManager(s, false);
@@ -82,14 +84,14 @@ public class STMBench {
         
         val startWarmup = Timer.milliTime();
         Console.OUT.println("warmup started");
-        runIteration(map, activePlaces, p, w, a, r, u, t, h, o, g, null, throughputPLH, null);
+        runIteration(map, activePlaces, p, w, a, r, u, t, h, o, g, null, optimized, throughputPLH, null);
         resetStatistics(map, throughputPLH);
         Console.OUT.println("warmup completed, warmup elapsed time ["+(Timer.milliTime() - startWarmup)+"]  ms ");
         
         for (iter in 1..n) {
             //fixme: reinit throughputPLH
         	val startIter = Timer.milliTime();
-            runIteration(map, activePlaces, p, d, a, r, u, t, h, o, g, victimsList, throughputPLH, null);
+            runIteration(map, activePlaces, p, d, a, r, u, t, h, o, g, victimsList, optimized, throughputPLH, null);
             printThroughput(map, iter, throughputPLH, d, a, t, h, o);
             resetStatistics(map, throughputPLH);
             Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
@@ -99,12 +101,12 @@ public class STMBench {
     }
     
     public static def runIteration(map:ResilientNativeMap, activePlaces:PlaceGroup, producersCount:Long, 
-    		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, 
+    		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
     		throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
         try {
             
             finish for (var i:Long = 0; i < producersCount; i++) {
-            	startPlace(activePlaces(i), map, activePlaces.size(), producersCount, d, a, r, u, t, h, o, g, victims, throughput, recoveryThroughput);
+            	startPlace(activePlaces(i), map, activePlaces.size(), producersCount, d, a, r, u, t, h, o, g, victims, optimized, throughput, recoveryThroughput);
             }
             
         }catch(e:Exception) {
@@ -118,7 +120,7 @@ public class STMBench {
     }
 
     private static def startPlace(pl:Place, map:ResilientNativeMap, activePlacesCount:Long, producersCount:Long, 
-    		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, 
+    		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
     		throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
         
         at (pl) async {
@@ -127,7 +129,7 @@ public class STMBench {
                 throughput().reinit(recoveryThroughput);
             
             for (thrd in 1..t) async {
-                produce(map, activePlacesCount, myVirtualPlaceId, producersCount, thrd-1, d, a, r, u, t, h, o, g, victims, throughput);
+                produce(map, activePlacesCount, myVirtualPlaceId, producersCount, thrd-1, d, a, r, u, t, h, o, g, victims, optimized, throughput);
             }
             
             if (resilient && victims != null) {
@@ -159,7 +161,7 @@ public class STMBench {
     }
     
     public static def produce(map:ResilientNativeMap, activePlacesCount:Long, myVirtualPlaceId:Long, producersCount:Long, producerId:Long, 
-    		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, 
+    		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
     		throughput:PlaceLocalHandle[PlaceThroughput]) {
         var txCount:Long = 0;
         val rand = new Random((here.id+1) * producerId);
@@ -168,13 +170,11 @@ public class STMBench {
         val recovering = timeNS == 0? false : true;
 
         while (timeNS < d*1e6) {
-            //do not include the time to select the random operations as part of the time//
             val virtualMembers = nextTransactionMembers(rand, activePlacesCount, h, myVirtualPlaceId);
             val membersOperations = nextRandomOperations(rand, activePlacesCount, virtualMembers, r, u, o);
             val lockRequests = new ArrayList[LockingRequest]();
            
             val distClosure = (tx:AbstractTx) => {
-                
                 for (var m:Long = 0; m < virtualMembers.size; m++) {
                     val operations = membersOperations.get(m);
                     tx.asyncAt(operations.dest, () => {
@@ -186,7 +186,6 @@ public class STMBench {
                         }
                     });
                 }
-                
                 return null;
             };
             
@@ -211,9 +210,11 @@ public class STMBench {
             
             //time starts here
             val start = System.nanoTime();
-            try {
             if (virtualMembers.size > 1 && TxConfig.get().STM ) { //STM distributed
-                map.executeTransaction(distClosure);
+                if (optimized)
+                    map.executeTransaction(virtualMembers, distClosure);
+                else
+                    map.executeTransaction(distClosure);
             }
             else if (virtualMembers.size > 1 && TxConfig.get().LOCKING ) { //locking distributed
                 map.executeLockingTransaction(lockRequests, distClosure);
@@ -235,16 +236,10 @@ public class STMBench {
             }
             else
                 assert (false) : "wrong or unsupported configurations, members= " + virtualMembers.size;
-            }catch(ex:Exception) {
-                Console.OUT.println(here + " exception " + ex.getMessage());
-                ex.printStackTrace();
-                throw ex;
-            }
-            txCount++;    
-            if (g != -1 && txCount%g == 0) {
-                Console.OUT.println(here + " Progress "+myVirtualPlaceId+"x"+producerId + ":" + txCount );
-            }
             
+            txCount++;
+            if (g != -1 && txCount%g == 0)
+                Console.OUT.println(here + " Progress "+myVirtualPlaceId+"x"+producerId + ":" + txCount );
             val elapsedNS = System.nanoTime() - start; 
             timeNS += elapsedNS;
             

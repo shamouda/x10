@@ -11,6 +11,7 @@ import x10.util.resilient.localstore.CloneableLong;
 import x10.util.resilient.localstore.tx.ConflictException;
 import x10.util.Timer;
 import x10.util.resilient.localstore.TxConfig;
+import x10.util.resilient.localstore.TxResult;
 
 // TM_DEBUG=0 TM=RV_LA_WB KILL_PLACES=2,5,10 KILL_TIMES=2,2,10 X10_NPLACES=13 X10_RESILIENT_MODE=1 TM_REP=lazy ./BankAsyncResilient.o 10 10 200 3
 
@@ -18,8 +19,8 @@ public class BankAsyncResilient {
     private static val DISABLE_CKPT = System.getenv("DISABLE_CKPT") != null && System.getenv("DISABLE_CKPT").equals("1");
     
     public static def main(args:Rail[String]) {
-        if (args.size != 4) {
-            Console.OUT.println("Parameters missing exp_accounts_per_place exp_transfers_per_place progress spare");
+        if (args.size != 5) {
+            Console.OUT.println("Parameters missing exp_accounts_per_place exp_transfers_per_place progress spare optimized");
             return;
         }
         val expAccounts = Long.parseLong(args(0));
@@ -27,7 +28,8 @@ public class BankAsyncResilient {
         val debugProgress = Long.parseLong(args(2));
         val accountsPerPlace = Math.ceil(Math.pow(2, expAccounts)) as Long;
         val transfersPerPlace = Math.ceil(Math.pow(2, expTransfers)) as Long;
-        val sparePlaces = Long.parseLong(args(3));        
+        val sparePlaces = Long.parseLong(args(3));
+        val optimized = Long.parseLong(args(4)) == 1;
         STMAppUtils.printBenchmarkStartingMessage("BankAsyncResilient", accountsPerPlace, transfersPerPlace, debugProgress, sparePlaces, -1F);
         val start = System.nanoTime();
         
@@ -55,7 +57,7 @@ public class BankAsyncResilient {
                     recoveryTimes.add(System.nanoTime() - startRecovery);
                 }
                 try {
-                    randomTransfer(map, mgr.activePlaces(), accountsPerPlace, transfersPerPlace, debugProgress, recover);
+                    randomTransfer(map, mgr.activePlaces(), accountsPerPlace, transfersPerPlace, debugProgress, recover, optimized);
                     break;
                 } catch(mulExp:MultipleExceptions) {
                     mulExp.printStackTrace();
@@ -93,7 +95,7 @@ public class BankAsyncResilient {
         }
     }
     
-    public static def randomTransfer(map:ResilientNativeMap, activePG:PlaceGroup, accountsPerPlace:Long, transfersPerPlace:Long, debugProgress:Long, recovered:Boolean){
+    public static def randomTransfer(map:ResilientNativeMap, activePG:PlaceGroup, accountsPerPlace:Long, transfersPerPlace:Long, debugProgress:Long, recovered:Boolean, optimized:Boolean){
         val accountsMAX = accountsPerPlace * activePG.size();
         finish for (p in activePG) at (p) async {
             val placeIndex = activePG.indexOf(p);
@@ -139,7 +141,7 @@ public class BankAsyncResilient {
                 }
                 
                 val members = pg;
-                val success = map.executeTransaction( members, (tx:Tx) => {
+                val bankClosure = (tx:Tx) => {
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] here["+here+"] TXSTART"+ (recovered?"RECOVER":"")+" accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"]");
                     val txId = tx.id;
                     val placeId =  ((txId >> 32) as Int);
@@ -155,27 +157,31 @@ public class BankAsyncResilient {
                             acc1 = obj as BankAccount;
                         acc1.account -= amount;
                         tx.put(randAcc1, acc1);
+                        
+                        tx.asyncAt(p2, () => {
+                            val obj = tx.get(randAcc2);
+                            var acc2:BankAccount;
+                            if (obj == null) 
+                                acc2 = new BankAccount(0);
+                            else
+                                acc2 = obj as BankAccount;
+                            acc2.account += amount;
+                            tx.put(randAcc2, acc2);
+                        });
                     });
                     
-                    tx.asyncAt(p2, () => {
-                        val obj = tx.get(randAcc2);
-                        var acc2:BankAccount;
-                        if (obj == null) 
-                            acc2 = new BankAccount(0);
-                        else
-                            acc2 = obj as BankAccount;
-                        acc2.account += amount;
-                        tx.put(randAcc2, acc2);
-                    });
-                    
-                    if (!DISABLE_CKPT) {
+                    if (!DISABLE_CKPT)
                         tx.put("p"+placeIndex, new CloneableLong(i));
-                    }
+                    
                     return null;
-                } );
+                };
+                var res:TxResult = null;
+                if (optimized)
+                    res = map.executeTransaction( members, bankClosure );
+                else
+                    res = map.executeTransaction( bankClosure );    
                 
-                //Console.OUT.println(here + ":" + randAcc1 + ":" + randAcc2 + ":"+ amount);
-                if (success.commitStatus == Tx.SUCCESS_RECOVER_STORE)
+                if (res.commitStatus == Tx.SUCCESS_RECOVER_STORE)
                     throw new RecoverDataStoreException("RecoverDataStoreException", here);
             }
         }

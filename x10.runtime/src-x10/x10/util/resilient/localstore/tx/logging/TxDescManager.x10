@@ -18,9 +18,8 @@ import x10.util.resilient.localstore.TxConfig;
 
 public class TxDescManager(map:ResilientNativeMap) {
     
-    //false
-    public def add(id:Long, mapName:String, members:Rail[Long], ignoreDeadSlave:Boolean) {
-        val desc = new TxDesc(id, mapName);
+    public def add(id:Long, members:Rail[Long], ignoreDeadSlave:Boolean) {
+        val desc = new TxDesc(id, map.name);
         desc.addVirtualMembers(members);
         val localTx = map.startLocalTransaction();
         if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " TxDesc.add localTx["+localTx.id+"] started ...");
@@ -29,7 +28,6 @@ public class TxDescManager(map:ResilientNativeMap) {
         if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " TxDesc.add localTx["+localTx.id+"] completed ...");
     }
     
-    //true
     public def delete(id:Long, ignoreDeadSlave:Boolean) {
         val localTx = map.startLocalTransaction();
         if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " TxDesc.delete localTx["+localTx.id+"] started ...");
@@ -53,11 +51,11 @@ public class TxDescManager(map:ResilientNativeMap) {
         var s:String = "";
         for (r in vMembers)
             s += r + " ";
-            
         val localTx = map.startLocalTransaction();
         if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " TxDesc.addVirtualMembers{"+s+"} localTx["+localTx.id+"] started ...");
-        val desc = localTx.get("tx"+id) as TxDesc;
-        assert (desc != null) : "TxDesc bug detected in addVirtualMembers NULL desc";
+        var desc:TxDesc = localTx.get("tx"+id) as TxDesc;
+        if (desc == null)
+            desc = new TxDesc(id, map.name); 
         desc.addVirtualMembers(vMembers);
         localTx.put("tx"+id, desc);
         localTx.commit(ignoreDeadSlave);
@@ -65,22 +63,30 @@ public class TxDescManager(map:ResilientNativeMap) {
     
     }
     
-    public def getVirtualMembers(id:Long) {
+    public def getVirtualMembers(id:Long, masterType:Boolean) {
+        if (masterType)
+            return getVirtualMembersFromMasterStore(id);
+        else
+            return getVirtualMembersFromSlaveStore(id);
+    }
+    
+    private def getVirtualMembersFromMasterStore(id:Long) {
         val localTx = map.startLocalTransaction();
-        if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] TxDesc.getVirtualMembers localTx["+localTx.id+"] started ...");
         val desc = localTx.get("tx"+id) as TxDesc;
         localTx.commit(true);
         if (desc == null) {
-            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] TxDesc.getVirtualMembers localTx["+localTx.id+"] completed resulet [NULL]  ...");
             return null;
         }
-        val result = desc.getVirtualMembers();
-        var s:String = "";
-        for (r in result)
-            s += r + " ";
-        if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] TxDesc.getVirtualMembers localTx["+localTx.id+"] completed resulet ["+s+"]  ...");
-        return result;
+        return desc.getVirtualMembers();
     }
     
+    private def getVirtualMembersFromSlaveStore(id:Long) {
+        val desc = map.plh().slaveStore.getTransDescriptor(id);
+        if (desc == null) {
+            return null;
+        }
+        else
+            return desc.getVirtualMembers();
+    }
     
 }

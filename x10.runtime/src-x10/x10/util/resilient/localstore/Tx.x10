@@ -16,7 +16,6 @@ import x10.util.ArrayList;
 import x10.util.Set;
 import x10.compiler.Ifdef;
 import x10.xrx.Runtime;
-import x10.compiler.Pinned;
 import x10.util.GrowableRail;
 import x10.util.Timer;
 import x10.util.resilient.localstore.tx.*;
@@ -27,7 +26,6 @@ import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Lock;
 
 public class Tx extends AbstractTx {
-    private val root = GlobalRef[Tx](this);
     private val commitHandler:CommitHandler;
     
     public transient val startTime:Long = Timer.milliTime();
@@ -75,16 +73,17 @@ public class Tx extends AbstractTx {
     public def getTxLoggingElapsedTime() = commitHandler.txLoggingElapsedTime;
 
     /*********************** Abort ************************/  
-    @Pinned public def abortRecovery() {
+    public def abortRecovery() {
+        plh().slaveStore.abort(id);
         abort(true);
     }
     
-    @Pinned public def abort() {
+    public def abort() {
         abort(false);
     }
     
-    @Pinned private def abort(recovery:Boolean) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " abort started alreadyAborted = " + aborted);
+    private def abort(recovery:Boolean) {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here="+ here + " abort started alreadyAborted = " + aborted);
         if (!aborted)
             aborted = true;
         else 
@@ -93,33 +92,37 @@ public class Tx extends AbstractTx {
         commitHandler.abort(recovery);
         
         abortTime = Timer.milliTime();
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " aborted, allTxTime ["+(abortTime-startTime)+"] ms");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here="+ here + " aborted, allTxTime ["+(abortTime-startTime)+"] ms");
     }
 
     
     /***********************   Two Phase Commit Protocol ************************/
-    @Pinned public def commit():Int {
+    public def commitRecovery() {
+        plh().slaveStore.commit(id);
+        return commit(true);
+    }
+    
+    public def commit():Int {
         if (TxConfig.get().DISABLE_COMMIT)
             return AbstractTx.SUCCESS;
         return commit(false);
     }
     
-    @Pinned public def commit(commitRecovery:Boolean) {
+    public def commit(recovery:Boolean) {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here=" + here + " commit started");
         if (TxConfig.get().DISABLE_COMMIT)
             return AbstractTx.SUCCESS;
-        
-        assert(here.id == root.home.id);
-        
-        val success = commitHandler.commit(commitRecovery);
+                
+        val success = commitHandler.commit(recovery);
 
         commitTime = Timer.milliTime();
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " committed, allTxTime [" + (commitTime-startTime) + "] ms");
-        
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here=" + here + " committed, allTxTime [" + (commitTime-startTime) + "] ms");
         return success;
     }
     
     
     public def asyncAt(virtualPlace:Long, closure:()=>void) {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here=" + here + " asyncAt(dest="+virtualPlace+") ...");
         if (members == null){
             val vMembers = new Rail[Long](1);
             vMembers(0) = virtualPlace;

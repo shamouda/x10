@@ -10,6 +10,7 @@ import x10.util.resilient.localstore.AbstractTx;
 import x10.util.resilient.localstore.TxMembers;
 import x10.util.resilient.localstore.tx.logging.TxDesc;
 import x10.util.GrowableRail;
+import x10.util.HashSet;
 
 /*
  * In lazy replication, transaction side effects are NOT applied at the slave until a master dies. 
@@ -31,165 +32,69 @@ import x10.util.GrowableRail;
  *  
  * Should be used in resilient mode only
  * */
-public class LazyReplicationCommitHandler extends CommitHandler {
+public class LazyReplicationCommitHandler extends ResilientCommitHandler {
 	
-	private val root = GlobalRef[LazyReplicationCommitHandler](this);
-	private var nonFatalDeadPlace:Boolean = false;
-	
-	public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers) {
-	    super(plh, id, mapName, members);	
-	}
-	
-	public def abort(abortedPlaces:ArrayList[Place], recovery:Boolean) {
-	    try {
-            //ask masters to abort (a master will abort slave first, then abort itself)
-            finalize(false, abortedPlaces, plh, id, members);
+    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers) {
+        super(plh, id, mapName, members);   
+    }
+    
+    public def abort_resilient(recovery:Boolean){
+        val abort_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { abort_local_resilient(plh, id); } ;
+        try {
+            if (members != null)
+                finish executeFlat(abort_master, true);
+            else
+                finish executeRecursively(abort_master, new HashSet[Long](), true);
         }
         catch(ex:MultipleExceptions) {
-            if (recovery) {
-                try {
-                    val deadMasters = getDeadPlaces(ex, members);
-                    //some masters died while rolling back,ask slaves to abort
-                    finalizeSlaves(false, deadMasters, plh, id, members);
-                }
-                catch(ex2:Exception) {
-                    if (TxConfig.get().TM_DEBUG) {
-                        Console.OUT.println("Warning: ignoring exception during finalizeSlaves(false): " + ex2.getMessage());
-                        ex2.printStackTrace();
-                    }
-                }
-            }
+            
         }
-        
-	    plh().txDescManager.delete(id, true);
     }
-
     
     /***********************   Two Phase Commit Protocol ************************/
-    public def commit(commitRecovery:Boolean):Int {
+    public def commit_resilient(commitRecovery:Boolean) {
+        commitPhaseOne(commitRecovery);
+        
+        plh().txDescManager.updateStatus(id, TxDesc.COMMITTING, true);
+        
+        commitPhaseTwo();
+        
+        plh().txDescManager.updateStatus(id, TxDesc.COMMITTED, true);
+    }
+   
+    private def commitPhaseOne(commitRecovery:Boolean) {
         if (!commitRecovery) {
+            val validate_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { validate_local_resilient(plh, id); };
+            val startP1 = Timer.milliTime();
             try {
-                commitPhaseOne(plh, id, members); // master failure is fatal, slave failure is not fatal
-                plh().txDescManager.updateStatus(id, TxDesc.COMMITTING, true);
+                if (members != null)
+                    finish executeFlat(validate_master, false);
+                else
+                    finish executeRecursively(validate_master, new HashSet[Long](), false);
             } catch(ex:Exception) {
-                val list = getDeadAndConflictingPlaces(ex);
-                abort(list, false);
+                abort(false);
                 throw ex;
             }
+            finally {
+                phase1ElapsedTime = Timer.milliTime() - startP1;
+            }
         }
-
-        commitPhaseTwo(plh, id, members, commitRecovery);
+    }
+    
+    private def commitPhaseTwo() {
+        val commit_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { commit_local_resilient(plh, id); } ;
         
-    	/* if we don't mark the committed transaction, 
-    	 * we will have to recommit all transactions that are already committed */
-        plh().txDescManager.updateStatus(id, TxDesc.COMMITTED, true);
-        if (nonFatalDeadPlace)
-        	return AbstractTx.SUCCESS_RECOVER_STORE;
-        else
-        	return AbstractTx.SUCCESS;
-    }
-
-    private def commitPhaseOne(plh:PlaceLocalHandle[LocalStore], id:Long, members:TxMembers) {
-        val start = Timer.milliTime();
+        val startP2 = Timer.milliTime();
         try {
-            if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseOne ...");
-        	finish for (p in members.pg()) {
-                at (p) async {
-                	commitPhaseOne_local(plh, id);
-                }
-        	}
-        } finally {
-            phase1ElapsedTime = Timer.milliTime() - start;
+            if (members != null)
+                finish executeFlat(commit_master, true);
+            else
+                finish executeRecursively(commit_master, new HashSet[Long](), true);
         }
-    }
-    
-    private def commitPhaseOne_local(plh:PlaceLocalHandle[LocalStore], id:Long) {
-    	val ownerPlaceIndex = plh().virtualPlaceId;
-        if (TxConfig.get().VALIDATION_REQUIRED) {
-            plh().masterStore.validate(id);
-        }
-
-    	var ex:Exception = null;
-    	if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] send log to slave ["+plh().slave+"]  ...");
-        val log = plh().masterStore.getTxCommitLog(id);
-        if (log != null && log.size() > 0) {                            
-            //send txLog to slave (very important to be able to tolerate failures of masters just after prepare)
-            try {
-            	finish at (plh().slave) async {
-                    plh().slaveStore.prepare(id, log, ownerPlaceIndex);
-                }
-            }catch(e:Exception) {
-            	ex = e;
-            	//ignoring dead slave
-            }
+        catch(ex:MultipleExceptions) {
             
-            if (ex != null) {
-                at (root) async {
-                    root().nonFatalDeadPlace = true;
-                }
-            }
         }
-        if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] send log to slave ["+plh().slave+"] DONE ...");
-    }
-    
-    private def commitPhaseTwo(plh:PlaceLocalHandle[LocalStore], id:Long, members:TxMembers, commitRecovery:Boolean) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " commitPhaseTwo ...");
-        val start = Timer.milliTime();
-        try {
-            finalize(true, null, plh, id, members);
-        }
-        catch(ex:MultipleExceptions) {    
-            if (commitRecovery) {
-                try {
-                    val deadMasters = getDeadPlaces(ex, members); //some masters have died after validation, ask slaves to commit
-                    finalizeSlaves(true, deadMasters, plh, id, members);
-                }
-                catch(ex2:Exception) {
-                    ex2.printStackTrace();
-                    throw new Exception("FATAL ERROR: Master and Slave died together, Exception["+ex2.getMessage()+"] ");
-                }
-            }
-        } finally {
-            phase2ElapsedTime = Timer.milliTime() - start;
-        }
-    }
-    
-    //used for both commit and abort
-    private def finalize(commit:Boolean, abortedPlaces:ArrayList[Place], 
-            plh:PlaceLocalHandle[LocalStore], id:Long, members:TxMembers) {
-        if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] " + ( commit? " Commit Started ": " Abort Started " ) + " ...");
-
-        //if one of the masters die, let the exception be thrown to the caller, but hide dying slves
-        val deadMasters = new ArrayList[Place]();
-        finish for (p in members.pg()) {
-            if (!commit && abortedPlaces.contains(p) && !p.isDead()) /*skip aborted places*/
-                continue;
-            
-            if (p.isDead()) {
-                deadMasters.add(p);
-            }
-            else {
-                at (p) async {
-                    finalizeLocal(commit, plh, id);
-                }
-            }
-        }
-        
-        if (deadMasters.size() > 0) {
-            val rail = new GrowableRail[CheckedThrowable](deadMasters.size());
-            for (var i:Long = 0 ; i < deadMasters.size() ; i ++){
-                rail(i) = new DeadPlaceException(deadMasters.get(i));
-            }
-            throw new MultipleExceptions(rail);
-        }
-    }
-    
-    private def finalizeLocal(commit:Boolean, plh:PlaceLocalHandle[LocalStore], id:Long) {
-        if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " finalizeLocal  here["+here+"] " + ( commit? " Commit Local Started ": " Abort Local Started " ) + " ...");
-        if (commit)
-            plh().masterStore.commit(id);
-        else
-            plh().masterStore.abort(id);
+        phase2ElapsedTime = Timer.milliTime() - startP2;
     }
 
 }

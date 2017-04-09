@@ -12,6 +12,19 @@ import x10.util.resilient.localstore.TxConfig;
 
 public class STMAppUtils {
     
+    public static def createVirtualMembersRail(p1:Long, p2:Long) {
+        if (p1 == p2){
+            val rail = new Rail[Long](1);
+            rail(0) = p1;
+            return rail;
+        }
+        else {
+            val rail = new Rail[Long](2);
+            rail(0) = p1;
+            rail(1) = p2;
+            return rail;
+        }
+    }
     public static def restoreProgress(map:ResilientNativeMap, placeIndex:Long, defaultProg:Long){
         val tx = map.startLocalTransaction();
         try {
