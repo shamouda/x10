@@ -56,7 +56,7 @@ public class TxLockCREW extends TxLock {
             
             if (conflict) {
                 if (resilient)
-                    checkDeadLockers();
+                    checkDeadLockers(key);
                 assert (writer != txId) : "lockRead bug, downgrade is not supported ";
                 if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] lockRead CONFLICT, writer["+writer+"] waitingWriter["+waitingWriter+"] ");
                 throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId) + " key ["+key+"] ", here);
@@ -113,7 +113,7 @@ public class TxLockCREW extends TxLock {
             
             if (conflict) {
                 if (resilient)
-                    checkDeadLockers();
+                    checkDeadLockers(key);
                 if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] lockWrite CONFLICT, writer["+writer+"] readers["+readersAsString(readers)+"] ");
                 throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId) + " key ["+key+"] ", here);
             }
@@ -169,7 +169,7 @@ public class TxLockCREW extends TxLock {
 
         while (waitingWriter == -1 && writer != -1 && stronger(txId, writer)) {  //waiting writers get access first
             if (resilient)
-                checkDeadLockers();
+                checkDeadLockers(key);
             lock.unlock();
             TxConfig.waitSleep();                   
             lock.lock();
@@ -201,7 +201,7 @@ public class TxLockCREW extends TxLock {
         
         while (readers.size() > minLimit && waitingWriter == txId) {
             if (resilient)
-                checkDeadLockers();
+                checkDeadLockers(key);
             lock.unlock();
             TxConfig.waitSleep();                     
             lock.lock();
@@ -230,7 +230,7 @@ public class TxLockCREW extends TxLock {
             
         while (writer != -1 && waitingWriter == txId) {
             if (resilient)
-                checkDeadLockers();
+                checkDeadLockers(key);
             lock.unlock();
             TxConfig.waitSleep();   
             lock.lock();
@@ -277,13 +277,13 @@ public class TxLockCREW extends TxLock {
         return res;
     }
     
-    private def checkDeadLockers() {
+    private def checkDeadLockers(key:String) {
         val iter = readers.iterator();
         while (iter.hasNext()) {
             val txId = iter.next();
-            TxManager.checkDeadCoordinator(txId);
+            TxManager.checkDeadCoordinator(txId, key);
         }
         if (writer != -1)
-            TxManager.checkDeadCoordinator(writer);
+            TxManager.checkDeadCoordinator(writer, key);
     }
 }

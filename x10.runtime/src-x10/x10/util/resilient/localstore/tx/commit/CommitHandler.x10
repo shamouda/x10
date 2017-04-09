@@ -31,6 +31,8 @@ public abstract class CommitHandler {
     }
     
     protected def executeFlat(closure:(PlaceLocalHandle[LocalStore],Long)=>void, deleteTxDesc:Boolean) {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] executeFlat started ...");
+                
         for (p in members.pg()) {
             async at (p) {
                 closure(plh, id);
@@ -40,10 +42,11 @@ public abstract class CommitHandler {
         if (deleteTxDesc) {
             plh().txDescManager.delete(id, true);
         }
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] executeFlat ended children ["+members.pg().size()+"] ...");
     }
     
     protected def executeRecursively(closure:(PlaceLocalHandle[LocalStore],Long)=>void, parents:HashSet[Long], deleteTxDesc:Boolean) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursively started ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] executeRecursively started ...");
         closure(plh, id);
         var childCount:Long = 0;
         val childrenVirtual = plh().txDescManager.getVirtualMembers(id, true);
@@ -68,7 +71,7 @@ public abstract class CommitHandler {
                 plh().txDescManager.delete(id, true);
             }
         }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursively ended children ["+childCount+"] ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] executeRecursively ended children ["+childCount+"] ...");
     }
     
     

@@ -61,11 +61,10 @@ public class SlaveStore {
     public def getSlaveMasterState():HashMap[String,Cloneable] {
         return masterState;
     }
-    
     /******* Prepare/Commit/Abort functions *******/
     /*Used by LocalTx to commit a transaction. TransLog is applied immediately and not saved in the logs map*/
     public def commit(id:Long, transLog:HashMap[String,Cloneable], ownerPlaceIndex:Long) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commitLocalTx() started ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.commitLocalTx() started ...");
         try {
             slaveLock();
             commitLockAcquired(new TxSlaveLog(id, ownerPlaceIndex, transLog));
@@ -73,12 +72,12 @@ public class SlaveStore {
         finally {
             slaveUnlock();
         }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commitLocalTx() committed ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.commitLocalTx() committed ...");
     }
     
     /*Used by Tx to commit a transaction that was previously prepared. TransLog is removed from the logs map after commit*/
     public def commit(id:Long) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commitGlobalTx() started ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.commitGlobalTx() started ...");
         try {
             slaveLock();
             val txLog = getLog(id);
@@ -89,11 +88,11 @@ public class SlaveStore {
         } finally {
             slaveUnlock();
         }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.commitGlobalTx() committed ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.commitGlobalTx() committed ...");
     }
     
     private def commitLockAcquired(txLog:TxSlaveLog) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] here["+here+"] SlaveStore.commitLockAcquired() started ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] " + TxManager.txIdToString(txLog.id) + " here["+here+"] SlaveStore.commitLockAcquired() started ...");
         try {
             val data = masterState;
             val iter = txLog.transLog.keySet().iterator();
@@ -105,15 +104,15 @@ public class SlaveStore {
                 else
                     data.put(key, value);
             }
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] here["+here+"] SlaveStore.commitLockAcquired() completed ...");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] " + TxManager.txIdToString(txLog.id) + " here["+here+"] SlaveStore.commitLockAcquired() completed ...");
         }catch(ex:Exception){
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] here["+here+"] SlaveStore.commitLockAcquired() exception["+ex.getMessage()+"] ...");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] " + TxManager.txIdToString(txLog.id) + " here["+here+"] SlaveStore.commitLockAcquired() exception["+ex.getMessage()+"] ...");
             throw ex;
         }
     }
     
     public def prepare(id:Long, entries:HashMap[String,Cloneable], ownerPlaceIndex:Long) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() started ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.prepare() started ...");
         try {
             slaveLock();
             var txSlaveLog:TxSlaveLog = getLog(id);
@@ -122,16 +121,16 @@ public class SlaveStore {
                 logs.add(txSlaveLog);
             }
             txSlaveLog.transLog = entries;
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() logs.put(id="+id+") ...");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.prepare() logs.put(id="+id+") ...");
         }
         finally {
             slaveUnlock();
         }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.prepare() completed ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.prepare() completed ...");
     }
     
     public def abort(id:Long) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.abort() started ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.abort() started ...");
         try {
             slaveLock();
             val log = getLog(id);
@@ -140,7 +139,7 @@ public class SlaveStore {
         finally {
             slaveUnlock();
         }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] SlaveStore.abort() completed ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.abort() completed ...");
     }
     
     public def filterCommitted(txList:ArrayList[Long]) {
@@ -284,10 +283,14 @@ public class SlaveStore {
         finally {
             slaveUnlock();
         }
-        if (result == null)
+        if (result == null) {
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " slaveStore.getTransDescriptor(" + txId + ") result[NULL] ...");
             return null;
-        else
+        }
+        else {
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " slaveStore.getTransDescriptor(" + txId + ") result["+(result as TxDesc)+"] ...");
             return result as TxDesc;
+        }
     }
     
 }

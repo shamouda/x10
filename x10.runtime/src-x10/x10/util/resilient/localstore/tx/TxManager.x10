@@ -229,10 +229,10 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     
     /********************************************************/
     
-    public static def checkDeadCoordinator(txId:Long) {
+    public static def checkDeadCoordinator(txId:Long, key:String) {
         val placeId = TxConfig.getTxPlaceId(txId);
         if (Place(placeId as Long).isDead()) {
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + txIdToString (txId)+ " coordinator place["+Place(placeId)+"] died !!!!");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + txIdToString (txId)+ " key["+key+"] coordinator place["+Place(placeId)+"] died !!!!");
             throw new DeadPlaceException(Place(placeId));
         }
     }

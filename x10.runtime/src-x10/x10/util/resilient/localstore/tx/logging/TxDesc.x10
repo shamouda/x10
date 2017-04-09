@@ -69,13 +69,6 @@ public class TxDesc(id:Long, mapName:String) implements Cloneable{
                 newMembers(i) = list.get(lastIndex++);
         }
         virtualMembers = newMembers;
-        
-        if (TxConfig.get().TM_DEBUG) {
-            var str:String = "";
-            for (x in virtualMembers)
-                str += x + " ";
-            Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString (id) + " virtualMembers = ["+str+"]");
-        }
     }
     
     public def getVirtualMembers() = virtualMembers;

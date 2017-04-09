@@ -54,8 +54,6 @@ public class EagerReplicationCommitHandler extends ResilientCommitHandler {
 	        commitPhaseOne();
         
         commitPhaseTwo();
-        
-        plh().txDescManager.delete(id, true);
     }
    
 	private def commitPhaseOne() {

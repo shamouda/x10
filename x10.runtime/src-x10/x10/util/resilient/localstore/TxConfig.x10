@@ -69,7 +69,7 @@ public class TxConfig {
         
         LOCK_FREE = BASELINE || (System.getenv("LOCK_FREE") == null || System.getenv("LOCK_FREE").equals("")) ? false : Long.parseLong(System.getenv("LOCK_FREE")) == 1;
         
-        TM_REP = System.getenv("TM_REP") == null ? "lazy" : System.getenv("TM_REP");
+        TM_REP = System.getenv("TM_REP") == null ? "eager" : System.getenv("TM_REP");
         DISABLE_COMMIT = System.getenv("DISABLE_COMMIT") != null && System.getenv("DISABLE_COMMIT").equals("1");
         DISABLE_SLAVE = System.getenv("DISABLE_SLAVE") != null && System.getenv("DISABLE_SLAVE").equals("1");
     	DISABLE_TX_LOGGING = System.getenv("DISABLE_TX_LOGGING") != null && System.getenv("DISABLE_TX_LOGGING").equals("1");

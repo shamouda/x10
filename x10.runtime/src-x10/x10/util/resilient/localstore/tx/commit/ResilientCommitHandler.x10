@@ -98,15 +98,14 @@ public abstract class ResilientCommitHandler extends CommitHandler {
                     }
                     
                     async at (rootPlace){
-                        if (masterVal) {
-                            master_closure(plh, id);
-                        }
-                        else {
-                            slave_closure(plh, id);
-                        }
-                        
-                        val childrenVirtual = plh().txDescManager.getVirtualMembers(id, masterVal);
                         try {
+                            if (masterVal)
+                                master_closure(plh, id);
+                            else
+                                slave_closure(plh, id);
+                            
+                            val childrenVirtual = plh().txDescManager.getVirtualMembers(id, masterVal);
+                        
                             if (childrenVirtual != null) {
                                 parents.add(here.id);
                                 val childrenPhysical = plh().getTxMembers( childrenVirtual , true);
@@ -116,7 +115,13 @@ public abstract class ResilientCommitHandler extends CommitHandler {
                                             executeRecursively(master_closure, parents, deleteTxDesc);
                                         }
                                     }
+                                    else
+                                        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient ignoring ["+p+"] already a parent ...");
+                                    
                                 }
+                            }
+                            else {
+                                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " NO_CHILDREN ...");
                             }
                         }
                         finally {
