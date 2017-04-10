@@ -11,11 +11,11 @@ import x10.util.resilient.localstore.TxMembers;
 import x10.util.HashSet;
 
 public class NonResilientCommitHandler extends CommitHandler {
-	
-	public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers) {
-	    super(plh, id, mapName, members);
-	}
-	
+    
+    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers) {
+        super(plh, id, mapName, members);
+    }
+    
     public def abort(recovery:Boolean) {
         val abort_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { abort_local(plh, id); } ;
         try {
@@ -31,11 +31,11 @@ public class NonResilientCommitHandler extends CommitHandler {
     }
     
     public def commit(commitRecovery:Boolean):Int {
-    	commitPhaseOne();
+        commitPhaseOne();
 
-    	commitPhaseTwo();
+        commitPhaseTwo();
         
-    	return AbstractTx.SUCCESS;
+        return AbstractTx.SUCCESS;
     }
    
     private def commitPhaseOne() {
