@@ -12,7 +12,7 @@ import x10.util.resilient.localstore.tx.ConflictException;
 import x10.util.Timer;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.TxResult;
-
+import x10.util.HashSet;
 // TM_DEBUG=0 TM=RV_LA_WB KILL_PLACES=2,5,10 KILL_TIMES=2,2,10 X10_NPLACES=13 X10_RESILIENT_MODE=1 TM_REP=lazy ./BankAsyncResilient.o 10 10 200 3
 
 public class BankAsyncResilient {
@@ -112,61 +112,86 @@ public class BankAsyncResilient {
             	if (i%debugProgress == 0) {
                     Console.OUT.println(here + " progress " + i);
             	}
+            	var randomAccounts:Rail[Long];
+            	var randomPlaces:Rail[Long];
+            	var index:Long = 0;
+                val set = new HashSet[Long]();
+                val LIMIT:Long;
+            	if (DISABLE_CKPT) {
+            	    randomAccounts = new Rail[Long](3);
+                    randomPlaces = new Rail[Long](3);
+                    LIMIT = 3;
+            	}
+            	else {
+            	    randomAccounts = new Rail[Long](4);
+                    randomPlaces = new Rail[Long](4);
+                    set.add(placeIndex);
+                    randomAccounts(3) = -1;
+                    randomPlaces(3) = placeIndex;
+                    LIMIT = 4;
+            	}
             	
-                val rand1 = Math.abs(rand.nextLong()% accountsMAX);
-                val p1 = rand1/accountsPerPlace;
-                
-                var rand2:Long = Math.abs(rand.nextLong()% accountsMAX);
-                var tmpP2:Long = rand2/accountsPerPlace;
-                while (rand1 == rand2 || p1 == tmpP2) {
-                    rand2 = Math.abs(rand.nextLong()% accountsMAX);
-                    tmpP2 = rand2/accountsPerPlace;
-                }
-                val p2 = tmpP2;
-                val randAcc1 = "acc"+rand1;
-                val randAcc2 = "acc"+rand2;
-                //val amount = Math.abs(rand.nextLong()%100);
-                
-                var pg:Rail[Long];
-                if (DISABLE_CKPT || placeIndex == p1 || placeIndex == p2){
-                    pg = new Rail[Long](2);
-                    pg(0) = p1; 
-                    pg(1) = p2;
-                }
-                else {
-                    pg = new Rail[Long](3);
-                    pg(0) = placeIndex;
-                    pg(1) = p1;
-                    pg(2) = p2;
+                while (set.size() < LIMIT) {
+                    val oldSize = set.size();
+                    val randNum = Math.abs(rand.nextLong()% accountsMAX);
+                    val randPl = randNum/accountsPerPlace;
+                    set.add(randPl);
+                    if (set.size() == oldSize)
+                        continue;
+                    randomAccounts(index) = randNum;
+                    randomPlaces(index) = randPl;
+                    index++;
                 }
                 
-                val members = pg;
+                val members = randomPlaces;
+                val p1 = members(0);
+                val p2 = members(1);
+                val p3 = members(2);
+                val acc1Key = "acc"+randomAccounts(0);
+                val acc2Key = "acc"+randomAccounts(1);
+                val acc3Key = "acc"+randomAccounts(2);
+                
                 val bankClosure = (tx:Tx) => {
-                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] here["+here+"] TXSTART"+ (recovered?"RECOVER":"")+" accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"]");
+                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] here["+here+"] TXSTART"+ (recovered?"RECOVER":"")+" accounts["+acc1Key+","+acc2Key+","+acc3Key+"] places["+p1+","+p2+","+p3+"]");
                     val txId = tx.id;
                     val placeId =  ((txId >> 32) as Int);
                     val txSeq = (txId as Int);
-                    val amount = (placeId*1000000 + txSeq);
+                    var m:Long = (placeId*100000 + txSeq);
+                    if (m%2 == 1)
+                        m++;
+                    val amount = m;
+                    val halfAmount = amount/2;
                     
                     tx.asyncAt(p1, () => {
-                        val obj = tx.get(randAcc1);
+                        val obj = tx.get(acc1Key);
                         var acc1:BankAccount;
                         if (obj == null) 
                             acc1 = new BankAccount(0);
                         else
                             acc1 = obj as BankAccount;
                         acc1.account -= amount;
-                        tx.put(randAcc1, acc1);
+                        tx.put(acc1Key, acc1);
                         
                         tx.asyncAt(p2, () => {
-                            val obj = tx.get(randAcc2);
+                            val obj = tx.get(acc2Key);
                             var acc2:BankAccount;
                             if (obj == null) 
                                 acc2 = new BankAccount(0);
                             else
                                 acc2 = obj as BankAccount;
-                            acc2.account += amount;
-                            tx.put(randAcc2, acc2);
+                            acc2.account += halfAmount;
+                            tx.put(acc2Key, acc2);
+                            
+                            tx.asyncAt(p3, () => {
+                                val obj = tx.get(acc3Key);
+                                var acc3:BankAccount;
+                                if (obj == null) 
+                                    acc3 = new BankAccount(0);
+                                else
+                                    acc3 = obj as BankAccount;
+                                acc3.account += halfAmount;
+                                tx.put(acc3Key, acc3);
+                            });
                         });
                     });
                     

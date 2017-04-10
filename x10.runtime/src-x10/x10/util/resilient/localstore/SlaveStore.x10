@@ -293,4 +293,16 @@ public class SlaveStore {
         }
     }
     
+    public def deleteTransDescriptor(txId:Long) {
+        try {
+            slaveLock();
+            if (masterState != null) {
+                masterState.delete("_TxDesc_tx"+txId);
+            }
+        }
+        finally {
+            slaveUnlock();
+        }
+    }
+    
 }

@@ -163,7 +163,8 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     public def restartGlobalTransaction(txDesc:TxDesc):Tx {
         assert(plh().virtualPlaceId != -1);
         val includeDead = true; // The commitHandler will take the correct actions regarding the dead master
-        val tx = new Tx(plh, txDesc.id, name,  null);
+        val members = txDesc.staticMembers? plh().getTxMembers(txDesc.virtualMembers, includeDead):null;
+        val tx = new Tx(plh, txDesc.id, name,  members);
         plh().txList.addGlobalTx(tx);
         return tx;
     }

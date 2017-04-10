@@ -75,12 +75,10 @@ public abstract class ResilientCommitHandler extends CommitHandler {
     }
     
     protected def executeRecursivelyResilient(master_closure:(PlaceLocalHandle[LocalStore],Long)=>void,
-            slave_closure:(PlaceLocalHandle[LocalStore],Long)=>void, deleteTxDesc:Boolean) {
+            slave_closure:(PlaceLocalHandle[LocalStore],Long)=>void, deleteTxDesc:Boolean, places:ArrayList[Place]) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient started ...");
         var completed:Boolean = false;
         var masterType:Boolean = true; 
-        val places = new ArrayList[Place]();
-        places.add(here);
         val parents = new HashSet[Long]();
         var ex:MultipleExceptions = null;
         while (!completed) {
@@ -99,18 +97,21 @@ public abstract class ResilientCommitHandler extends CommitHandler {
                     
                     async at (rootPlace){
                         try {
-                            if (masterVal)
+                            if (masterVal) {
                                 master_closure(plh, id);
-                            else
+                                parents.add(plh().getVirtualPlaceId());
+                            }
+                            else {
                                 slave_closure(plh, id);
+                                parents.add(plh().getPreviousVirtualPlaceId());
+                            }
                             
                             val childrenVirtual = plh().txDescManager.getVirtualMembers(id, masterVal);
-                        
                             if (childrenVirtual != null) {
-                                parents.add(here.id);
-                                val childrenPhysical = plh().getTxMembers( childrenVirtual , true);
-                                for (p in childrenPhysical.pg()) {
-                                    if (!parents.contains(p.id)) {
+                                val physical = plh().getTxMembers( childrenVirtual , true).places;
+                                for (var i:Long = 0; i < childrenVirtual.size; i++) {
+                                    val p = physical(i);
+                                    if (!parents.contains(childrenVirtual(i))) {
                                         async at (p) {
                                             executeRecursively(master_closure, parents, deleteTxDesc);
                                         }
@@ -126,10 +127,12 @@ public abstract class ResilientCommitHandler extends CommitHandler {
                         }
                         finally {
                             if (deleteTxDesc) {
-                                plh().txDescManager.delete(id, true);
+                                if (masterVal)
+                                    plh().txDescManager.delete(id, true);
+                                else
+                                    plh().txDescManager.deleteTxDescFromSlaveStore(id);
                             }
                         }
-                        
                     }
                 }
                 completed = true;
@@ -146,7 +149,7 @@ public abstract class ResilientCommitHandler extends CommitHandler {
             throw ex;
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient ended ...");
     }
-    
+ 
     protected def abort_local_resilient(plh:PlaceLocalHandle[LocalStore], id:Long) {
         var ex:Exception = null;
         val log = plh().masterStore.getTxCommitLog(id);

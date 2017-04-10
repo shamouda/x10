@@ -12,6 +12,7 @@ import x10.util.resilient.localstore.tx.logging.TxDesc;
 import x10.util.GrowableRail;
 import x10.util.HashSet;
 import x10.compiler.Pinned;
+import x10.util.resilient.localstore.tx.logging.TxDescManager;
 
 /*
  * In eager replication, transaction side effects are applied at the slave immediately by the master.
@@ -30,6 +31,10 @@ public class EagerReplicationCommitHandler extends ResilientCommitHandler {
 	    super(plh, id, mapName, members);	
 	}
 	
+	/*
+	 * recovery = false (default) master is alive
+	 * recovery = true means that the slave is acting as master to abort a transaction that the master started before it died
+	 **/
 	public def abort_resilient(recovery:Boolean){
 	    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " abort_resilient started ...");
 	    val abort_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { abort_local_resilient(plh, id); } ;
@@ -44,7 +49,21 @@ public class EagerReplicationCommitHandler extends ResilientCommitHandler {
             }
         }
         else {
-            executeRecursivelyResilient(abort_master, abort_slave, true);            
+            val masters = new ArrayList[Place]();
+            if (!recovery) {
+                masters.add(here);
+            }
+            else {
+                abort_slave(plh, id);
+                val childrenVirtual = plh().txDescManager.getVirtualMembers(id, TxDescManager.FROM_SLAVE);
+                if (childrenVirtual != null) {
+                    val members = plh().getTxMembers( childrenVirtual , true);
+                    for (p in members.places)
+                        masters.add(p);
+                }
+                plh().txDescManager.deleteTxDescFromSlaveStore(id);
+            }
+            executeRecursivelyResilient(abort_master, abort_slave, true, masters);
         }
     }
 	
@@ -53,7 +72,7 @@ public class EagerReplicationCommitHandler extends ResilientCommitHandler {
 	    if (!commitRecovery) 
 	        commitPhaseOne();
         
-        commitPhaseTwo();
+        commitPhaseTwo(commitRecovery);
     }
    
 	private def commitPhaseOne() {
@@ -64,7 +83,9 @@ public class EagerReplicationCommitHandler extends ResilientCommitHandler {
             if (members != null)
                 finish executeFlat(validate_master, false);
             else {
-                executeRecursivelyResilient(validate_master, validate_slave, false);  
+                val masters = new ArrayList[Place]();
+                masters.add(here);
+                executeRecursivelyResilient(validate_master, validate_slave, false, masters);  
             }
             plh().txDescManager.updateStatus(id, TxDesc.COMMITTING, true);
         } catch(ex:Exception) {
@@ -76,7 +97,7 @@ public class EagerReplicationCommitHandler extends ResilientCommitHandler {
         }
     }
     
-	private def commitPhaseTwo() {
+	private def commitPhaseTwo(recovery:Boolean) {
         val commit_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { commit_local_resilient(plh, id); } ;
         val commit_slave = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { plh().slaveStore.commit(id); } ;
         val startP2 = Timer.milliTime();
@@ -98,7 +119,21 @@ public class EagerReplicationCommitHandler extends ResilientCommitHandler {
             }
         }
         else {
-            executeRecursivelyResilient(commit_master, commit_slave, true);  
+            val masters = new ArrayList[Place]();
+            if (!recovery) {
+                masters.add(here);
+            }
+            else {
+                commit_slave(plh, id);
+                val childrenVirtual = plh().txDescManager.getVirtualMembers(id, TxDescManager.FROM_SLAVE);
+                if (childrenVirtual != null) {
+                    val members = plh().getTxMembers( childrenVirtual , true);
+                    for (p in members.places)
+                        masters.add(p);
+                }
+                plh().txDescManager.deleteTxDescFromSlaveStore(id);
+            }
+            executeRecursivelyResilient(commit_master, commit_slave, true, masters);  
         }
         phase2ElapsedTime = Timer.milliTime() - startP2;
         

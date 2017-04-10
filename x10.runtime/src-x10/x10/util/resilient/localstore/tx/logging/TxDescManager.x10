@@ -17,9 +17,12 @@ import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.TxConfig;
 
 public class TxDescManager(map:ResilientNativeMap) {
+    public static val FROM_SLAVE = false;
+    public static val FROM_MASTER = true;
     
     public def add(id:Long, members:Rail[Long], ignoreDeadSlave:Boolean) {
-        val desc = new TxDesc(id, map.name);
+        val staticMembers = members != null && members.size > 0;
+        val desc = new TxDesc(id, map.name, staticMembers);
         desc.addVirtualMembers(members);
         val localTx = map.startLocalTransaction();
         if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " TxDesc.add localTx["+localTx.id+"] started ...");
@@ -55,7 +58,7 @@ public class TxDescManager(map:ResilientNativeMap) {
         if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " TxDesc.addVirtualMembers{"+s+"} localTx["+localTx.id+"] started ...");
         var desc:TxDesc = localTx.get("tx"+id) as TxDesc;
         if (desc == null)
-            desc = new TxDesc(id, map.name); 
+            desc = new TxDesc(id, map.name, false); 
         desc.addVirtualMembers(vMembers);
         localTx.put("tx"+id, desc);
         localTx.commit(ignoreDeadSlave);
@@ -88,5 +91,11 @@ public class TxDescManager(map:ResilientNativeMap) {
         else
             return desc.getVirtualMembers();
     }
+    
+    
+    public def deleteTxDescFromSlaveStore(id:Long) {
+        map.plh().slaveStore.deleteTransDescriptor(id);
+    }
+    
     
 }

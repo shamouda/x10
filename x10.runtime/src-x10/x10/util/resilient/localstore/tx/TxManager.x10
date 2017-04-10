@@ -150,6 +150,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
 		        		val key = iter.next();
 		        		val log = bucket.bucketMap.getOrThrow(key);
 		        		if (!log.aborted && log.writeValidated){
+		        		    Console.OUT.println(here + " MasterStore.waitUntilPaused  found a non-aborted transaction Tx["+log.id+"] ");
 		        			stopped = false;
 		        			break;
 		        		}

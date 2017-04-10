@@ -22,26 +22,28 @@ import x10.util.ArrayList;
 public class TxDesc(id:Long, mapName:String) implements Cloneable{
     public var status:Long = STARTED;
     public var virtualMembers:Rail[Long];
-
+    public val staticMembers:Boolean;
     public static val STARTED=1;
     public static val COMMITTING=2;
     public static val COMMITTED=3;
 
-    public def this(id:Long, mapName:String) {
+    public def this(id:Long, mapName:String, staticMembers:Boolean) {
         property (id, mapName);
         this.status = STARTED;
         this.virtualMembers = new Rail[Long]();
+        this.staticMembers = staticMembers;
     }
     
     //used for clone only
-    private def this(id:Long, mapName:String, status:Long, rail:Rail[Long]) {
+    private def this(id:Long, mapName:String, status:Long, rail:Rail[Long], staticMembers:Boolean) {
         property (id, mapName);
         this.status = status;
         this.virtualMembers = rail;
+        this.staticMembers = staticMembers;
     }
     
     public def clone():Cloneable {
-        return new TxDesc(id, mapName, status, virtualMembers);
+        return new TxDesc(id, mapName, status, virtualMembers, staticMembers);
     }
     
     public def addVirtualMembers(ids:Rail[Long]) {

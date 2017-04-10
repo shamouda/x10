@@ -74,7 +74,6 @@ public class Tx extends AbstractTx {
 
     /*********************** Abort ************************/  
     public def abortRecovery() {
-        plh().slaveStore.abort(id);
         abort(true);
     }
     
@@ -98,7 +97,6 @@ public class Tx extends AbstractTx {
     
     /***********************   Two Phase Commit Protocol ************************/
     public def commitRecovery() {
-        plh().slaveStore.commit(id);
         return commit(true);
     }
     

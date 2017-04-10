@@ -165,6 +165,15 @@ public class LocalStore(immediateRecovery:Boolean) {
         }
     }
     
+    public def getPreviousVirtualPlaceId() {
+        try {
+            lock();
+            return (virtualPlaceId -1 + activePlaces.size());
+        }finally {
+            unlock();
+        }
+    }
+    
     public def getActivePlaces() {
         try {
             lock();

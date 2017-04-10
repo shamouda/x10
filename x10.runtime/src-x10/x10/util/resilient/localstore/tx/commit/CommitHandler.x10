@@ -9,6 +9,7 @@ import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.TxMembers;
 import x10.util.HashSet;
 import x10.compiler.Pinned;
+import x10.util.resilient.localstore.tx.logging.TxDescManager;
 
 public abstract class CommitHandler {
 	public transient var phase1ElapsedTime:Long = 0;
@@ -49,17 +50,20 @@ public abstract class CommitHandler {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] executeRecursively started ...");
         closure(plh, id);
         var childCount:Long = 0;
-        val childrenVirtual = plh().txDescManager.getVirtualMembers(id, true);
+        val childrenVirtual = plh().txDescManager.getVirtualMembers(id, TxDescManager.FROM_MASTER);
         try {
             if (childrenVirtual != null) {
-                parents.add(here.id);
+                val myVirtualPlaceId = plh().getVirtualPlaceId();
+                parents.add(myVirtualPlaceId);
                 childCount = childrenVirtual.size;
-                val childrenPhysical = plh().getTxMembers( childrenVirtual , true);
-                for (p in childrenPhysical.pg()) {
-                    if (!parents.contains(p.id)) {
+                val txMembers = plh().getTxMembers( childrenVirtual , true);
+                val virtual = txMembers.virtual;
+                val physical = txMembers.places;
+                for (var i:Long = 0; i < virtual.size ; i++) {
+                    if (!parents.contains(virtual(i))) {
+                        val p = physical(i);
                         if (p.isDead())
                             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursively target="+p+" DEAD ...");                    
-                        
                         async at (p) {
                             executeRecursively(closure, parents, deleteTxDesc);
                         }
