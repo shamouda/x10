@@ -259,7 +259,7 @@ public class STMBench {
                 val recoveryTime = System.nanoTime() - throughput().rightPlaceDeathTimeNS;
                 oldThroughput.shiftElapsedTime(recoveryTime);
                 Console.OUT.println(here + " Calculated recovery time = " + (recoveryTime/ 1e9) + " seconds" );
-        		startPlace(nextPlace, map, activePlacesCount, producersCount, d, a, r, u, t, h, o, g, victims, throughput, oldThroughput);
+        		startPlace(nextPlace, map, activePlacesCount, producersCount, d, a, r, u, t, h, o, g, victims, optimized, throughput, oldThroughput);
             }
         }
     }
