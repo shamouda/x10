@@ -58,6 +58,6 @@ public class NativeStore[V]{V haszero, V <: Cloneable} extends Store[V] {
       }
   
       public def executeTransaction(members:Rail[Long], closure:(Tx)=>Any):TxResult {
-          return map.executeTransaction(members, closure);
+          return map.executeTransaction(members, closure, -1);
       }
 }

@@ -23,9 +23,8 @@ public class TxConfig {
 
 
     //used for performance testing only
-    public val DISABLE_COMMIT:Boolean;
+    public val COMMIT:Boolean;
 	public val DISABLE_SLAVE:Boolean; 
-	public val DISABLE_TX_LOGGING:Boolean;
 
 
     public val BASELINE:Boolean;
@@ -70,14 +69,11 @@ public class TxConfig {
         LOCK_FREE = BASELINE || (System.getenv("LOCK_FREE") == null || System.getenv("LOCK_FREE").equals("")) ? false : Long.parseLong(System.getenv("LOCK_FREE")) == 1;
         
         TM_REP = System.getenv("TM_REP") == null ? "eager" : System.getenv("TM_REP");
-        DISABLE_COMMIT = System.getenv("DISABLE_COMMIT") != null && System.getenv("DISABLE_COMMIT").equals("1");
+        COMMIT = System.getenv("COMMIT") == null || System.getenv("COMMIT").equals("1");
         DISABLE_SLAVE = System.getenv("DISABLE_SLAVE") != null && System.getenv("DISABLE_SLAVE").equals("1");
-    	DISABLE_TX_LOGGING = System.getenv("DISABLE_TX_LOGGING") != null && System.getenv("DISABLE_TX_LOGGING").equals("1");
     	TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
         DPE_SLEEP_MS = System.getenv("DPE_SLEEP_MS") == null ? 10 : Long.parseLong(System.getenv("DPE_SLEEP_MS"));
         
-        if (!DISABLE_TX_LOGGING) //enable desc requires enable slave
-            assert(!DISABLE_SLAVE);
     }
     
     public static def get() = instance;

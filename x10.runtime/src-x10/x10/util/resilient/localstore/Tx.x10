@@ -101,14 +101,14 @@ public class Tx extends AbstractTx {
     }
     
     public def commit():Int {
-        if (TxConfig.get().DISABLE_COMMIT)
+        if (!TxConfig.get().COMMIT)
             return AbstractTx.SUCCESS;
         return commit(false);
     }
     
     public def commit(recovery:Boolean) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here=" + here + " commit started");
-        if (TxConfig.get().DISABLE_COMMIT)
+        if (!TxConfig.get().COMMIT)
             return AbstractTx.SUCCESS;
                 
         val success = commitHandler.commit(recovery);

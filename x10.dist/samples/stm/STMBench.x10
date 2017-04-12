@@ -67,7 +67,7 @@ public class STMBench {
         val mgr = new PlaceManager(s, false);
         val activePlaces = mgr.activePlaces();
         val p = opts("p", activePlaces.size());
-        printRunConfigurations (new STMBenchParameters(r, u, n, p, t, w, d, a, h, o, g, s));
+        printRunConfigurations (new STMBenchParameters(r, u, n, p, t, w, d, a, h, o, g, s, optimized));
         
         assert (h <= activePlaces.size()) : "invalid value for parameter h, h should not exceed the number of active places" ;
 
@@ -398,9 +398,10 @@ public class STMBench {
         public val o:Long;  //TxParticipantOperations
         public val g:Long;  //progress
         public val s:Long;  //spare
-
+        public val opt:Boolean;
+    
         def this(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, 
-                d:Long, a:Long, h:Long, o:Long, g:Long, s:Long) {
+                d:Long, a:Long, h:Long, o:Long, g:Long, s:Long, opt:Boolean) {
             this.r = r;
             this.u = u;
             this.n = n;
@@ -413,6 +414,7 @@ public class STMBench {
             this.o = o;
             this.g = g;
             this.s = s;
+            this.opt = opt;
         }
     };
     
@@ -469,6 +471,7 @@ public class STMBench {
         Console.OUT.println("TM=" + System.getenv("TM"));
         Console.OUT.println("LOCK_FREE=" + System.getenv("LOCK_FREE"));
         Console.OUT.println("BUCKETS_COUNT=" + System.getenv("BUCKETS_COUNT"));
+        Console.OUT.println("DISABLE_SLAVE=" + System.getenv("DISABLE_SLAVE"));
         Console.OUT.println("DISABLE_INCR_PARALLELISM=" + System.getenv("DISABLE_INCR_PARALLELISM"));
         
         Console.OUT.println("r=" + param.r);
@@ -483,6 +486,7 @@ public class STMBench {
         Console.OUT.println("o=" + param.o);
         Console.OUT.println("g=" + param.g);
         Console.OUT.println("s=" + param.s);
+        Console.OUT.println("opt=" + param.opt);
     }
 }
 

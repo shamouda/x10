@@ -23,7 +23,7 @@ import x10.util.resilient.localstore.TxConfig;
  * Priority is decided based on the following criteria in order:
  *  - A transaction id is composed of a place id and a sequence, the sequence is used for deciding the priority
  *  1) Readers have the lowest priority: 
- *     a reading transaction fails to acquire the lock if there is a waiting writer, or if the current writer has smaller sequence number.
+ *     a reading transaction fails to acquire the lock if there is a waiting writer, or if the current writer is older.
  *     a reading transaction waits only if the current writer has younger sequence number, and there is no waiting writers.   
  *  2) A writer waits if his sequence number is smaller than the sequence of the current writer, or smaller than current readers. Otherwise, the writer 
  *     fails to acquire the lock.
@@ -165,17 +165,18 @@ public class TxLockCREW extends TxLock {
      * */
     private def waitReaderWriterLocked(txId:Long, key:String) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitReaderWriterLocked started");
-        Runtime.increaseParallelism();
-
-        while (waitingWriter == -1 && writer != -1 && stronger(txId, writer)) {  //waiting writers get access first
-            if (resilient)
-                checkDeadLockers(key);
-            lock.unlock();
-            TxConfig.waitSleep();                   
-            lock.lock();
+        try {
+            Runtime.increaseParallelism();
+            while (waitingWriter == -1 && writer != -1 && stronger(txId, writer)) {  //waiting writers get access first
+                if (resilient)
+                    checkDeadLockers(key);
+                lock.unlock();
+                TxConfig.waitSleep();                   
+                lock.lock();
+            }
+        } finally {
+            Runtime.decreaseParallelism(1n);    
         }
-        
-        Runtime.decreaseParallelism(1n);
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitReaderWriterLocked completed"); 
         
         if (writer == -1 && waitingWriter == -1)
@@ -197,17 +198,18 @@ public class TxLockCREW extends TxLock {
         else 
             return false;
         
-        Runtime.increaseParallelism();
-        
-        while (readers.size() > minLimit && waitingWriter == txId) {
-            if (resilient)
-                checkDeadLockers(key);
-            lock.unlock();
-            TxConfig.waitSleep();                     
-            lock.lock();
+        try {
+            Runtime.increaseParallelism();
+            while (readers.size() > minLimit && waitingWriter == txId) {
+                if (resilient)
+                    checkDeadLockers(key);
+                lock.unlock();
+                TxConfig.waitSleep();                     
+                lock.lock();
+            }
+        }finally {
+            Runtime.decreaseParallelism(1n);
         }
-        
-        Runtime.decreaseParallelism(1n);
         
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitWriterReadersLocked completed");
         
@@ -226,17 +228,18 @@ public class TxLockCREW extends TxLock {
         else 
             return false;
         
-        Runtime.increaseParallelism();
-            
-        while (writer != -1 && waitingWriter == txId) {
-            if (resilient)
-                checkDeadLockers(key);
-            lock.unlock();
-            TxConfig.waitSleep();   
-            lock.lock();
+        try {
+            Runtime.increaseParallelism();
+            while (writer != -1 && waitingWriter == txId) {
+                if (resilient)
+                    checkDeadLockers(key);
+                lock.unlock();
+                TxConfig.waitSleep();   
+                lock.lock();
+            }
+        } finally {
+            Runtime.decreaseParallelism(1n);
         }
-        
-        Runtime.decreaseParallelism(1n);
         
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitWriterWriterLocked completed"); 
         if (waitingWriter == txId) {
