@@ -137,7 +137,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         Console.OUT.println(here + " MasterStore.waitUntilPaused started ...");
     	val buckets = TxConfig.get().BUCKETS_COUNT;
     	try {
-	        Runtime.increaseParallelism();
+	        Runtime.increaseParallelism("waitUntilPaused");
 	        
 	        var stopped:Boolean;
 	        do{
@@ -165,7 +165,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
 	        } while (!stopped);
         
     	}finally {
-    		Runtime.decreaseParallelism(1n);
+    		Runtime.decreaseParallelism(1n, "waitUntilPaused");
     	}
         paused();
         Console.OUT.println(here + " MasterStore.waitUntilPaused completed ...");
@@ -804,8 +804,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 val deleted = kLog.getDeleted();
                 memory.setValueLocked(kLog.getValue(), key, log.id, deleted);
                 if (deleted) {
-                    memory.deleteLocked();
-                    data.deleteMemoryUnit(key);
+                    memory.deleteLocked(id, key);
+                    data.deleteMemoryUnit(id, key);
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_WB key["+key+"] deleted");
                 }
                 memory.unlockWrite(log.id, key);
@@ -828,8 +828,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             else {
                 val deleted = kLog.getDeleted();
                 if (deleted) {
-                    memory.deleteLocked();
-                    data.deleteMemoryUnit(key);
+                    memory.deleteLocked(id, key);
+                    data.deleteMemoryUnit(id, key);
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_UL key["+key+"] deleted");
                 }
                 memory.unlockWrite(log.id, key);
@@ -856,16 +856,16 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
            
             if (kLog.getLockedRead()) {
                 if (kLog.getAdded()){
-                    memory.deleteLocked();
-                    data.deleteMemoryUnit(key);
+                    memory.deleteLocked(id, key);
+                    data.deleteMemoryUnit(id, key);
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_UL key["+key+"] deleted ");
                 }
                 memory.unlockRead(log.id, key);
             }
             else if (kLog.getLockedWrite()) {
                 if (kLog.getAdded()){
-                    memory.deleteLocked();
-                    data.deleteMemoryUnit(key);
+                    memory.deleteLocked(id, key);
+                    data.deleteMemoryUnit(id, key);
                 }
                 else { 
                     memory.rollbackValueLocked(kLog.getValue(), kLog.getInitVersion(), key, log.id);    
@@ -898,8 +898,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 memory.unlockRead(log.id, key);
             else if (kLog.getLockedWrite()) {
                 if (kLog.getAdded()){
-                    memory.deleteLocked();
-                    data.deleteMemoryUnit(key);
+                    memory.deleteLocked(id, key);
+                    data.deleteMemoryUnit(id, key);
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_WB key["+key+"] deleted ");
                 }
                 memory.unlockWrite(log.id, key);

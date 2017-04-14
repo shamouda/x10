@@ -6,6 +6,7 @@ import x10.util.resilient.localstore.Cloneable;
 import x10.util.HashSet;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.tx.SafeBucketHashMap;
+import x10.util.resilient.localstore.tx.TxManager;
 
 /*
  * MapData may be accessed by different transactions at the same time.
@@ -67,18 +68,18 @@ public class MapData {
                 if (size %10000 == 0)
                     Console.OUT.println(here + " MapData.size = " + size);
             }
-            res.ensureNotDeleted();
+            res.ensureNotDeleted(k);
             return new MemUnitResponse(res, added);
         }finally {
             unlockKey(k);
         }
     }
     
-    public def deleteMemoryUnit(k:String):void {
+    public def deleteMemoryUnit(txId:Long, k:String):void {
         try {
             lockKey(k);
             metadata.deleteUnsafe(k);
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("MapData.delete(" + k + ")");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " MapData.delete(" + k + ")");
         }finally {
             unlockKey(k);
         }

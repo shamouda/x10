@@ -1522,6 +1522,11 @@ public final class Runtime {
     }
 
     // notify the pool a worker is about to execute a blocking operation
+    public static def increaseParallelism(tag:String):void {
+        //Console.OUT.println(here + " - increaseParallelism  - Tag[" + tag + "] " );
+        increaseParallelism();
+    }
+    
     public static def increaseParallelism():void {
         if (!STATIC_THREADS && !STABLE_POOL_SIZE) {
             pool.increase();
@@ -1529,6 +1534,11 @@ public final class Runtime {
     }
 
     // notify the pool a worker resumed execution after a blocking operation
+    public static def decreaseParallelism(n:Int, tag:String) {
+        //Console.OUT.println(here + " - decreaseParallelism("+n+")  - Tag[" + tag + "] " );
+        decreaseParallelism(n);
+    }
+    
     public static def decreaseParallelism(n:Int) {
         if (!STATIC_THREADS && !STABLE_POOL_SIZE)  {
             pool.decrease(n);

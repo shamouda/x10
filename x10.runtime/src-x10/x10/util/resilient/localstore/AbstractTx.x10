@@ -15,6 +15,7 @@ package x10.util.resilient.localstore;
 import x10.util.Set;
 import x10.xrx.Runtime;
 import x10.util.concurrent.Future;
+import x10.util.resilient.localstore.tx.TxManager;
 
 public class AbstractTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String) {
     protected static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
@@ -32,17 +33,26 @@ public class AbstractTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Stri
         
     /***************** Get ********************/
     public def get(key:String):Cloneable {
-        return plh().masterStore.get(mapName, id, key);
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " GET_STARTED here=" + here + " Tx.get("+key+") ");
+        val x = plh().masterStore.get(mapName, id, key);
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " GET_FINISHED here=" + here + " Tx.get("+key+") ");
+        return x;
     }
     
     /***************** PUT ********************/
     public def put(key:String, value:Cloneable):Cloneable {
-        return plh().masterStore.put(mapName, id, key, value);
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " PUT_STARTED here=" + here + " Tx.put("+key+") ");
+        val x = plh().masterStore.put(mapName, id, key, value);
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " PUT_FINISHED here=" + here + " Tx.put("+key+") ");
+        return x;
     }
     
     /***************** Delete ********************/
     public def delete(key:String):Cloneable {
-        return plh().masterStore.delete(mapName, id, key);
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " DELETE_STARTED here=" + here + " Tx.delete("+key+") ");
+        val x = plh().masterStore.delete(mapName, id, key);
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " DELETE_FINISHED here=" + here + " Tx.delete("+key+") ");
+        return x;
     }
     
     /***************** KeySet ********************/
@@ -60,17 +70,5 @@ public class AbstractTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Stri
         val pl = plh().getPlace(virtualPlace);
         assert (pl.id >= 0 && pl.id < Place.numPlaces()) : "fatal bug, wrong place id " + pl.id;
         return at (pl) closure();
-    }
-    
-    protected static def opDesc(op:Int) {
-        switch(op) {
-            case LOCK: return "LOCK";
-            case UNLOCK: return "UNLOCK";
-            case GET_LOCAL: return "GET_LOCAL";
-            case PUT_LOCAL: return "PUT_LOCAL";
-            case DELETE_LOCAL: return "DELETE_LOCAL";
-            case KEYSET_LOCAL: return "KEYSET_LOCAL";
-        }
-        return "";
     }
 }

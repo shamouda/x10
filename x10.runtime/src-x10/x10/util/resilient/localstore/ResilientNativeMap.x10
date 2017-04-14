@@ -178,8 +178,6 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
         if (virtualMembers != null) 
             members = plh().getTxMembers(virtualMembers, true);
         
-        try {
-            Runtime.increaseParallelism();
             var retryCount:Long = 0;
             while(true) {
                 if (retryCount == maxRetries)
@@ -216,9 +214,6 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
                         members = plh().getTxMembers(virtualMembers, true);
                 }
             }
-        }finally {
-            Runtime.decreaseParallelism(1n);    
-        }
     }
     
     /***********************   Lock-based Transactions ****************************/

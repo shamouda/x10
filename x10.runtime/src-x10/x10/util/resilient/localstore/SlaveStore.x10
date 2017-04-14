@@ -225,7 +225,7 @@ public class SlaveStore {
         try {
             slaveLock();
             Console.OUT.println(here + " - SlaveStore.waitUntilPaused started logsSize["+logs.size() +"] ...");
-            Runtime.increaseParallelism();
+            Runtime.increaseParallelism("Slave.waitUntilPaused");
             var count:Long = 0;
             while (logs.size() != 0) {
                 slaveUnlock();
@@ -242,7 +242,7 @@ public class SlaveStore {
         
         }finally {
             Console.OUT.println(here + " - SlaveStore.waitUntilPaused completed ...");
-            Runtime.decreaseParallelism(1n);
+            Runtime.decreaseParallelism(1n, "Slave.waitUntilPaused");
             slaveUnlock();
         }
     }

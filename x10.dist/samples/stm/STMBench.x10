@@ -49,7 +49,7 @@ public class STMBench {
         ]);
         
         val r = opts("r", 32*1024);
-        val u = opts("u", 0.0F);
+        val u = opts("u", 0.5F);
         val n = opts("n", 5);    
         val t = opts("t", Runtime.NTHREADS as Long);
         val w = opts("w", 5000);
@@ -212,9 +212,9 @@ public class STMBench {
             val start = System.nanoTime();
             if (virtualMembers.size > 1 && TxConfig.get().STM ) { //STM distributed
                 if (optimized)
-                    map.executeTransaction(virtualMembers, distClosure);
+                    map.executeTransaction(virtualMembers, distClosure, -1);
                 else
-                    map.executeTransaction(distClosure);
+                    map.executeTransaction(distClosure, -1);
             }
             else if (virtualMembers.size > 1 && TxConfig.get().LOCKING ) { //locking distributed
                 map.executeLockingTransaction(lockRequests, distClosure);

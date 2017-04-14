@@ -166,16 +166,21 @@ public class TxLockCREW extends TxLock {
     private def waitReaderWriterLocked(txId:Long, key:String) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitReaderWriterLocked started");
         try {
-            Runtime.increaseParallelism();
+            Runtime.increaseParallelism("waitReaderWriterLocked");
+            var count:Long = 0;
             while (waitingWriter == -1 && writer != -1 && stronger(txId, writer)) {  //waiting writers get access first
                 if (resilient)
                     checkDeadLockers(key);
                 lock.unlock();
                 TxConfig.waitSleep();                   
                 lock.lock();
+                count++;
+                if (count%1000 == 0) {
+                    Console.OUT.println(here + " - waitReaderWriterLocked  Tx["+txId+"]  writer["+writer+"]  waitingWriter["+waitingWriter+"] readers["+readersAsString(readers)+"] ...");
+                }
             }
         } finally {
-            Runtime.decreaseParallelism(1n);    
+            Runtime.decreaseParallelism(1n, "waitReaderWriterLocked");    
         }
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitReaderWriterLocked completed"); 
         
@@ -199,16 +204,22 @@ public class TxLockCREW extends TxLock {
             return false;
         
         try {
-            Runtime.increaseParallelism();
+            Runtime.increaseParallelism("waitWriterReadersLocked");
+            var count:Long = 0;
             while (readers.size() > minLimit && waitingWriter == txId) {
                 if (resilient)
                     checkDeadLockers(key);
                 lock.unlock();
                 TxConfig.waitSleep();                     
                 lock.lock();
+                
+                count++;
+                if (count%1000 == 0) {
+                    Console.OUT.println(here + " - waitWriterReadersLocked  Tx["+txId+"]  writer["+writer+"]  waitingWriter["+waitingWriter+"] readers["+readersAsString(readers)+"] ...");
+                }
             }
         }finally {
-            Runtime.decreaseParallelism(1n);
+            Runtime.decreaseParallelism(1n, "waitWriterReadersLocked");
         }
         
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitWriterReadersLocked completed");
@@ -221,7 +232,7 @@ public class TxLockCREW extends TxLock {
             return false;
     }
     
-    private def waitWriterWriterLocked(txId:Long, key:String) {
+    private def waitWriterWriterLocked(txId:Long, key:String) {        
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitWriterWriterLocked started"); 
         if (waitingWriter == -1 || stronger (txId, waitingWriter))
             waitingWriter = txId;
@@ -229,16 +240,22 @@ public class TxLockCREW extends TxLock {
             return false;
         
         try {
-            Runtime.increaseParallelism();
+            Runtime.increaseParallelism("waitWriterWriterLocked");
+            var count:Long = 0;
             while (writer != -1 && waitingWriter == txId) {
                 if (resilient)
                     checkDeadLockers(key);
                 lock.unlock();
                 TxConfig.waitSleep();   
                 lock.lock();
+                
+                count++;
+                if (count%1000 == 0) {
+                    Console.OUT.println(here + " - waitWriterWriterLocked  Tx["+txId+"]  writer["+writer+"]  waitingWriter["+waitingWriter+"] readers["+readersAsString(readers)+"] ...");
+                }
             }
         } finally {
-            Runtime.decreaseParallelism(1n);
+            Runtime.decreaseParallelism(1n, "waitWriterWriterLocked");
         }
         
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitWriterWriterLocked completed"); 
