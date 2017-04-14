@@ -137,8 +137,10 @@ public abstract class ResilientCommitHandler extends CommitHandler {
                 }
                 completed = true;
             } catch(mulExp:MultipleExceptions) {
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient phase finished with error ...");
-                mulExp.printStackTrace();
+                if (TxConfig.get().TM_DEBUG) {
+                    Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient phase finished with error ...");
+                    mulExp.printStackTrace();
+                }
                 places.clear();
                 places.addAll(getDeadPlaces(mulExp));
                 masterType = false;
