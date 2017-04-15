@@ -224,7 +224,7 @@ public class SlaveStore {
         assert (!TxConfig.get().TM_REP.equals("lazy")) : "bug, SlaveStore.waitUntilPaused should not be called with lazy replication";
         try {
             slaveLock();
-            Console.OUT.println(here + " - SlaveStore.waitUntilPaused started logsSize["+logs.size() +"] ...");
+            Console.OUT.println("Recovering " + here + " - SlaveStore.waitUntilPaused started logsSize["+logs.size() +"] ...");
             Runtime.increaseParallelism("Slave.waitUntilPaused");
             var count:Long = 0;
             while (logs.size() != 0) {
@@ -240,8 +240,8 @@ public class SlaveStore {
                 }
             }
         
-        }finally {
-            Console.OUT.println(here + " - SlaveStore.waitUntilPaused completed ...");
+        } finally {
+            Console.OUT.println("Recovering " + here + " - SlaveStore.waitUntilPaused completed ...");
             Runtime.decreaseParallelism(1n, "Slave.waitUntilPaused");
             slaveUnlock();
         }

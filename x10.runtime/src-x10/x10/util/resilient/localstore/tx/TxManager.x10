@@ -134,10 +134,10 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     
     /**************   Pausing for Recovery    ****************/
     public def waitUntilPaused() {
-        Console.OUT.println(here + " MasterStore.waitUntilPaused started ...");
+        Console.OUT.println("Recovering " + here + " MasterStore.waitUntilPaused started ...");
     	val buckets = TxConfig.get().BUCKETS_COUNT;
     	try {
-	        Runtime.increaseParallelism("waitUntilPaused");
+	        Runtime.increaseParallelism("Master.waitUntilPaused");
 	        
 	        var stopped:Boolean;
 	        do{
@@ -150,7 +150,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
 		        		val key = iter.next();
 		        		val log = bucket.bucketMap.getOrThrow(key);
 		        		if (!log.aborted && log.writeValidated){
-		        		    Console.OUT.println(here + " MasterStore.waitUntilPaused  found a non-aborted transaction Tx["+log.id+"] ");
+		        		    Console.OUT.println("Recovering " + here + " MasterStore.waitUntilPaused  found a non-aborted transaction Tx["+log.id+"] " + txIdToString (log.id));
 		        			stopped = false;
 		        			break;
 		        		}
@@ -165,10 +165,10 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
 	        } while (!stopped);
         
     	}finally {
-    		Runtime.decreaseParallelism(1n, "waitUntilPaused");
+    		Runtime.decreaseParallelism(1n, "Master.waitUntilPaused");
     	}
         paused();
-        Console.OUT.println(here + " MasterStore.waitUntilPaused completed ...");
+        Console.OUT.println("Recovering " + here + " MasterStore.waitUntilPaused completed ...");
     }
     
     private def ensureActiveStatus() {
@@ -187,7 +187,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     		statusLock();
     		assert(status == STATUS_ACTIVE);
     		status = STATUS_PAUSING;
-    		Console.OUT.println(here + " TxManager changed status from STATUS_ACTIVE to STATUS_PAUSING");
+    		Console.OUT.println("Recovering " + here + " TxManager changed status from STATUS_ACTIVE to STATUS_PAUSING");
     	}
     	finally {
     		statusUnlock();
@@ -199,7 +199,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     		statusLock();
     		assert(status == STATUS_PAUSING);
     		status = STATUS_PAUSED;
-    		Console.OUT.println(here + " TxManager changed status from STATUS_PAUSING to STATUS_PAUSED");
+    		Console.OUT.println("Recovering " + here + " TxManager changed status from STATUS_PAUSING to STATUS_PAUSED");
     	}
     	finally {
     		statusUnlock();
@@ -211,7 +211,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     		statusLock();
     		assert(status == STATUS_PAUSED);
     		status = STATUS_ACTIVE;
-    		Console.OUT.println(here + " TxManager changed status from STATUS_PAUSED to STATUS_ACTIVE");
+    		Console.OUT.println("Recovering " + here + " TxManager changed status from STATUS_PAUSED to STATUS_ACTIVE");
     	}
     	finally {
     		statusUnlock();
