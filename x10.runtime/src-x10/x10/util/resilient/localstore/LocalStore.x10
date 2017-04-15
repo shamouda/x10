@@ -41,6 +41,8 @@ public class LocalStore(immediateRecovery:Boolean) {
     
     public transient var txDescManager:TxDescManager; //A resilient map for transactions' descriptors
     
+    private val replacementHistory = new HashMap[Long, Long] ();
+    
     public def this(active:PlaceGroup, immediateRecovery:Boolean) {
         property(immediateRecovery);
         lock = new Lock();
@@ -190,6 +192,8 @@ public class LocalStore(immediateRecovery:Boolean) {
             lock();
             val size = activePlaces.size();
             val rail = new Rail[Place](size);
+            val oldPlace = activePlaces(virtualId);
+            replacementHistory.put(oldPlace.id, spare.id);
             for (var i:Long = 0; i< size; i++) {
                 if (virtualId == i)
                     rail(i) = spare;
@@ -215,7 +219,14 @@ public class LocalStore(immediateRecovery:Boolean) {
     public def getMaster(p:Place) {
         try {
             lock();
-            return activePlaces.prev(p);
+            var master:Place = activePlaces.prev(p);
+            if (master.id == -1) {
+                Console.OUT.println(here + " Master of ("+p+") computed as -1,  replacementHist = " + replacementHistory.getOrElse(p.id, -1));
+                val newP = Place(replacementHistory.getOrThrow(p.id));
+                master = activePlaces.prev(newP);
+                Console.OUT.println(here + " Master of (" + p + ") corrected to " + master );
+            }
+            return master;
         } finally {
             unlock();
         }
@@ -224,7 +235,14 @@ public class LocalStore(immediateRecovery:Boolean) {
     public def getSlave(p:Place) {
         try {
             lock();
-            return activePlaces.next(p);
+            var slave:Place = activePlaces.next(p);
+            if (slave.id == -1) {
+                Console.OUT.println(here + " Slave of ("+p+") computed as -1,  replacementHist = " + replacementHistory.getOrElse(p.id, -1));
+                val newP = Place(replacementHistory.getOrThrow(p.id));
+                slave = activePlaces.next(newP);
+                Console.OUT.println(here + " Slave of (" + p + ") corrected to " + slave );
+            }
+            return slave;
         }finally {
             unlock();
         }
