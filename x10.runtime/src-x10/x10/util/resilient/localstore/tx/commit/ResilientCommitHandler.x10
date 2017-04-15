@@ -80,7 +80,7 @@ public abstract class ResilientCommitHandler extends CommitHandler {
         var completed:Boolean = false;
         var masterType:Boolean = true; 
         val parents = new HashSet[Long]();
-        var ex:MultipleExceptions = null;
+        var ex:Exception = null;
         while (!completed) {
             try {
                 val masterVal = masterType;
@@ -136,6 +136,15 @@ public abstract class ResilientCommitHandler extends CommitHandler {
                     }
                 }
                 completed = true;
+            } catch(dpe:DeadPlaceException) {
+                if (TxConfig.get().TM_DEBUG) {
+                    Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient phase finished with error ...");
+                    dpe.printStackTrace();
+                }
+                places.clear();
+                places.add(dpe.place);
+                masterType = false;
+                ex = dpe;
             } catch(mulExp:MultipleExceptions) {
                 if (TxConfig.get().TM_DEBUG) {
                     Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient phase finished with error ...");

@@ -163,6 +163,7 @@ public class STMBench {
     public static def produce(map:ResilientNativeMap, activePlacesCount:Long, myVirtualPlaceId:Long, producersCount:Long, producerId:Long, 
     		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
     		throughput:PlaceLocalHandle[PlaceThroughput]) {
+        Console.OUT.println("PRODUCE FROM " + here);
         var txCount:Long = 0;
         val rand = new Random((here.id+1) * producerId);
         val myThroughput = throughput().thrds(producerId);

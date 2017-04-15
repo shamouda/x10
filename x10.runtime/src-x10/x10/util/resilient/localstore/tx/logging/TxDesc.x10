@@ -73,7 +73,15 @@ public class TxDesc(id:Long, mapName:String) implements Cloneable{
         virtualMembers = newMembers;
     }
     
-    public def getVirtualMembers() = virtualMembers;
+    public def getVirtualMembers() {
+        if (virtualMembers != null) {
+            for (p in virtualMembers) {
+                assert (p >= 0 && p < Place.numPlaces()) : here + " Assertion error p= " + p;
+            }
+        }
+            
+        return virtualMembers;
+    }
     
     public def getStatusDesc() {
         if (status == STARTED)

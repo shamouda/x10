@@ -35,8 +35,8 @@ public class DistributedRecoveryHelper {
             throw new Exception(here + " Fatal error, two consecutive places died : " + deadSlave + "  and " + slaveOfDeadMaster);
         
         finish {
-            at (slaveOfDeadMaster) async createMasterStoreAtSpare(plh, spare, oldActivePlaces);
-            async createSlaveStoreAtSpare(plh, spare);
+            async at (slaveOfDeadMaster) createMasterStoreAtSpare(plh, spare, oldActivePlaces);
+            createSlaveStoreAtSpare(plh, spare);
         }
         
         Console.OUT.println("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: now spare place has all needed data, let it handshake with other places ...");
@@ -93,14 +93,15 @@ public class DistributedRecoveryHelper {
             
             var allocated:Boolean = false;
             try {
+                Console.OUT.println("Recovering " + here + " Try to allocate " + Place(i) );
                 allocated = at (Place(i)) plh().allocate(deadPlaceVirtualPlaceId);
             }catch(ex:Exception) {
             }
             
             if (!allocated)
-                Console.OUT.println(here + " Failed to allocate " + Place(i) + ", is it dead? " + Place(i).isDead());
+                Console.OUT.println("Recovering " + here + " Failed to allocate " + Place(i) + ", is it dead? " + Place(i).isDead());
             else {
-                Console.OUT.println(here + " Succeeded to allocate " + Place(i) );
+                Console.OUT.println("Recovering " + here + " Succeeded to allocate " + Place(i) );
                 placeIndx = i;
                 break;
             }
@@ -116,13 +117,19 @@ public class DistributedRecoveryHelper {
     	    val map = new ResilientNativeMap(txDesc.mapName, plh);
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Recovering " + here + " recovering txdesc " + txDesc);
             val tx = map.restartGlobalTransaction(txDesc);
-            if (txDesc.status == TxDesc.COMMITTING) {
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Recovering " + here + " recovering Tx["+tx.id+"] commit it");
-                tx.commitRecovery();
-            }
-            else if (txDesc.status == TxDesc.STARTED) {
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Recovering " + here + " recovering Tx["+tx.id+"] abort it");
-                tx.abortRecovery();
+            try {
+                if (txDesc.status == TxDesc.COMMITTING) {
+                    //if (TxConfig.get().TM_DEBUG) 
+                    Console.OUT.println("Recovering " + here + " recovering Tx["+tx.id+"] commit it");
+                    tx.commitRecovery();
+                }
+                else if (txDesc.status == TxDesc.STARTED) {
+                    //if (TxConfig.get().TM_DEBUG) 
+                    Console.OUT.println("Recovering " + here + " recovering Tx["+tx.id+"] abort it");
+                    tx.abortRecovery();
+                }
+            }catch(ex:Exception) {
+                Console.OUT.println("Recovering " + here + " recovering Tx["+tx.id+"] failed with exception ["+ex.getMessage()+"] ");        
             }
     	}
         Console.OUT.println("Recovering " + here + " slave acting as master to complete dead master's transactions done ...");

@@ -241,7 +241,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     /*************** Abstract Methods ****************/
     public abstract def get(id:Long, key:String):Cloneable;
     public abstract def put(id:Long, key:String, value:Cloneable):Cloneable;
-    public abstract def delete(id:Long, key:String):Cloneable;
+    public abstract def delete(id:Long, key:String, txDesc:Boolean):Cloneable;
     public abstract def validate(log:TxLog):void ;
     public abstract def commit(log:TxLog):void ;
     public abstract def abort(log:TxLog):void; //log must be locked
@@ -314,7 +314,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             }
             var memory:MemoryUnit = log.getMemoryUnit(key);
             if (memory == null) {
-                val memUResponse = data.getMemoryUnit(key);
+                val memUResponse = data.getMemoryUnit(key, status == STATUS_ACTIVE);
                 memory = memUResponse.mem;
                 if (lockRead)
                     memory.lockRead(id, key);
@@ -395,7 +395,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         }
     }
     
-    protected def put_RV_EA_WB(id:Long, key:String, value:Cloneable, delete:Boolean):Cloneable {
+    protected def put_RV_EA_WB(id:Long, key:String, value:Cloneable, delete:Boolean, txDesc:Boolean):Cloneable {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RV_EA_WB started, key["+key+"] delete["+delete+"] ");
         var log:TxLog = null;
         try {     	
@@ -403,7 +403,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             val memory = cont.memory;
             log = cont.log;
             
-            if (resilient && immediateRecovery)
+            if (resilient && immediateRecovery && !txDesc)
                 ensureActiveStatus();
             
             /*** EarlyAcquire ***/
@@ -428,7 +428,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         }
     }
     
-    protected def put_RL_EA_WB(id:Long, key:String, value:Cloneable, delete:Boolean):Cloneable {
+    protected def put_RL_EA_WB(id:Long, key:String, value:Cloneable, delete:Boolean, txDesc:Boolean):Cloneable {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RL_EA_WB started, key["+key+"] delete["+delete+"] ");
         var log:TxLog = null;
         try {
@@ -436,7 +436,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             val memory = cont.memory;
             log = cont.log;
             
-            if (resilient && immediateRecovery)
+            if (resilient && immediateRecovery && !txDesc)
                 ensureActiveStatus();
             
             /*** EarlyAcquire ***/
@@ -461,7 +461,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         }
     }
     
-    protected def put_RL_EA_UL(id:Long, key:String, value:Cloneable, delete:Boolean):Cloneable {
+    protected def put_RL_EA_UL(id:Long, key:String, value:Cloneable, delete:Boolean, txDesc:Boolean):Cloneable {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RL_EA_UL started, key["+key+"] delete["+delete+"] ");
         var log:TxLog = null;
         try {
@@ -469,7 +469,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             val memory = cont.memory;
             log = cont.log;
             
-            if (resilient && immediateRecovery)
+            if (resilient && immediateRecovery && !txDesc)
                 ensureActiveStatus();
             
             /*** Early Acquire ***/
@@ -495,7 +495,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         }
     }
     
-    protected def put_RV_EA_UL(id:Long, key:String, value:Cloneable, delete:Boolean):Cloneable {
+    protected def put_RV_EA_UL(id:Long, key:String, value:Cloneable, delete:Boolean, txDesc:Boolean):Cloneable {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RV_EA_UL started, key["+key+"] delete["+delete+"] ");
         var log:TxLog = null;
         try {
@@ -503,7 +503,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             val memory = cont.memory;
             log = cont.log;
             
-            if (resilient && immediateRecovery)
+            if (resilient && immediateRecovery && !txDesc)
                 ensureActiveStatus();
             
             /*** EarlyAcquire ***/
@@ -530,7 +530,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     }
     
     
-    protected def put_LA_WB(id:Long, key:String, value:Cloneable, delete:Boolean):Cloneable {
+    protected def put_LA_WB(id:Long, key:String, value:Cloneable, delete:Boolean, txDesc:Boolean):Cloneable {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_LA_WB started, key["+key+"] delete["+delete+"] ");
         var log:TxLog = null;
         try {
@@ -538,7 +538,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             val memory = cont.memory;
             log = cont.log;
             
-            if (resilient && immediateRecovery)
+            if (resilient && immediateRecovery && !txDesc)
                 ensureActiveStatus();
             
             /*** DO NOT ACQUIRE WRITE LOCK HERE ***/
@@ -917,7 +917,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         val log = getOrAddLockingTxLog(id);
         var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
         if (memory == null) {
-            memory = data.getMemoryUnit(key).mem;
+            memory = data.getMemoryUnit(key, true).mem;
             log.memUnits.put(key, memory);
         }
         memory.lockWrite(id, key);
@@ -928,7 +928,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         for (key in keys) {
             var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
             if (memory == null) {
-                memory = data.getMemoryUnit(key).mem;
+                memory = data.getMemoryUnit(key, true).mem;
                 log.memUnits.put(key, memory);
             }
             memory.lockWrite(id, key);
@@ -939,7 +939,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         val log = getOrAddLockingTxLog(id);
         var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
         if (memory == null) {
-            memory = data.getMemoryUnit(key).mem;
+            memory = data.getMemoryUnit(key, true).mem;
             log.memUnits.put(key, memory);
         }
         memory.lockRead(id, key);        
@@ -950,7 +950,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         for (key in keys) {
             var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
             if (memory == null) {
-                memory = data.getMemoryUnit(key).mem;
+                memory = data.getMemoryUnit(key, true).mem;
                 log.memUnits.put(key, memory);
             }
             memory.lockRead(id, key);

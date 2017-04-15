@@ -19,7 +19,7 @@ public class TxManager_Baseline extends TxManager {
         return data.baselinePutValue(key, value);
     }
     
-    public def delete(id:Long, key:String):Cloneable {
+    public def delete(id:Long, key:String, txDesc:Boolean):Cloneable {
         return data.baselinePutValue(key, null);
     }
     

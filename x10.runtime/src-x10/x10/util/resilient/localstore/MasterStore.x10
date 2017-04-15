@@ -49,7 +49,11 @@ public class MasterStore(immediateRecovery:Boolean) {
     }
     
     public def delete(mapName:String, id:Long, key:String):Cloneable {
-        return txManager.delete(id, mapName+key);
+        return txManager.delete(id, mapName+key, false);
+    }
+    
+    public def deleteTxDesc(mapName:String, id:Long, key:String):Cloneable {
+        return txManager.delete(id, mapName+key, true);
     }
     
     public def validate(id:Long) {
@@ -103,7 +107,7 @@ public class MasterStore(immediateRecovery:Boolean) {
     }
     
     public def deleteLocked(mapName:String, id:Long, key:String):Cloneable {
-        return txManager.delete(id, mapName+key);
+        return txManager.delete(id, mapName+key, false);
     }
     
     public def putLocked(mapName:String, id:Long, key:String, value:Cloneable):Cloneable {

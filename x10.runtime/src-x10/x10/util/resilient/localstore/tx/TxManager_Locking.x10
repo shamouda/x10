@@ -19,7 +19,7 @@ public class TxManager_Locking extends TxManager {
         return putLocked(id, key, value);
     }
     
-    public def delete(id:Long, key:String):Cloneable {
+    public def delete(id:Long, key:String, txDesc:Boolean):Cloneable {
         throw new Exception("operation not supported for lock based tx manager");
     }
     

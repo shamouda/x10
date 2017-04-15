@@ -34,7 +34,7 @@ public class TxDescManager(map:ResilientNativeMap) {
     public def delete(id:Long, ignoreDeadSlave:Boolean) {
         val localTx = map.startLocalTransaction();
         if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " TxDesc.delete localTx["+localTx.id+"] started ...");
-        localTx.delete("tx"+id);
+        localTx.deleteTxDesc("tx"+id);
         localTx.commit(ignoreDeadSlave);
         if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " TxDesc.delete localTx["+localTx.id+"] completed ...");
     }

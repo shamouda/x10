@@ -23,11 +23,11 @@ public class TxManager_RV_EA_UL extends TxManager {
     }
     
     public def put(id:Long, key:String, value:Cloneable):Cloneable {
-        return put_RV_EA_UL(id, key, value, false);
+        return put_RV_EA_UL(id, key, value, false, false);
     }
     
-    public def delete(id:Long, key:String):Cloneable {
-        return put_RV_EA_UL(id, key, null, true);
+    public def delete(id:Long, key:String, txDesc:Boolean):Cloneable {
+        return put_RV_EA_UL(id, key, null, true, txDesc);
     }
     
     public def validate(log:TxLog) {

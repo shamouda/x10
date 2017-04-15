@@ -75,16 +75,15 @@ public class LocalStore(immediateRecovery:Boolean) {
     public def allocate(vPlace:Long) {
         try {
             plh().lock();
-            Console.OUT.println(here + " received allocation request to replace virtual place ["+vPlace+"] ");
+            Console.OUT.println("Recovering " + here + " received allocation request to replace virtual place ["+vPlace+"] ");
             if (plh().virtualPlaceId == -1) {
                 plh().virtualPlaceId = vPlace;
-                Console.OUT.println(here + " allocation request succeeded");
+                Console.OUT.println("Recovering " + here + " allocation request succeeded");
                 return true;
             }
-            Console.OUT.println(here + " allocation request failed, already allocated for virtual place ["+plh().virtualPlaceId+"] ");
+            Console.OUT.println("Recovering " + here + " allocation request failed, already allocated for virtual place ["+plh().virtualPlaceId+"] ");
             return false;
-        }
-        finally {
+        } finally {
             plh().unlock();
         }
     }
@@ -139,7 +138,7 @@ public class LocalStore(immediateRecovery:Boolean) {
         
             this.activePlaces = oldActivePlaces;
             if (newAddedPlaces().size() > 0) {
-                Console.OUT.println(here + " My master gave me outdated information");
+                Console.OUT.println("Recovering " + here + " My master gave me outdated information");
                 //my master was not aware of some place changes
                 for (change in newAddedPlaces()) {
                     plh().replace(change.virtualPlaceId, change.newPlace);
@@ -203,12 +202,12 @@ public class LocalStore(immediateRecovery:Boolean) {
                 var str:String = "";
                 for (p in activePlaces)
                     str += p + ",  " ;
-                Console.OUT.println(here + " - updated activePlaces to be: " + str);
+                Console.OUT.println("Recovering " + here + " - updated activePlaces to be: " + str);
             }
             return activePlaces;
         }finally {
             unlock();
-            Console.OUT.println(here + " - Handshake with new place ["+spare+"]  at virtualId ["+virtualId+"] ..." );
+            Console.OUT.println("Recovering " + here + " - Handshake with new place ["+spare+"]  at virtualId ["+virtualId+"] ..." );
         }
         
     }

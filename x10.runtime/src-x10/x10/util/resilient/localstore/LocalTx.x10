@@ -61,6 +61,15 @@ public class LocalTx extends AbstractTx {
         }
     }
     
+    public def deleteTxDesc(key:String):Cloneable {
+        try {
+            return plh().masterStore.deleteTxDesc(mapName, id, key);
+        }catch(ex:Exception){
+            abortTime = Timer.milliTime();
+            throw ex;
+        }
+    }
+    
     /***************** KeySet ********************/
     public def keySet():Set[String] {
         try {

@@ -147,16 +147,19 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     }
     
     private def startGlobalTransaction(members:TxMembers):Tx {
-        assert(plh().virtualPlaceId != -1);
-        
+        assert(plh().masterStore != null && plh().virtualPlaceId != -1) : "here["+here+"] masterStore = ["+plh().masterStore+"] , virtualPlace ["+plh().virtualPlaceId+"]";
         val id = plh().masterStore.getNextTransactionId();
         val tx = new Tx(plh, id, name, members);
-        var predefinedMembers:Rail[Long] = null;
-        if (members != null)
-            predefinedMembers = members.virtual;
-        plh().txDescManager.add(id, predefinedMembers, false);
-        
-        plh().txList.addGlobalTx(tx);
+        try {
+            var predefinedMembers:Rail[Long] = null;
+            if (members != null)
+                predefinedMembers = members.virtual;
+            plh().txDescManager.add(id, predefinedMembers, false);
+            
+            plh().txList.addGlobalTx(tx);
+        }catch(ex:NullPointerException) {
+            ex.printStackTrace();
+        }
         return tx;
     }
     
