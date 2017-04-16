@@ -118,11 +118,11 @@ public class LocalStore(immediateRecovery:Boolean) {
             //update other places according to the version of active places that my master is aware of
             val newAddedPlaces = new GlobalRef[ArrayList[PlaceChange]](new ArrayList[PlaceChange]());
             val me = here;
+            val activeSize = oldActivePlaces.size();
             try {
                  finish for (p in oldActivePlaces) {
                      val expectedSlave = oldActivePlaces.next(p);
-                     val activeSize = oldActivePlaces.size();
-                     if (p.isDead() || expectedSlave.id == here.id /*p is my master*/ || p.id == here.id /* p is me*/)
+                     if (p.isDead() || expectedSlave.id == me.id /*p is my master*/ || p.id == me.id /* p is me*/)
                          continue;
                      at (p) async {
                          //at handshare receiver

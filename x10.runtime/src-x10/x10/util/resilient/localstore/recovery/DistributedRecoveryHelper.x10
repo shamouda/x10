@@ -44,21 +44,20 @@ public class DistributedRecoveryHelper {
         Console.OUT.println("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: now spare place has all needed data, let it handshake with other places ...");
         val newActivePlaces = computeNewActivePlaces(oldActivePlaces, deadPlaceVirtualPlaceId, spare);
         
-        @Uncounted async at (spare) {
+        //the application layer can now recognize a change in the places configurations
+        plh().replace(deadPlaceVirtualPlaceId, spare);
+        plh().slave = spare;
+        plh().masterStore.reactivate();
+        val recoveryTime = System.nanoTime()-startTimeNS;
+        Console.OUT.println("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: completed successfully, createReplicaTime:"+((createReplicaTime)/1e9)+" seconds:totalRecoveryTime:" + ((recoveryTime)/1e9)+" seconds");
+        
+        finish at (spare) async {
             val startHandshake = System.nanoTime();
             plh().handshake(newActivePlaces, deadPlaceVirtualPlaceId);
             plh().masterStore.reactivate();
             val handshakeTime = System.nanoTime() - startHandshake;
             Console.OUT.println("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: handshakeTime:"+((handshakeTime)/1e9)+" seconds");
         }
-
-        //the application layer can now recognize a change in the places configurations
-        plh().replace(deadPlaceVirtualPlaceId, spare);
-        plh().slave = spare;
-        plh().masterStore.reactivate();
-        val recoveryTime = System.nanoTime()-startTimeNS;
-
-        Console.OUT.println("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: completed successfully, createReplicaTime:"+((createReplicaTime)/1e9)+" seconds:totalRecoveryTime:" + ((recoveryTime)/1e9)+" seconds");
     }
     
     
