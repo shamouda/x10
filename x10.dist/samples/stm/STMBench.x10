@@ -479,6 +479,7 @@ public class STMBench {
         Console.OUT.println("STMBench starting with the following parameters:");        
         Console.OUT.println("X10_NPLACES="  + Place.numPlaces());
         Console.OUT.println("X10_NTHREADS=" + Runtime.NTHREADS);
+        Console.OUT.println("X10_NUM_IMMEDIATE_THREADS=" + System.getenv("X10_NUM_IMMEDIATE_THREADS"));
         Console.OUT.println("X10_RESILIENT_MODE=" + x10.xrx.Runtime.RESILIENT_MODE);
         Console.OUT.println("TM=" + System.getenv("TM"));
         Console.OUT.println("LOCK_FREE=" + System.getenv("LOCK_FREE"));
