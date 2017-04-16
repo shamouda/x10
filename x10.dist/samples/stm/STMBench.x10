@@ -270,7 +270,7 @@ public class STMBench {
     }
 
     public static def printThroughput(map:ResilientNativeMap, iteration:Long, plh:PlaceLocalHandle[PlaceThroughput], d:Long, a:Long, t:Long, h:Long, o:Long ) {
-    	map.printTxStatistics();
+    	//map.printTxStatistics();
         
         val throughputList = new ArrayList[ProducerThroughput]();
         val activePlcs = map.getActivePlaces();
