@@ -179,7 +179,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     }
     
     public def executeTransaction(virtualMembers:Rail[Long], closure:(Tx)=>Any, maxRetries:Long, maxTimeNS:Long):TxResult {
-    	val start = System.nanoTime();
+    	val beginning = System.nanoTime();
     	var members:TxMembers = null;
         if (virtualMembers != null) 
             members = plh().getTxMembers(virtualMembers, true);
@@ -188,7 +188,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
         while(true) {
             if (retryCount > 0 && retryCount % 1000 == 0)
                 Console.OUT.println(here + " executeTransaction retryCount reached " + retryCount);
-            if (retryCount == maxRetries || (maxTimeNS != -1 && System.nanoTime() - start >= maxTimeNS))
+            if (retryCount == maxRetries || (maxTimeNS != -1 && System.nanoTime() - beginning >= maxTimeNS))
                 throw new FatalTransactionException("Reached maximum limit for retrying a transaction");
             retryCount++;
             
