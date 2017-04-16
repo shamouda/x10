@@ -88,25 +88,21 @@ public class STMBench {
         resetStatistics(map, throughputPLH);
         Console.OUT.println("warmup completed, warmup elapsed time ["+(Timer.milliTime() - startWarmup)+"]  ms ");
         
-        for (iter in 1..n) {
-            //fixme: reinit throughputPLH
-        	val startIter = Timer.milliTime();
-            runIteration(map, activePlaces, p, d, a, r, u, t, h, o, g, victimsList, optimized, throughputPLH, null);
-            printThroughput(map, iter, throughputPLH, d, a, t, h, o);
-            resetStatistics(map, throughputPLH);
-            Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
-        }
-        
-        val expectedDeadPlacesCount = victimsList.size();
-        var actualDead:Long = 0;
-        for (pp in Place.places()) {
-            if (pp.isDead())
-                actualDead++;
-        }
-        if (expectedDeadPlacesCount == actualDead)
+        try {
+            for (iter in 1..n) {
+                //fixme: reinit throughputPLH
+            	val startIter = Timer.milliTime();
+                runIteration(map, activePlaces, p, d, a, r, u, t, h, o, g, victimsList, optimized, throughputPLH, null);
+                printThroughput(map, iter, throughputPLH, d, a, t, h, o);
+                resetStatistics(map, throughputPLH);
+                Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
+            }
+            
             Console.OUT.println("+++ STMBench Succeeded +++");
-        else
-            Console.OUT.println("+++ STMBench Failed, more places died ("+actualDead+") than expected ("+expectedDeadPlacesCount+") +++");
+        }catch(ex:Exception) {
+            Console.OUT.println("!!! STMBench Failed !!!");
+            ex.printStackTrace();
+        }
     }
     
     public static def runIteration(map:ResilientNativeMap, activePlaces:PlaceGroup, producersCount:Long, 
@@ -118,13 +114,11 @@ public class STMBench {
             	startPlace(activePlaces(i), map, activePlaces.size(), producersCount, d, a, r, u, t, h, o, g, victims, optimized, throughput, recoveryThroughput);
             }
             
-        }catch(e:Exception) {
+        } catch (e:STMBenchFailed) {
+            throw e;
+        } catch(e:Exception) {
             if (!resilient)
                 throw e;
-            else {
-                Console.OUT.println("iteration failed with exception " + e.getMessage());
-                e.printStackTrace();
-            }
         }
     }
 
@@ -264,7 +258,8 @@ public class STMBench {
             val slaveChange = map.nextPlaceChange();
             if (resilient && producerId == 0 && slaveChange.changed) {
                 val nextPlace = slaveChange.newSlave;
-        	    assert (throughput().rightPlaceDeathTimeNS != -1) : here + " assertion error, did not receive suicide note ...";
+                if (throughput().rightPlaceDeathTimeNS == -1)
+                    throw new STMBenchFailed(here + " assertion error, did not receive suicide note ...");
         		val oldThroughput = throughput().rightPlaceThroughput;
                 val recoveryTime = System.nanoTime() - throughput().rightPlaceDeathTimeNS;
                 oldThroughput.shiftElapsedTime(recoveryTime);
@@ -573,5 +568,12 @@ class PlaceThroughput(threads:Long, slices:Long) {
         for (t in thrds) {
             t.elapsedTimeNS += timeNS;
         }
+    }
+}
+
+
+class STMBenchFailed extends Exception {
+    public def this(message:String) {
+        super(message);
     }
 }
