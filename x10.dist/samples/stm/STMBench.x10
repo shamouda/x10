@@ -279,7 +279,7 @@ public class STMBench {
             val plcTh = at(p) plh();
             for (i in 0..(t-1))
                 throughputList.add(plcTh.thrds(i));
-            //Console.OUT.println(p + "==> " + plcTh);
+            Console.OUT.println(p + "==> " + plcTh);
         }
         var allOperations:Long = 0;
         var allTimeNS:Long = 0;
