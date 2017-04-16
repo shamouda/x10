@@ -14,7 +14,7 @@ import x10.util.resilient.localstore.tx.TxManager;
  **/
 public class MapData {
     val metadata:SafeBucketHashMap[String,MemoryUnit];
-    var print:Boolean = false;
+    //var print:Boolean = false;
     public def this() {
         metadata = new SafeBucketHashMap[String,MemoryUnit](TxConfig.get().BUCKETS_COUNT);
     }
@@ -65,25 +65,16 @@ public class MapData {
                     throw new StorePausedException(here + " MapData can not put values while the store is paused ");
                 res = new MemoryUnit(null);
                 metadata.putUnsafe(k, res);
-                if (print) {
-                    Console.OUT.println(here + " MapData.put ("+k+")");
-                }
+                //if (print)
+                //    Console.OUT.println(here + " MapData.put ("+k+")");
                 added = true;
                 val size = metadata.sizeUnsafe(); 
                 if (size %10000 == 0) {
                     Console.OUT.println(here + " MapData.size = " + size);
-                    print = true;
+                    //print = true;
                 }
             }
-            try {
-                res.ensureNotDeleted(k);
-            }catch(ex:Exception) {
-                if (print) {
-                    Console.OUT.println(here + " MapData.put ("+k+") already deleted!!!!!");
-                }
-                throw ex;
-            }
-            
+            res.ensureNotDeleted(k);
             return new MemUnitResponse(res, added);
         }finally {
             unlockKey(k);

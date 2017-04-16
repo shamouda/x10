@@ -154,8 +154,8 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
             var predefinedMembers:Rail[Long] = null;
             if (members != null)
                 predefinedMembers = members.virtual;
-            
-            if (resilient)
+
+            if (members == null || resilient)
                 plh().txDescManager.add(id, predefinedMembers, false);
             
             plh().txList.addGlobalTx(tx);
