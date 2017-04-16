@@ -289,8 +289,8 @@ public class STMBench {
             val p0Times = plh().p0Times;
             val p0Counts = plh().p0Counts;
             
-            team.reduce(Place(0), times, 0, p0Times, 0, count, Team.ADD);
-            team.reduce(Place(0), counts, 0, p0Counts, 0, count, Team.ADD);
+            team.allreduce(times, 0, p0Times, 0, count, Team.ADD);
+            team.allreduce(counts, 0, p0Counts, 0, count, Team.ADD);
         }
         
         Console.OUT.println("times and counts reduced to place 0");
