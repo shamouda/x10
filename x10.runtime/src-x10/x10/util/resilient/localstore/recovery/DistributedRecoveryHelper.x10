@@ -106,7 +106,9 @@ public class DistributedRecoveryHelper {
                 break;
             }
         }
-        assert(placeIndx != -1) : here + " No available spare places to allocate ";
+        if(placeIndx == -1)
+            throw new Exception(here + " No available spare places to allocate ");         
+            
         return Place(placeIndx);
     }
     
