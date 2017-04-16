@@ -43,11 +43,14 @@ public class DistributedRecoveryHelper {
         
         Console.OUT.println("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: now spare place has all needed data, let it handshake with other places ...");
         val newActivePlaces = computeNewActivePlaces(oldActivePlaces, deadPlaceVirtualPlaceId, spare);
-        val startHandshake = System.nanoTime();
-        finish at (spare) async {
+        
+        @Uncounted async at (spare) {
+            val startHandshake = System.nanoTime();
             plh().handshake(newActivePlaces, deadPlaceVirtualPlaceId);
+            plh().masterStore.reactivate();
+            val handshakeTime = System.nanoTime() - startHandshake;
+            Console.OUT.println("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: handshakeTime:"+((handshakeTime)/1e9)+" seconds");
         }
-        val handshakeTime = System.nanoTime() - startHandshake;
 
         //the application layer can now recognize a change in the places configurations
         plh().replace(deadPlaceVirtualPlaceId, spare);
@@ -55,7 +58,7 @@ public class DistributedRecoveryHelper {
         plh().masterStore.reactivate();
         val recoveryTime = System.nanoTime()-startTimeNS;
 
-        Console.OUT.println("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: completed successfully, createReplicaTime:"+((createReplicaTime)/1e9)+" seconds:handshakeTime:"+((handshakeTime)/1e9)+" seconds:totalRecoveryTime:" + ((recoveryTime)/1e9)+" seconds");
+        Console.OUT.println("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: completed successfully, createReplicaTime:"+((createReplicaTime)/1e9)+" seconds:totalRecoveryTime:" + ((recoveryTime)/1e9)+" seconds");
     }
     
     
@@ -74,6 +77,8 @@ public class DistributedRecoveryHelper {
         at (spare) async {
             Console.OUT.println("Recovering " + here + " Spare received the master replica from slave ["+me+"] ...");    
         	plh().masterStore = new MasterStore(map, plh().immediateRecovery);
+        	plh().masterStore.pausing();
+        	plh().masterStore.paused();
         	plh().slave = me;
         }
     }

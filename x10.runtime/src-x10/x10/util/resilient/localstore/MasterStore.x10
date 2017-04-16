@@ -141,6 +141,10 @@ public class MasterStore(immediateRecovery:Boolean) {
     	txManager.pausing();
     }
     
+    public def paused() {
+        txManager.paused();
+    }
+    
     public def reactivate() {
         txManager.reactivate();
     }
