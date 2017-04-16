@@ -219,7 +219,7 @@ public class STMBench {
             val start = System.nanoTime();
             var includeTx:Boolean = true;
             if (virtualMembers.size > 1 && TxConfig.get().STM ) { //STM distributed
-            	val remainingTime =  d*1e6 - timeNS;
+            	val remainingTime =  (d*1e6 - timeNS) as Long;
             	try {
 	                if (optimized)
 	                    map.executeTransaction(virtualMembers, distClosure, -1, remainingTime);
