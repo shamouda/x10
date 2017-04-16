@@ -281,6 +281,7 @@ public class STMBench {
         val activePlcs = map.getActivePlaces();
         val team = new Team(activePlcs);
      
+        val startReduce = System.nanoTime();
         finish for (p in activePlcs) async at (p) {
             val plcTh = plh();
             val count = plcTh.slices;
@@ -293,8 +294,9 @@ public class STMBench {
             team.allreduce(times, 0, p0Times, 0, count, Team.ADD);
             team.allreduce(counts, 0, p0Counts, 0, count, Team.ADD);
         }
+        val elapsedReduceNS = System.nanoTime() - startReduce;
         
-        Console.OUT.println("times and counts reduced to place 0");
+        Console.OUT.println("Reduction completed in "+((elapsedReduceNS)/1e9)+" seconds ");
         
         var allOperations:Long = 0;
         var allTimeNS:Long = 0;
