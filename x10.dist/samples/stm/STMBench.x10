@@ -11,6 +11,7 @@ import x10.util.resilient.localstore.LockingRequest.KeyInfo;
 import x10.util.resilient.localstore.LockingTx;
 import x10.util.resilient.localstore.LocalTx;
 import x10.util.resilient.localstore.AbstractTx;
+import x10.util.resilient.localstore.tx.FatalTransactionException;
 
 import x10.util.concurrent.Future;
 import x10.xrx.Runtime;
@@ -216,11 +217,17 @@ public class STMBench {
             
             //time starts here
             val start = System.nanoTime();
+            var includeTx:Boolean = true;
             if (virtualMembers.size > 1 && TxConfig.get().STM ) { //STM distributed
-                if (optimized)
-                    map.executeTransaction(virtualMembers, distClosure, -1);
-                else
-                    map.executeTransaction(distClosure, -1);
+            	val remainingTime =  d*1e6 - timeNS;
+            	try {
+	                if (optimized)
+	                    map.executeTransaction(virtualMembers, distClosure, -1, remainingTime);
+	                else
+	                    map.executeTransaction(null, distClosure, -1, remainingTime);
+            	}catch(f:FatalTransactionException) {
+            		includeTx = false;
+            	}
             }
             else if (virtualMembers.size > 1 && TxConfig.get().LOCKING ) { //locking distributed
                 map.executeLockingTransaction(lockRequests, distClosure);
@@ -243,20 +250,21 @@ public class STMBench {
             else
                 assert (false) : "wrong or unsupported configurations, members= " + virtualMembers.size;
             
-            txCount++;
-            if (g != -1 && txCount%g == 0)
-                Console.OUT.println(here + " Progress "+myVirtualPlaceId+"x"+producerId + ":" + txCount );
-            val elapsedNS = System.nanoTime() - start; 
-            timeNS += elapsedNS;
-            
-            /*time slice statistics*/
-            var slice:Long = (timeNS / (a*1e6)) as Long;
-            if (slice > myThroughput.counts.size -1 )
-                slice = myThroughput.counts.size -1;
-            myThroughput.counts(slice) += 1;
-            myThroughput.timesNS(slice) += elapsedNS;
-            myThroughput.elapsedTimeNS = timeNS;
-            
+            if (includeTx) {
+	            txCount++;
+	            if (g != -1 && txCount%g == 0)
+	                Console.OUT.println(here + " Progress "+myVirtualPlaceId+"x"+producerId + ":" + txCount );
+	            val elapsedNS = System.nanoTime() - start; 
+	            timeNS += elapsedNS;
+	            
+	            /*time slice statistics*/
+	            var slice:Long = (timeNS / (a*1e6)) as Long;
+	            if (slice > myThroughput.counts.size -1 )
+	                slice = myThroughput.counts.size -1;
+	            myThroughput.counts(slice) += 1;
+	            myThroughput.timesNS(slice) += elapsedNS;
+	            myThroughput.elapsedTimeNS = timeNS;
+            }
             val slaveChange = map.nextPlaceChange();
             if (resilient && producerId == 0 && slaveChange.changed) {
                 val nextPlace = slaveChange.newSlave;

@@ -175,52 +175,53 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     }
     
     public def executeTransaction(closure:(Tx)=>Any, maxRetries:Long):TxResult {
-        return executeTransaction(null, closure, maxRetries);
+        return executeTransaction(null, closure, maxRetries, -1);
     }
     
-    public def executeTransaction(virtualMembers:Rail[Long], closure:(Tx)=>Any, maxRetries:Long):TxResult {
-        var members:TxMembers = null;
+    public def executeTransaction(virtualMembers:Rail[Long], closure:(Tx)=>Any, maxRetries:Long, maxTimeNS:Long):TxResult {
+    	val start = System.nanoTime();
+    	var members:TxMembers = null;
         if (virtualMembers != null) 
             members = plh().getTxMembers(virtualMembers, true);
         
-            var retryCount:Long = 0;
-            while(true) {
-                if (retryCount > 0 && retryCount % 1000 == 0)
-                    Console.OUT.println(here + " executeTransaction retryCount reached " + retryCount);
-                if (retryCount == maxRetries)
-                    throw new FatalTransactionException("Reached maximum limit for retrying a transaction");
-                retryCount++;
-                
-                var tx:Tx = null; 
-                var commitCalled:Boolean = false;
-                val start = Timer.milliTime();
-                try {
-                    tx = startGlobalTransaction(members);
-                    val out:Any;
-                    finish {
-                        out = closure(tx);
-                    }
-                    tx.processingElapsedTime = Timer.milliTime() - start ;
-                    
-                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} succeeded  preCommitTime["+tx.processingElapsedTime+"] ms");
-                    commitCalled = true;
-                    return new TxResult(tx.commit(), out);
-                } catch(ex:Exception) {
-                    if (tx != null && !commitCalled) {
-                        tx.processingElapsedTime = Timer.milliTime() - start;
-                        tx.abort(); // tx.commit() aborts automatically if needed
-                    }
-                    
-                    if (TxConfig.get().TM_DEBUG) {
-                        val txId = tx == null? -1 : tx.id;
-                        Console.OUT.println("Tx[" + txId + "] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] ");
-                        ex.printStackTrace();
-                    }
-                    val dpe = throwIfFatalSleepIfRequired(ex, plh().immediateRecovery);
-                    if (dpe && virtualMembers != null)
-                        members = plh().getTxMembers(virtualMembers, true);
+        var retryCount:Long = 0;
+        while(true) {
+            if (retryCount > 0 && retryCount % 1000 == 0)
+                Console.OUT.println(here + " executeTransaction retryCount reached " + retryCount);
+            if (retryCount == maxRetries || (maxTimeNS != -1 && System.nanoTime() - start >= maxTimeNS))
+                throw new FatalTransactionException("Reached maximum limit for retrying a transaction");
+            retryCount++;
+            
+            var tx:Tx = null; 
+            var commitCalled:Boolean = false;
+            val start = Timer.milliTime();
+            try {
+                tx = startGlobalTransaction(members);
+                val out:Any;
+                finish {
+                    out = closure(tx);
                 }
+                tx.processingElapsedTime = Timer.milliTime() - start ;
+                
+                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] executeTransaction  {finish closure();} succeeded  preCommitTime["+tx.processingElapsedTime+"] ms");
+                commitCalled = true;
+                return new TxResult(tx.commit(), out);
+            } catch(ex:Exception) {
+                if (tx != null && !commitCalled) {
+                    tx.processingElapsedTime = Timer.milliTime() - start;
+                    tx.abort(); // tx.commit() aborts automatically if needed
+                }
+                
+                if (TxConfig.get().TM_DEBUG) {
+                    val txId = tx == null? -1 : tx.id;
+                    Console.OUT.println("Tx[" + txId + "] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] ");
+                    ex.printStackTrace();
+                }
+                val dpe = throwIfFatalSleepIfRequired(ex, plh().immediateRecovery);
+                if (dpe && virtualMembers != null)
+                    members = plh().getTxMembers(virtualMembers, true);
             }
+        }
     }
     
     /***********************   Lock-based Transactions ****************************/
