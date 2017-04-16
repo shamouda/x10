@@ -94,9 +94,10 @@ public class STMBench {
                 //fixme: reinit throughputPLH
             	val startIter = Timer.milliTime();
                 runIteration(map, activePlaces, p, d, a, r, u, t, h, o, g, victimsList, optimized, throughputPLH, null);
+                Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
+                
                 printThroughput(map, iter, throughputPLH, d, a, t, h, o);
                 resetStatistics(map, throughputPLH);
-                Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
             }
             
             Console.OUT.println("+++ STMBench Succeeded +++");
