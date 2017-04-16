@@ -36,7 +36,7 @@ public class TxLockCREW extends TxLock {
     private val readers = new HashSet[Long]();
     private var waitingWriter:Long = -1;
     private var writer:Long = -1;
-    
+
     public def lockRead(txId:Long, key:String) {
         try {
             lock.lock();
@@ -179,6 +179,9 @@ public class TxLockCREW extends TxLock {
                     Console.OUT.println(here + " - waitReaderWriterLocked  Tx["+txId+"]  writer["+writer+"]  waitingWriter["+waitingWriter+"] readers["+readersAsString(readers)+"] ...");
                 }
             }
+            if (count >= 1000) {
+                Console.OUT.println(here + " - waitReaderWriterLocked  Tx["+txId+"]  finished wait ...");
+            }
         } finally {
             Runtime.decreaseParallelism(1n, "waitReaderWriterLocked");    
         }
@@ -218,6 +221,9 @@ public class TxLockCREW extends TxLock {
                     Console.OUT.println(here + " - waitWriterReadersLocked  Tx["+txId+"]  writer["+writer+"]  waitingWriter["+waitingWriter+"] readers["+readersAsString(readers)+"] ...");
                 }
             }
+            if (count >= 1000) {
+                Console.OUT.println(here + " - waitWriterReadersLocked  Tx["+txId+"]  finished wait ...");
+            }
         }finally {
             Runtime.decreaseParallelism(1n, "waitWriterReadersLocked");
         }
@@ -253,6 +259,9 @@ public class TxLockCREW extends TxLock {
                 if (count%1000 == 0) {
                     Console.OUT.println(here + " - waitWriterWriterLocked  Tx["+txId+"]  writer["+writer+"]  waitingWriter["+waitingWriter+"] readers["+readersAsString(readers)+"] ...");
                 }
+            }
+            if (count >= 1000) {
+                Console.OUT.println(here + " - waitWriterWriterLocked  Tx["+txId+"]  finished wait ...");
             }
         } finally {
             Runtime.decreaseParallelism(1n, "waitWriterWriterLocked");
