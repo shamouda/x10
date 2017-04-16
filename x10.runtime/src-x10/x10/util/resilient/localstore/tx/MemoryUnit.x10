@@ -161,4 +161,5 @@ public class MemoryUnit {
     /********  Baseline methods *********/
     public def baselineGet() = value;
     
+    public def isDeleted() = deleted;
 }
