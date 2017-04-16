@@ -183,7 +183,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
         
             var retryCount:Long = 0;
             while(true) {
-                if (retryCount % 1000 == 0)
+                if (retryCount > 0 && retryCount % 1000 == 0)
                     Console.OUT.println(here + " executeTransaction retryCount reached " + retryCount);
                 if (retryCount == maxRetries)
                     throw new FatalTransactionException("Reached maximum limit for retrying a transaction");
