@@ -22,6 +22,7 @@ import x10.util.Random;
 import x10.util.RailUtils;
 import x10.util.HashSet;
 import x10.compiler.Uncounted;
+import x10.util.Team;
 
 public class STMBench {
     private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
@@ -272,38 +273,39 @@ public class STMBench {
     public static def printThroughput(map:ResilientNativeMap, iteration:Long, plh:PlaceLocalHandle[PlaceThroughput], d:Long, a:Long, t:Long, h:Long, o:Long ) {
     	//map.printTxStatistics();
         
-        val throughputList = new ArrayList[ProducerThroughput]();
+        Console.OUT.println("========================================================================");
+        Console.OUT.println("Collecting throughput information ..... .....");
+        Console.OUT.println("========================================================================");
+        
         val activePlcs = map.getActivePlaces();
-        Console.OUT.println("collecting throughput information ...");
-        for (p in activePlcs) {
-            val plcTh = at(p) plh();
-            for (i in 0..(t-1))
-                throughputList.add(plcTh.thrds(i));
-            Console.OUT.println(p + "==> " + plcTh);
+        val team = new Team(activePlcs);
+     
+        finish for (p in activePlcs) async at (p) {
+            val plcTh = plh();
+            val count = plcTh.slices;
+            val times = plcTh.mergeTimes();
+            val counts = plcTh.mergeCounts();
+            
+            val p0Times = plh().p0Times;
+            val p0Counts = plh().p0Counts;
+            
+            team.reduce(Place(0), times, 0, p0Times, 0, count, Team.ADD);
+            team.reduce(Place(0), counts, 0, p0Counts, 0, count, Team.ADD);
         }
+        
+        Console.OUT.println("times and counts reduced to place 0");
+        
         var allOperations:Long = 0;
         var allTimeNS:Long = 0;
-        val producers = throughputList.size();
         val slices = d / a;
-        val counts = new Rail[Long](slices);
-        val timesNS = new Rail[Long](slices);
-        
-        for ( producer in throughputList) {
-            var localCount:Long = 0;
-            var localTimeNS:Long = 0;
-        	for (var i:Long = 0; i < slices; i++) {
-        		localCount += producer.counts(i);
-                counts(i) += producer.counts(i);
-                localTimeNS += producer.timesNS(i);
-                timesNS(i) += producer.timesNS(i);
-        	}
-        	allOperations += localCount * h * o;
-        	allTimeNS     += localTimeNS;
-        	//assert (localTimeNS != 0) : "invalid run, a segmentation fault probably caused one place to fail";
-        	val localThroughput = (localCount as Double ) * h * o / (localTimeNS / 1e6);
-            Console.OUT.println("iteration:" + iteration +":producer:"+producer.placeId+"x"+producer.threadId+ ":localthroughput(op/MS):"+localThroughput);
+        val counts = plh().p0Counts;
+        val timesNS = plh().p0Times;
+        for (var i:Long = 0; i < slices; i++) {
+            allOperations += counts(i) * h * o;
+            allTimeNS     += timesNS(i);
         }
         
+        val producers = activePlcs.size() * t;
         val throughput = (allOperations as Double) / (allTimeNS/1e6) * producers;
         for (var i:Long = 0; i < slices; i++) {
         	if (i == 0)
@@ -544,10 +546,15 @@ class PlaceThroughput(threads:Long, slices:Long) {
     public var rightPlaceDeathTimeNS:Long = -1;
     public var virtualPlaceId:Long;
 
+    public val p0Times:Rail[Long];
+    public val p0Counts:Rail[Long];
+
     public def this(virtualPlaceId:Long, threads:Long, slices:Long) {
         property(threads, slices);
         this.virtualPlaceId = virtualPlaceId;
         thrds = new Rail[ProducerThroughput](threads, (i:Long)=> new ProducerThroughput( virtualPlaceId, i , slices));
+        p0Times = new Rail[Long](slices);
+        p0Counts = new Rail[Long](slices);
     }
     
     public def reset() {
@@ -571,6 +578,26 @@ class PlaceThroughput(threads:Long, slices:Long) {
         for (t in thrds) {
             t.elapsedTimeNS += timeNS;
         }
+    }
+    
+    public def mergeCounts():Rail[Long] {
+        val localCounts = new Rail[Long](slices);
+        for (t in thrds) {
+            for (var i:Long = 0; i < slices; i++) {
+                localCounts(i) += t.counts(i);
+            }
+        }
+        return localCounts;
+    }
+    
+    public def mergeTimes():Rail[Long] {
+        val localTimes = new Rail[Long](slices);
+        for (t in thrds) {
+            for (var i:Long = 0; i < slices; i++) {
+                localTimes(i) += t.timesNS(i);
+            }
+        }
+        return localTimes;
     }
 }
 
