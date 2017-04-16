@@ -97,7 +97,16 @@ public class STMBench {
             Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
         }
         
-        Console.OUT.println("+++ STMBench Succeeded +++");
+        val expectedDeadPlacesCount = victimsList.size();
+        var actualDead:Long = 0;
+        for (pp in Place.places()) {
+            if (pp.isDead())
+                actualDead++;
+        }
+        if (expectedDeadPlacesCount == actualDead)
+            Console.OUT.println("+++ STMBench Succeeded +++");
+        else
+            Console.OUT.println("+++ STMBench Failed, more places died ("+actualDead+") than expected ("+expectedDeadPlacesCount+") +++");
     }
     
     public static def runIteration(map:ResilientNativeMap, activePlaces:PlaceGroup, producersCount:Long, 
@@ -460,6 +469,13 @@ public class STMBench {
         			return seconds(i);
         	}
         	return -1;
+        }
+        
+        public def size() {
+            if (places == null)
+                return 0;
+            else
+                return places.size;
         }
     }
     
