@@ -44,8 +44,11 @@ public class MapData {
             val iter = metadata.keySetUnsafe().iterator();
             while (iter.hasNext()) {
                 val k = iter.next();
-                val v = metadata.getOrThrowUnsafe(k).getAtomicValueLocked(false, k, -1).value;
-                values.put(k, v);
+                val memU = metadata.getOrThrowUnsafe(k);
+                if (!memU.deleted) {
+                    val v = metadata.getOrThrowUnsafe(k).getAtomicValueLocked(false, k, -1).value;
+                    values.put(k, v);
+                }
             }
             return values;
             

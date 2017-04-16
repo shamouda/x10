@@ -89,7 +89,7 @@ public final class Runtime {
 
     public static def x10rtSendMessage(id:Long, msgBody:()=>void, prof:Profile, preSendAction:()=>void):void {
         if (id >= Place.numPlaces() || id < 0)
-            throw new Exception("FATAL exception invalid place id " + id );
+            throw new Exception(here+ " FATAL exception invalid place id " + id );
         
         var body:()=>void = msgBody;
         if (CANCELLABLE) {
@@ -124,6 +124,9 @@ public final class Runtime {
 
     public static def x10rtSendAsync(id:Long, body:()=>void, finishState:FinishState, 
                                      prof:Profile, preSendAction:()=>void):void {
+        if (id >= Place.numPlaces() || id < 0)
+            throw new Exception(here+ " FATAL exception invalid place id " + id );
+                                         
         val epoch = epoch();
         if (CANCELLABLE) {
             if (activity() != null && activity().epoch < epoch) throw new CancellationException();

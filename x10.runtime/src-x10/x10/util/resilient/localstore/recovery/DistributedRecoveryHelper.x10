@@ -60,7 +60,7 @@ public class DistributedRecoveryHelper {
         	plh().slaveStore.waitUntilPaused();
         
         val map = plh().slaveStore.getSlaveMasterState();
-        Console.OUT.println("Recovering " + here + " Slave prepared a consistent master replica to the spare master ...");
+        Console.OUT.println("Recovering " + here + " Slave prepared a consistent master replica to the spare master spare=["+spare+"] ...");
         val me = here;
         at (spare) async {
             Console.OUT.println("Recovering " + here + " Spare received the master replica from slave ["+me+"] ...");    
