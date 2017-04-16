@@ -46,6 +46,7 @@ public class DistributedRecoveryHelper {
         }
         //the application layer can now recognize a change in the places configurations
         plh().replace(deadPlaceVirtualPlaceId, spare);
+        plh().slave = spare;
         Console.OUT.println("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: completed successfully, recoveryTime:" + ((System.nanoTime()-startTimeNS)/1e9)+" seconds");
     }
     
@@ -79,7 +80,6 @@ public class DistributedRecoveryHelper {
             Console.OUT.println("Recovering " + here + " Spare received the slave replica from master ["+me+"] ...");    
             plh().slaveStore = new SlaveStore(masterState);
         }
-        plh().slave = spare;
         plh().masterStore.reactivate();
     }
     
