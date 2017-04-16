@@ -187,7 +187,6 @@ public class LocalStore(immediateRecovery:Boolean) {
     
 
     public def replace(virtualId:Long, spare:Place) {
-        //Console.OUT.println(here + " replacing : vId["+virtualId+"] spare["+spare+"] ..." );
         try {
             lock();
             val size = activePlaces.size();
@@ -207,13 +206,12 @@ public class LocalStore(immediateRecovery:Boolean) {
                 for (p in activePlaces)
                     str += p + ",  " ;
                 Console.OUT.println("Recovering " + here + " - updated activePlaces to be: " + str);
+                Console.OUT.println("Recovering " + here + " - Handshake with new place ["+spare+"]  at virtualId ["+virtualId+"] ..." );
             }
             return activePlaces;
         }finally {
             unlock();
-            Console.OUT.println("Recovering " + here + " - Handshake with new place ["+spare+"]  at virtualId ["+virtualId+"] ..." );
         }
-        
     }
     
     public def getMaster(p:Place) {
