@@ -276,8 +276,8 @@ public class STMBench {
 	                myThroughput.counts(slice) += 1;
 	            }
             }
-            else
-                Console.OUT.println(here + " finished -  elapsedTime:" + (timeNS/1e9) + " seconds");
+            /*else
+                Console.OUT.println(here + " finished -  elapsedTime:" + (timeNS/1e9) + " seconds");*/
             
             val slaveChange = map.nextPlaceChange();
             if (resilient && producerId == 0 && slaveChange.changed) {
