@@ -250,13 +250,13 @@ public class STMBench {
             else
                 assert (false) : "wrong or unsupported configurations, members= " + virtualMembers.size;
             
+            val elapsedNS = System.nanoTime() - start; 
+            timeNS += elapsedNS;
+            
             if (includeTx) {
 	            txCount++;
 	            if (g != -1 && txCount%g == 0)
 	                Console.OUT.println(here + " Progress "+myVirtualPlaceId+"x"+producerId + ":" + txCount );
-	            val elapsedNS = System.nanoTime() - start; 
-	            timeNS += elapsedNS;
-	            
 	            /*time slice statistics*/
 	            var slice:Long = (timeNS / (a*1e6)) as Long;
 	            if (slice > myThroughput.counts.size -1 )
@@ -265,6 +265,9 @@ public class STMBench {
 	            myThroughput.timesNS(slice) += elapsedNS;
 	            myThroughput.elapsedTimeNS = timeNS;
             }
+            else
+                Console.OUT.println(here + " finished -  elapsedTime:" + (timeNS/1e9) + " seconds");
+            
             val slaveChange = map.nextPlaceChange();
             if (resilient && producerId == 0 && slaveChange.changed) {
                 val nextPlace = slaveChange.newSlave;
