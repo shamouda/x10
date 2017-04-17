@@ -174,6 +174,7 @@ public class STMBench {
     public static def produce(map:ResilientNativeMap, activePlacesCount:Long, myVirtualPlaceId:Long, producersCount:Long, producerId:Long, 
     		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
     		throughput:PlaceLocalHandle[PlaceThroughput]) {
+        throughput().started = true;
         if (throughput().recovered) {
             Console.OUT.println(here + " Spare place started to produce transactions " + throughput().toString());
         }
@@ -305,6 +306,8 @@ public class STMBench {
         val startReduce = System.nanoTime();
         finish for (p in activePlcs) async at (p) {
             val plcTh = plh();
+            if (!plcTh.started)
+                throw new STMBenchFailed(here + " never started ...");
             val count = plcTh.slices;
             val times = plcTh.mergeTimes();
             val counts = plcTh.mergeCounts();
@@ -575,6 +578,7 @@ class PlaceThroughput(threads:Long, slices:Long) {
     public val p0Times:Rail[Long];
     public val p0Counts:Rail[Long];
 
+    public var started:Boolean = false;
     public var recovered:Boolean = false;
 
     public def this(virtualPlaceId:Long, threads:Long, slices:Long) {
