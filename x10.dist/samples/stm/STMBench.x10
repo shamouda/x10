@@ -82,11 +82,15 @@ public class STMBench {
         val map = store.makeMap("map");
         
         val startWarmup = Timer.milliTime();
-        Console.OUT.println("warmup started");
-        runIteration(map, activePlaces, p, w, r, u, t, h, o, g, null, optimized, throughputPLH, null);
-        resetStatistics(map, throughputPLH);
-        Console.OUT.println("warmup completed, warmup elapsed time ["+(Timer.milliTime() - startWarmup)+"]  ms ");
-        
+        if (w == -1) {
+            Console.OUT.println("no warmpup");
+        }
+        else {
+            Console.OUT.println("warmup started");
+            runIteration(map, activePlaces, p, w, r, u, t, h, o, g, null, optimized, throughputPLH, null);
+            resetStatistics(map, throughputPLH);
+            Console.OUT.println("warmup completed, warmup elapsed time ["+(Timer.milliTime() - startWarmup)+"]  ms ");
+        }
         try {
             for (iter in 1..n) {
             	val startIter = Timer.milliTime();
