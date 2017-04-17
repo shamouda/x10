@@ -92,7 +92,6 @@ public class STMBench {
         
         try {
             for (iter in 1..n) {
-                //fixme: reinit throughputPLH
             	val startIter = Timer.milliTime();
                 runIteration(map, activePlaces, p, d, a, r, u, t, h, o, g, victimsList, optimized, throughputPLH, null);
                 Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
@@ -175,7 +174,9 @@ public class STMBench {
     public static def produce(map:ResilientNativeMap, activePlacesCount:Long, myVirtualPlaceId:Long, producersCount:Long, producerId:Long, 
     		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
     		throughput:PlaceLocalHandle[PlaceThroughput]) {
-        //Console.OUT.println("PRODUCE FROM " + here);
+        if (throughput().recovered) {
+            Console.OUT.println(here + " Spare place started to produce transactions " + throughput().toString());
+        }
         var txCount:Long = 0;
         val rand = new Random((here.id+1) * producerId);
         val myThroughput = throughput().thrds(producerId);
@@ -574,6 +575,8 @@ class PlaceThroughput(threads:Long, slices:Long) {
     public val p0Times:Rail[Long];
     public val p0Counts:Rail[Long];
 
+    public val recovered:Boolean = false;
+
     public def this(virtualPlaceId:Long, threads:Long, slices:Long) {
         property(threads, slices);
         this.virtualPlaceId = virtualPlaceId;
@@ -589,6 +592,7 @@ class PlaceThroughput(threads:Long, slices:Long) {
     public def reinit(other:PlaceThroughput) {
         virtualPlaceId = other.virtualPlaceId;
         thrds = other.thrds;
+        recovered = true;
     }
     
     public def toString() {
