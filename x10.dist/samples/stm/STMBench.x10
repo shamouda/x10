@@ -330,7 +330,9 @@ public class STMBench {
         for (var i:Long = 0; i < slices; i++) {
         	if (i == 0)
         	    Console.OUT.print("iteration:" + iteration + ":sliceThroughput(op/MS):");
-        	val sliceThroughput = (counts(i) as Double) * h * o / (timesNS(i)/1e6) * producers ;
+        	var sliceThroughput:Double = 0;
+        	if (timesNS(i) != 0)
+        	    sliceThroughput = (counts(i) as Double) * h * o / (timesNS(i)/1e6) * producers ;
         	Console.OUT.print(sliceThroughput);
         	if (i != slices -1)
         		Console.OUT.print(":");	
