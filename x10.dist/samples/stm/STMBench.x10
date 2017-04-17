@@ -40,7 +40,6 @@ public class STMBench {
             Option("t","txThreadsPerPlace","number of threads creating transactions per place (default (X10_NTHREADS))"),
             Option("w","warmupTime","warm up time in milliseconds (default 5000 ms)"),
             Option("d","iterationDuration","Single iteration duration"),
-            Option("a","timeSlice","Throughput time slice"),
             Option("h","txParticipants","number of transaction participants (default 2)"),
             Option("o","TxParticipantOperations","number of operations per transaction participant (default 2)"),
             Option("g","progress","interval of progress reporting per producer (default no progress reporting)"),
@@ -56,7 +55,6 @@ public class STMBench {
         val t = opts("t", Runtime.NTHREADS as Long);
         val w = opts("w", 5000);
         val d = opts("d", 5000);
-        val a = opts("a", 1000);
         val h = opts("h", 2);
         val o = opts("o", 2);
         val g = opts("g", -1);
@@ -69,7 +67,7 @@ public class STMBench {
         val mgr = new PlaceManager(s, false);
         val activePlaces = mgr.activePlaces();
         val p = opts("p", activePlaces.size());
-        printRunConfigurations (new STMBenchParameters(r, u, n, p, t, w, d, a, h, o, g, s, optimized));
+        printRunConfigurations (new STMBenchParameters(r, u, n, p, t, w, d, h, o, g, s, optimized));
         
         assert (h <= activePlaces.size()) : "invalid value for parameter h, h should not exceed the number of active places" ;
 
@@ -77,8 +75,7 @@ public class STMBench {
             assert (p * t == 1): "lock free mode can only be used with only 1 producer thread";
         }
         
-        val timeSlices = d / a;
-        val throughputPLH = PlaceLocalHandle.make[PlaceThroughput](Place.places(), ()=> new PlaceThroughput(here.id, t, timeSlices) );
+        val throughputPLH = PlaceLocalHandle.make[PlaceThroughput](Place.places(), ()=> new PlaceThroughput(here.id, t) );
                 
         val immediateRecovery = true;
         val store = ResilientStore.make(activePlaces, immediateRecovery);
@@ -86,17 +83,17 @@ public class STMBench {
         
         val startWarmup = Timer.milliTime();
         Console.OUT.println("warmup started");
-        runIteration(map, activePlaces, p, w, a, r, u, t, h, o, g, null, optimized, throughputPLH, null);
+        runIteration(map, activePlaces, p, w, r, u, t, h, o, g, null, optimized, throughputPLH, null);
         resetStatistics(map, throughputPLH);
         Console.OUT.println("warmup completed, warmup elapsed time ["+(Timer.milliTime() - startWarmup)+"]  ms ");
         
         try {
             for (iter in 1..n) {
             	val startIter = Timer.milliTime();
-                runIteration(map, activePlaces, p, d, a, r, u, t, h, o, g, victimsList, optimized, throughputPLH, null);
+                runIteration(map, activePlaces, p, d, r, u, t, h, o, g, victimsList, optimized, throughputPLH, null);
                 Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
                 
-                printThroughput(map, iter, throughputPLH, d, a, t, h, o);
+                printThroughput(map, iter, throughputPLH, d, t, h, o);
                 resetStatistics(map, throughputPLH);
             }
             
@@ -108,12 +105,12 @@ public class STMBench {
     }
     
     public static def runIteration(map:ResilientNativeMap, activePlaces:PlaceGroup, producersCount:Long, 
-    		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
+    		d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
     		throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
         try {
             
             finish for (var i:Long = 0; i < producersCount; i++) {
-            	startPlace(activePlaces(i), map, activePlaces.size(), producersCount, d, a, r, u, t, h, o, g, victims, optimized, throughput, recoveryThroughput);
+            	startPlace(activePlaces(i), map, activePlaces.size(), producersCount, d, r, u, t, h, o, g, victims, optimized, throughput, recoveryThroughput);
             }
             
         } catch (e:STMBenchFailed) {
@@ -131,7 +128,7 @@ public class STMBench {
     }
 
     private static def startPlace(pl:Place, map:ResilientNativeMap, activePlacesCount:Long, producersCount:Long, 
-    		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
+    		d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
     		throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
         
         at (pl) async {
@@ -140,7 +137,7 @@ public class STMBench {
                 throughput().reinit(recoveryThroughput);
             
             for (thrd in 1..t) async {
-                produce(map, activePlacesCount, myVirtualPlaceId, producersCount, thrd-1, d, a, r, u, t, h, o, g, victims, optimized, throughput);
+                produce(map, activePlacesCount, myVirtualPlaceId, producersCount, thrd-1, d, r, u, t, h, o, g, victims, optimized, throughput);
             }
             
             if (resilient && victims != null) {
@@ -172,17 +169,15 @@ public class STMBench {
     }
     
     public static def produce(map:ResilientNativeMap, activePlacesCount:Long, myVirtualPlaceId:Long, producersCount:Long, producerId:Long, 
-    		d:Long, a:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
+    		d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
     		throughput:PlaceLocalHandle[PlaceThroughput]) {
         throughput().started = true;
         if (throughput().recovered) {
             Console.OUT.println(here + " Spare place started to produce transactions " + throughput().toString());
         }
-        var txCount:Long = 0;
         val rand = new Random((here.id+1) * producerId);
         val myThroughput = throughput().thrds(producerId);
         var timeNS:Long = myThroughput.elapsedTimeNS; // always 0 in non-resilient mode, non-zero for spare places in resilient mode
-        val recovering = timeNS == 0? false : true;
 
         while (timeNS < d*1e6) {
             val virtualMembers = nextTransactionMembers(rand, activePlacesCount, h, myVirtualPlaceId);
@@ -262,22 +257,11 @@ public class STMBench {
             timeNS += elapsedNS;
             myThroughput.elapsedTimeNS = timeNS;
             
-            /*time slice statistics*/
-            var slice:Long = (timeNS / (a*1e6)) as Long;
-            if (slice < myThroughput.counts.size) {
-                myThroughput.timesNS(slice) += elapsedNS;
-            }
-            
             if (includeTx) {
-	            txCount++;
-	            if (g != -1 && txCount%g == 0)
-	                Console.OUT.println(here + " Progress "+myVirtualPlaceId+"x"+producerId + ":" + txCount );
-	            if (slice < myThroughput.counts.size) {
-	                myThroughput.counts(slice) += 1;
-	            }
+	            myThroughput.txCount++;
+	            if (g != -1 && myThroughput.txCount%g == 0)
+	                Console.OUT.println(here + " Progress "+myVirtualPlaceId+"x"+producerId + ":" + myThroughput.txCount );
             }
-            /*else
-                Console.OUT.println(here + " finished -  elapsedTime:" + (timeNS/1e9) + " seconds");*/
             
             val slaveChange = map.nextPlaceChange();
             if (resilient && producerId == 0 && slaveChange.changed) {
@@ -288,12 +272,14 @@ public class STMBench {
                 val recoveryTime = System.nanoTime() - throughput().rightPlaceDeathTimeNS;
                 oldThroughput.shiftElapsedTime(recoveryTime);
                 Console.OUT.println(here + " Calculated recovery time = " + (recoveryTime/ 1e9) + " seconds" );
-        		startPlace(nextPlace, map, activePlacesCount, producersCount, d, a, r, u, t, h, o, g, victims, optimized, throughput, oldThroughput);
+        		startPlace(nextPlace, map, activePlacesCount, producersCount, d, r, u, t, h, o, g, victims, optimized, throughput, oldThroughput);
             }
         }
+        
+        Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
     }
 
-    public static def printThroughput(map:ResilientNativeMap, iteration:Long, plh:PlaceLocalHandle[PlaceThroughput], d:Long, a:Long, t:Long, h:Long, o:Long ) {
+    public static def printThroughput(map:ResilientNativeMap, iteration:Long, plh:PlaceLocalHandle[PlaceThroughput], d:Long, t:Long, h:Long, o:Long ) {
     	//map.printTxStatistics();
         
         Console.OUT.println("========================================================================");
@@ -308,43 +294,23 @@ public class STMBench {
             val plcTh = plh();
             if (!plcTh.started)
                 throw new STMBenchFailed(here + " never started ...");
-            val count = plcTh.slices;
             val times = plcTh.mergeTimes();
             val counts = plcTh.mergeCounts();
             
-            val p0Times = plh().p0Times;
-            val p0Counts = plh().p0Counts;
+            plh().reducedTime = team.allreduce(times, Team.ADD);
+            plh().reducedTxCount = team.allreduce(counts, Team.ADD);
             
-            team.allreduce(times, 0, p0Times, 0, count, Team.ADD);
-            team.allreduce(counts, 0, p0Counts, 0, count, Team.ADD);
+            val localThroughput = (counts as Double ) * h * o / (times/1e6) * t;
+            Console.OUT.println("iteration:" + iteration +":"+here+":t="+t+":localthroughput(op/MS):"+localThroughput);
         }
         val elapsedReduceNS = System.nanoTime() - startReduce;
         
-        Console.OUT.println("Reduction completed in "+((elapsedReduceNS)/1e9)+" seconds ");
         
-        var allOperations:Long = 0;
-        var allTimeNS:Long = 0;
-        val slices = d / a;
-        val counts = plh().p0Counts;
-        val timesNS = plh().p0Times;
-        for (var i:Long = 0; i < slices; i++) {
-            allOperations += counts(i) * h * o;
-            allTimeNS     += timesNS(i);
-        }
-        
+        val allOperations = plh().reducedTxCount * h * o;
+        val allTimeNS = plh().reducedTime;
         val producers = activePlcs.size() * t;
         val throughput = (allOperations as Double) / (allTimeNS/1e6) * producers;
-        for (var i:Long = 0; i < slices; i++) {
-        	if (i == 0)
-        	    Console.OUT.print("iteration:" + iteration + ":sliceThroughput(op/MS):");
-        	var sliceThroughput:Double = 0;
-        	if (timesNS(i) != 0)
-        	    sliceThroughput = (counts(i) as Double) * h * o / (timesNS(i)/1e6) * producers ;
-        	Console.OUT.print(sliceThroughput);
-        	if (i != slices -1)
-        		Console.OUT.print(":");	
-        }
-    	Console.OUT.println();
+        Console.OUT.println("Reduction completed in "+((elapsedReduceNS)/1e9)+" seconds   txCount["+plh().reducedTxCount+"] OpCount["+allOperations+"]  timeNS["+plh().reducedTime+"]");
         Console.OUT.println("iteration:" + iteration + ":globalthroughput(op/MS):"+throughput);
     }
     
@@ -429,7 +395,6 @@ public class STMBench {
         public val t:Long;  //txThreadsPerPlace
         public val w:Long;  //warmupTime
         public val d:Long;  //iterationDuration
-        public val a:Long;  //timeSlice
         public val h:Long;  //txParticipants
         public val o:Long;  //TxParticipantOperations
         public val g:Long;  //progress
@@ -437,7 +402,7 @@ public class STMBench {
         public val opt:Boolean;
     
         def this(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, 
-                d:Long, a:Long, h:Long, o:Long, g:Long, s:Long, opt:Boolean) {
+                d:Long, h:Long, o:Long, g:Long, s:Long, opt:Boolean) {
             this.r = r;
             this.u = u;
             this.n = n;
@@ -445,7 +410,6 @@ public class STMBench {
             this.t = t;
             this.w = w;
             this.d = d;
-            this.a = a;
             this.h = h;
             this.o = o;
             this.g = g;
@@ -527,7 +491,6 @@ public class STMBench {
         Console.OUT.println("t=" + param.t);
         Console.OUT.println("w=" + param.w);
         Console.OUT.println("d=" + param.d);
-        Console.OUT.println("a=" + param.a);
         Console.OUT.println("h=" + param.h + "   !!! At least one place is local !!!!   ");
         Console.OUT.println("o=" + param.o);
         Console.OUT.println("g=" + param.g);
@@ -538,59 +501,48 @@ public class STMBench {
 
 class ProducerThroughput {
     public var elapsedTimeNS:Long = 0;
+    public var txCount:Long = 0;
     public val placeId:Long;
     public val threadId:Long;
-    public val timesNS:Rail[Long];
-    public val counts:Rail[Long];
-    public def this (placeId:Long, threadId:Long, timesNS:Rail[Long], counts:Rail[Long]) {
-        this.timesNS = timesNS;
-        this.counts = counts;
+
+    public def this (placeId:Long, threadId:Long, elapsedTimeNS:Long, txCount:Long) {
+        this.elapsedTimeNS = elapsedTimeNS;
+        this.txCount = txCount;
         this.placeId = placeId;
         this.threadId = threadId;
     }
     
-    public def this(placeId:Long, threadId:Long, slices:Long) {
+    public def this(placeId:Long, threadId:Long) {
         this.placeId = placeId;
         this.threadId = threadId;
-        timesNS = new Rail[Long](slices);
-        counts = new Rail[Long](slices);
     }
     
     public def toString() {
-        var cstr:String = ", slices(";
-        for (var i:Long = 0; i< counts.size; i++){
-            cstr += counts(i) ;
-            if (i != counts.size -1)
-                cstr += ",";
-        }
-        cstr += ")";
-        return placeId+"x"+threadId +": elapsedTime=" + elapsedTimeNS/1e9 + " seconds " + cstr;
+        return placeId+"x"+threadId +": elapsedTime=" + elapsedTimeNS/1e9 + " seconds  txCount= " + txCount;
     }
 }
 
 
-class PlaceThroughput(threads:Long, slices:Long) {
+class PlaceThroughput(threads:Long) {
     public var thrds:Rail[ProducerThroughput];
     public var rightPlaceThroughput:PlaceThroughput;
     public var rightPlaceDeathTimeNS:Long = -1;
     public var virtualPlaceId:Long;
 
-    public val p0Times:Rail[Long];
-    public val p0Counts:Rail[Long];
-
     public var started:Boolean = false;
     public var recovered:Boolean = false;
 
-    public def this(virtualPlaceId:Long, threads:Long, slices:Long) {
-        property(threads, slices);
+    public var reducedTime:Long;
+    public var reducedTxCount:Long;
+
+    public def this(virtualPlaceId:Long, threads:Long) {
+        property(threads);
         this.virtualPlaceId = virtualPlaceId;
-        thrds = new Rail[ProducerThroughput](threads, (i:Long)=> new ProducerThroughput( virtualPlaceId, i , slices));
-        p0Times = new Rail[Long](slices);
-        p0Counts = new Rail[Long](slices);
+        thrds = new Rail[ProducerThroughput](threads, (i:Long)=> new ProducerThroughput( virtualPlaceId, i));
     }
     
     public def reset() {
-        thrds = new Rail[ProducerThroughput](threads, (i:Long)=> new ProducerThroughput( virtualPlaceId, i , slices));
+        thrds = new Rail[ProducerThroughput](threads, (i:Long)=> new ProducerThroughput( virtualPlaceId, i));
     }
     
     public def reinit(other:PlaceThroughput) {
@@ -613,24 +565,20 @@ class PlaceThroughput(threads:Long, slices:Long) {
         }
     }
     
-    public def mergeCounts():Rail[Long] {
-        val localCounts = new Rail[Long](slices);
+    public def mergeCounts():Long {
+        var sumCount:Long = 0;
         for (t in thrds) {
-            for (var i:Long = 0; i < slices; i++) {
-                localCounts(i) += t.counts(i);
-            }
+            sumCount+= t.txCount;
         }
-        return localCounts;
+        return sumCount;
     }
     
-    public def mergeTimes():Rail[Long] {
-        val localTimes = new Rail[Long](slices);
+    public def mergeTimes():Long {
+        var sumTimes:Long = 0;
         for (t in thrds) {
-            for (var i:Long = 0; i < slices; i++) {
-                localTimes(i) += t.timesNS(i);
-            }
+            sumTimes += t.elapsedTimeNS;
         }
-        return localTimes;
+        return sumTimes;
     }
 }
 
