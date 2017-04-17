@@ -575,7 +575,7 @@ class PlaceThroughput(threads:Long, slices:Long) {
     public val p0Times:Rail[Long];
     public val p0Counts:Rail[Long];
 
-    public val recovered:Boolean = false;
+    public var recovered:Boolean = false;
 
     public def this(virtualPlaceId:Long, threads:Long, slices:Long) {
         property(threads, slices);
