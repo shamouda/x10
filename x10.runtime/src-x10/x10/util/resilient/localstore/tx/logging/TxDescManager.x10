@@ -67,10 +67,14 @@ public class TxDescManager(map:ResilientNativeMap) {
     }
     
     public def getVirtualMembers(id:Long, masterType:Boolean) {
-        if (masterType)
-            return getVirtualMembersFromMasterStore(id);
-        else
-            return getVirtualMembersFromSlaveStore(id);
+        try {
+            if (masterType)
+                return getVirtualMembersFromMasterStore(id);
+            else
+                return getVirtualMembersFromSlaveStore(id);
+        } catch (spe:StorePausedException) {
+            return null;
+        }
     }
     
     private def getVirtualMembersFromMasterStore(id:Long) {
