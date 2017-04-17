@@ -284,7 +284,7 @@ public class STMBench {
     }
 
     public static def printThroughput(map:ResilientNativeMap, producersCount:Long, iteration:Long, plh:PlaceLocalHandle[PlaceThroughput], d:Long, t:Long, h:Long, o:Long ) {
-    	//map.printTxStatistics();
+    	map.printTxStatistics();
         
         Console.OUT.println("========================================================================");
         Console.OUT.println("Collecting throughput information ..... .....");
