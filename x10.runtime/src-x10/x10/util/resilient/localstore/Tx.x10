@@ -88,8 +88,12 @@ public class Tx extends AbstractTx {
         else 
             return;
         
-        commitHandler.abort(recovery);
-        
+        try {
+            commitHandler.abort(recovery);
+        }
+        catch (ex:Exception) {
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here="+ here + " ignoring exception during abort ");    
+        }
         abortTime = Timer.milliTime();
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here="+ here + " aborted, allTxTime ["+(abortTime-startTime)+"] ms");
     }
