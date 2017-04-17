@@ -121,7 +121,7 @@ public class STMBench {
             throw e;
         } catch (mulExp:MultipleExceptions) {
             val stmFailed = mulExp.getExceptionsOfType[STMBenchFailed]();
-            if (stmFailed != null || !resilient)
+            if ((stmFailed != null && stmFailed.size != 0) || !resilient)
                 throw mulExp;
             mulExp.printStackTrace();
         } catch(e:Exception) {
