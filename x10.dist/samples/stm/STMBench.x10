@@ -487,7 +487,7 @@ public class STMBench {
         Console.OUT.println("DISABLE_SLAVE=" + System.getenv("DISABLE_SLAVE"));
         Console.OUT.println("DISABLE_INCR_PARALLELISM=" + System.getenv("DISABLE_INCR_PARALLELISM"));
         Console.OUT.println("X10_EXIT_BY_SIGKILL=" + System.getenv("X10_EXIT_BY_SIGKILL"));
-        
+        Console.OUT.println("COMMIT=" + System.getenv("COMMIT"));
         
         Console.OUT.println("r=" + param.r);
         Console.OUT.println("u=" + param.u);
