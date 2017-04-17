@@ -71,7 +71,7 @@ public abstract class CommitHandler {
                 }
             }
         }finally {
-            if (deleteTxDesc) {
+            if (deleteTxDesc && childrenVirtual != null) {
                 plh().txDescManager.delete(id, true);
             }
         }
