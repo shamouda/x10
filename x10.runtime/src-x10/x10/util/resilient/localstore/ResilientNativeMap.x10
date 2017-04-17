@@ -155,7 +155,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
             if (members != null)
                 predefinedMembers = members.virtual;
 
-            if (members == null || resilient)
+            if ((members == null || resilient) && TxConfig.get().COMMIT)
                 plh().txDescManager.add(id, predefinedMembers, false);
             
             plh().txList.addGlobalTx(tx);
