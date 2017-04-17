@@ -300,8 +300,8 @@ public class STMBench {
             plh().reducedTime = team.allreduce(times, Team.ADD);
             plh().reducedTxCount = team.allreduce(counts, Team.ADD);
             
-            val localThroughput = (counts as Double ) * h * o / (times/1e6) * t;
-            Console.OUT.println("iteration:" + iteration +":"+here+":t="+t+":localthroughput(op/MS):"+localThroughput);
+            /*val localThroughput = (counts as Double ) * h * o / (times/1e6) * t;
+            Console.OUT.println("iteration:" + iteration +":"+here+":t="+t+":localthroughput(op/MS):"+localThroughput);*/
         }
         val elapsedReduceNS = System.nanoTime() - startReduce;
         
