@@ -15,6 +15,7 @@ package x10.util.resilient.localstore.tx.logging;
 import x10.util.resilient.localstore.tx.TxManager;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.TxConfig;
+import x10.util.resilient.localstore.tx.StorePausedException;
 
 public class TxDescManager(map:ResilientNativeMap) {
     public static val FROM_SLAVE = false;
