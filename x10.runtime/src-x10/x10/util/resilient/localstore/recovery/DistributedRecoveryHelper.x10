@@ -79,6 +79,7 @@ public class DistributedRecoveryHelper {
         	plh().masterStore.pausing();
         	plh().masterStore.paused();
         	plh().slave = me;
+        	plh().oldSlave = me;
         }
     }
     
