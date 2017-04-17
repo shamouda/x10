@@ -122,6 +122,7 @@ public class STMBench {
         } catch(e:Exception) {
             if (!resilient)
                 throw e;
+            e.printStackTrace();
         }
     }
 
