@@ -258,18 +258,21 @@ public class STMBench {
             
             val elapsedNS = System.nanoTime() - start; 
             timeNS += elapsedNS;
+            myThroughput.elapsedTimeNS = timeNS;
+            
+            /*time slice statistics*/
+            var slice:Long = (timeNS / (a*1e6)) as Long;
+            if (slice < myThroughput.counts.size) {
+                myThroughput.timesNS(slice) += elapsedNS;
+            }
             
             if (includeTx) {
 	            txCount++;
 	            if (g != -1 && txCount%g == 0)
 	                Console.OUT.println(here + " Progress "+myVirtualPlaceId+"x"+producerId + ":" + txCount );
-	            /*time slice statistics*/
-	            var slice:Long = (timeNS / (a*1e6)) as Long;
-	            if (slice > myThroughput.counts.size -1 )
-	                slice = myThroughput.counts.size -1;
-	            myThroughput.counts(slice) += 1;
-	            myThroughput.timesNS(slice) += elapsedNS;
-	            myThroughput.elapsedTimeNS = timeNS;
+	            if (slice < myThroughput.counts.size) {
+	                myThroughput.counts(slice) += 1;
+	            }
             }
             else
                 Console.OUT.println(here + " finished -  elapsedTime:" + (timeNS/1e9) + " seconds");
