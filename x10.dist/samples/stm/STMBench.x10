@@ -91,10 +91,16 @@ public class STMBench {
             resetStatistics(map, throughputPLH);
             Console.OUT.println("warmup completed, warmup elapsed time ["+(Timer.milliTime() - startWarmup)+"]  ms ");
         }
+        
         try {
             for (iter in 1..n) {
             	val startIter = Timer.milliTime();
-                runIteration(map, activePlaces, p, d, r, u, t, h, o, g, victimsList, optimized, throughputPLH, null);
+            	var victim:VictimsList = victimsList;
+            	if (victim.onePerIteration)
+            	    victim = victimsList.getVictim(iter-1);
+            	else
+            	    victim = victimsList;
+                runIteration(map, activePlaces, p, d, r, u, t, h, o, g, victim, optimized, throughputPLH, null);
                 Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
                 
                 printThroughput(map, p, iter, throughputPLH, d, t, h, o);
@@ -296,14 +302,14 @@ public class STMBench {
             val team = new Team(activePlcs);
             finish for (p in activePlcs) async at (p) {
                 val plcTh = plh();
-                if (!plcTh.started)
-                    throw new STMBenchFailed(here + " never started ...");
                 val times = plcTh.mergeTimes();
                 val counts = plcTh.mergeCounts();
                 
                 plh().reducedTime = team.allreduce(times, Team.ADD);
                 plh().reducedTxCount = team.allreduce(counts, Team.ADD);
                 
+                if (!plcTh.started)
+                    throw new STMBenchFailed(here + " never started ...");
                 /*val localThroughput = (counts as Double ) * h * o / (times/1e6) * t;
                 Console.OUT.println("iteration:" + iteration +":"+here+":t="+t+":localthroughput(op/MS):"+localThroughput);*/
             }
@@ -321,6 +327,7 @@ public class STMBench {
         val throughput = (allOperations as Double) / (allTimeNS/1e6) * producers;
         Console.OUT.println("Reduction completed in "+((elapsedReduceNS)/1e9)+" seconds   txCount["+plh().reducedTxCount+"] OpCount["+allOperations+"]  timeNS["+plh().reducedTime+"]");
         Console.OUT.println("iteration:" + iteration + ":globalthroughput(op/MS):"+throughput);
+        Console.OUT.println("========================================================================");
     }
     
     public static def resetStatistics(map:ResilientNativeMap, plh:PlaceLocalHandle[PlaceThroughput]) {
@@ -430,7 +437,22 @@ public class STMBench {
     static class VictimsList {
     	private val places:Rail[Long];
 	    private val seconds:Rail[Long];
-    	
+    	private var onePerIteration:Boolean;
+    
+        public def this(place:Long, time:Long) {
+            onePerIteration = true;
+            places = new Rail[Long](1);
+            seconds = new Rail[Long](1);
+            places(0) = place;
+            seconds(0) = time;
+        }
+
+        public def getVictim(i:Long) {
+            if (i >= places.size)
+                return null;
+            return new VictimsList(places(i), seconds(i));
+        }
+        
         public def this(vp:String, vt:String) {
         	if (vp != null && !vp.equals("")) {
         	    assert (resilient) : "assertion error, set X10_RESILIENT_MODE to a non-zero value";
@@ -445,10 +467,20 @@ public class STMBench {
         	
         	if (vt != null && !vt.equals("")) {
         	    assert (resilient) : "assertion error, set X10_RESILIENT_MODE to a non-zero value";
-        		val tmp = vt.split(",");
-        		seconds = new Rail[Long](tmp.size);
-        	    for (var i:Long = 0; i < tmp.size; i++) {
-        	    	seconds(i) = Long.parseLong(tmp(i));
+        	    if (vt.equals("-1") && places != null) {
+        	        onePerIteration = true;
+        	        seconds = new Rail[Long](places.size);
+        	        for (var i:Long = 0 ; i< places.size; i++) {
+        	            seconds(i) = 1;
+        	        }
+        	    }
+        	    else {
+        	        onePerIteration = false;
+            		val tmp = vt.split(",");
+            		seconds = new Rail[Long](tmp.size);
+            	    for (var i:Long = 0; i < tmp.size; i++) {
+            	    	seconds(i) = Long.parseLong(tmp(i));
+            	    }
         	    }
         	}
         	else
