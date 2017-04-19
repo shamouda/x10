@@ -87,7 +87,7 @@ public class STMBench {
         }
         else {
             Console.OUT.println("warmup started");
-            runIteration(map, activePlaces, p, w, r, u, t, h, o, g, null, optimized, throughputPLH, null);
+            runIteration(map, p, w, r, u, t, h, o, g, null, optimized, throughputPLH, null);
             resetStatistics(map, throughputPLH);
             Console.OUT.println("warmup completed, warmup elapsed time ["+(Timer.milliTime() - startWarmup)+"]  ms ");
         }
@@ -100,7 +100,7 @@ public class STMBench {
             	    victim = victimsList.getVictim(iter-1);
             	else
             	    victim = victimsList;
-                runIteration(map, activePlaces, p, d, r, u, t, h, o, g, victim, optimized, throughputPLH, null);
+                runIteration(map, p, d, r, u, t, h, o, g, victim, optimized, throughputPLH, null);
                 Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
                 
                 printThroughput(map, p, iter, throughputPLH, d, t, h, o);
@@ -114,9 +114,10 @@ public class STMBench {
         }
     }
     
-    public static def runIteration(map:ResilientNativeMap, activePlaces:PlaceGroup, producersCount:Long, 
+    public static def runIteration(map:ResilientNativeMap, producersCount:Long, 
     		d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
     		throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
+        val activePlaces = map.getActivePlaces();
         try {
             
             finish for (var i:Long = 0; i < producersCount; i++) {
