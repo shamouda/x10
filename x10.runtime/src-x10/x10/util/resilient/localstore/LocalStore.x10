@@ -114,6 +114,9 @@ public class LocalStore(immediateRecovery:Boolean) {
     public def handshake (oldActivePlaces:PlaceGroup, vId:Long) {
         try {
             plh().lock();
+            val deadPlace = activePlaces(vId);
+            this.replacementHistory.put(deadPlace.id, here.id);
+            
             this.virtualPlaceId = vId;
             //update other places according to the version of active places that my master is aware of
             val newAddedPlaces = new GlobalRef[ArrayList[PlaceChange]](new ArrayList[PlaceChange]());
