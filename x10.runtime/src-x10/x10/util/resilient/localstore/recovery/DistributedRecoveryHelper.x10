@@ -53,7 +53,7 @@ public class DistributedRecoveryHelper {
         
         finish at (spare) async {
             val startHandshake = System.nanoTime();
-            plh().handshake(newActivePlaces, deadPlaceVirtualPlaceId);
+            plh().handshake(newActivePlaces, deadPlaceVirtualPlaceId, deadSlave);
             plh().masterStore.reactivate();
             val handshakeTime = System.nanoTime() - startHandshake;
             Console.OUT.println("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: handshakeTime:"+((handshakeTime)/1e9)+" seconds");

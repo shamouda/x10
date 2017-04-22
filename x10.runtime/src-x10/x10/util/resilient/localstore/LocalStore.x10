@@ -111,10 +111,9 @@ public class LocalStore(immediateRecovery:Boolean) {
     };
     
     
-    public def handshake (oldActivePlaces:PlaceGroup, vId:Long) {
+    public def handshake (oldActivePlaces:PlaceGroup, vId:Long, deadPlace:Place) {
         try {
             plh().lock();
-            val deadPlace = activePlaces(vId);
             this.replacementHistory.put(deadPlace.id, here.id);
             
             this.virtualPlaceId = vId;
