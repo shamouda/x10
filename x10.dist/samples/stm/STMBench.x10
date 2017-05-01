@@ -94,12 +94,12 @@ public class STMBench {
         
         try {
             for (iter in 1..n) {
-            	val startIter = Timer.milliTime();
-            	var victim:VictimsList = victimsList;
-            	if (victim.onePerIteration)
-            	    victim = victimsList.getVictim(iter-1);
-            	else
-            	    victim = victimsList;
+                val startIter = Timer.milliTime();
+                var victim:VictimsList = victimsList;
+                if (victim.onePerIteration)
+                    victim = victimsList.getVictim(iter-1);
+                else
+                    victim = victimsList;
                 runIteration(map, p, d, r, u, t, h, o, g, victim, optimized, throughputPLH, null);
                 Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
                 
@@ -115,13 +115,13 @@ public class STMBench {
     }
     
     public static def runIteration(map:ResilientNativeMap, producersCount:Long, 
-    		d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
-    		throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
+            d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
+            throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
         val activePlaces = map.getActivePlaces();
         try {
             
             finish for (var i:Long = 0; i < producersCount; i++) {
-            	startPlace(activePlaces(i), map, activePlaces.size(), producersCount, d, r, u, t, h, o, g, victims, optimized, throughput, recoveryThroughput);
+                startPlace(activePlaces(i), map, activePlaces.size(), producersCount, d, r, u, t, h, o, g, victims, optimized, throughput, recoveryThroughput);
             }
             
         } catch (e:STMBenchFailed) {
@@ -139,8 +139,8 @@ public class STMBench {
     }
 
     private static def startPlace(pl:Place, map:ResilientNativeMap, activePlacesCount:Long, producersCount:Long, 
-    		d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
-    		throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
+            d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
+            throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
         
         at (pl) async {
             val myVirtualPlaceId = map.getVirtualPlaceId();
@@ -152,36 +152,36 @@ public class STMBench {
             }
             
             if (resilient && victims != null) {
-            	val killTime = victims.getKillTime(here);
-            	if (killTime != -1) {
-            		@Uncounted async {
-            			Console.OUT.println("Hammer kill timer at "+here+" starting sleep for "+killTime+" secs");
-            			val deadline = System.currentTimeMillis() + 1000 * killTime;
-            			while (deadline > System.currentTimeMillis()) {
-            				val sleepTime = deadline - System.currentTimeMillis();
-            				System.sleep(sleepTime);
-            			}
-            			
-            			val prev = map.plh().getMaster(here);
-            			val myThroughput = throughput();
-            			val me = here;
-            			at (prev) {
-            			    throughput().rightPlaceThroughput = myThroughput;
-            			    throughput().rightPlaceDeathTimeNS =  System.nanoTime();
-            			    Console.OUT.println(here + " Received suicide note from " + me + " througputValues: " + myThroughput);
-            			}
-            			
-            			Console.OUT.println(here + " Hammer calling killHere" );
-            			System.killHere();
-            		}
-            	}
+                val killTime = victims.getKillTime(here);
+                if (killTime != -1) {
+                    @Uncounted async {
+                        Console.OUT.println("Hammer kill timer at "+here+" starting sleep for "+killTime+" secs");
+                        val deadline = System.currentTimeMillis() + 1000 * killTime;
+                        while (deadline > System.currentTimeMillis()) {
+                            val sleepTime = deadline - System.currentTimeMillis();
+                            System.sleep(sleepTime);
+                        }
+                        
+                        val prev = map.plh().getMaster(here);
+                        val myThroughput = throughput();
+                        val me = here;
+                        at (prev) {
+                            throughput().rightPlaceThroughput = myThroughput;
+                            throughput().rightPlaceDeathTimeNS =  System.nanoTime();
+                            Console.OUT.println(here + " Received suicide note from " + me + " througputValues: " + myThroughput);
+                        }
+                        
+                        Console.OUT.println(here + " Hammer calling killHere" );
+                        System.killHere();
+                    }
+                }
             }
         }
     }
     
     public static def produce(map:ResilientNativeMap, activePlacesCount:Long, myVirtualPlaceId:Long, producersCount:Long, producerId:Long, 
-    		d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
-    		throughput:PlaceLocalHandle[PlaceThroughput]) {
+            d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
+            throughput:PlaceLocalHandle[PlaceThroughput]) {
         throughput().started = true;
         if (throughput().recovered) {
             Console.OUT.println(here + " Spare place started to produce transactions " + throughput().toString());
@@ -233,15 +233,15 @@ public class STMBench {
             val start = System.nanoTime();
             var includeTx:Boolean = true;
             if (virtualMembers.size > 1 && TxConfig.get().STM ) { //STM distributed
-            	val remainingTime =  (d*1e6 - timeNS) as Long;
-            	try {
-	                if (optimized)
-	                    map.executeTransaction(virtualMembers, distClosure, -1, remainingTime);
-	                else
-	                    map.executeTransaction(null, distClosure, -1, remainingTime);
-            	}catch(f:FatalTransactionException) {
-            		includeTx = false;
-            	}
+                val remainingTime =  (d*1e6 - timeNS) as Long;
+                try {
+                    if (optimized)
+                        map.executeTransaction(virtualMembers, distClosure, -1, remainingTime);
+                    else
+                        map.executeTransaction(null, distClosure, -1, remainingTime);
+                }catch(f:FatalTransactionException) {
+                    includeTx = false;
+                }
             }
             else if (virtualMembers.size > 1 && TxConfig.get().LOCKING ) { //locking distributed
                 map.executeLockingTransaction(lockRequests, distClosure);
@@ -269,9 +269,9 @@ public class STMBench {
             myThroughput.elapsedTimeNS = timeNS;
             
             if (includeTx) {
-	            myThroughput.txCount++;
-	            if (g != -1 && myThroughput.txCount%g == 0)
-	                Console.OUT.println(here + " Progress "+myVirtualPlaceId+"x"+producerId + ":" + myThroughput.txCount );
+                myThroughput.txCount++;
+                if (g != -1 && myThroughput.txCount%g == 0)
+                    Console.OUT.println(here + " Progress "+myVirtualPlaceId+"x"+producerId + ":" + myThroughput.txCount );
             }
             
             val slaveChange = map.nextPlaceChange();
@@ -279,11 +279,11 @@ public class STMBench {
                 val nextPlace = slaveChange.newSlave;
                 if (throughput().rightPlaceDeathTimeNS == -1)
                     throw new STMBenchFailed(here + " assertion error, did not receive suicide note ...");
-        		val oldThroughput = throughput().rightPlaceThroughput;
+                val oldThroughput = throughput().rightPlaceThroughput;
                 val recoveryTime = System.nanoTime() - throughput().rightPlaceDeathTimeNS;
                 oldThroughput.shiftElapsedTime(recoveryTime);
                 Console.OUT.println(here + " Calculated recovery time = " + (recoveryTime/ 1e9) + " seconds" );
-        		startPlace(nextPlace, map, activePlacesCount, producersCount, d, r, u, t, h, o, g, victims, optimized, throughput, oldThroughput);
+                startPlace(nextPlace, map, activePlacesCount, producersCount, d, r, u, t, h, o, g, victims, optimized, throughput, oldThroughput);
             }
         }
         
@@ -291,7 +291,7 @@ public class STMBench {
     }
 
     public static def printThroughput(map:ResilientNativeMap, producersCount:Long, iteration:Long, plh:PlaceLocalHandle[PlaceThroughput], d:Long, t:Long, h:Long, o:Long ) {
-    	map.printTxStatistics();
+        map.printTxStatistics();
         
         Console.OUT.println("========================================================================");
         Console.OUT.println("Collecting throughput information ..... .....");
@@ -436,9 +436,9 @@ public class STMBench {
     };
     
     static class VictimsList {
-    	private val places:Rail[Long];
-	    private val seconds:Rail[Long];
-    	private var onePerIteration:Boolean;
+        private val places:Rail[Long];
+        private val seconds:Rail[Long];
+        private var onePerIteration:Boolean;
     
         public def this(place:Long, time:Long) {
             onePerIteration = true;
@@ -455,52 +455,52 @@ public class STMBench {
         }
         
         public def this(vp:String, vt:String) {
-        	if (vp != null && !vp.equals("")) {
-        	    assert (resilient) : "assertion error, set X10_RESILIENT_MODE to a non-zero value";
-        	    val tmp = vp.split(",");
-        	    places = new Rail[Long](tmp.size);
-        	    for (var i:Long = 0; i < tmp.size; i++) {
-        	    	places(i) = Long.parseLong(tmp(i));
-        	    }
-        	}
-        	else
-        		places = null;
-        	
-        	if (vt != null && !vt.equals("")) {
-        	    assert (resilient) : "assertion error, set X10_RESILIENT_MODE to a non-zero value";
-        	    if (vt.equals("-1") && places != null) {
-        	        onePerIteration = true;
-        	        seconds = new Rail[Long](places.size);
-        	        for (var i:Long = 0 ; i< places.size; i++) {
-        	            seconds(i) = 1;
-        	        }
-        	    }
-        	    else {
-        	        onePerIteration = false;
-            		val tmp = vt.split(",");
-            		seconds = new Rail[Long](tmp.size);
-            	    for (var i:Long = 0; i < tmp.size; i++) {
-            	    	seconds(i) = Long.parseLong(tmp(i));
-            	    }
-        	    }
-        	}
-        	else
-        		seconds = null;
-        	
-        	if (places != null){
-        	    assert (seconds != null) : "assertion error, -vt is missing" ;
-        		assert (places.size == seconds.size) : "wrong victims configurations" ;
-        	}
+            if (vp != null && !vp.equals("")) {
+                assert (resilient) : "assertion error, set X10_RESILIENT_MODE to a non-zero value";
+                val tmp = vp.split(",");
+                places = new Rail[Long](tmp.size);
+                for (var i:Long = 0; i < tmp.size; i++) {
+                    places(i) = Long.parseLong(tmp(i));
+                }
+            }
+            else
+                places = null;
+            
+            if (vt != null && !vt.equals("")) {
+                assert (resilient) : "assertion error, set X10_RESILIENT_MODE to a non-zero value";
+                if (vt.equals("-1") && places != null) {
+                    onePerIteration = true;
+                    seconds = new Rail[Long](places.size);
+                    for (var i:Long = 0 ; i< places.size; i++) {
+                        seconds(i) = 1;
+                    }
+                }
+                else {
+                    onePerIteration = false;
+                    val tmp = vt.split(",");
+                    seconds = new Rail[Long](tmp.size);
+                    for (var i:Long = 0; i < tmp.size; i++) {
+                        seconds(i) = Long.parseLong(tmp(i));
+                    }
+                }
+            }
+            else
+                seconds = null;
+            
+            if (places != null){
+                assert (seconds != null) : "assertion error, -vt is missing" ;
+                assert (places.size == seconds.size) : "wrong victims configurations" ;
+            }
         }
         
         public def getKillTime(p:Place) {
-        	if (places == null)
-        		return -1;
-        	for (var i:Long = 0; i < places.size; i++){
-        		if (p.id == places(i))
-        			return seconds(i);
-        	}
-        	return -1;
+            if (places == null)
+                return -1;
+            for (var i:Long = 0; i < places.size; i++){
+                if (p.id == places(i))
+                    return seconds(i);
+            }
+            return -1;
         }
         
         public def size() {
