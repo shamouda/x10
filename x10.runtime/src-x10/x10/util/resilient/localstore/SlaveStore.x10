@@ -248,7 +248,7 @@ public class SlaveStore {
     }
     
     
-    public def getTransDescriptors():ArrayList[TxDesc] {
+    public def getTransDescriptors(place:Place):ArrayList[TxDesc] {
         val result = new ArrayList[TxDesc]();
         try {
             slaveLock();
@@ -256,11 +256,14 @@ public class SlaveStore {
                 val set = masterState.keySet();
                 val iter = set.iterator();
                 while (iter.hasNext()) {
-                    val txId = iter.next();
-                    if (txId.contains("_TxDesc_")) {
-                        val obj = masterState.get(txId);
+                    val key = iter.next();
+                    if (key.contains("_TxDesc_")) {
+                        val obj = masterState.get(key);
                         if (obj != null) {
-                            result.add(obj as TxDesc);
+                            val desc = obj as TxDesc;
+                            val placeId = TxConfig.getTxPlaceId(desc.id);
+                            if (placeId == (place.id) as Int)
+                                result.add(desc);
                         }
                     }
                 }
