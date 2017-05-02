@@ -204,7 +204,7 @@ public class BankAsyncResilient {
                 if (optimized)
                     res = map.executeTransaction( members, bankClosure );
                 else
-                    res = map.executeTransaction( bankClosure );    
+                    res = map.executeTransaction( bankClosure, -1, -1 );    
                 
                 if (res.commitStatus == Tx.SUCCESS_RECOVER_STORE)
                     throw new RecoverDataStoreException("RecoverDataStoreException", here);
