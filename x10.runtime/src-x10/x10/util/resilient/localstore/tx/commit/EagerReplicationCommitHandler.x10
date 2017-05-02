@@ -13,6 +13,7 @@ import x10.util.GrowableRail;
 import x10.util.HashSet;
 import x10.compiler.Pinned;
 import x10.util.resilient.localstore.tx.logging.TxDescManager;
+import x10.compiler.Uncounted;
 
 /*
  * In eager replication, transaction side effects are applied at the slave immediately by the master.
@@ -27,18 +28,34 @@ import x10.util.resilient.localstore.tx.logging.TxDescManager;
  * */
 public class EagerReplicationCommitHandler extends ResilientCommitHandler {
     
-	public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers) {
-	    super(plh, id, mapName, members);	
-	}
-	
-	/*
-	 * recovery = false (default) master is alive
-	 * recovery = true means that the slave is acting as master to abort a transaction that the master started before it died
-	 **/
-	public def abort_resilient(recovery:Boolean){
-	    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " abort_resilient started ...");
-	    val abort_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { abort_local_resilient(plh, id); } ;
-	    val abort_slave = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { plh().slaveStore.abort(id); } ;
+    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers) {
+        super(plh, id, mapName, members);
+    }
+    
+    private def asyncDeleteDescriptors(recovery:Boolean, masters:ArrayList[Place]) {
+        val deleteDesc_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { plh().txDescManager.delete(id, true); } ;
+        val deleteDesc_slave = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { plh().txDescManager.deleteTxDescFromSlaveStore(id); } ;
+    
+        @Uncounted async {
+            try {
+                if (recovery) { //delete at slave
+                    plh().txDescManager.deleteTxDescFromSlaveStore(id);
+                }
+                executeRecursivelyResilient(deleteDesc_master, deleteDesc_slave, masters);
+            }catch(ex:Exception) {
+                //ignore exceptions while delete
+            }
+        }
+    }
+    
+    /*
+     * recovery = false (default) master is alive
+     * recovery = true means that the slave is acting as master to abort a transaction that the master started before it died
+     **/
+    public def abort_resilient(recovery:Boolean){
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " abort_resilient started ...");
+        val abort_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { abort_local_resilient(plh, id); } ;
+        val abort_slave = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { plh().slaveStore.abort(id); } ;
         if (members != null) {
             try { 
                 finish executeFlat(abort_master, true);
@@ -61,21 +78,22 @@ public class EagerReplicationCommitHandler extends ResilientCommitHandler {
                     for (p in members.places)
                         masters.add(p);
                 }
-                plh().txDescManager.deleteTxDescFromSlaveStore(id);
             }
-            executeRecursivelyResilient(abort_master, abort_slave, true, masters);
+            executeRecursivelyResilient(abort_master, abort_slave, masters);
+            asyncDeleteDescriptors(recovery, masters);
         }
+        
     }
-	
+    
     /***********************   Two Phase Commit Protocol ************************/
-	public def commit_resilient(commitRecovery:Boolean) {
-	    if (!commitRecovery) 
-	        commitPhaseOne();
+    public def commit_resilient(commitRecovery:Boolean) {
+        if (!commitRecovery) 
+            commitPhaseOne();
         
         commitPhaseTwo(commitRecovery);
     }
    
-	private def commitPhaseOne() {
+    private def commitPhaseOne() {
         val validate_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { validate_local_resilient(plh, id); };
         val validate_slave = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => {  };
         val startP1 = Timer.milliTime();
@@ -85,7 +103,7 @@ public class EagerReplicationCommitHandler extends ResilientCommitHandler {
             else {
                 val masters = new ArrayList[Place]();
                 masters.add(here);
-                executeRecursivelyResilient(validate_master, validate_slave, false, masters);  
+                executeRecursivelyResilient(validate_master, validate_slave, masters);  
             }
             plh().txDescManager.updateStatus(id, TxDesc.COMMITTING, true);
         } catch(ex:Exception) {
@@ -97,7 +115,7 @@ public class EagerReplicationCommitHandler extends ResilientCommitHandler {
         }
     }
     
-	private def commitPhaseTwo(recovery:Boolean) {
+    private def commitPhaseTwo(recovery:Boolean) {
         val commit_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { commit_local_resilient(plh, id); } ;
         val commit_slave = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { plh().slaveStore.commit(id); } ;
         val startP2 = Timer.milliTime();
@@ -131,9 +149,9 @@ public class EagerReplicationCommitHandler extends ResilientCommitHandler {
                     for (p in members.places)
                         masters.add(p);
                 }
-                plh().txDescManager.deleteTxDescFromSlaveStore(id);
             }
-            executeRecursivelyResilient(commit_master, commit_slave, true, masters);  
+            executeRecursivelyResilient(commit_master, commit_slave, masters);
+            asyncDeleteDescriptors(recovery, masters);
         }
         phase2ElapsedTime = Timer.milliTime() - startP2;
         
