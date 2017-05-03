@@ -74,13 +74,23 @@ public class EagerReplicationCommitHandler extends ResilientCommitHandler {
                 abort_slave(plh, id);
                 val childrenVirtual = plh().txDescManager.getVirtualMembers(id, TxDescManager.FROM_SLAVE);
                 if (childrenVirtual != null) {
-                    val members = plh().getTxMembers( childrenVirtual , true);
-                    for (p in members.places)
-                        masters.add(p);
+                    val places = plh().getTxMembers( childrenVirtual , true).places;
+                                        
+                    for (var i:Long = 0; i<childrenVirtual.size; i++) {
+                        if (plh().getSlave(childrenVirtual(i)).id != here.id) {
+                            masters.add(places(i));
+                        }
+                        else {
+                            Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " Skipping place ["+childrenVirtual(i)+"] because he is my dead master ");
+                        }
+                    }
                 }
             }
-            executeRecursivelyResilient(abort_master, abort_slave, masters);
-            asyncDeleteDescriptors(recovery, masters);
+            
+            if (masters.size() > 0) {
+                executeRecursivelyResilient(abort_master, abort_slave, masters);
+                asyncDeleteDescriptors(recovery, masters);
+            }
         }
         
     }
@@ -145,13 +155,22 @@ public class EagerReplicationCommitHandler extends ResilientCommitHandler {
                 commit_slave(plh, id);
                 val childrenVirtual = plh().txDescManager.getVirtualMembers(id, TxDescManager.FROM_SLAVE);
                 if (childrenVirtual != null) {
-                    val members = plh().getTxMembers( childrenVirtual , true);
-                    for (p in members.places)
-                        masters.add(p);
+                    val places = plh().getTxMembers( childrenVirtual , true).places;
+                                        
+                    for (var i:Long = 0; i<childrenVirtual.size; i++) {
+                        if (plh().getSlave(childrenVirtual(i)).id != here.id) {
+                            masters.add(places(i));
+                        }
+                        else {
+                            Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " Skipping place ["+childrenVirtual(i)+"] because he is my dead master ");
+                        }
+                    }
                 }
             }
-            executeRecursivelyResilient(commit_master, commit_slave, masters);
-            asyncDeleteDescriptors(recovery, masters);
+            if (masters.size() > 0) {
+                executeRecursivelyResilient(commit_master, commit_slave, masters);
+                asyncDeleteDescriptors(recovery, masters);
+            }
         }
         phase2ElapsedTime = Timer.milliTime() - startP2;
         

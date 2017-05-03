@@ -24,11 +24,12 @@ import x10.util.resilient.localstore.tx.TransactionsList;
 import x10.compiler.Uncounted;
 import x10.util.resilient.localstore.recovery.DistributedRecoveryHelper;
 import x10.util.resilient.localstore.tx.logging.TxDescManager;
+import x10.util.resilient.localstore.tx.StorePausedException;
 
 public class LocalStore(immediateRecovery:Boolean) {
     private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
-    public transient var masterStore:MasterStore = null;
+    private transient var masterStore:MasterStore = null;
     public transient var virtualPlaceId:Long = -1; //-1 means a spare place
     public transient var slave:Place;
     public transient var oldSlave:Place;
@@ -394,6 +395,18 @@ public class LocalStore(immediateRecovery:Boolean) {
         }
         else
             Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+") master is not active");
+    }
+    
+    
+    public def getMasterStore() {
+        if (masterStore == null) {
+            throw new StorePausedException(here + " MasterStore is not initialized yet");
+        }
+        return masterStore;
+    }
+    
+    public def setMasterStore(m:MasterStore) {
+        this.masterStore = m;
     }
     
 }

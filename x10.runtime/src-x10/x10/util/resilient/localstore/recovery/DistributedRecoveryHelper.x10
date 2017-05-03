@@ -18,8 +18,8 @@ public class DistributedRecoveryHelper {
     	val start = System.nanoTime();
     	val deadSlave = plh().slave;
     	val oldActivePlaces = plh().getActivePlaces();
-    	val deadPlaceVirtualPlaceId = oldActivePlaces.indexOf(deadSlave);
-    	val spare = allocateSparePlace(plh, deadPlaceVirtualPlaceId, oldActivePlaces);
+    	val deadPlaceVirtualId = oldActivePlaces.indexOf(deadSlave);
+    	val spare = allocateSparePlace(plh, deadPlaceVirtualId, oldActivePlaces);
     	recoverSlave(plh, spare, start);
     }
     
@@ -28,7 +28,7 @@ public class DistributedRecoveryHelper {
         Console.OUT.println("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: started given already allocated spare " + spare);
         val deadSlave = plh().slave;
         val oldActivePlaces = plh().getActivePlaces();
-        val deadPlaceVirtualPlaceId = oldActivePlaces.indexOf(deadSlave);
+        val deadPlaceVirtualId = oldActivePlaces.indexOf(deadSlave);
         
         val slaveOfDeadMaster = oldActivePlaces.next(deadSlave);
         if (slaveOfDeadMaster.isDead())
@@ -37,24 +37,20 @@ public class DistributedRecoveryHelper {
         val startCreateReplicas = System.nanoTime();
         finish {
             async at (slaveOfDeadMaster) createMasterStoreAtSpare(plh, spare, oldActivePlaces, deadSlave);
-            createSlaveStoreAtSpare(plh, spare);
+            createSlaveStoreAtSpare(plh, spare, deadPlaceVirtualId);
         }
         val createReplicaTime = System.nanoTime() - startCreateReplicas;
         
         Console.OUT.println("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: now spare place has all needed data, let it handshake with other places ...");
-        
-        plh().slave = spare;
-        //the application layer can now recognize a change in the places configurations
-        plh().replace(deadPlaceVirtualPlaceId, spare);
-        plh().masterStore.reactivate();
+        val newActivePlaces = computeNewActivePlaces(oldActivePlaces, deadPlaceVirtualId, spare);
+
         val recoveryTime = System.nanoTime()-startTimeNS;
         Console.OUT.println("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: completed successfully, createReplicaTime:"+((createReplicaTime)/1e9)+" seconds:totalRecoveryTime:" + ((recoveryTime)/1e9)+" seconds");
         
-        val newActivePlaces = plh().getActivePlaces();
-        at (spare) async {
+        finish at (spare) async {
             val startHandshake = System.nanoTime();
-            plh().handshake(newActivePlaces, deadPlaceVirtualPlaceId, deadSlave);
-            plh().masterStore.reactivate();
+            plh().handshake(newActivePlaces, deadPlaceVirtualId, deadSlave);
+            plh().getMasterStore().reactivate();
             val handshakeTime = System.nanoTime() - startHandshake;
             Console.OUT.println("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: handshakeTime:"+((handshakeTime)/1e9)+" seconds");
         }
@@ -75,27 +71,31 @@ public class DistributedRecoveryHelper {
         val me = here;
         at (spare) async {
             Console.OUT.println("Recovering " + here + " Spare received the master replica from slave ["+me+"] ...");    
-        	plh().masterStore = new MasterStore(map, plh().immediateRecovery);
-        	plh().masterStore.pausing();
-        	plh().masterStore.paused();
+        	plh().setMasterStore (new MasterStore(map, plh().immediateRecovery));
+        	plh().getMasterStore().pausing();
+        	plh().getMasterStore().paused();
         	plh().slave = me;
         	plh().oldSlave = me;
         }
     }
     
-    private static def createSlaveStoreAtSpare(plh:PlaceLocalHandle[LocalStore], spare:Place) {
+    private static def createSlaveStoreAtSpare(plh:PlaceLocalHandle[LocalStore], spare:Place, deadPlaceVirtualId:Long) {
         Console.OUT.println("Recovering " + here + " Master of the dead slave, prepare a slave replica for the spare place ...");
-    	plh().masterStore.waitUntilPaused();
-    	val masterState = plh().masterStore.getState().getKeyValueMap();
+    	plh().getMasterStore().waitUntilPaused();
+    	val masterState = plh().getMasterStore().getState().getKeyValueMap();
     	Console.OUT.println("Recovering " + here + " Master prepared a consistent slave replica to the spare slave ...");
     	val me = here;
         at (spare) {
             Console.OUT.println("Recovering " + here + " Spare received the slave replica from master ["+me+"] ...");    
             plh().slaveStore = new SlaveStore(masterState);
         }
+        //the application layer can now recognize a change in the places configurations
+        plh().replace(deadPlaceVirtualId, spare);
+        plh().slave = spare;
+        plh().getMasterStore().reactivate();
     }
     
-    private static def allocateSparePlace(plh:PlaceLocalHandle[LocalStore], deadPlaceVirtualPlaceId:Long, oldActivePlaces:PlaceGroup) {
+    private static def allocateSparePlace(plh:PlaceLocalHandle[LocalStore], deadPlaceVirtualId:Long, oldActivePlaces:PlaceGroup) {
         val nPlaces = Place.numAllPlaces();
         val nActive = oldActivePlaces.size();
         var placeIndx:Long = -1;
@@ -106,7 +106,7 @@ public class DistributedRecoveryHelper {
             var allocated:Boolean = false;
             try {
                 Console.OUT.println("Recovering " + here + " Try to allocate " + Place(i) );
-                allocated = at (Place(i)) plh().allocate(deadPlaceVirtualPlaceId);
+                allocated = at (Place(i)) plh().allocate(deadPlaceVirtualId);
             }catch(ex:Exception) {
             }
             
@@ -136,11 +136,13 @@ public class DistributedRecoveryHelper {
                     //if (TxConfig.get().TM_DEBUG) 
                     Console.OUT.println("Recovering " + here + " recovering Tx["+tx.id+"] commit it");
                     tx.commitRecovery();
+                    Console.OUT.println("Recovering " + here + " recovering Tx["+tx.id+"] commit done");
                 }
                 else if (txDesc.status == TxDesc.STARTED) {
                     //if (TxConfig.get().TM_DEBUG) 
                     Console.OUT.println("Recovering " + here + " recovering Tx["+tx.id+"] abort it");
                     tx.abortRecovery();
+                    Console.OUT.println("Recovering " + here + " recovering Tx["+tx.id+"] abort done");
                 }
             }catch(ex:Exception) {
                 Console.OUT.println("Recovering " + here + " recovering Tx["+tx.id+"] failed with exception ["+ex.getMessage()+"] ");        
@@ -175,7 +177,7 @@ public class DistributedRecoveryHelper {
                     at (pl) async {
                         var committedList:ArrayList[Long]; 
                         if (isMaster)
-                            committedList = plh().masterStore.filterCommitted(txList);
+                            committedList = plh().getMasterStore().filterCommitted(txList);
                         else
                             committedList = plh().slaveStore.filterCommitted(txList);
                         val cList = committedList;

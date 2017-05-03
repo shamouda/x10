@@ -34,7 +34,7 @@ public class LocalTx extends AbstractTx {
     /***************** Get ********************/
     public def get(key:String):Cloneable {
         try {
-            return plh().masterStore.get(mapName, id, key);
+            return plh().getMasterStore().get(mapName, id, key);
         }catch(ex:Exception){
             abortTime = Timer.milliTime();
             throw ex;
@@ -44,7 +44,7 @@ public class LocalTx extends AbstractTx {
     /***************** PUT ********************/
     public def put(key:String, value:Cloneable):Cloneable {
         try {
-            return plh().masterStore.put(mapName, id, key, value);
+            return plh().getMasterStore().put(mapName, id, key, value);
         }catch(ex:Exception){
             abortTime = Timer.milliTime();
             throw ex;
@@ -54,7 +54,7 @@ public class LocalTx extends AbstractTx {
     /***************** Delete ********************/
     public def delete(key:String):Cloneable {
         try {
-            return plh().masterStore.delete(mapName, id, key);
+            return plh().getMasterStore().delete(mapName, id, key);
         }catch(ex:Exception){
             abortTime = Timer.milliTime();
             throw ex;
@@ -63,7 +63,7 @@ public class LocalTx extends AbstractTx {
     
     public def deleteTxDesc(key:String):Cloneable {
         try {
-            return plh().masterStore.deleteTxDesc(mapName, id, key);
+            return plh().getMasterStore().deleteTxDesc(mapName, id, key);
         }catch(ex:Exception){
             abortTime = Timer.milliTime();
             throw ex;
@@ -73,7 +73,7 @@ public class LocalTx extends AbstractTx {
     /***************** KeySet ********************/
     public def keySet():Set[String] {
         try {
-            return plh().masterStore.keySet(mapName, id);
+            return plh().getMasterStore().keySet(mapName, id);
         }catch(ex:Exception){
             abortTime = Timer.milliTime();
             throw ex;
@@ -83,7 +83,7 @@ public class LocalTx extends AbstractTx {
     /***********************   Abort ************************/  
     
     public def abort() {
-        plh().masterStore.abort(id);
+        plh().getMasterStore().abort(id);
         abortTime = Timer.milliTime();
     }
     
@@ -100,9 +100,9 @@ public class LocalTx extends AbstractTx {
         val ownerPlaceIndex = plh().virtualPlaceId;
         try {
             if (TxConfig.get().VALIDATION_REQUIRED)
-                plh().masterStore.validate(id);
+                plh().getMasterStore().validate(id);
             
-            val log = plh().masterStore.getTxCommitLog(id);
+            val log = plh().getMasterStore().getTxCommitLog(id);
             try {
                 if (resilient && log != null && log.size() > 0 && !TxConfig.get().DISABLE_SLAVE) {
                     finish at (plh().slave) async {
@@ -118,7 +118,7 @@ public class LocalTx extends AbstractTx {
             
             if (log != null) {
                 //master commit
-                plh().masterStore.commit(id);
+                plh().getMasterStore().commit(id);
             }
             commitTime = Timer.milliTime();
             return success;

@@ -34,7 +34,7 @@ public class AbstractTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Stri
     /***************** Get ********************/
     public def get(key:String):Cloneable {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " GET_STARTED here=" + here + " Tx.get("+key+") ");
-        val x = plh().masterStore.get(mapName, id, key);
+        val x = plh().getMasterStore().get(mapName, id, key);
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " GET_FINISHED here=" + here + " Tx.get("+key+") ");
         return x;
     }
@@ -42,7 +42,7 @@ public class AbstractTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Stri
     /***************** PUT ********************/
     public def put(key:String, value:Cloneable):Cloneable {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " PUT_STARTED here=" + here + " Tx.put("+key+") ");
-        val x = plh().masterStore.put(mapName, id, key, value);
+        val x = plh().getMasterStore().put(mapName, id, key, value);
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " PUT_FINISHED here=" + here + " Tx.put("+key+") ");
         return x;
     }
@@ -50,14 +50,14 @@ public class AbstractTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Stri
     /***************** Delete ********************/
     public def delete(key:String):Cloneable {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " DELETE_STARTED here=" + here + " Tx.delete("+key+") ");
-        val x = plh().masterStore.delete(mapName, id, key);
+        val x = plh().getMasterStore().delete(mapName, id, key);
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " DELETE_FINISHED here=" + here + " Tx.delete("+key+") ");
         return x;
     }
     
     /***************** KeySet ********************/
     public def keySet():Set[String] {
-        return plh().masterStore.keySet(mapName, id); 
+        return plh().getMasterStore().keySet(mapName, id); 
     }
     
     public def asyncAt(virtualPlace:Long, closure:()=>void) {

@@ -79,7 +79,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     
     public def startLocalTransaction():LocalTx {
         assert(plh().virtualPlaceId != -1) : here + " LocalTx assertion error  virtual place id = -1";
-        val id = plh().masterStore.getNextTransactionId();
+        val id = plh().getMasterStore().getNextTransactionId();
         val tx = new LocalTx(plh, id, name);
         plh().txList.addLocalTx(tx);
         return tx;
@@ -147,8 +147,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     }
     
     private def startGlobalTransaction(members:TxMembers):Tx {
-        assert(plh().masterStore != null && plh().virtualPlaceId != -1) : "here["+here+"] masterStore = ["+plh().masterStore+"] , virtualPlace ["+plh().virtualPlaceId+"]";
-        val id = plh().masterStore.getNextTransactionId();
+        val id = plh().getMasterStore().getNextTransactionId();
         val tx = new Tx(plh, id, name, members);
         try {
             var predefinedMembers:Rail[Long] = null;
@@ -228,7 +227,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     
     private def startLockingTransaction(requests:ArrayList[LockingRequest]):LockingTx {
         assert(plh().virtualPlaceId != -1);
-        val id = plh().masterStore.getNextTransactionId();
+        val id = plh().getMasterStore().getNextTransactionId();
         val tx = new LockingTx(plh, id, name, requests);
         plh().txList.addLockingTx(tx);
         return tx;

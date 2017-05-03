@@ -54,9 +54,9 @@ public class LockingTx extends AbstractTx {
             for (var i:Long = 0; i < req.keys.size ; i++) {
                 if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read);
                 if (req.keys(i).read)
-                    plh().masterStore.lockRead(mapName, id, req.keys(i).key);
+                    plh().getMasterStore().lockRead(mapName, id, req.keys(i).key);
                 else
-                    plh().masterStore.lockWrite(mapName, id, req.keys(i).key);
+                    plh().getMasterStore().lockWrite(mapName, id, req.keys(i).key);
                 if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
             }
             
@@ -72,9 +72,9 @@ public class LockingTx extends AbstractTx {
                     for (var i:Long = 0; i < req.keys.size ; i++) {
                         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read);
                         if (req.keys(i).read)
-                            plh().masterStore.lockRead(mapName, id, req.keys(i).key);
+                            plh().getMasterStore().lockRead(mapName, id, req.keys(i).key);
                         else
-                            plh().masterStore.lockWrite(mapName, id, req.keys(i).key);
+                            plh().getMasterStore().lockWrite(mapName, id, req.keys(i).key);
                         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
                     }
                     
@@ -93,9 +93,9 @@ public class LockingTx extends AbstractTx {
             for (var i:Long = 0; i < req.keys.size ; i++) {
                 if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read);
                 if (req.keys(i).read)
-                    plh().masterStore.unlockRead(mapName, id, req.keys(i).key);
+                    plh().getMasterStore().unlockRead(mapName, id, req.keys(i).key);
                 else
-                    plh().masterStore.unlockWrite(mapName, id, req.keys(i).key);
+                    plh().getMasterStore().unlockWrite(mapName, id, req.keys(i).key);
                 if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
             }
         }
@@ -105,9 +105,9 @@ public class LockingTx extends AbstractTx {
                     for (var i:Long = 0; i < req.keys.size ; i++) {
                         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read);
                         if (req.keys(i).read)
-                            plh().masterStore.unlockRead(mapName, id, req.keys(i).key);
+                            plh().getMasterStore().unlockRead(mapName, id, req.keys(i).key);
                         else
-                            plh().masterStore.unlockWrite(mapName, id, req.keys(i).key);
+                            plh().getMasterStore().unlockWrite(mapName, id, req.keys(i).key);
                         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
                     }
                 }

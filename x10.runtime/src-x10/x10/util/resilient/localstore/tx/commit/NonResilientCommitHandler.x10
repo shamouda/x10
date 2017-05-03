@@ -67,14 +67,14 @@ public class NonResilientCommitHandler extends CommitHandler {
     }
     
     private def validate_local(plh:PlaceLocalHandle[LocalStore], id:Long) {
-        plh().masterStore.validate(id);
+        plh().getMasterStore().validate(id);
     }
     
     private def commit_local(plh:PlaceLocalHandle[LocalStore], id:Long) {
-        plh().masterStore.commit(id);
+        plh().getMasterStore().commit(id);
     }
     
     private def abort_local(plh:PlaceLocalHandle[LocalStore], id:Long) {
-        plh().masterStore.abort(id);
+        plh().getMasterStore().abort(id);
     }
 }

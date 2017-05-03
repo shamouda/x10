@@ -76,7 +76,11 @@ public abstract class ResilientCommitHandler extends CommitHandler {
     
     protected def executeRecursivelyResilient(master_closure:(PlaceLocalHandle[LocalStore],Long)=>void,
             slave_closure:(PlaceLocalHandle[LocalStore],Long)=>void, places:ArrayList[Place]) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient started ...");
+        var str:String = "";
+        for (x in places) {
+            str += x + " , " ;
+        }
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient started, places are ["+str+"]  ...");
         var completed:Boolean = false;
         var masterType:Boolean = true; 
         val parents = new HashSet[Long]();
@@ -153,7 +157,7 @@ public abstract class ResilientCommitHandler extends CommitHandler {
  
     protected def abort_local_resilient(plh:PlaceLocalHandle[LocalStore], id:Long) {
         var ex:Exception = null;
-        val log = plh().masterStore.getTxCommitLog(id);
+        val log = plh().getMasterStore().getTxCommitLog(id);
         if (log != null && log.size() > 0) {
             try {
                 at (plh().slave) {
@@ -164,7 +168,7 @@ public abstract class ResilientCommitHandler extends CommitHandler {
             }
         }
             
-        plh().masterStore.abort(id);
+        plh().getMasterStore().abort(id);
         
         if (ex != null) {
             at (root) async {
@@ -175,7 +179,7 @@ public abstract class ResilientCommitHandler extends CommitHandler {
     
     protected def commit_local_resilient(plh:PlaceLocalHandle[LocalStore], id:Long) {
         var ex:Exception = null;
-        val log = plh().masterStore.getTxCommitLog(id);
+        val log = plh().getMasterStore().getTxCommitLog(id);
         if (log != null && log.size() > 0) {
             try {
                 at (plh().slave)  {
@@ -186,7 +190,7 @@ public abstract class ResilientCommitHandler extends CommitHandler {
             }
         }
         
-        plh().masterStore.commit(id);
+        plh().getMasterStore().commit(id);
         
         if (ex != null) {
             at (root) async {
@@ -197,11 +201,11 @@ public abstract class ResilientCommitHandler extends CommitHandler {
     
     protected def validate_local_resilient(plh:PlaceLocalHandle[LocalStore], id:Long) {
         if (TxConfig.get().VALIDATION_REQUIRED)
-            plh().masterStore.validate(id);
+            plh().getMasterStore().validate(id);
         
         var ex:Exception = null;
         val ownerPlaceIndex = plh().virtualPlaceId;
-        val log = plh().masterStore.getTxCommitLog(id);
+        val log = plh().getMasterStore().getTxCommitLog(id);
         if (log != null && log.size() > 0) {
             try {
                 at (plh().slave) {
