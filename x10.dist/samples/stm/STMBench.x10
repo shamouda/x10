@@ -156,6 +156,8 @@ public class STMBench {
                 if (killTime != -1) {
                     @Uncounted async {
                         Console.OUT.println("Hammer kill timer at "+here+" starting sleep for "+killTime+" secs");
+                        val startedNS = System.nanoTime(); 
+                        
                         val deadline = System.currentTimeMillis() + 1000 * killTime;
                         while (deadline > System.currentTimeMillis()) {
                             val sleepTime = deadline - System.currentTimeMillis();
@@ -164,6 +166,7 @@ public class STMBench {
                         
                         val prev = map.plh().getMaster(here);
                         val myThroughput = throughput();
+                        myThroughput.setElapsedTime(System.nanoTime() - startedNS);
                         val me = here;
                         at (prev) {
                             throughput().rightPlaceThroughput = myThroughput;
@@ -604,6 +607,12 @@ class PlaceThroughput(threads:Long) {
     public def shiftElapsedTime(timeNS:Long) {
         for (t in thrds) {
             t.elapsedTimeNS += timeNS;
+        }
+    }
+    
+    public def setElapsedTime(timeNS:Long) {
+        for (t in thrds) {
+            t.elapsedTimeNS = timeNS;
         }
     }
     
