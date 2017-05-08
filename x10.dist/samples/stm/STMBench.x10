@@ -588,6 +588,14 @@ class PlaceThroughput(threads:Long) {
     
     public def reset() {
         thrds = new Rail[ProducerThroughput](threads, (i:Long)=> new ProducerThroughput( virtualPlaceId, i));
+        rightPlaceThroughput = null;
+        rightPlaceDeathTimeNS = -1;
+
+        started = false;
+        recovered = false;
+
+        reducedTime = 0;
+        reducedTxCount = 0;
     }
     
     public def reinit(other:PlaceThroughput) {
