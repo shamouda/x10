@@ -6,8 +6,6 @@ import x10.util.resilient.localstore.Tx;
 import x10.util.resilient.localstore.ResilientStore;
 import x10.util.resilient.localstore.CloneableLong;
 import x10.util.resilient.localstore.TxConfig;
-import x10.util.resilient.localstore.LockingRequest;
-import x10.util.resilient.localstore.LockingRequest.KeyInfo;
 import x10.util.resilient.localstore.LockingTx;
 import x10.util.resilient.localstore.LocalTx;
 import x10.util.resilient.localstore.AbstractTx;
@@ -193,19 +191,25 @@ public class STMBench {
         val myThroughput = throughput().thrds(producerId);
         var timeNS:Long = myThroughput.elapsedTimeNS; // always 0 in non-resilient mode, non-zero for spare places in resilient mode
 
+        //pre-allocate rails
+        val virtualMembers = new Rail[Long](h);
+        val keys = new Rail[String] (h*o);
+        val values = new Rail[Long] (h*o);
+        val readFlags = new Rail[Boolean] (h*o);
+        
         while (timeNS < d*1e6) {
-            val virtualMembers = nextTransactionMembers(rand, activePlacesCount, h, myVirtualPlaceId);
-            val membersOperations = nextRandomOperations(rand, activePlacesCount, virtualMembers, r, u, o);
-            val lockRequests = new ArrayList[LockingRequest]();
+            nextTransactionMembers(rand, activePlacesCount, h, myVirtualPlaceId, virtualMembers);
+            nextRandomOperations(rand, activePlacesCount, virtualMembers, r, u, o, keys, values, readFlags);
            
             val distClosure = (tx:AbstractTx) => {
-                for (var m:Long = 0; m < virtualMembers.size; m++) {
-                    val operations = membersOperations.get(m);
-                    tx.asyncAt(operations.dest, () => {
+                for (var m:Long = 0; m < h; m++) {
+                    val start = m*o;
+                    val dest = virtualMembers(m);
+                    tx.asyncAt(dest, () => {
                         for (var x:Long = 0; x < o; x++) {
-                            val key = operations.keys(x).key;
-                            val read = operations.keys(x).read;
-                            val value = operations.values(x);
+                            val key = keys(start+x);
+                            val read = readFlags(start+x);
+                            val value = values(start+x);
                             read? tx.get(key): tx.put(key, new CloneableLong(value));
                         }
                     });
@@ -214,23 +218,14 @@ public class STMBench {
             };
             
             val localClosure = (tx:AbstractTx) => {
-                val operations = membersOperations.get(0);
                 for (var x:Long = 0; x < o; x++) {
-                    val key = operations.keys(x).key;
-                    val read = operations.keys(x).read;
-                    val value = operations.values(x);
+                    val key = keys(x);
+                    val read = readFlags(x);
+                    val value = values(x);
                     read? tx.get(key): tx.put(key, new CloneableLong(value));
                 }
                 return null;
             };
-            
-            if (TxConfig.get().LOCKING ) {
-                val rail = membersOperations.toRail();
-                RailUtils.sort(rail);
-                for (memReq in rail) {
-                    lockRequests.add(new LockingRequest(memReq.dest, memReq.keys)); //sorting of the keys is done internally
-                }
-            }
             
             //time starts here
             val start = System.nanoTime();
@@ -247,7 +242,7 @@ public class STMBench {
                 }
             }
             else if (virtualMembers.size > 1 && TxConfig.get().LOCKING ) { //locking distributed
-                map.executeLockingTransaction(lockRequests, distClosure);
+                map.executeLockingTransaction(virtualMembers, keys, readFlags, o, distClosure);
             }
             else if (virtualMembers.size == 1 && producersCount == 1 && TxConfig.get().STM ) { // STM local
                 //local transaction
@@ -256,7 +251,7 @@ public class STMBench {
             }
             else if (virtualMembers.size == 1 && producersCount == 1 && TxConfig.get().LOCKING ) { //Locking local
                 assert (virtualMembers(0) == here.id) : "local transactions are not supported at remote places in this benchmark" ;
-                map.executeLockingTransaction(lockRequests, localClosure);
+                map.executeLockingTransaction(virtualMembers, keys, readFlags, o, localClosure);
             }
             else if (virtualMembers.size == 1 && producersCount == 1 && TxConfig.get().BASELINE ) { //baseline local
                 map.executeBaselineTransaction(localClosure);
@@ -290,7 +285,7 @@ public class STMBench {
             }
         }
         
-        //Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
+        Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
     }
 
     public static def printThroughput(map:ResilientNativeMap, producersCount:Long, iteration:Long, plh:PlaceLocalHandle[PlaceThroughput], d:Long, t:Long, h:Long, o:Long ) {
@@ -339,74 +334,68 @@ public class STMBench {
         Place.places().broadcastFlat(()=>{plh().reset();}, (p:Place)=>true);
     }
     
-    public static def nextTransactionMembers(rand:Random, activePlacesCount:Long, h:Long, myPlaceIndex:Long) {
-        val selectedPlaces = new HashSet[Long]();
-        selectedPlaces.add(myPlaceIndex);
-        while (selectedPlaces.size() < h) {
-            selectedPlaces.add(Math.abs(rand.nextLong()) % activePlacesCount);
+    public static def nextTransactionMembers(rand:Random, activePlacesCount:Long, h:Long, myPlaceIndex:Long, result:Rail[Long]) {
+        var selected:Long = 0;
+        while (selected < h) {
+            val candidate = Math.abs(rand.nextLong()) % activePlacesCount;
+            var repeated:Boolean = false;
+            for (var i:Long = 0 ; i < selected; i++) {
+                if (result(i) == candidate) {
+                    repeated = true;
+                    break;
+                }
+            }
+            if (!repeated) {
+                result(selected) == candidate;
+                selected++;
+            }
         }
-        val rail = new Rail[Long](h);
-        val iter = selectedPlaces.iterator();
-        for (var c:Long = 0; c < h; c++) {
-            rail(c) = iter.next();
-        }
-        RailUtils.sort(rail);
-        return rail;
+        if (TxConfig.get().LOCKING)
+            RailUtils.sort(result);
+        return result;
     }
     
-    public static def nextRandomOperations(rand:Random, activePlacesCount:Long, virtualMembers:Rail[Long], r:Long, u:Float, o:Long) {
-        val list = new ArrayList[MemberOperations]();
-        
+    public static def nextRandomOperations(rand:Random, activePlacesCount:Long, virtualMembers:Rail[Long], r:Long, u:Float, o:Long,
+            keys:Rail[String], values:Rail[Long], readFlags:Rail[Boolean]) {
+        val h = virtualMembers.size;
         val keysPerPlace = r / activePlacesCount;
         
-        for (pl in virtualMembers) {
-            val keys = new Rail[KeyInfo](o);
-            val values = new Rail[Long](o);
+        for (var i:Long = 0; i< h; i++) {
+            val baseKey = virtualMembers(i) * keysPerPlace;
+            val start = i*o;          
             
-            val baseKey = pl * keysPerPlace;
-            val uniqueKeys = new HashSet[String]();
             for (var x:Long = 0; x < o; x++) {
-                val read = rand.nextFloat() > u;
-                var k:String = "key" + (baseKey + (Math.abs(rand.nextLong()% keysPerPlace)));
-                while (uniqueKeys.contains(k))
-                    k = "key" + (baseKey + (Math.abs(rand.nextLong()% keysPerPlace)));
-                uniqueKeys.add(k);
-                keys(x) = new KeyInfo(k, read); 
-                values(x) = Math.abs(rand.nextLong())%1000;
+                readFlags(start+x) = rand.nextFloat() > u;
+                values(start+x) = Math.abs(rand.nextLong())%1000;
+                var repeated:Boolean = false;
+                do {
+                    var k:String = "key" + (baseKey + (Math.abs(rand.nextLong()% keysPerPlace)));
+                    repeated = false;
+                    for (var j:Long = 0; j < x; j++) {
+                        if (keys(start+j).equals(k)) {
+                            repeated = true;
+                            break;
+                        }
+                    }
+                    if (!repeated) {
+                        keys(start+x) = k;
+                    }
+                }while (repeated);
             }
-            list.add(new MemberOperations(pl, keys, values));
+            if (TxConfig.get().LOCKING)
+                RailUtils.qsort(keys, start, start+o-1, (x:String,y:String) => x.compareTo(y));
         }
-        
-        return list;
+        /*
+        for (var i:Long = 0; i < h*o; i++) {
+            Console.OUT.print(keys(i) + " ");
+            if ((i+1) % o == 0)
+                Console.OUT.println();        
+        }
+        Console.OUT.println();
+        */
     }
     
     /*********************  Structs ********************/
-    public static struct MemberOperations implements Comparable[MemberOperations] {
-        val dest:Long;
-        val keys:Rail[KeyInfo];
-        val values:Rail[Long];
-        public def this(dest:Long, keys:Rail[KeyInfo], values:Rail[Long]) {
-            this.dest = dest;
-            this.keys = keys;
-            this.values = values;
-        }
-        public def toString() {
-            var str:String = "memberOperations:" /*+ dest*/ + ":";
-            for (k in keys)
-                str += "("+k.key+","+k.read+")" ;
-            return str;
-        }
-        
-        public def compareTo(that:MemberOperations):Int {
-            if (dest == that.dest)
-                return 0n;
-            else if ( dest < that.dest)
-                return -1n;
-            else
-                return 1n;
-        }
-    }
-    
     public static struct STMBenchParameters {
         public val r:Long;  //keysRange
         public val u:Float; //updatePercentage

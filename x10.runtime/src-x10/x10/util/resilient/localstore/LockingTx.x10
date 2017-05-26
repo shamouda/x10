@@ -27,55 +27,65 @@ import x10.util.concurrent.Future;
 
 /*should be used in non-resilient mode only*/
 public class LockingTx extends AbstractTx {
-    public transient val startTime:Long = Timer.milliTime(); ////
-    public transient var lockingElapsedTime:Long = 0;  //////
-    public transient var processingElapsedTime:Long = 0; //// (including waitTime)
-    public transient var unlockingElapsedTime:Long = 0; ///////
-    public transient var totalElapsedTime:Long = 0; //////
-   
-    public val requests:ArrayList[LockingRequest];
+    public transient val startTime:Long=Timer.milliTime(); ////
+    public transient var lockingElapsedTime:Long=0; //////
+    public transient var processingElapsedTime:Long=0; //// (including waitTime)
+    public transient var unlockingElapsedTime:Long=0; ///////
+    public transient var totalElapsedTime:Long=0; //////
 
-    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, requests:ArrayList[LockingRequest]) {
+    public val members:Rail[Long];
+    public val keys:Rail[String];
+    public val readFlags:Rail[Boolean];
+    public val opPerPlace:Long;
+
+    public def this(plh:PlaceLocalHandle[LocalStore],id:Long,mapName:String,members:Rail[Long],keys:Rail[String],readFlags:Rail[Boolean],opPerPlace:Long)
+    {
         super(plh, id, mapName);
-        this.requests = requests;
+        this.members = members;
+        this.keys = keys;
+        this.readFlags = readFlags;
+        this.opPerPlace = opPerPlace;
     }
-    
+
     /****************lock and unlock all keys**********************/
 
     public def lock() {
+        //don't copy this in remote operations
+        val members = this.members;
+        val keys = this.keys;
+        val readFlags = this.readFlags;
+        val plh = this.plh;
+        val opPerPlace = this.opPerPlace;
+        
         val startLock = Timer.milliTime();
         
-        if (requests.size() == 1 && requests.get(0).dest == here.id) {//local locking
-            val req = requests.get(0);
-            
+        if (members.size == 1 && members(0) == here.id) {//local locking
             if (!TxConfig.get().DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
                 Runtime.increaseParallelism();
             
-            for (var i:Long = 0; i < req.keys.size ; i++) {
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read);
-                if (req.keys(i).read)
-                    plh().getMasterStore().lockRead(mapName, id, req.keys(i).key);
+            for (var x:Long = 0; x < opPerPlace ; x++) {
+                if (readFlags(x))
+                    plh().getMasterStore().lockRead(mapName, id, keys(x));
                 else
-                    plh().getMasterStore().lockWrite(mapName, id, req.keys(i).key);
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
+                    plh().getMasterStore().lockWrite(mapName, id, keys(x));
             }
             
             if (!TxConfig.get().DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
                 Runtime.decreaseParallelism(1n);
         }
         else {
-            finish for (req in requests) {
-                at (Place(req.dest)) { //locking must be done sequentially
+            finish for (var i:Long = 0; i < members.size; i++) {
+                val dest = members(i);
+                val start = opPerPlace*i;
+                at (Place(dest)) { //locking must be done sequentially
                     if (!TxConfig.get().DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
                         Runtime.increaseParallelism();
                     
-                    for (var i:Long = 0; i < req.keys.size ; i++) {
-                        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read);
-                        if (req.keys(i).read)
-                            plh().getMasterStore().lockRead(mapName, id, req.keys(i).key);
+                    for (var x:Long = 0; x < opPerPlace ; x++) {
+                        if (readFlags(start+x))
+                            plh().getMasterStore().lockRead(mapName, id, keys(start+x));
                         else
-                            plh().getMasterStore().lockWrite(mapName, id, req.keys(i).key);
-                        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") locking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
+                            plh().getMasterStore().lockWrite(mapName, id, keys(start+x));
                     }
                     
                     if (!TxConfig.get().DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
@@ -87,28 +97,32 @@ public class LockingTx extends AbstractTx {
     }
 
     public def unlock() {
+        //don't copy this in remote operations
+        val members = this.members;
+        val keys = this.keys;
+        val readFlags = this.readFlags;
+        val plh = this.plh;
+        val opPerPlace = this.opPerPlace;
+        
         val startUnlock = Timer.milliTime();
-        if (requests.size() == 1 && requests.get(0).dest == here.id) {//local locking
-            val req = requests.get(0);
-            for (var i:Long = 0; i < req.keys.size ; i++) {
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read);
-                if (req.keys(i).read)
-                    plh().getMasterStore().unlockRead(mapName, id, req.keys(i).key);
+        if (members.size == 1 && members(0) == here.id) {//local locking
+            for (var x:Long = 0; x < opPerPlace ; x++) {
+                if (readFlags(x))
+                    plh().getMasterStore().unlockRead(mapName, id, keys(x));
                 else
-                    plh().getMasterStore().unlockWrite(mapName, id, req.keys(i).key);
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
+                    plh().getMasterStore().unlockWrite(mapName, id, keys(x));
             }
         }
         else {
-            finish for (req in requests) {
-                at (Place(req.dest)) async {
-                    for (var i:Long = 0; i < req.keys.size ; i++) {
-                        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read);
-                        if (req.keys(i).read)
-                            plh().getMasterStore().unlockRead(mapName, id, req.keys(i).key);
+            finish for (var i:Long = 0; i < members.size; i++) {
+                val dest = members(i);
+                val start = opPerPlace*i;
+                at (Place(dest)) async {
+                    for (var x:Long = 0; x < opPerPlace ; x++) {
+                        if (readFlags(start+x))
+                            plh().getMasterStore().unlockRead(mapName, id, keys(start+x));
                         else
-                            plh().getMasterStore().unlockWrite(mapName, id, req.keys(i).key);
-                        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " +here+ " ("+i+"/"+req.keys.size+") unlocking " + req.keys(i).key + "  read: " + req.keys(i).read + " -done");
+                            plh().getMasterStore().unlockWrite(mapName, id, keys(start+x));
                     }
                 }
             }
@@ -116,6 +130,5 @@ public class LockingTx extends AbstractTx {
         unlockingElapsedTime = Timer.milliTime() - startUnlock;
         totalElapsedTime = Timer.milliTime() - startTime;
     }
-    
-    
+
 }

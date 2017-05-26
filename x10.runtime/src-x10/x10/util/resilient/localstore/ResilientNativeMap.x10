@@ -5,7 +5,6 @@ import x10.util.HashMap;
 import x10.util.ArrayList;
 import x10.util.RailUtils;
 import x10.util.resilient.localstore.tx.*;
-import x10.util.resilient.localstore.LockingRequest;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Lock;
 import x10.xrx.Runtime;
@@ -18,7 +17,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     private var baselineTxId:Long = 0;
     
-    /**	
+    /** 
      * Get the value of key k in the resilient map.
      */
     public def get(k:String) {
@@ -178,8 +177,8 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     }
     
     public def executeTransaction(virtualMembers:Rail[Long], closure:(Tx)=>Any, maxRetries:Long, maxTimeNS:Long):TxResult {
-    	val beginning = System.nanoTime();
-    	var members:TxMembers = null;
+        val beginning = System.nanoTime();
+        var members:TxMembers = null;
         if (virtualMembers != null) 
             members = plh().getTxMembers(virtualMembers, true);
         
@@ -225,16 +224,16 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     
     /***********************   Lock-based Transactions ****************************/
     
-    private def startLockingTransaction(requests:ArrayList[LockingRequest]):LockingTx {
+    private def startLockingTransaction(members:Rail[Long], keys:Rail[String], readFlags:Rail[Boolean], o:Long):LockingTx {
         assert(plh().virtualPlaceId != -1);
         val id = plh().getMasterStore().getNextTransactionId();
-        val tx = new LockingTx(plh, id, name, requests);
+        val tx = new LockingTx(plh, id, name, members, keys, readFlags, o);
         plh().txList.addLockingTx(tx);
         return tx;
     }
     
-    public def executeLockingTransaction(lockRequests:ArrayList[LockingRequest], closure:(LockingTx)=>Any) {
-        val tx = startLockingTransaction(lockRequests);
+    public def executeLockingTransaction(members:Rail[Long], keys:Rail[String], readFlags:Rail[Boolean], o:Long, closure:(LockingTx)=>Any) {
+        val tx = startLockingTransaction(members, keys, readFlags, o);
         
         tx.lock();
         
@@ -246,6 +245,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
         return new TxResult(Tx.SUCCESS, out);
     }
     
+    
     /**************Baseline Operations*****************/
     private def startBaselineTransaction():AbstractTx {
         assert(plh().virtualPlaceId != -1);
@@ -253,6 +253,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
         val tx = new AbstractTx(plh, id, name);
         return tx;
     }
+    
     public def executeBaselineTransaction(closure:(AbstractTx)=>Any) {
         val tx = startBaselineTransaction();
         val out = closure(tx);
