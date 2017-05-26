@@ -17,8 +17,10 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     private val STATUS_PAUSING = 1;
     private val STATUS_PAUSED = 2;
     private var resilientStatusLock:Lock;
+    
     //stm
-    protected val txLogs:SafeBucketHashMap[Long,TxLog];
+    private val txLogManager:TxLogManager;
+    
     //locking
     protected val lockingTxLogs:SafeBucketHashMap[Long,LockingTxLog];
     protected static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
@@ -26,15 +28,15 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     public def this(data:MapData, immediateRecovery:Boolean) {
         property(data, immediateRecovery);
         if (TxConfig.get().BASELINE) {
-            txLogs = null;
+            txLogManager = null;
             lockingTxLogs = null;
         }
         else if (TxConfig.get().STM ){
-            txLogs = new SafeBucketHashMap[Long,TxLog](TxConfig.get().BUCKETS_COUNT);
+            txLogManager = new TxLogManager();
             lockingTxLogs = null;
         }
         else {
-            txLogs = null;
+            txLogManager = null;
             lockingTxLogs = new SafeBucketHashMap[Long,LockingTxLog](TxConfig.get().BUCKETS_COUNT);
         }
         if (resilient)
@@ -68,8 +70,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
      * Accordingly, read-only transactions incurs no replication overhead.
      */
     public def getTxCommitLog(id:Long):HashMap[String,Cloneable] {
-        val log = txLogs.getOrElseSafe(id, null);
-        if (log == null || log.aborted)
+        val log = txLogManager.search(id);
+        if (log == null /**SS_CHECK|| log.aborted**/)
             return null;
         
         try {
@@ -97,23 +99,6 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             log.unlock();
         }
     }
-    
-    public def getOrAddTxLog(id:Long) {
-        var log:TxLog = null;
-        try {
-            txLogs.lock(id);
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] ");
-            log = txLogs.getOrElseUnsafe(id, null);
-            if (log == null) {
-                log = new TxLog(id);
-                txLogs.putUnsafe(id, log);
-            }
-        }
-        finally{
-            txLogs.unlock(id);
-        }
-        return log;
-    }
    
     public def getOrAddLockingTxLog(id:Long) {
         var log:LockingTxLog = null;
@@ -139,30 +124,12 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     	try {
 	        Runtime.increaseParallelism("Master.waitUntilPaused");
 	        
-	        var stopped:Boolean;
-	        do{
-	        	stopped = true;
-		        for (var i:Long = 0; i < buckets; i++) {
-		        	val bucket = txLogs.getBucket(i);
-		    		bucket.lock();
-		        	val iter = bucket.bucketMap.keySet().iterator();
-		        	while (iter.hasNext()) {
-		        		val key = iter.next();
-		        		val log = bucket.bucketMap.getOrThrow(key);
-		        		if (!log.aborted && log.writeValidated){
-		        		    Console.OUT.println("Recovering " + here + " MasterStore.waitUntilPaused  found a non-aborted transaction Tx["+log.id+"] " + txIdToString (log.id));
-		        			stopped = false;
-		        			break;
-		        		}
-		        	}
-		        	bucket.unlock();
-		        	if (!stopped)
-		        		break;
-		        }
-		        
-		        if (!stopped)
-		            TxConfig.waitSleep();
-	        } while (!stopped);
+	        while (true) {
+	        	if (!txLogManager.activeTransactionsExist()) {
+	        	    break;
+	        	}
+	        	TxConfig.waitSleep();
+	        }
         
     	}finally {
     		Runtime.decreaseParallelism(1n, "Master.waitUntilPaused");
@@ -256,7 +223,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     /*************************************************/
     
     public def validate(id:Long) {
-        val log = txLogs.getOrElseSafe(id, null);
+        val log = txLogManager.search(id);
         if (log == null)
             return;
         
@@ -269,7 +236,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     }
     
     public def commit(id:Long) {
-        val log = txLogs.getOrElseSafe(id, null);
+        val log = txLogManager.search(id);
         if (log == null)
             return;
         
@@ -280,13 +247,12 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             log.unlock();
         }
         
-        //delete log to avoid repeated commit if a recovery commit is called
-        txLogs.deleteSafe(id);
+        txLogManager.delete(log);
     }
     
     public def abort(id:Long) {
         /*Abort may reach before normal Tx operations, wait until we have a txLog to abort*/
-        val log = txLogs.getOrElseSafe(id, null);
+        val log = txLogManager.search(id);
         if (log == null) {
             return;
         }
@@ -297,6 +263,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         } finally {
             log.unlock();
         }
+        
+        txLogManager.deleteAborted(log);
     }
     
     public def keySet(mapName:String, id:Long):Set[String] {
@@ -306,12 +274,15 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     /********************** Utils ***************************/
     /*throws an exception if a conflict was found*/
     protected def logInitialIfNotLogged(id:Long, key:String, lockRead:Boolean):LogContainer {
-        val log = getOrAddTxLog(id);
+        val log = txLogManager.getOrAdd(id);
         log.lock();
         try {
+            //SS_CHECK uncomment if going to record aborted tx
+            /*
             if (log.aborted) {
                 throw new AbortedTransactionException("AbortedTransactionException");
             }
+            */
             var memory:MemoryUnit = log.getMemoryUnit(key);
             if (memory == null) {
                 val memUResponse = data.getMemoryUnit(key, status == STATUS_ACTIVE);
@@ -418,6 +389,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             }
         } catch(ex:AbortedTransactionException) {
             return null;
+        } catch(ex:ConcurrentTransactionsLimitExceeded) { /**SS_CHECK  repeat**/
+            throw ex;
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
             return null;
@@ -876,7 +849,6 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+log.id+"] " + txIdToString (id)+ " abort_UL key "+key+" is NOT locked !!!!");
             }
         }
-        log.clearAborted();
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_UL completed");
     }
     
@@ -905,7 +877,6 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 memory.unlockWrite(log.id, key);
             }
         }
-        log.aborted = true;
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_WB completed");
     }
     

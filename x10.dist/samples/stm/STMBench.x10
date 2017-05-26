@@ -194,12 +194,13 @@ public class STMBench {
         //pre-allocate rails
         val virtualMembers = new Rail[Long](h);
         val keys = new Rail[String] (h*o);
+        val tmpKeys = new Rail[Long] (o);
         val values = new Rail[Long] (h*o);
         val readFlags = new Rail[Boolean] (h*o);
         
         while (timeNS < d*1e6) {
             nextTransactionMembers(rand, activePlacesCount, h, myVirtualPlaceId, virtualMembers);
-            nextRandomOperations(rand, activePlacesCount, virtualMembers, r, u, o, keys, values, readFlags);
+            nextRandomOperations(rand, activePlacesCount, virtualMembers, r, u, o, keys, values, readFlags, tmpKeys);
            
             val distClosure = (tx:AbstractTx) => {
                 for (var m:Long = 0; m < h; m++) {
@@ -356,7 +357,7 @@ public class STMBench {
     }
     
     public static def nextRandomOperations(rand:Random, activePlacesCount:Long, virtualMembers:Rail[Long], r:Long, u:Float, o:Long,
-            keys:Rail[String], values:Rail[Long], readFlags:Rail[Boolean]) {
+            keys:Rail[String], values:Rail[Long], readFlags:Rail[Boolean], tmpKeys:Rail[Long]) {
         val h = virtualMembers.size;
         val keysPerPlace = r / activePlacesCount;
         
@@ -369,30 +370,28 @@ public class STMBench {
                 values(start+x) = Math.abs(rand.nextLong())%1000;
                 var repeated:Boolean = false;
                 do {
-                    var k:String = "key" + (baseKey + (Math.abs(rand.nextLong()% keysPerPlace)));
+                    var k:Long = Math.abs(rand.nextLong()% keysPerPlace);
                     repeated = false;
                     for (var j:Long = 0; j < x; j++) {
-                        if (keys(start+j).equals(k)) {
+                        if (tmpKeys(start+j) == k) {
                             repeated = true;
                             break;
                         }
                     }
                     if (!repeated) {
-                        keys(start+x) = k;
+                        //tmpKeys is used to reduce string concat/compare operations
+                        tmpKeys(x) = k;
+                        
                     }
                 }while (repeated);
             }
             if (TxConfig.get().LOCKING)
-                RailUtils.qsort(keys, start, start+o-1, (x:String,y:String) => x.compareTo(y));
+                RailUtils.sort(tmpKeys);
+            
+            for (var x:Long = 0; x < o; x++) {
+                 keys(start+x) = "key" + (baseKey + tmpKeys(x));
+            }
         }
-        /*
-        for (var i:Long = 0; i < h*o; i++) {
-            Console.OUT.print(keys(i) + " ");
-            if ((i+1) % o == 0)
-                Console.OUT.println();        
-        }
-        Console.OUT.println();
-        */
     }
     
     /*********************  Structs ********************/

@@ -19,7 +19,9 @@ public class TxConfig {
     public val VALIDATION_REQUIRED:Boolean;
     public val BUCKETS_COUNT:Long;
     public val DISABLE_INCR_PARALLELISM:Boolean;
-    public  val DPE_SLEEP_MS:Long;
+    public val DPE_SLEEP_MS:Long;
+
+    public val MAX_CONCURRENT_TXS:Long;
 
 
     //used for performance testing only
@@ -74,6 +76,7 @@ public class TxConfig {
     	TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
         DPE_SLEEP_MS = System.getenv("DPE_SLEEP_MS") == null ? 10 : Long.parseLong(System.getenv("DPE_SLEEP_MS"));
         
+        MAX_CONCURRENT_TXS = System.getenv("MAX_CONCURRENT_TXS") == null ? 100 : Long.parseLong(System.getenv("MAX_CONCURRENT_TXS"));
     }
     
     public static def get() = instance;

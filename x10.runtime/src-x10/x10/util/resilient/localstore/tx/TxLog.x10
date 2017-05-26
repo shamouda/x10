@@ -27,22 +27,35 @@ import x10.util.RailUtils;
  * However, an abort request may occur concurrenctly with other requests, that is why we have a lock to prevent
  * interleaving between abort and other operations.
  **/
-public class TxLog (id:Long) {
+public class TxLog {
     
     public var transLog:HashMap[String,TxKeyChange];
     public var aborted:Boolean = false;
     public var writeValidated:Boolean = false;
-
+    public var id:Long = -1;
     private var lock:Lock;
     
-    public def this(id:Long) {
-        property(id);
+    public def this() {
         transLog = new HashMap[String,TxKeyChange]();
         if (!TxConfig.get().LOCK_FREE)
             lock = new Lock();
         else
             lock = null;
-    } 
+    }
+    
+    public def reset() {
+        id = -1;
+        transLog.clear();
+        aborted = false;
+        writeValidated = false;
+    }
+    
+    public def clearAborted() {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] clearTxLog ...");
+        transLog = null;
+        aborted = true;
+    }
+    
     
     public def getChangeLog(key:String) {
         return transLog.getOrThrow(key);
@@ -172,12 +185,6 @@ public class TxLog (id:Long) {
     public def unlock() {
         if (!TxConfig.get().LOCK_FREE)
             lock.unlock();
-    }
-    
-    public def clearAborted() {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] clearTxLog ...");
-        transLog = null;
-        aborted = true;
     }
     
     public def getSortedKeys():Rail[String] {

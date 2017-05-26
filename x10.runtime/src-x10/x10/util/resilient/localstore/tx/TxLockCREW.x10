@@ -17,6 +17,8 @@ import x10.util.concurrent.ReadWriteSemaphore;
 import x10.util.HashSet;
 import x10.xrx.Runtime;
 import x10.util.resilient.localstore.TxConfig;
+import x10.util.GrowableRail;
+
 /*
  * A concurrent read exclusive write lock for transactional management.
  * Each lock records: a set of readers, one writer and one waiting writer.
@@ -33,10 +35,41 @@ import x10.util.resilient.localstore.TxConfig;
 public class TxLockCREW extends TxLock {
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     private val lock = new Lock();
-    private val readers = new HashSet[Long]();
+    private val readers = new ReadersList();
     private var waitingWriter:Long = -1;
     private var writer:Long = -1;
 
+    private static class ReadersList {
+        val rdRail = new GrowableRail[Long](5);
+        
+        public def add(id:Long) {
+            rdRail.add(id);
+        }
+        
+        public def remove(id:Long) {
+            val last = rdRail.size() -1;
+            var indx:Long = -1;
+            for (indx = 0 ; indx < rdRail.size(); indx++) {
+                if (rdRail(indx) == id)
+                    break;
+            }
+            assert (indx != -1) : "fatal lock bug, removing non-existing reader";
+            //swap with last
+            val tmp = rdRail(indx);
+            rdRail(indx) = rdRail(last);
+            rdRail(last) = tmp;
+            
+            rdRail.removeLast();
+        }
+        
+        public def size() = rdRail.size();
+        
+        public def contains(id:Long) = rdRail.contains(id);
+        
+        public def get(indx:Long) = rdRail(indx);
+        
+    }
+    
     public def lockRead(txId:Long, key:String) {
         try {
             lock.lock();
@@ -77,12 +110,12 @@ public class TxLockCREW extends TxLock {
                 writer = txId;
                 conflict = false;
             }
-            else if (readers.size() == 1 && readers.iterator().next() == txId) { 
+            else if (readers.size() == 1 && readers.get(0) == txId) { 
                 readers.remove(txId);
                 writer = txId;
                 conflict = false;
             }
-            else if (readers.size() > 0 && !readers.contains(txId) && stronger(txId, readers)) {  
+            else if (readers.size() > 0 && !readers.contains(txId) && strongerThanReaders(txId)) {  
                 if (waitWriterReadersLocked(0, txId, key)) {
                     writer = txId;
                     conflict = false;
@@ -114,7 +147,7 @@ public class TxLockCREW extends TxLock {
             if (conflict) {
                 if (resilient)
                     checkDeadLockers(key);
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] lockWrite CONFLICT, writer["+writer+"] readers["+readersAsString(readers)+"] ");
+                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] lockWrite CONFLICT, writer["+writer+"] readers["+readersAsString()+"] ");
                 throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId) + " key ["+key+"] ", here);
             }
             else
@@ -141,11 +174,11 @@ public class TxLockCREW extends TxLock {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] unlockWrite done");
     }
     
-    private static def readersAsString(set:HashSet[Long]) {
+    private def readersAsString() {
         var s:String = "";
-        val iter = set.iterator();
-        while (iter.hasNext()) {
-            s += iter.next() + " ";
+        for (var i:Long = 0; i < readers.size(); i++) {
+            val rd = readers.get(i);
+            s += rd + " ";
         }
         return s;
     }
@@ -176,7 +209,7 @@ public class TxLockCREW extends TxLock {
                 lock.lock();
                 count++;
                 if (count%1000 == 0) {
-                    Console.OUT.println(here + " - waitReaderWriterLocked  Tx["+txId+"]  writer["+writer+"]  waitingWriter["+waitingWriter+"] readers["+readersAsString(readers)+"] ...");
+                    Console.OUT.println(here + " - waitReaderWriterLocked  Tx["+txId+"]  writer["+writer+"]  waitingWriter["+waitingWriter+"] readers["+readersAsString()+"] ...");
                 }
             }
             if (count >= 1000) {
@@ -218,7 +251,7 @@ public class TxLockCREW extends TxLock {
                 
                 count++;
                 if (count%1000 == 0) {
-                    Console.OUT.println(here + " - waitWriterReadersLocked  Tx["+txId+"]  writer["+writer+"]  waitingWriter["+waitingWriter+"] readers["+readersAsString(readers)+"] ...");
+                    Console.OUT.println(here + " - waitWriterReadersLocked  Tx["+txId+"]  writer["+writer+"]  waitingWriter["+waitingWriter+"] readers["+readersAsString()+"] ...");
                 }
             }
             if (count >= 1000) {
@@ -257,7 +290,7 @@ public class TxLockCREW extends TxLock {
                 
                 count++;
                 if (count%1000 == 0) {
-                    Console.OUT.println(here + " - waitWriterWriterLocked  Tx["+txId+"]  writer["+writer+"]  waitingWriter["+waitingWriter+"] readers["+readersAsString(readers)+"] ...");
+                    Console.OUT.println(here + " - waitWriterWriterLocked  Tx["+txId+"]  writer["+writer+"]  waitingWriter["+waitingWriter+"] readers["+readersAsString()+"] ...");
                 }
             }
             if (count >= 1000) {
@@ -293,12 +326,11 @@ public class TxLockCREW extends TxLock {
         return res;
     }
     
-    private def stronger(me:Long, readers:HashSet[Long]) {
+    private def strongerThanReaders(me:Long) {
         var res:Boolean = true;
     
-        val iter = readers.iterator();
-        while (iter.hasNext()) {
-            val other = iter.next();
+        for (var i:Long = 0; i < readers.size(); i++) {
+            val other = readers.get(i);
             res = stronger(me, other);
             if (!res)
                 break;
@@ -307,9 +339,8 @@ public class TxLockCREW extends TxLock {
     }
     
     private def checkDeadLockers(key:String) {
-        val iter = readers.iterator();
-        while (iter.hasNext()) {
-            val txId = iter.next();
+        for (var i:Long = 0; i < readers.size(); i++) {
+            val txId = readers.get(i);
             TxManager.checkDeadCoordinator(txId, key);
         }
         if (writer != -1)
