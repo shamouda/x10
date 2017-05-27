@@ -139,6 +139,12 @@ public class TxLog {
         transLog.getOrThrow(key).setDeleted(d);
     }
     
+    public def setAllWriteFlags(key:String, locked:Boolean, deleted:Boolean) {
+        transLog.getOrThrow(key).setDeleted(deleted);
+        transLog.getOrThrow(key).setLockedWrite(locked);
+        transLog.getOrThrow(key).setReadOnly(false);
+    }
+    
     public def getLockedRead(key:String) {
         var result:Boolean = false;
         val keyLog = transLog.getOrElse(key, null);
