@@ -17,6 +17,7 @@ import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.RailUtils;
+import x10.util.GrowableRail;
 
 /*
  * The log to track actions done on a key. 
@@ -28,7 +29,107 @@ import x10.util.RailUtils;
  * interleaving between abort and other operations.
  **/
 public class TxLog {
+    private static class TxLogKeysList {
+        private val rdKeys:GrowableRail[TxKeyChange];
+        private val wtKeys:GrowableRail[TxKeyChange];
     
+        public def this() {
+            rdKeys = new GrowableRail[TxKeyChange](TxConfig.get().PREALLOC_TXKEYS);
+            wtKeys = new GrowableRail[TxKeyChange](TxConfig.get().PREALLOC_TXKEYS);
+        }
+    
+        public def reset() {
+            rdKeys.clear();
+            wtKeys.clear();
+        }
+        
+        public def isReadOnlyTransaction() {
+            return wtKeys.size() == 0;
+        }
+        
+        public def getWriteKeys()  {
+            return wtKeys;
+        }
+        
+        public def add(log:TxKeyChange) {
+            rdKeys.add(log);
+        }
+        
+        
+        private def get(key:String, read:Boolean) {
+            val rail = read ? rdKeys : wtKeys;
+            for (var i:Long = 0; i < rail.size(); i++) {
+                if (rail(i).key().equals(key))
+                    return rail(i);
+            }
+            return null;
+        }
+    
+        
+        public def get(key:String) {
+            val rdVal = get(key, true);
+            if (rdVal != null)
+                return rdVal;
+            return get(key, false);
+        }
+        
+        public def getOrThrow(key:String) {
+            val obj = get(key);            
+            if (obj == null)
+                throw new Exception("Not found:" + key);
+            return obj;
+        }
+    
+        private def fromReadToWrite(key:String) {
+            val last = rdKeys.size() -1;
+            var indx:Long = -1;
+            for (indx = 0 ; indx < rdKeys.size(); indx++) {
+                if (rdKeys(indx).key().equals(key))
+                    break;
+            }
+            assert (indx != -1) : "fatal txkeychange not found";
+            //swap with last
+            val tmp = rdKeys(indx);
+            rdKeys(indx) = rdKeys(last);
+            rdKeys(last) = tmp;
+            val log = rdKeys.removeLast();
+            wtKeys.add(log);
+            return log;
+        }
+
+        public def logPut(key:String, copiedValue:Cloneable) {
+            var log:TxKeyChange = get(key, false); //get from write
+            if (log == null)
+                log = fromReadToWrite(key);
+            log.update(copiedValue);
+        }
+    
+        public def logDelete(key:String) {
+            var log:TxKeyChange = get(key, false); //get from write
+            if (log == null)
+                log = fromReadToWrite(key);
+            log.delete();
+        }
+
+        public def setAllWriteFlags(key:String, locked:Boolean, deleted:Boolean) {
+            var log:TxKeyChange = get(key, false); //get from write
+            if (log == null)
+                log = fromReadToWrite(key);
+            log.setReadOnly(false);
+            log.setLockedWrite(locked);
+            log.setDeleted(deleted);
+        }
+
+        public def setLockedWrite(key:String) {
+            var log:TxKeyChange = get(key, false); //get from write
+            if (log == null)
+                log = fromReadToWrite(key);
+            log.setLockedWrite(true);
+        }
+        
+    }
+
+    private val keysList:TxLogKeysList;
     public var transLog:HashMap[String,TxKeyChange];
     public var aborted:Boolean = false;
     public var writeValidated:Boolean = false;
@@ -36,6 +137,7 @@ public class TxLog {
     private var lock:Lock;
     
     public def this() {
+        keysList = new TxLogKeysList();
         transLog = new HashMap[String,TxKeyChange]();
         if (!TxConfig.get().LOCK_FREE)
             lock = new Lock();

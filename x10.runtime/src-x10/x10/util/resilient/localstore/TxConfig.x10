@@ -28,6 +28,7 @@ public class TxConfig {
     public val PREALLOC_READERS:Long;
     public val PREALLOC_TXKEYS:Long;
 
+
     //used for performance testing only
     public val COMMIT:Boolean;
 	public val DISABLE_SLAVE:Boolean; 
