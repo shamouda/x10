@@ -40,7 +40,7 @@ public class TxLockCREW extends TxLock {
     private var writer:Long = -1;
 
     private static class ReadersList {
-        val rdRail = new GrowableRail[Long](5);
+        val rdRail = new GrowableRail[Long](TxConfig.get().PREALLOC_READERS);
         
         public def add(id:Long) {
             rdRail.add(id);
