@@ -20,44 +20,41 @@ import x10.util.resilient.localstore.Cloneable;
  * In WB: the value is the current value local to the transaction, changes occur on the log value (not directly on the Map), we use this value for commit.
  **/
 public class TxKeyChange {
+    private var key:String;
+
     /*A copy of the value, used to isolate the transaction updates for the actual value*/
     private var value:Cloneable;
     
     /*Initial version at Tx start*/
-    private val initVersion:Int;
+    private var initVersion:Int = -1n;
     
     /*Initial version at Tx start*/
-    private val initTxId:Long;
+    private var initTxId:Long = -1;
     
     /*A flag to indicate if the value was used for read only operations*/
     private var readOnly:Boolean = true;
     private var lockedRead:Boolean = false;
     private var lockedWrite:Boolean = false;
 
-    private val added:Boolean;
+    private var added:Boolean = false;
     private var deleted:Boolean = false;
-    private val memU:MemoryUnit;
-
-    public def this(initValue:Cloneable, initVersion:Int, initTxId:Long, lockedRead:Boolean, memU:MemoryUnit, added:Boolean) {
-        this.value = initValue;
-        this.initVersion = initVersion;
+    private var memU:MemoryUnit;
+     
+    public def this(key:String, initTxId:Long, lockedRead:Boolean, memU:MemoryUnit, added:Boolean) {
+        this.key = key;
         this.initTxId = initTxId;
         this.lockedRead = lockedRead;
         this.memU = memU;
         this.added = added;
     }
     
-    public def this (value:Cloneable, initVersion:Int, initTxId:Long,
-            readOnly:Boolean, lockedRead:Boolean, lockedWrite:Boolean, memU:MemoryUnit, added:Boolean) {
-        this.value = value;
+    public def initValueVersion(initValue:Cloneable, initVersion:Int) {
+        this.value = initValue;
         this.initVersion = initVersion;
-        this.initTxId = initTxId;
-        this.readOnly = readOnly;
-        this.lockedRead = lockedRead;
-        this.lockedWrite = lockedWrite;
-        this.memU = memU;
-        this.added = added;
     }
+    
+    
+    public def key() = key;
     
     public def update(n:Cloneable) {
         //Undo Logging should only log the initial value and perform updates inplace

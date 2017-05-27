@@ -93,11 +93,9 @@ public class TxLog {
     public def logInitialValue(key:String, txId:Long, lockedRead:Boolean, memU:MemoryUnit, added:Boolean) {
         var log:TxKeyChange = transLog.getOrElse(key, null);
         if (log == null) {
-            /*
-            log = new TxKeyChange(txId, lockedRead, memU, added);
+            log = new TxKeyChange(key, txId, lockedRead, memU, added);
             memU.initializeTxKeyLog(key, lockedRead, log);
             transLog.put(key, log);
-            */
         }
     }
     
