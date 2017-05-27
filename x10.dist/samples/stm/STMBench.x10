@@ -389,7 +389,7 @@ public class STMBench {
                 RailUtils.sort(tmpKeys);
             
             for (var x:Long = 0; x < o; x++) {
-                 keys(start+x) = "key" + (baseKey + tmpKeys(x));
+                 keys(start+x) = String.valueOf ( baseKey + tmpKeys(x) );
             }
         }
     }
