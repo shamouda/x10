@@ -122,7 +122,7 @@ public class MasterStore(immediateRecovery:Boolean) {
             metadata.lockAll();
         
         for (txId in txList) {
-            val obj = metadata.getOrThrowUnsafe("_TxDesc_"+"tx"+txId).getAtomicValueLocked(false, "_TxDesc_"+"tx"+txId, -1).value;
+            val obj = metadata.getOrThrowUnsafe("_TxDesc_"+"tx"+txId).getValueLocked(false, "_TxDesc_"+"tx"+txId, -1);
             if (obj != null && ( (obj as TxDesc).status == TxDesc.COMMITTED || (obj as TxDesc).status == TxDesc.COMMITTING) ) {
                 list.add(txId);
             }

@@ -41,7 +41,7 @@ public class MemoryUnit {
         }
     }
     
-    public def getAtomicValue(copy:Boolean, key:String, txId:Long) {
+    public def getValue(copy:Boolean, key:String, txId:Long) {
         try {
             lockExclusive(); //lock is used to ensure that value/version are always in sync as a composite value
             ensureNotDeleted(key);
@@ -49,22 +49,27 @@ public class MemoryUnit {
             if (copy) {
                 v = value == null?null:value.clone();
             }
-            if (TxConfig.get().TM_DEBUG && txId != -1) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " getvv key["+key+"] ver["+version+"] val["+v+"]");
-            return new AtomicValue(version, v);
+            return v;
         }
         finally {
             unlockExclusive();
         }
     }
     
-    public def getAtomicValueLocked(copy:Boolean, key:String, txId:Long) {
-        ensureNotDeleted(key);
-        var v:Cloneable = value;
-        if (copy) {
-            v = value == null?null:value.clone();
+    public def initializeTxKeyLog(key:String, locked:Boolean, log:TxKeyChange) {
+        /*
+        try {
+            if (!locked)
+                lockExclusive(); 
+            ensureNotDeleted(key);
+            val v = value == null?null:value.clone();
+            log.initValueVersion(v, version);
         }
-        if (TxConfig.get().TM_DEBUG && txId != -1) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " getvv key["+key+"] ver["+version+"] val["+v+"]");
-        return new AtomicValue(version, v);
+        finally {
+            if (!locked)
+                unlockExclusive();
+        }
+        */
     }
     
     public def rollbackValueLocked(oldValue:Cloneable, oldVersion:Int, key:String, txId:Long) {
@@ -135,6 +140,11 @@ public class MemoryUnit {
         }
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " getvv key["+key+"] ver["+version+"] val["+v+"]");
         return v;
+    }
+    
+    public def getVersionLocked(copy:Boolean, key:String, txId:Long) {
+        ensureNotDeleted(key);
+        return version;
     }
     
     public def setValueLocked(v:Cloneable, key:String, txId:Long, deleted:Boolean) {

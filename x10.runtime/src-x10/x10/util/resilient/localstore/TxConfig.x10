@@ -17,12 +17,16 @@ public class TxConfig {
     public val TM_REP:String; //lazy|eager
 	public val TM_DEBUG:Boolean; //lazy|eager
     public val VALIDATION_REQUIRED:Boolean;
+    public val WRITE_BUFFERING:Boolean;
+
     public val BUCKETS_COUNT:Long;
     public val DISABLE_INCR_PARALLELISM:Boolean;
     public val DPE_SLEEP_MS:Long;
 
     public val MAX_CONCURRENT_TXS:Long;
 
+    public val PREALLOC_READERS:Long;
+    public val PREALLOC_TXKEYS:Long;
 
     //used for performance testing only
     public val COMMIT:Boolean;
@@ -53,6 +57,8 @@ public class TxConfig {
             assert(false) : "Invalid TM value, possible values are: baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB";
         }
         
+        WRITE_BUFFERING = TM.contains("WB");
+        
         BUCKETS_COUNT = (System.getenv("BUCKETS_COUNT") == null || System.getenv("BUCKETS_COUNT").equals("")) ? 1 : Long.parseLong(System.getenv("BUCKETS_COUNT"));
         DISABLE_INCR_PARALLELISM = (System.getenv("DISABLE_INCR_PARALLELISM") == null || System.getenv("DISABLE_INCR_PARALLELISM").equals("")) ? false : Long.parseLong(System.getenv("DISABLE_INCR_PARALLELISM")) == 1;
 
@@ -77,6 +83,8 @@ public class TxConfig {
         DPE_SLEEP_MS = System.getenv("DPE_SLEEP_MS") == null ? 10 : Long.parseLong(System.getenv("DPE_SLEEP_MS"));
         
         MAX_CONCURRENT_TXS = System.getenv("MAX_CONCURRENT_TXS") == null ? 100 : Long.parseLong(System.getenv("MAX_CONCURRENT_TXS"));
+        PREALLOC_READERS = System.getenv("PREALLOC_READERS") == null ? 5 : Long.parseLong(System.getenv("PREALLOC_READERS"));
+        PREALLOC_TXKEYS = System.getenv("PREALLOC_TXKEYS") == null ? 5 : Long.parseLong(System.getenv("PREALLOC_TXKEYS"));
     }
     
     public static def get() = instance;

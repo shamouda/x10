@@ -90,12 +90,14 @@ public class TxLog {
     }
     
     /*MUST be called before logPut and logDelete*/
-    public def logInitialValue(key:String, copiedValue:Cloneable, version:Int, txId:Long, lockedRead:Boolean, memU:MemoryUnit, added:Boolean) {
+    public def logInitialValue(key:String, txId:Long, lockedRead:Boolean, memU:MemoryUnit, added:Boolean) {
         var log:TxKeyChange = transLog.getOrElse(key, null);
         if (log == null) {
-            log = new TxKeyChange(copiedValue, version, txId, lockedRead, memU, added);
+            /*
+            log = new TxKeyChange(txId, lockedRead, memU, added);
+            memU.initializeTxKeyLog(key, lockedRead, log);
             transLog.put(key, log);
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " initial read ver["+version+"] val["+copiedValue+"]");
+            */
         }
     }
     

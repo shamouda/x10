@@ -89,8 +89,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                         map.put(key, null);
                     }
                     else {
-                        val atomicV = memory.getAtomicValueLocked(true, key, id);
-                        map.put(key, atomicV.value);
+                        val atomicV = memory.getValueLocked(true, key, id);
+                        map.put(key, atomicV);
                     }
                 }
                 return map;
@@ -120,20 +120,20 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     /**************   Pausing for Recovery    ****************/
     public def waitUntilPaused() {
         Console.OUT.println("Recovering " + here + " MasterStore.waitUntilPaused started ...");
-    	val buckets = TxConfig.get().BUCKETS_COUNT;
-    	try {
-	        Runtime.increaseParallelism("Master.waitUntilPaused");
-	        
-	        while (true) {
-	        	if (!txLogManager.activeTransactionsExist()) {
-	        	    break;
-	        	}
-	        	TxConfig.waitSleep();
-	        }
+        val buckets = TxConfig.get().BUCKETS_COUNT;
+        try {
+            Runtime.increaseParallelism("Master.waitUntilPaused");
+            
+            while (true) {
+                if (!txLogManager.activeTransactionsExist()) {
+                    break;
+                }
+                TxConfig.waitSleep();
+            }
         
-    	}finally {
-    		Runtime.decreaseParallelism(1n, "Master.waitUntilPaused");
-    	}
+        }finally {
+            Runtime.decreaseParallelism(1n, "Master.waitUntilPaused");
+        }
         paused();
         Console.OUT.println("Recovering " + here + " MasterStore.waitUntilPaused completed ...");
     }
@@ -150,49 +150,49 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     }
     
     public def pausing() {
-    	try {
-    		statusLock();
-    		assert(status == STATUS_ACTIVE);
-    		status = STATUS_PAUSING;
-    		Console.OUT.println("Recovering " + here + " TxManager changed status from STATUS_ACTIVE to STATUS_PAUSING");
-    	}
-    	finally {
-    		statusUnlock();
-    	}
+        try {
+            statusLock();
+            assert(status == STATUS_ACTIVE);
+            status = STATUS_PAUSING;
+            Console.OUT.println("Recovering " + here + " TxManager changed status from STATUS_ACTIVE to STATUS_PAUSING");
+        }
+        finally {
+            statusUnlock();
+        }
     }
     
     public def paused() {
-    	try {
-    		statusLock();
-    		assert(status == STATUS_PAUSING);
-    		status = STATUS_PAUSED;
-    		Console.OUT.println("Recovering " + here + " TxManager changed status from STATUS_PAUSING to STATUS_PAUSED");
-    	}
-    	finally {
-    		statusUnlock();
-    	}
+        try {
+            statusLock();
+            assert(status == STATUS_PAUSING);
+            status = STATUS_PAUSED;
+            Console.OUT.println("Recovering " + here + " TxManager changed status from STATUS_PAUSING to STATUS_PAUSED");
+        }
+        finally {
+            statusUnlock();
+        }
     }
     
     public def reactivate() {
-    	try {
-    		statusLock();
-    		assert(status == STATUS_PAUSED);
-    		status = STATUS_ACTIVE;
-    		Console.OUT.println("Recovering " + here + " TxManager changed status from STATUS_PAUSED to STATUS_ACTIVE");
-    	}
-    	finally {
-    		statusUnlock();
-    	}
+        try {
+            statusLock();
+            assert(status == STATUS_PAUSED);
+            status = STATUS_ACTIVE;
+            Console.OUT.println("Recovering " + here + " TxManager changed status from STATUS_PAUSED to STATUS_ACTIVE");
+        }
+        finally {
+            statusUnlock();
+        }
     }
     
     public def isActive() {
-    	try {
-    		statusLock();
-    		return status == STATUS_ACTIVE;
-    	}
-    	finally {
-    		statusUnlock();
-    	}
+        try {
+            statusLock();
+            return status == STATUS_ACTIVE;
+        }
+        finally {
+            statusUnlock();
+        }
     }
     
     /********************************************************/
@@ -290,14 +290,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 if (lockRead)
                     memory.lockRead(id, key);
                 
-                var atomicV:AtomicValue = null;
-                if (lockRead)
-                    atomicV = memory.getAtomicValueLocked(true, key, id);
-                else
-                    atomicV = memory.getAtomicValue(true, key, id); //will cause internal locking
-                val copy1 = atomicV.value;
-                val ver = atomicV.version;
-                log.logInitialValue(key, copy1, ver, id, lockRead, memory, memUResponse.added);
+                log.logInitialValue(key, id, lockRead, memory, memUResponse.added);
             }
             return new LogContainer(memory, log);
         } catch(ex:AbortedTransactionException) {
@@ -325,13 +318,10 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     private def lockWriteRV(id:Long, key:String, cont:LogContainer, delete:Boolean) {
         val memory = cont.memory;
         val log = cont.log;
-        var atomicV:AtomicValue = null;
         if (!log.getLockedWrite(key)) {
             //there is no need to do unlockRead, in read versioning we don't lock the keys while reading
             memory.lockWrite(id, key); 
-            atomicV = memory.getAtomicValueLocked(false, key, id);
-
-            val curVer = atomicV.version;
+            val curVer = memory.getVersionLocked(false, key, id);
             val initVer = log.getInitVersion(key);
             if (curVer != initVer) {
                 /*another transaction has modified it and committed since we read the initial value*/
@@ -343,10 +333,6 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             log.setReadOnly(key, false);
             log.setDeleted(key, delete);
         }
-        else 
-            atomicV = memory.getAtomicValueLocked(false, key, id);
-        
-        return atomicV;
     }
     
     private def lockWriteRL(id:Long, key:String, cont:LogContainer, delete:Boolean) {
@@ -369,8 +355,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     protected def put_RV_EA_WB(id:Long, key:String, value:Cloneable, delete:Boolean, txDesc:Boolean):Cloneable {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RV_EA_WB started, key["+key+"] delete["+delete+"] ");
         var log:TxLog = null;
-        try {     	
-            val cont = logInitialIfNotLogged(id, key, false);        	
+        try {       
+            val cont = logInitialIfNotLogged(id, key, false);           
             val memory = cont.memory;
             log = cont.log;
             
@@ -480,7 +466,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 ensureActiveStatus();
             
             /*** EarlyAcquire ***/
-            val atomicV = lockWriteRV(id, key, cont, delete);
+            lockWriteRV(id, key, cont, delete);
             
             /*** Undo Logging ***/
             if (delete){
@@ -517,7 +503,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             /*** DO NOT ACQUIRE WRITE LOCK HERE ***/
             
             /*** Write Buffering ***/
-            val copy1 = (value == null)? null:value.clone();            
+            val copy1 = (value == null)? null:value.clone();
             log.setReadOnly(key, false);
             if (delete) {
                 return log.logDelete(key);
@@ -550,9 +536,10 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             
             
             /*** Undo Logging ***/
-            val atomicV = memory.getAtomicValueLocked(true, key, id);
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " getvv  ver["+atomicV.version+"] value["+atomicV.value+"]");
-            return atomicV.value; //send a different copy to use to avoid manipulating the log or the original data
+            //true = send a different copy to use to avoid manipulating the log or the original data
+            val atomicV = memory.getValueLocked(true, key, id);
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " getvv  value["+atomicV+"]");
+            return atomicV;
         } catch(ex:AbortedTransactionException) {
             return null;
         } catch(ex:Exception) {
@@ -623,7 +610,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
            
             /*** UndoLogging: read value from memory ***/
             val copy = true; // send a different copy to use to avoid manipulating the log or the original data 
-            return memory.getAtomicValue(copy, key, id).value;
+            return memory.getValue(copy, key, id);
         } catch(ex:AbortedTransactionException) {
             return null;
         } catch(ex:Exception) {
@@ -662,7 +649,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             if (writeTx) {
                 if (resilient && immediateRecovery)
                     ensureActiveStatus();
-            	log.writeValidated = true;
+                log.writeValidated = true;
             }
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
@@ -691,7 +678,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 
                 /*Read Validation*/
                 val initVer = logMap.getOrThrow(key).getInitVersion();
-                val curVer = memory.getAtomicValueLocked(false, key, id).version;
+                val curVer = memory.getVersionLocked(false, key, id);
                 //detect write after read
                 if (curVer != initVer) {
                     if (log.getReadOnly(key))
@@ -710,7 +697,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             if (writeTx) {
                 if (resilient && immediateRecovery)
                     ensureActiveStatus();
-            	log.writeValidated = true;
+                log.writeValidated = true;
             }
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
@@ -736,7 +723,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                         
                     /*Read Validation*/
                     val initVer = logMap.getOrThrow(key).getInitVersion();
-                    val curVer = memory.getAtomicValueLocked(false, key, id).version;
+                    val curVer = memory.getVersionLocked(false, key, id);
                     
                     //detect write after read
                     if (curVer != initVer) {
@@ -746,12 +733,12 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                     log.setLockedRead(key, true);
                 }
                 else
-                	writeTx = true;
+                    writeTx = true;
             }
             if (writeTx) {
                 if (resilient && immediateRecovery)
                     ensureActiveStatus();
-            	log.writeValidated = true; // we can not start migratoin until all writeValidated transactions commit or abort
+                log.writeValidated = true; // we can not start migratoin until all writeValidated transactions commit or abort
             }
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
@@ -982,15 +969,15 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     
     /*********************************************/
     private def statusLock(){
-    	assert(resilient);
+        assert(resilient);
         if (!TxConfig.get().LOCK_FREE)
-        	resilientStatusLock.lock();
+            resilientStatusLock.lock();
     }
     
     private def statusUnlock(){
-    	assert(resilient);
+        assert(resilient);
         if (!TxConfig.get().LOCK_FREE)
-        	resilientStatusLock.unlock();
+            resilientStatusLock.unlock();
     }
 }
 
