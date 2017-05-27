@@ -128,149 +128,129 @@ public class TxLog {
         }
         
     }
-
+    
     private val keysList:TxLogKeysList;
-    public var transLog:HashMap[String,TxKeyChange];
-    public var aborted:Boolean = false;
-    public var writeValidated:Boolean = false;
-    public var id:Long = -1;
+    public var aborted:Boolean=false;
+    public var writeValidated:Boolean=false;
+    public var id:Long=-1;
     private var lock:Lock;
-    
-    public def this() {
-        keysList = new TxLogKeysList();
-        transLog = new HashMap[String,TxKeyChange]();
-        if (!TxConfig.get().LOCK_FREE)
-            lock = new Lock();
-        else
-            lock = null;
-    }
-    
-    public def reset() {
-        id = -1;
-        transLog.clear();
-        aborted = false;
-        writeValidated = false;
-    }
-    
-    public def clearAborted() {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] clearTxLog ...");
-        transLog = null;
-        aborted = true;
-    }
-    
-    
-    public def getChangeLog(key:String) {
-        return transLog.getOrThrow(key);
-    }
-    
-    // get currently logged value (throws an exception if value was not set before)
+
+
+        public def this(){
+            keysList = new TxLogKeysList();
+            if (!TxConfig.get().LOCK_FREE)
+                lock = new Lock();
+            else
+                lock = null;
+        }
+
+        public def reset() {
+            id = -1;
+            keysList.clear();
+            aborted = false;
+            writeValidated = false;
+        }
+
+
+        // get currently logged value (throws an exception if value was not set
+        // before)
     public def getValue(copy:Boolean, key:String) {
-        val value = transLog.getOrThrow(key).getValue();
+        val value = keysList.getOrThrow(key).getValue();
         var v:Cloneable = value;
         if (copy) {
             v = value == null?null:value.clone();
         }
         return v;
     }
-    
-    // get version
+
+        // get version
     public def getInitVersion(key:String) {
-        return transLog.getOrThrow(key).getInitVersion();
+        return keysList.getOrThrow(key).getInitVersion();
     }
-    
-    // get TxId
+
+        // get TxId
     public def getInitTxId(key:String) {
-        return transLog.getOrThrow(key).getInitTxId();
+        return keysList.getOrThrow(key).getInitTxId();
     }
-       
+
     public def getMemoryUnit(key:String) {
-        var log:TxKeyChange = transLog.getOrElse(key, null);
+        var log:TxKeyChange = keysList.get(key);
         if (log == null)
             return null;
         else
             return log.getMemoryUnit();
     }
-    
-    /*MUST be called before logPut and logDelete*/
+
     public def logInitialValue(key:String, txId:Long, lockedRead:Boolean, memU:MemoryUnit, added:Boolean) {
-        var log:TxKeyChange = transLog.getOrElse(key, null);
+        var log:TxKeyChange = keysList.get(key);
         if (log == null) {
-            log = new TxKeyChange(key, txId, lockedRead, memU, added);
+            log = new TxKeyChange(txId, lockedRead, memU, added);
             memU.initializeTxKeyLog(key, lockedRead, log);
-            transLog.put(key, log);
+            keysList.addRead(log);
         }
     }
-    
+
     public def logPut(key:String, copiedValue:Cloneable) {
-        return transLog.getOrThrow(key).update(copiedValue);
+        return keysList.logPut(key, copiedValue);
     }
-    
+
     public def logDelete(key:String) {
-        return transLog.getOrThrow(key).delete();
+        return keysList.logDelete(key);
     }
-    
-    public def setReadOnly(key:String, ro:Boolean) {
-        transLog.getOrThrow(key).setReadOnly(ro);
-    }
-    
-    //*used by Undo Logging*//
-    public def getReadOnly(key:String) {
-        return transLog.getOrThrow(key).getReadOnly();
-    }
-    
-    public def getDeleted(key:String) {
-        return transLog.getOrThrow(key).getDeleted();
-    }
-    
-    // mark as locked for read
-    public def setLockedRead(key:String, lr:Boolean) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + "here["+here+"] key["+key+"] setLockedRead("+lr+") ");
-        transLog.getOrThrow(key).setLockedRead(lr);
-    }
-    
-    // mark as locked for write
-    public def setLockedWrite(key:String, lw:Boolean) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] key["+key+"] setLockedWrite("+lw+") ");
-        transLog.getOrThrow(key).setLockedWrite(lw);
-    }
-    
-    public def setDeleted(key:String, d:Boolean) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] key["+key+"] setDeleted("+d+") ");
-        transLog.getOrThrow(key).setDeleted(d);
-    }
-    
+
     public def setAllWriteFlags(key:String, locked:Boolean, deleted:Boolean) {
-        transLog.getOrThrow(key).setDeleted(deleted);
-        transLog.getOrThrow(key).setLockedWrite(locked);
-        transLog.getOrThrow(key).setReadOnly(false);
+        keysList.setAllWriteFlags(key, locked, deleted);
     }
-    
+
+        // *used by Undo Logging*//
+    public def getReadOnly(key:String) {
+        return keysList.getOrThrow(key).getReadOnly();
+    }
+
+    public def getDeleted(key:String) {
+        return keysList.getOrThrow(key).getDeleted();
+    }
+
+        // mark as locked for read
+    public def setLockedRead(key:String, lr:Boolean) {
+        keysList.getOrThrow(key).setLockedRead(lr);
+    }
+
+        // mark as locked for write
+    public def setLockedWrite(key:String) {
+        keysList.setLockedWrite(key);
+    }
+
     public def getLockedRead(key:String) {
         var result:Boolean = false;
-        val keyLog = transLog.getOrElse(key, null);
-        if (keyLog == null)
+        val log = keysList.get(key);
+        if (log == null)
             result = false;
         else
-            result = keyLog.getLockedRead();
+            result = log.getLockedRead();
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] key["+key+"] getLockedRead?["+result+"]");
         return result;
     }
-    
+
     public def getLockedWrite(key:String) {
         var result:Boolean = false;
-        val keyLog = transLog.getOrElse(key, null);
-        if (keyLog == null)
+        val log = keysList.get(key);
+        if (log == null)
             result = false;
         else
-            result = keyLog.getLockedWrite();
+            result = log.getLockedWrite();
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] key["+key+"] getLockedWrite?["+result+"]");
         return result;
     }
-    
-    /*Get log without readonly changes*/
+
+    public def isReadOnlyTransaction() {
+        return keysList.isReadOnlyTransaction();
+    }
+
+    /* Get log without readonly changes */
     public def removeReadOnlyKeys():HashMap[String,Cloneable] {
         val map = new HashMap[String,Cloneable]();
-        if (transLog == null && aborted) {
+        if (transLog == null || aborted) {
             return null;
         }
         val iter = transLog.keySet().iterator();
@@ -284,17 +264,47 @@ public class TxLog {
         }
         return map;
     }
+
+    public def prepareCommitLog():HashMap[String,Cloneable] {
+        val map = new HashMap[String,Cloneable]();
+        if (transLog == null || aborted) {
+            return null;
+        }
     
-    public def lock() {
-        if (!TxConfig.get().LOCK_FREE)
-            lock.lock();
+        val wtKeys = keysList.getWriteKeys();
+        if (TxConfig.get().WRITE_BUFFERING) {
+            for (var i:Long = 0 ; i < wtKeys.size(); i++) {
+                val log = wtKeys.get(i);
+                map.put( log.key() , log.getValue());   /*SS_CHECK  I don't clone the objects here, why I did so in the past???**/
+            }
+        }
+        else {
+            for (var i:Long = 0 ; i < wtKeys.size(); i++) {
+                val log = wtKeys.get(i);
+                val key = log.key();
+                val memory = log.getMemoryUnit(key);
+                if (memory.isDeletedLocked()) {
+                    map.put(key, null);
+                }
+                else {
+                    map.put(key, memory.getValueLocked(false, key, id));   /*SS_CHECK  I don't clone the objects here, why I did so in the past???**/
+                }
+            
+            }
+        }
+        return map;
     }
-    
-    public def unlock() {
-        if (!TxConfig.get().LOCK_FREE)
-            lock.unlock();
-    }
-    
+
+        public def lock() {
+            if (!TxConfig.get().LOCK_FREE)
+                lock.lock();
+        }
+
+        public def unlock() {
+            if (!TxConfig.get().LOCK_FREE)
+                lock.unlock();
+        }
+
     public def getSortedKeys():Rail[String] {
         val size = transLog.size();
         val rail = new Rail[String](size);
