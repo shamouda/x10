@@ -43,8 +43,9 @@ public class STMBench {
             Option("g","progress","interval of progress reporting per producer (default no progress reporting)"),
             Option("vp","victims","victim places to kill (comma separated)"),
             Option("vt","victimsTimes","times to kill victim places(comma separated)"),
-            Option("opt","optimized","optimized runs use fixed pre-defined members list (default 0 (not optimized)"),
-            Option("s","spare","Spare places (default 0)")
+            Option("opt","optimized","optimized runs use fixed pre-defined members list (default 0 (not optimized))"),
+            Option("s","spare","Spare places (default 0)"),
+            Option("f","f","Transaction coordinator is also a participant (default 1) ")
         ]);
         
         val r = opts("r", 32*1024);
@@ -60,12 +61,13 @@ public class STMBench {
         val vp = opts("vp", "");
         val vt = opts("vt", "");
         val optimized = opts("opt", 0) == 1;
+        val f = opts("f", 1) == 1;
         val victimsList = new VictimsList(vp, vt);
         
         val mgr = new PlaceManager(s, false);
         val activePlaces = mgr.activePlaces();
         val p = opts("p", activePlaces.size());
-        printRunConfigurations (new STMBenchParameters(r, u, n, p, t, w, d, h, o, g, s, optimized));
+        printRunConfigurations (new STMBenchParameters(r, u, n, p, t, w, d, h, o, g, s, f, optimized));
         
         assert (h <= activePlaces.size()) : "invalid value for parameter h, h should not exceed the number of active places" ;
 
@@ -85,7 +87,7 @@ public class STMBench {
         }
         else {
             Console.OUT.println("warmup started");
-            runIteration(map, p, w, r, u, t, h, o, g, null, optimized, throughputPLH, null);
+            runIteration(map, p, w, r, u, t, h, o, g, f, null, optimized, throughputPLH, null);
             resetStatistics(map, throughputPLH);
             Console.OUT.println("warmup completed, warmup elapsed time ["+(Timer.milliTime() - startWarmup)+"]  ms ");
         }
@@ -98,7 +100,7 @@ public class STMBench {
                     victim = victimsList.getVictim(iter-1);
                 else
                     victim = victimsList;
-                runIteration(map, p, d, r, u, t, h, o, g, victim, optimized, throughputPLH, null);
+                runIteration(map, p, d, r, u, t, h, o, g, f, victim, optimized, throughputPLH, null);
                 Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
                 
                 printThroughput(map, p, iter, throughputPLH, d, t, h, o);
@@ -113,13 +115,13 @@ public class STMBench {
     }
     
     public static def runIteration(map:ResilientNativeMap, producersCount:Long, 
-            d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
+            d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, f:Boolean, victims:VictimsList, optimized:Boolean,
             throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
         val activePlaces = map.getActivePlaces();
         try {
             
             finish for (var i:Long = 0; i < producersCount; i++) {
-                startPlace(activePlaces(i), map, activePlaces.size(), producersCount, d, r, u, t, h, o, g, victims, optimized, throughput, recoveryThroughput);
+                startPlace(activePlaces(i), map, activePlaces.size(), producersCount, d, r, u, t, h, o, g, f, victims, optimized, throughput, recoveryThroughput);
             }
             
         } catch (e:STMBenchFailed) {
@@ -137,7 +139,7 @@ public class STMBench {
     }
 
     private static def startPlace(pl:Place, map:ResilientNativeMap, activePlacesCount:Long, producersCount:Long, 
-            d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
+            d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, f:Boolean, victims:VictimsList, optimized:Boolean,
             throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
         
         at (pl) async {
@@ -146,7 +148,7 @@ public class STMBench {
                 throughput().reinit(recoveryThroughput);
             
             for (thrd in 1..t) async {
-                produce(map, activePlacesCount, myVirtualPlaceId, producersCount, thrd-1, d, r, u, t, h, o, g, victims, optimized, throughput);
+                produce(map, activePlacesCount, myVirtualPlaceId, producersCount, thrd-1, d, r, u, t, h, o, g, f, victims, optimized, throughput);
             }
             
             if (resilient && victims != null) {
@@ -181,13 +183,13 @@ public class STMBench {
     }
     
     public static def produce(map:ResilientNativeMap, activePlacesCount:Long, myVirtualPlaceId:Long, producersCount:Long, producerId:Long, 
-            d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, victims:VictimsList, optimized:Boolean,
+            d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, f:Boolean, victims:VictimsList, optimized:Boolean,
             throughput:PlaceLocalHandle[PlaceThroughput]) {
         throughput().started = true;
         if (throughput().recovered) {
             Console.OUT.println(here + " Spare place started to produce transactions " + throughput().toString());
         }
-        val rand = new Random((here.id+1) * producerId);
+        val rand = new Random((here.id+1) * t + producerId);
         val myThroughput = throughput().thrds(producerId);
         var timeNS:Long = myThroughput.elapsedTimeNS; // always 0 in non-resilient mode, non-zero for spare places in resilient mode
 
@@ -199,9 +201,9 @@ public class STMBench {
         val readFlags = new Rail[Boolean] (h*o);
         
         while (timeNS < d*1e6) {
-            nextTransactionMembers(rand, activePlacesCount, h, myVirtualPlaceId, virtualMembers);
+            val innerStr = nextTransactionMembers(rand, activePlacesCount, h, myVirtualPlaceId, virtualMembers, f);
             nextRandomOperations(rand, activePlacesCount, virtualMembers, r, u, o, keys, values, readFlags, tmpKeys);
-           
+            
             val distClosure = (tx:AbstractTx) => {
                 for (var m:Long = 0; m < h; m++) {
                     val start = m*o;
@@ -238,7 +240,7 @@ public class STMBench {
                         map.executeTransaction(virtualMembers, distClosure, -1, remainingTime);
                     else
                         map.executeTransaction(null, distClosure, -1, remainingTime);
-                }catch(f:FatalTransactionException) {
+                }catch(expf:FatalTransactionException) {
                     includeTx = false;
                 }
             }
@@ -282,7 +284,7 @@ public class STMBench {
                 val recoveryTime = System.nanoTime() - throughput().rightPlaceDeathTimeNS;
                 oldThroughput.shiftElapsedTime(recoveryTime);
                 Console.OUT.println(here + " Calculated recovery time = " + (recoveryTime/ 1e9) + " seconds" );
-                startPlace(nextPlace, map, activePlacesCount, producersCount, d, r, u, t, h, o, g, victims, optimized, throughput, oldThroughput);
+                startPlace(nextPlace, map, activePlacesCount, producersCount, d, r, u, t, h, o, g, f, victims, optimized, throughput, oldThroughput);
             }
         }
         
@@ -335,8 +337,13 @@ public class STMBench {
         Place.places().broadcastFlat(()=>{plh().reset();}, (p:Place)=>true);
     }
     
-    public static def nextTransactionMembers(rand:Random, activePlacesCount:Long, h:Long, myPlaceIndex:Long, result:Rail[Long]) {
+    public static def nextTransactionMembers(rand:Random, activePlacesCount:Long, h:Long, myPlaceIndex:Long, result:Rail[Long], f:Boolean) {
         var selected:Long = 0;
+        if (f){
+            result(0) = myPlaceIndex;
+            selected = 1 ;
+        }
+        
         while (selected < h) {
             val candidate = Math.abs(rand.nextLong()) % activePlacesCount;
             var repeated:Boolean = false;
@@ -347,13 +354,18 @@ public class STMBench {
                 }
             }
             if (!repeated) {
-                result(selected) == candidate;
+                result(selected) = candidate;
                 selected++;
             }
         }
         if (TxConfig.get().LOCKING)
             RailUtils.sort(result);
-        return result;
+        
+        var mstr:String = "";
+        for (var i:Long = 0 ; i < result.size; i++) {
+            mstr += result(i) + " ";
+        }
+        return mstr;
     }
     
     public static def nextRandomOperations(rand:Random, activePlacesCount:Long, virtualMembers:Rail[Long], r:Long, u:Float, o:Long,
@@ -373,7 +385,7 @@ public class STMBench {
                     var k:Long = Math.abs(rand.nextLong()% keysPerPlace);
                     repeated = false;
                     for (var j:Long = 0; j < x; j++) {
-                        if (tmpKeys(start+j) == k) {
+                        if (tmpKeys(j) == k) {
                             repeated = true;
                             break;
                         }
@@ -385,6 +397,7 @@ public class STMBench {
                     }
                 }while (repeated);
             }
+            
             if (TxConfig.get().LOCKING)
                 RailUtils.sort(tmpKeys);
             
@@ -407,10 +420,11 @@ public class STMBench {
         public val o:Long;  //TxParticipantOperations
         public val g:Long;  //progress
         public val s:Long;  //spare
+        public val f:Boolean;
         public val opt:Boolean;
     
         def this(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, 
-                d:Long, h:Long, o:Long, g:Long, s:Long, opt:Boolean) {
+                d:Long, h:Long, o:Long, g:Long, s:Long, f:Boolean, opt:Boolean) {
             this.r = r;
             this.u = u;
             this.n = n;
@@ -422,6 +436,7 @@ public class STMBench {
             this.o = o;
             this.g = g;
             this.s = s;
+            this.f = f;
             this.opt = opt;
         }
     };
@@ -524,10 +539,11 @@ public class STMBench {
         Console.OUT.println("t=" + param.t);
         Console.OUT.println("w=" + param.w);
         Console.OUT.println("d=" + param.d);
-        Console.OUT.println("h=" + param.h + "   !!! At least one place is local !!!!   ");
+        Console.OUT.println("h=" + param.h );
         Console.OUT.println("o=" + param.o);
         Console.OUT.println("g=" + param.g);
         Console.OUT.println("s=" + param.s);
+        Console.OUT.println("f=" + param.f  + (param.f ? " !!! At least one place is local !!!! ": "h random places") );
         Console.OUT.println("opt=" + param.opt);
     }
 }
