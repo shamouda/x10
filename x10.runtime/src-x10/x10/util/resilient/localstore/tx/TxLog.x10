@@ -38,7 +38,7 @@ public class TxLog {
             wtKeys = new GrowableRail[TxKeyChange](TxConfig.get().PREALLOC_TXKEYS);
         }
     
-        public def reset() {
+        public def clear() {
             rdKeys.clear();
             wtKeys.clear();
         }
@@ -49,6 +49,10 @@ public class TxLog {
         
         public def getWriteKeys()  {
             return wtKeys;
+        }
+        
+        public def getReadKeys()  {
+            return rdKeys;
         }
         
         public def add(log:TxKeyChange) {
@@ -101,14 +105,14 @@ public class TxLog {
             var log:TxKeyChange = get(key, false); //get from write
             if (log == null)
                 log = fromReadToWrite(key);
-            log.update(copiedValue);
+            return log.update(copiedValue);
         }
     
         public def logDelete(key:String) {
             var log:TxKeyChange = get(key, false); //get from write
             if (log == null)
                 log = fromReadToWrite(key);
-            log.delete();
+            return log.delete();
         }
 
         public def setAllWriteFlags(key:String, locked:Boolean, deleted:Boolean) {
@@ -128,32 +132,30 @@ public class TxLog {
         }
         
     }
-    
+
     private val keysList:TxLogKeysList;
-    public var aborted:Boolean=false;
-    public var writeValidated:Boolean=false;
-    public var id:Long=-1;
+    public var transLog:HashMap[String,TxKeyChange];
+    public var aborted:Boolean = false;
+    public var writeValidated:Boolean = false;
+    public var id:Long = -1;
     private var lock:Lock;
+    
+    public def this() {
+        keysList = new TxLogKeysList();
+        if (!TxConfig.get().LOCK_FREE)
+            lock = new Lock();
+        else
+            lock = null;
+    }
+    
+    public def reset() {
+        id = -1;
+        keysList.clear();
+        aborted = false;
+        writeValidated = false;
+    }
 
-
-        public def this(){
-            keysList = new TxLogKeysList();
-            if (!TxConfig.get().LOCK_FREE)
-                lock = new Lock();
-            else
-                lock = null;
-        }
-
-        public def reset() {
-            id = -1;
-            keysList.clear();
-            aborted = false;
-            writeValidated = false;
-        }
-
-
-        // get currently logged value (throws an exception if value was not set
-        // before)
+    // get currently logged value (throws an exception if value was not set before)
     public def getValue(copy:Boolean, key:String) {
         val value = keysList.getOrThrow(key).getValue();
         var v:Cloneable = value;
@@ -162,17 +164,17 @@ public class TxLog {
         }
         return v;
     }
-
-        // get version
+    
+    // get version
     public def getInitVersion(key:String) {
         return keysList.getOrThrow(key).getInitVersion();
     }
-
-        // get TxId
+    
+    // get TxId
     public def getInitTxId(key:String) {
         return keysList.getOrThrow(key).getInitTxId();
     }
-
+       
     public def getMemoryUnit(key:String) {
         var log:TxKeyChange = keysList.get(key);
         if (log == null)
@@ -180,20 +182,21 @@ public class TxLog {
         else
             return log.getMemoryUnit();
     }
-
+    
+    /*MUST be called before logPut and logDelete*/
     public def logInitialValue(key:String, txId:Long, lockedRead:Boolean, memU:MemoryUnit, added:Boolean) {
         var log:TxKeyChange = keysList.get(key);
         if (log == null) {
-            log = new TxKeyChange(txId, lockedRead, memU, added);
+            log = new TxKeyChange(key, txId, lockedRead, memU, added);
             memU.initializeTxKeyLog(key, lockedRead, log);
-            keysList.addRead(log);
+            keysList.add(log);
         }
     }
-
+    
     public def logPut(key:String, copiedValue:Cloneable) {
         return keysList.logPut(key, copiedValue);
     }
-
+    
     public def logDelete(key:String) {
         return keysList.logDelete(key);
     }
@@ -201,26 +204,26 @@ public class TxLog {
     public def setAllWriteFlags(key:String, locked:Boolean, deleted:Boolean) {
         keysList.setAllWriteFlags(key, locked, deleted);
     }
-
-        // *used by Undo Logging*//
+    
+    //*used by Undo Logging*//
     public def getReadOnly(key:String) {
         return keysList.getOrThrow(key).getReadOnly();
     }
-
+    
     public def getDeleted(key:String) {
         return keysList.getOrThrow(key).getDeleted();
     }
-
-        // mark as locked for read
+    
+    // mark as locked for read
     public def setLockedRead(key:String, lr:Boolean) {
         keysList.getOrThrow(key).setLockedRead(lr);
     }
-
-        // mark as locked for write
-    public def setLockedWrite(key:String) {
+    
+    // mark as locked for write
+    public def setLockedWrite(key:String, lr:Boolean) {
         keysList.setLockedWrite(key);
     }
-
+    
     public def getLockedRead(key:String) {
         var result:Boolean = false;
         val log = keysList.get(key);
@@ -231,7 +234,7 @@ public class TxLog {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] key["+key+"] getLockedRead?["+result+"]");
         return result;
     }
-
+    
     public def getLockedWrite(key:String) {
         var result:Boolean = false;
         val log = keysList.get(key);
@@ -242,13 +245,14 @@ public class TxLog {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] key["+key+"] getLockedWrite?["+result+"]");
         return result;
     }
-
+    
     public def isReadOnlyTransaction() {
         return keysList.isReadOnlyTransaction();
     }
-
-    /* Get log without readonly changes */
+    
+    /*Get log without readonly changes*/
     public def removeReadOnlyKeys():HashMap[String,Cloneable] {
+    /*
         val map = new HashMap[String,Cloneable]();
         if (transLog == null || aborted) {
             return null;
@@ -263,26 +267,24 @@ public class TxLog {
             }
         }
         return map;
+        */
+        return new HashMap[String,Cloneable]();
     }
-
+    
     public def prepareCommitLog():HashMap[String,Cloneable] {
         val map = new HashMap[String,Cloneable]();
-        if (transLog == null || aborted) {
-            return null;
-        }
-    
         val wtKeys = keysList.getWriteKeys();
         if (TxConfig.get().WRITE_BUFFERING) {
             for (var i:Long = 0 ; i < wtKeys.size(); i++) {
-                val log = wtKeys.get(i);
+                val log = wtKeys(i);
                 map.put( log.key() , log.getValue());   /*SS_CHECK  I don't clone the objects here, why I did so in the past???**/
             }
         }
         else {
             for (var i:Long = 0 ; i < wtKeys.size(); i++) {
-                val log = wtKeys.get(i);
+                val log = wtKeys(i);
                 val key = log.key();
-                val memory = log.getMemoryUnit(key);
+                val memory = log.getMemoryUnit();
                 if (memory.isDeletedLocked()) {
                     map.put(key, null);
                 }
@@ -294,26 +296,25 @@ public class TxLog {
         }
         return map;
     }
-
-        public def lock() {
-            if (!TxConfig.get().LOCK_FREE)
-                lock.lock();
-        }
-
-        public def unlock() {
-            if (!TxConfig.get().LOCK_FREE)
-                lock.unlock();
-        }
-
+    public def lock() {
+        if (!TxConfig.get().LOCK_FREE)
+            lock.lock();
+    }
+    
+    public def unlock() {
+        if (!TxConfig.get().LOCK_FREE)
+            lock.unlock();
+    }
+    
+    public def getWriteKeys() {
+        return keysList.getWriteKeys();
+    }
+    
+    public def getReadKeys() {
+        return keysList.getReadKeys();
+    }
+    
     public def getSortedKeys():Rail[String] {
-        val size = transLog.size();
-        val rail = new Rail[String](size);
-        var i:Int = 0n;
-        val iter = transLog.keySet().iterator();
-        while (iter.hasNext()) {
-            rail(i++) = iter.next();
-        }
-        RailUtils.sort(rail);
-        return rail;
+        return new Rail[String](1);
     }
 }
