@@ -64,6 +64,20 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             throw new Exception("Wrong Tx Manager Configuration (undo logging can not be selected with late acquire");
     }
     
+
+    public def isReadOnlyTransaction(id:Long) {
+        val log = txLogManager.search(id);
+        if (log == null /**SS_CHECK|| log.aborted**/)
+            return true;
+        
+        try {
+            log.lock();
+            return log.isReadOnlyTransaction();
+        }finally {
+            log.unlock();
+        }
+    }
+    
     /* Used in resilient mode to transfer the changes done by a transaction to the Slave.
      * We filter the TxLog object to remove read-only keys,
      * so that we transfer only the update operations.
@@ -76,25 +90,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         
         try {
             log.lock();
-            if (TxConfig.get().TM.contains("WB")) { //write buffering
-                return log.removeReadOnlyKeys();
-            }
-            else {
-                val map = log.removeReadOnlyKeys();
-                val iter = map.keySet().iterator();
-                while (iter.hasNext()) {
-                    val key = iter.next();
-                    val memory = log.getMemoryUnit(key);
-                    if (memory.isDeletedLocked()) {
-                        map.put(key, null);
-                    }
-                    else {
-                        val atomicV = memory.getValueLocked(true, key, id);
-                        map.put(key, atomicV);
-                    }
-                }
-                return map;
-            }
+            return log.prepareCommitLog();
         }finally {
             log.unlock();
         }
