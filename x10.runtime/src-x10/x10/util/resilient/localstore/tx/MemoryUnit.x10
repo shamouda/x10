@@ -57,7 +57,6 @@ public class MemoryUnit {
     }
     
     public def initializeTxKeyLog(key:String, locked:Boolean, log:TxKeyChange) {
-        /*
         try {
             if (!locked)
                 lockExclusive(); 
@@ -69,7 +68,6 @@ public class MemoryUnit {
             if (!locked)
                 unlockExclusive();
         }
-        */
     }
     
     public def rollbackValueLocked(oldValue:Cloneable, oldVersion:Int, key:String, txId:Long) {

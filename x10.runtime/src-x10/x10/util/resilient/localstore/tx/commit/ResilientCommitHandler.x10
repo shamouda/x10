@@ -157,8 +157,7 @@ public abstract class ResilientCommitHandler extends CommitHandler {
  
     protected def abort_local_resilient(plh:PlaceLocalHandle[LocalStore], id:Long) {
         var ex:Exception = null;
-        val log = plh().getMasterStore().getTxCommitLog(id);
-        if (log != null && log.size() > 0) {
+        if (!plh().getMasterStore().isReadOnlyTransaction(id)) {
             try {
                 at (plh().slave) {
                     plh().slaveStore.abort(id);
@@ -179,8 +178,7 @@ public abstract class ResilientCommitHandler extends CommitHandler {
     
     protected def commit_local_resilient(plh:PlaceLocalHandle[LocalStore], id:Long) {
         var ex:Exception = null;
-        val log = plh().getMasterStore().getTxCommitLog(id);
-        if (log != null && log.size() > 0) {
+        if (!plh().getMasterStore().isReadOnlyTransaction(id)) {
             try {
                 at (plh().slave)  {
                     plh().slaveStore.commit(id);

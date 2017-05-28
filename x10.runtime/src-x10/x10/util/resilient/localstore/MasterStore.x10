@@ -36,6 +36,10 @@ public class MasterStore(immediateRecovery:Boolean) {
         this.txManager = TxManager.make(new MapData(masterMap), immediateRecovery);
     }   
     
+    public def isReadOnlyTransaction(id:Long) {
+        return txManager.isReadOnlyTransaction(id);
+    }
+    
     public def getTxCommitLog(id:Long) {
         return txManager.getTxCommitLog(id);
     }

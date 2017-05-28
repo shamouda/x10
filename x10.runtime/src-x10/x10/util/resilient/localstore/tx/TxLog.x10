@@ -249,11 +249,6 @@ public class TxLog {
         return keysList.isReadOnlyTransaction();
     }
     
-    /*Get log without readonly changes*/
-    public def removeReadOnlyKeys():HashMap[String,Cloneable] {
-        return new HashMap[String,Cloneable]();
-    }
-    
     public def prepareCommitLog():HashMap[String,Cloneable] {
         val map = new HashMap[String,Cloneable]();
         val wtKeys = keysList.getWriteKeys();
