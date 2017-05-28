@@ -625,20 +625,16 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         var writeTx:Boolean = false;
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RL_LA_WB started");
         try {
-            val logMap = log.transLog;
-            val sortedKeys = log.getSortedKeys();
-            for (var i:Int = 0n; i < sortedKeys.size; i++){
-                val key = sortedKeys(i);
-                val memory = log.getMemoryUnit(key);
+            val writeList = log.getWriteKeys();
+            for (var i:Int = 0n; i < writeList.size(); i++){
+                val kLog = writeList(i);
+                val key = kLog.key();
+                val memory = kLog.getMemoryUnit();
                 
-                if (!log.getReadOnly(key)) {
-                    val deleted = log.getDeleted(key);
-                    lockWriteRL(id, key, new LogContainer( memory, log), deleted);
-                    writeTx = true;
-                }
-                else {
-                    assert(log.getLockedRead(key));                    
-                }
+                assert(!kLog.getReadOnly());
+                val deleted = kLog.getDeleted();
+                lockWriteRL(id, key, new LogContainer( memory, log), deleted);
+                writeTx = true;
             }
             
             if (writeTx) {
@@ -658,35 +654,42 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         var writeTx:Boolean = false;
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RV_LA_WB started");
         try {
-            val logMap = log.transLog;
-            val sortedKeys = log.getSortedKeys();
-            for (var i:Int = 0n; i < sortedKeys.size; i++){
-                val key = sortedKeys(i);
-                val memory = log.getMemoryUnit(key);
-                
-                if (log.getReadOnly(key))
-                    memory.lockRead(id, key); 
-                else {
-                    memory.lockWrite(id, key);
-                    writeTx = true;
-                }
+            val writeList = log.getWriteKeys();
+            for (var i:Int = 0n; i < writeList.size(); i++){
+                val kLog = writeList(i);
+                val key = kLog.key();
+                val memory = kLog.getMemoryUnit();
+                assert(!kLog.getReadOnly());
+
+                memory.lockWrite(id, key);
+                writeTx = true;
                 
                 /*Read Validation*/
-                val initVer = logMap.getOrThrow(key).getInitVersion();
+                val initVer = kLog.getInitVersion();
                 val curVer = memory.getVersionLocked(false, key, id);
                 //detect write after read
                 if (curVer != initVer) {
-                    if (log.getReadOnly(key))
-                        memory.unlockRead(id, key);
-                    else
-                        memory.unlockWrite(id, key);
+                    memory.unlockWrite(id, key);
                     throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
                 }
-                
-                if (log.getReadOnly(key))
-                    log.setLockedRead(key, true);
-                else
-                    log.setLockedWrite(key, true);
+                kLog.setLockedWrite(true);
+            }
+            val readList = log.getReadKeys();
+            for (var i:Int = 0n; i < readList.size(); i++){
+                val kLog = readList(i);
+                val key = kLog.key();
+                val memory = kLog.getMemoryUnit();
+                assert(kLog.getReadOnly());
+                memory.lockRead(id, key); 
+                /*Read Validation*/
+                val initVer = kLog.getInitVersion();
+                val curVer = memory.getVersionLocked(false, key, id);
+                //detect write after read
+                if (curVer != initVer) {
+                    memory.unlockRead(id, key);
+                    throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
+                }
+                kLog.setLockedRead(true);
             }
             
             if (writeTx) {
@@ -706,29 +709,31 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         var writeTx:Boolean = false;
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RV_EA_UL started");
         try {
-            val logMap = log.transLog;
-            val sortedKeys = log.getSortedKeys();
-            for (var i:Int = 0n; i < sortedKeys.size; i++){
-                val key = sortedKeys(i);
-                val memory = log.getMemoryUnit(key);
+            val writeList = log.getReadKeys();
+            if (writeList.size() > 0)
+                writeTx = true;
+            
+            val readList = log.getReadKeys();
+            for (var i:Int = 0n; i < readList.size(); i++){
+                val kLog = readList(i);
+                val key = kLog.key();
+                val memory = kLog.getMemoryUnit();
                 
+                assert (!kLog.getLockedWrite());
                 //lock read only key
-                if (!log.getLockedWrite(key)) {
-                    memory.lockRead(id, key); 
-                        
-                    /*Read Validation*/
-                    val initVer = logMap.getOrThrow(key).getInitVersion();
-                    val curVer = memory.getVersionLocked(false, key, id);
+                
+                memory.lockRead(id, key); 
                     
-                    //detect write after read
-                    if (curVer != initVer) {
-                        memory.unlockRead(id, key);
-                        throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
-                    }
-                    log.setLockedRead(key, true);
+                /*Read Validation*/
+                val initVer = kLog.getInitVersion();
+                val curVer = memory.getVersionLocked(false, key, id);
+                
+                //detect write after read
+                if (curVer != initVer) {
+                    memory.unlockRead(id, key);
+                    throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
                 }
-                else
-                	writeTx = true;
+                kLog.setLockedRead(true);
             }
             if (writeTx) {
                 if (resilient && immediateRecovery)
@@ -747,24 +752,28 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     protected def commit_WB(log:TxLog) {
         val id = log.id;
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_WB started");
-        val logMap = log.transLog;
-        val iter = logMap.keySet().iterator();
-        while (iter.hasNext()) {
-            val key = iter.next();
-            val kLog = logMap.getOrThrow(key);
-            val memory = log.getMemoryUnit(key);
-            if (kLog.getLockedRead())
-                memory.unlockRead(log.id, key);
-            else {
-                val deleted = kLog.getDeleted();
-                memory.setValueLocked(kLog.getValue(), key, log.id, deleted);
-                if (deleted) {
-                    memory.deleteLocked(id, key);
-                    data.deleteMemoryUnit(id, key);
-                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_WB key["+key+"] deleted");
-                }
-                memory.unlockWrite(log.id, key);
+        
+        val readList = log.getReadKeys();
+        for (var i:Int = 0n; i < readList.size(); i++){
+            val kLog = readList(i);
+            val key = kLog.key();
+            val memory = kLog.getMemoryUnit();
+            memory.unlockRead(log.id, key);
+        }
+        
+        val writeList = log.getWriteKeys();
+        for (var i:Int = 0n; i < writeList.size(); i++){
+            val kLog = writeList(i);
+            val key = kLog.key();
+            val memory = kLog.getMemoryUnit();
+            val deleted = kLog.getDeleted();
+            memory.setValueLocked(kLog.getValue(), key, log.id, deleted);
+            if (deleted) {
+                memory.deleteLocked(id, key);
+                data.deleteMemoryUnit(id, key);
+                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_WB key["+key+"] deleted");
             }
+            memory.unlockWrite(log.id, key);
         }
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_WB completed");
     }
@@ -772,23 +781,27 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     protected def commit_UL(log:TxLog) {
         val id = log.id;
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_UL started");
-        val logMap = log.transLog;
-        val iter = logMap.keySet().iterator();
-        while (iter.hasNext()) {
-            val key = iter.next();
-            val kLog = logMap.getOrThrow(key);
-            val memory = log.getMemoryUnit(key);
-            if (kLog.getLockedRead())
-                memory.unlockRead(log.id, key);
-            else {
-                val deleted = kLog.getDeleted();
-                if (deleted) {
-                    memory.deleteLocked(id, key);
-                    data.deleteMemoryUnit(id, key);
-                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_UL key["+key+"] deleted");
-                }
-                memory.unlockWrite(log.id, key);
+        val readList = log.getReadKeys();
+        for (var i:Int = 0n; i < readList.size(); i++){
+            val kLog = readList(i);
+            val key = kLog.key();
+            val memory = kLog.getMemoryUnit();
+            memory.unlockRead(log.id, key);
+        }
+        
+        val writeList = log.getWriteKeys();
+        for (var i:Int = 0n; i < writeList.size(); i++){
+            val kLog = writeList(i);
+            val key = kLog.key();
+            val memory = kLog.getMemoryUnit();
+        
+            val deleted = kLog.getDeleted();
+            if (deleted) {
+                memory.deleteLocked(id, key);
+                data.deleteMemoryUnit(id, key);
+                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_UL key["+key+"] deleted");
             }
+            memory.unlockWrite(log.id, key);
         }
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_UL completed");
     }
@@ -802,13 +815,11 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             return;
         }
         
-        val logMap = log.transLog;
-        val iter = logMap.keySet().iterator();
-        while (iter.hasNext()) {
-            val key = iter.next();
-            val kLog = logMap.getOrThrow(key);
-            val memory = log.getMemoryUnit(key);
-           
+        val readList = log.getReadKeys();
+        for (var i:Int = 0n; i < readList.size(); i++){
+            val kLog = readList(i);
+            val key = kLog.key();
+            val memory = kLog.getMemoryUnit();
             if (kLog.getLockedRead()) {
                 if (kLog.getAdded()){
                     memory.deleteLocked(id, key);
@@ -817,7 +828,14 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 }
                 memory.unlockRead(log.id, key);
             }
-            else if (kLog.getLockedWrite()) {
+        }
+        val writeList = log.getWriteKeys();
+        for (var i:Int = 0n; i < writeList.size(); i++){
+            val kLog = writeList(i);
+            val key = kLog.key();
+            val memory = kLog.getMemoryUnit();
+            
+            if (kLog.getLockedWrite()) {
                 if (kLog.getAdded()){
                     memory.deleteLocked(id, key);
                     data.deleteMemoryUnit(id, key);
@@ -826,9 +844,6 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                     memory.rollbackValueLocked(kLog.getValue(), kLog.getInitVersion(), key, log.id);    
                 }
                 memory.unlockWrite(log.id, key);
-            }
-            else {
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+log.id+"] " + txIdToString (id)+ " abort_UL key "+key+" is NOT locked !!!!");
             }
         }
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_UL completed");
@@ -842,15 +857,23 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " WARNING: an attempt to abort an already aborted transaction");
             return;
         }
-        val logMap = log.transLog;
-        val iter = logMap.keySet().iterator();
-        while (iter.hasNext()) {
-            val key = iter.next();
-            val kLog = logMap.getOrThrow(key);
-            val memory = log.getMemoryUnit(key);
+        
+        val readList = log.getReadKeys();
+        for (var i:Int = 0n; i < readList.size(); i++){
+            val kLog = readList(i);
+            val key = kLog.key();
+            val memory = kLog.getMemoryUnit();
+            
             if (kLog.getLockedRead())
                 memory.unlockRead(log.id, key);
-            else if (kLog.getLockedWrite()) {
+        }
+        
+        val writeList = log.getWriteKeys();
+        for (var i:Int = 0n; i < writeList.size(); i++){
+            val kLog = writeList(i);
+            val key = kLog.key();
+            val memory = kLog.getMemoryUnit();
+            if (kLog.getLockedWrite()) {
                 if (kLog.getAdded()){
                     memory.deleteLocked(id, key);
                     data.deleteMemoryUnit(id, key);

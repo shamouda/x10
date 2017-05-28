@@ -134,7 +134,6 @@ public class TxLog {
     }
 
     private val keysList:TxLogKeysList;
-    public var transLog:HashMap[String,TxKeyChange];
     public var aborted:Boolean = false;
     public var writeValidated:Boolean = false;
     public var id:Long = -1;
@@ -252,22 +251,6 @@ public class TxLog {
     
     /*Get log without readonly changes*/
     public def removeReadOnlyKeys():HashMap[String,Cloneable] {
-    /*
-        val map = new HashMap[String,Cloneable]();
-        if (transLog == null || aborted) {
-            return null;
-        }
-        val iter = transLog.keySet().iterator();
-        while (iter.hasNext()) {
-            val key = iter.next();
-            val log = transLog.getOrThrow(key);
-            if (!log.getReadOnly()) {
-                val copy = log.getValue() == null ? null:log.getValue().clone();
-                map.put(key, copy);
-            }
-        }
-        return map;
-        */
         return new HashMap[String,Cloneable]();
     }
     
@@ -313,8 +296,5 @@ public class TxLog {
     public def getReadKeys() {
         return keysList.getReadKeys();
     }
-    
-    public def getSortedKeys():Rail[String] {
-        return new Rail[String](1);
-    }
+
 }
