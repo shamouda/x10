@@ -139,6 +139,9 @@ public class TxLog {
     public var id:Long = -1;
     private var lock:Lock;
     
+    //used to reduce searching for memory units after calling TxManager.logInitialIfNotLogged
+    private var lastUsedMemoryUnit:MemoryUnit;
+    
     public def this() {
         keysList = new TxLogKeysList();
         if (!TxConfig.get().LOCK_FREE)
@@ -162,6 +165,11 @@ public class TxLog {
             v = value == null?null:value.clone();
         }
         return v;
+    }
+    
+    public def getLastUsedMemoryUnit() = lastUsedMemoryUnit;
+    public def setLastUsedMemoryUnit(memU:MemoryUnit) {
+        lastUsedMemoryUnit = memU;
     }
     
     // get version
@@ -218,11 +226,6 @@ public class TxLog {
         keysList.getOrThrow(key).setLockedRead(lr);
     }
     
-    // mark as locked for write
-    public def setLockedWrite(key:String, lr:Boolean) {
-        keysList.setLockedWrite(key);
-    }
-    
     public def getLockedRead(key:String) {
         var result:Boolean = false;
         val log = keysList.get(key);
@@ -274,6 +277,7 @@ public class TxLog {
         }
         return map;
     }
+    
     public def lock() {
         if (!TxConfig.get().LOCK_FREE)
             lock.lock();
@@ -282,6 +286,7 @@ public class TxLog {
     public def unlock() {
         if (!TxConfig.get().LOCK_FREE)
             lock.unlock();
+        lastUsedMemoryUnit = null;
     }
     
     public def getWriteKeys() {
