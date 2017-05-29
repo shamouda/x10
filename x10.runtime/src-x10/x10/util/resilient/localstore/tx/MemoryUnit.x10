@@ -25,8 +25,6 @@ public class MemoryUnit {
     private val internalLock:Lock;
     private var deleted:Boolean = false;
     
-    public var justAdded:Boolean;
-
     public def this(v:Cloneable) {
         value = v;
         if (TxConfig.get().BASELINE) { //Baseline
@@ -58,13 +56,13 @@ public class MemoryUnit {
         }
     }
     
-    public def initializeTxKeyLog(key:String, locked:Boolean, log:TxKeyChange) {
+    public def initializeTxKeyLog(key:String, txId:Long, locked:Boolean, added:Boolean, keyLog:TxKeyChange) {
         try {
             if (!locked)
                 lockExclusive(); 
             ensureNotDeleted(key);
             val v = value == null?null:value.clone();
-            log.initValueVersion(v, version);
+            keyLog.init(key, txId, locked, this, added, v, version);
         }
         finally {
             if (!locked)

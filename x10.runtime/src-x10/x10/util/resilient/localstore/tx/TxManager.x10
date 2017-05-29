@@ -279,16 +279,14 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 throw new AbortedTransactionException("AbortedTransactionException");
             }
             */
-            var memory:MemoryUnit = log.getMemoryUnit(key);
+            val keyLog = log.getOrAddKeyLog(key);
+            var memory:MemoryUnit = keyLog.getMemoryUnit();
             if (memory == null) {
-                memory = data.getMemoryUnit(key, status == STATUS_ACTIVE);
-                if (lockRead)
-                    memory.lockRead(id, key);
-                
-                log.logInitialValue(key, id, lockRead, memory, memory.justAdded);
-                memory.justAdded = false;
+                memory = data.initLog(key, status == STATUS_ACTIVE, log, keyLog, lockRead);
             }
             log.setLastUsedMemoryUnit(memory);
+            log.setLastUsedKeyLog(keyLog);
+            
             return log;
         } catch(ex:AbortedTransactionException) {
             throw ex;
@@ -346,6 +344,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         try {     	
             log = logInitialIfNotLogged(id, key, false);        	
             val memory = log.getLastUsedMemoryUnit();
+            val keyLog = log.getLastUsedKeyLog();
             
             if (resilient && immediateRecovery && !txDesc)
                 ensureActiveStatus();
@@ -876,7 +875,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         val log = getOrAddLockingTxLog(id);
         var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
         if (memory == null) {
-            memory = data.getMemoryUnit(key, true);
+            memory = data.getMemoryUnit(key);
             log.memUnits.put(key, memory);
         }
         memory.lockWrite(id, key);
@@ -887,7 +886,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         for (key in keys) {
             var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
             if (memory == null) {
-                memory = data.getMemoryUnit(key, true);
+                memory = data.getMemoryUnit(key);
                 log.memUnits.put(key, memory);
             }
             memory.lockWrite(id, key);
@@ -898,7 +897,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         val log = getOrAddLockingTxLog(id);
         var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
         if (memory == null) {
-            memory = data.getMemoryUnit(key, true);
+            memory = data.getMemoryUnit(key);
             log.memUnits.put(key, memory);
         }
         memory.lockRead(id, key);        
@@ -909,7 +908,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         for (key in keys) {
             var memory:MemoryUnit = log.memUnits.getOrElse(key, null);
             if (memory == null) {
-                memory = data.getMemoryUnit(key, true);
+                memory = data.getMemoryUnit(key);
                 log.memUnits.put(key, memory);
             }
             memory.lockRead(id, key);

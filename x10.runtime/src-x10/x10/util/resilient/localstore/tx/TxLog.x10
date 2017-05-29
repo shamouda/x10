@@ -57,8 +57,8 @@ public class TxLog {
         
         public def add(log:TxKeyChange) {
             rdKeys.add(log);
+            //log.setIndx(rdKeys.size()-1);
         }
-        
         
         private def search(key:String, read:Boolean) {
             val rail = read ? rdKeys : wtKeys;
@@ -99,6 +99,18 @@ public class TxLog {
             wtKeys.add(log);
             return log;
         }
+        /*
+        private def fromReadToWrite(indx:Long) {
+            assert (indx != -1) : "fatal txkeychange not found";
+            //swap with last
+            val tmp = rdKeys(indx);
+            rdKeys(indx) = rdKeys(last);
+            rdKeys(last) = tmp;
+            val log = rdKeys.removeLast();
+            wtKeys.add(log);
+            return log;
+        }
+        */
 
         public def logPut(key:String, copiedValue:Cloneable) {
             var log:TxKeyChange = search(key, false); //get from write
@@ -140,6 +152,7 @@ public class TxLog {
     
     //used to reduce searching for memory units after calling TxManager.logInitialIfNotLogged
     private var lastUsedMemoryUnit:MemoryUnit;
+    private var lastUsedKeyLog:TxKeyChange;
     
     public def this() {
         keysList = new TxLogKeysList();
@@ -147,6 +160,15 @@ public class TxLog {
             lock = new Lock();
         else
             lock = null;
+    }
+    
+    public def getOrAddKeyLog(key:String) { 
+        var log:TxKeyChange = keysList.get(key);
+        if (log == null) {
+            log = new TxKeyChange();
+            keysList.add(log);
+        }
+        return log;
     }
     
     public def reset() {
@@ -171,6 +193,11 @@ public class TxLog {
         lastUsedMemoryUnit = memU;
     }
     
+    public def getLastUsedKeyLog() = lastUsedKeyLog;
+    public def setLastUsedKeyLog(kLog:TxKeyChange) {
+        lastUsedKeyLog = kLog;
+    }
+    
     // get version
     public def getInitVersion(key:String) {
         return keysList.getOrThrow(key).getInitVersion();
@@ -187,16 +214,6 @@ public class TxLog {
             return null;
         else
             return log.getMemoryUnit();
-    }
-    
-    /*MUST be called before logPut and logDelete*/
-    public def logInitialValue(key:String, txId:Long, lockedRead:Boolean, memU:MemoryUnit, added:Boolean) {
-        var log:TxKeyChange = keysList.get(key);
-        if (log == null) {
-            log = new TxKeyChange(key, txId, lockedRead, memU, added);
-            memU.initializeTxKeyLog(key, lockedRead, log);
-            keysList.add(log);
-        }
     }
     
     public def logPut(key:String, copiedValue:Cloneable) {

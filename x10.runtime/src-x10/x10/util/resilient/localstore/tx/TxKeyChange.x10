@@ -39,7 +39,9 @@ public class TxKeyChange {
     private var added:Boolean = false;
     private var deleted:Boolean = false;
     private var memU:MemoryUnit;
-     
+    
+    private var location:Long;
+
     public def this(key:String, initTxId:Long, lockedRead:Boolean, memU:MemoryUnit, added:Boolean) {
         this.key = key;
         this.initTxId = initTxId;
@@ -48,11 +50,26 @@ public class TxKeyChange {
         this.added = added;
     }
     
-    public def initValueVersion(initValue:Cloneable, initVersion:Int) {
+    public def this(){
+        
+    }
+    
+    public def init(key:String, initTxId:Long, lockedRead:Boolean, memU:MemoryUnit, added:Boolean,
+            initValue:Cloneable, initVersion:Int) {
+        this.key = key;
+        this.initTxId = initTxId;
+        this.lockedRead = lockedRead;
+        this.memU = memU;
+        this.added = added;
         this.value = initValue;
         this.initVersion = initVersion;
     }
     
+    public def indx() = location;
+    
+    public def setIndx(l:Long) {
+        location = l;
+    }
     
     public def key() = key;
     

@@ -7,6 +7,8 @@ import x10.util.HashSet;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.tx.SafeBucketHashMap;
 import x10.util.resilient.localstore.tx.TxManager;
+import x10.util.resilient.localstore.tx.TxLog;
+import x10.util.resilient.localstore.tx.TxKeyChange;
 
 /*
  * MapData may be accessed by different transactions at the same time.
@@ -57,17 +59,40 @@ public class MapData {
         }
     }
     
-    public def getMemoryUnit(k:String, active:Boolean):MemoryUnit {
+    public def getMemoryUnit(k:String):MemoryUnit {
         var res:MemoryUnit = null;
-        var added:Boolean  = false;
         try {
             lockKey(k);
             res = metadata.getOrElseUnsafe(k, null);
             if (res == null) {
-                if (!active)
-                    throw new StorePausedException(here + " MapData can not put values while the store is paused ");
                 res = new MemoryUnit(null);
                 metadata.putUnsafe(k, res);
+                //if (print)
+                //    Console.OUT.println(here + " MapData.put ("+k+")");
+                val size = metadata.sizeUnsafe(); 
+                if (size %10000 == 0) {
+                    Console.OUT.println(here + " MapData.size = " + size);
+                    //print = true;
+                }
+            }
+            res.ensureNotDeleted(k);
+            return res;
+        }finally {
+            unlockKey(k);
+        }
+    }
+    
+    public def initLog(k:String, active:Boolean, log:TxLog, keyLog:TxKeyChange, lockRead:Boolean):MemoryUnit {
+        var memory:MemoryUnit = null;
+        var added:Boolean  = false;
+        try {
+            lockKey(k);
+            memory = metadata.getOrElseUnsafe(k, null);
+            if (memory == null) {
+                if (!active)
+                    throw new StorePausedException(here + " MapData can not put values while the store is paused ");
+                memory = new MemoryUnit(null);
+                metadata.putUnsafe(k, memory);
                 //if (print)
                 //    Console.OUT.println(here + " MapData.put ("+k+")");
                 added = true;
@@ -77,13 +102,20 @@ public class MapData {
                     //print = true;
                 }
             }
-            res.ensureNotDeleted(k);
-            res.justAdded = added;
-            return res;
+            memory.ensureNotDeleted(k);
+            
+            if (lockRead)
+                memory.lockRead(log.id, k);
+            
+            if (keyLog.key() == null) {
+                memory.initializeTxKeyLog(k, log.id, lockRead, added, keyLog);
+            }
+            return memory;
         }finally {
             unlockKey(k);
         }
     }
+    
     
     public def deleteMemoryUnit(txId:Long, k:String):void {
         try {
