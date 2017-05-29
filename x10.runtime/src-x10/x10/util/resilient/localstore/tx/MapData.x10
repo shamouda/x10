@@ -57,7 +57,7 @@ public class MapData {
         }
     }
     
-    public def getMemoryUnit(k:String, active:Boolean):MemUnitResponse {
+    public def getMemoryUnit(k:String, active:Boolean):MemoryUnit {
         var res:MemoryUnit = null;
         var added:Boolean  = false;
         try {
@@ -78,7 +78,8 @@ public class MapData {
                 }
             }
             res.ensureNotDeleted(k);
-            return new MemUnitResponse(res, added);
+            res.justAdded = added;
+            return res;
         }finally {
             unlockKey(k);
         }
@@ -167,13 +168,5 @@ public class MapData {
         else
             return memU.baselineGet();
     }
-    
-    public static struct MemUnitResponse {
-        public val mem:MemoryUnit;
-        public val added:Boolean;
-        public def this(mem:MemoryUnit, added:Boolean) {
-            this.mem = mem;
-            this.added = added;
-        }
-    };
+
 }

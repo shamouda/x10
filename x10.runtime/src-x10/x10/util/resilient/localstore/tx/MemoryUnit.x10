@@ -25,6 +25,8 @@ public class MemoryUnit {
     private val internalLock:Lock;
     private var deleted:Boolean = false;
     
+    public var justAdded:Boolean;
+
     public def this(v:Cloneable) {
         value = v;
         if (TxConfig.get().BASELINE) { //Baseline
