@@ -60,7 +60,7 @@ public class TxLog {
         }
         
         
-        private def get(key:String, read:Boolean) {
+        private def search(key:String, read:Boolean) {
             val rail = read ? rdKeys : wtKeys;
             for (var i:Long = 0; i < rail.size(); i++) {
                 if (rail(i).key().equals(key))
@@ -68,13 +68,12 @@ public class TxLog {
             }
             return null;
         }
-    
         
         public def get(key:String) {
-            val rdVal = get(key, true);
+            val rdVal = search(key, true);
             if (rdVal != null)
                 return rdVal;
-            return get(key, false);
+            return search(key, false);
         }
         
         public def getOrThrow(key:String) {
@@ -102,21 +101,21 @@ public class TxLog {
         }
 
         public def logPut(key:String, copiedValue:Cloneable) {
-            var log:TxKeyChange = get(key, false); //get from write
+            var log:TxKeyChange = search(key, false); //get from write
             if (log == null)
                 log = fromReadToWrite(key);
             return log.update(copiedValue);
         }
     
         public def logDelete(key:String) {
-            var log:TxKeyChange = get(key, false); //get from write
+            var log:TxKeyChange = search(key, false); //get from write
             if (log == null)
                 log = fromReadToWrite(key);
             return log.delete();
         }
 
         public def setAllWriteFlags(key:String, locked:Boolean, deleted:Boolean) {
-            var log:TxKeyChange = get(key, false); //get from write
+            var log:TxKeyChange = search(key, false); //get from write
             if (log == null)
                 log = fromReadToWrite(key);
             log.setReadOnly(false);
@@ -125,7 +124,7 @@ public class TxLog {
         }
 
         public def setLockedWrite(key:String) {
-            var log:TxKeyChange = get(key, false); //get from write
+            var log:TxKeyChange = search(key, false); //get from write
             if (log == null)
                 log = fromReadToWrite(key);
             log.setLockedWrite(true);

@@ -119,9 +119,8 @@ public class MemoryUnit {
         return "version:"+version+":value:"+value;
     }
     
-    public def deleteLocked(txId:Long, key:String) {       
+    public def deleteLocked() {       
         deleted = true;
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " deleteLocked key["+key+"] ");
     }
     
     public def ensureNotDeleted(key:String) {

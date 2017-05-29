@@ -752,7 +752,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             val deleted = kLog.getDeleted();
             memory.setValueLocked(kLog.getValue(), key, log.id, deleted);
             if (deleted) {
-                memory.deleteLocked(id, key);
+                memory.deleteLocked();
                 data.deleteMemoryUnit(id, key);
                 if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_WB key["+key+"] deleted");
             }
@@ -780,7 +780,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         
             val deleted = kLog.getDeleted();
             if (deleted) {
-                memory.deleteLocked(id, key);
+                memory.deleteLocked();
                 data.deleteMemoryUnit(id, key);
                 if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_UL key["+key+"] deleted");
             }
@@ -805,7 +805,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             val memory = kLog.getMemoryUnit();
             if (kLog.getLockedRead()) {
                 if (kLog.getAdded()){
-                    memory.deleteLocked(id, key);
+                    memory.deleteLocked();
                     data.deleteMemoryUnit(id, key);
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_UL key["+key+"] deleted ");
                 }
@@ -820,7 +820,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             
             if (kLog.getLockedWrite()) {
                 if (kLog.getAdded()){
-                    memory.deleteLocked(id, key);
+                    memory.deleteLocked();
                     data.deleteMemoryUnit(id, key);
                 }
                 else { 
@@ -858,7 +858,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             val memory = kLog.getMemoryUnit();
             if (kLog.getLockedWrite()) {
                 if (kLog.getAdded()){
-                    memory.deleteLocked(id, key);
+                    memory.deleteLocked();
                     data.deleteMemoryUnit(id, key);
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_WB key["+key+"] deleted ");
                 }
