@@ -57,7 +57,7 @@ public class TxLog {
         
         public def add(log:TxKeyChange) {
             rdKeys.add(log);
-            //log.setIndx(rdKeys.size()-1);
+            log.setIndx(rdKeys.size()-1);
         }
         
         private def search(key:String, read:Boolean) {
@@ -99,8 +99,9 @@ public class TxLog {
             wtKeys.add(log);
             return log;
         }
-        /*
+        
         private def fromReadToWrite(indx:Long) {
+            val last = rdKeys.size() -1;
             assert (indx != -1) : "fatal txkeychange not found";
             //swap with last
             val tmp = rdKeys(indx);
@@ -108,9 +109,7 @@ public class TxLog {
             rdKeys(last) = tmp;
             val log = rdKeys.removeLast();
             wtKeys.add(log);
-            return log;
         }
-        */
 
         public def logPut(key:String, copiedValue:Cloneable) {
             var log:TxKeyChange = search(key, false); //get from write
@@ -118,7 +117,13 @@ public class TxLog {
                 log = fromReadToWrite(key);
             return log.update(copiedValue);
         }
-    
+        
+        public def logPut(log:TxKeyChange, copiedValue:Cloneable) {
+            if (log.getReadOnly())
+                fromReadToWrite(log.indx());
+            return log.update(copiedValue);
+        }
+        
         public def logDelete(key:String) {
             var log:TxKeyChange = search(key, false); //get from write
             if (log == null)
@@ -126,6 +131,13 @@ public class TxLog {
             return log.delete();
         }
 
+        
+        public def logDelete(log:TxKeyChange) {
+            if (log.getReadOnly())
+                fromReadToWrite(log.indx());
+            return log.delete();
+        }
+        
         public def setAllWriteFlags(key:String, locked:Boolean, deleted:Boolean) {
             var log:TxKeyChange = search(key, false); //get from write
             if (log == null)
@@ -134,14 +146,14 @@ public class TxLog {
             log.setLockedWrite(locked);
             log.setDeleted(deleted);
         }
-
-        public def setLockedWrite(key:String) {
-            var log:TxKeyChange = search(key, false); //get from write
-            if (log == null)
-                log = fromReadToWrite(key);
-            log.setLockedWrite(true);
-        }
         
+        public def setAllWriteFlags(log:TxKeyChange, locked:Boolean, deleted:Boolean) {
+            if (log.getReadOnly())
+                fromReadToWrite(log.indx());
+            log.setReadOnly(false);
+            log.setLockedWrite(locked);
+            log.setDeleted(deleted);
+        }
     }
 
     private val keysList:TxLogKeysList;
@@ -188,6 +200,16 @@ public class TxLog {
         return v;
     }
     
+    public def getValue(copy:Boolean, keyLog:TxKeyChange) {
+        val value = keyLog.getValue();
+        var v:Cloneable = value;
+        if (copy) {
+            v = value == null?null:value.clone();
+        }
+        return v;
+    }
+    
+    
     public def getLastUsedMemoryUnit() = lastUsedMemoryUnit;
     public def setLastUsedMemoryUnit(memU:MemoryUnit) {
         lastUsedMemoryUnit = memU;
@@ -215,17 +237,17 @@ public class TxLog {
         else
             return log.getMemoryUnit();
     }
-    
-    public def logPut(key:String, copiedValue:Cloneable) {
-        return keysList.logPut(key, copiedValue);
-    }
-    
-    public def logDelete(key:String) {
-        return keysList.logDelete(key);
-    }
 
-    public def setAllWriteFlags(key:String, locked:Boolean, deleted:Boolean) {
-        keysList.setAllWriteFlags(key, locked, deleted);
+    public def logPut(keyLog:TxKeyChange, copiedValue:Cloneable) {
+        return keysList.logPut(keyLog, copiedValue);
+    }
+    
+    public def logDelete(keyLog:TxKeyChange) {
+        return keysList.logDelete(keyLog);
+    }
+    
+    public def setAllWriteFlags(keyLog:TxKeyChange, locked:Boolean, deleted:Boolean) {
+        keysList.setAllWriteFlags(keyLog, locked, deleted);
     }
     
     //*used by Undo Logging*//

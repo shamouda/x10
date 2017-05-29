@@ -310,31 +310,31 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     }
     
     /************  Common Implementations for Get/Put/Delete/Commit/Abort/Validate ****************/
-    private def lockWriteRV(id:Long, key:String, memory:MemoryUnit, log:TxLog, delete:Boolean) {
-        if (!log.getLockedWrite(key)) {
+    private def lockWriteRV(id:Long, key:String, memory:MemoryUnit, log:TxLog, keyLog:TxKeyChange, delete:Boolean) {
+        if (!keyLog.getLockedWrite()) {
             //there is no need to do unlockRead, in read versioning we don't lock the keys while reading
             memory.lockWrite(id, key); 
             val curVer = memory.getVersionLocked(false, key, id);
-            val initVer = log.getInitVersion(key);
+            val initVer = keyLog.getInitVersion();
             if (curVer != initVer) {
                 /*another transaction has modified it and committed since we read the initial value*/
                 memory.unlockWrite(id, key);
                 //don't mark it as locked, because at abort time we return the old value for locked variables. our old value is wrong.
                 throw new ConflictException("ConflictException["+here+"] Tx["+id+"] " + txIdToString (id) , here);
             }
-            log.setAllWriteFlags(key, true, delete);
+            log.setAllWriteFlags(keyLog, true, delete);
         }
     }
     
-    private def lockWriteRL(id:Long, key:String, memory:MemoryUnit, log:TxLog, delete:Boolean) {
-        if (!log.getLockedWrite(key)) {
+    private def lockWriteRL(id:Long, key:String, memory:MemoryUnit, log:TxLog, keyLog:TxKeyChange, delete:Boolean) {
+        if (!keyLog.getLockedWrite()) {
             
-            if (log.getLockedRead(key))
-                log.setLockedRead(key, false);
+            if (keyLog.getLockedRead())
+                keyLog.setLockedRead(false);
             
             memory.lockWrite(id, key); //lockWrite unlockRead if upgrading fails 
             
-            log.setAllWriteFlags(key, true, delete);
+            log.setAllWriteFlags(keyLog, true, delete);
         }
     }
     
@@ -350,14 +350,14 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 ensureActiveStatus();
             
             /*** EarlyAcquire ***/
-            lockWriteRV(id, key, memory, log, delete);
+            lockWriteRV(id, key, memory, log, keyLog, delete);
             
             /*** Write Buffering ***/
             if (delete)
-                return log.logDelete(key);
+                return log.logDelete(keyLog);
             else{
                 val copy1 = (value == null)? null:value.clone();
-                return log.logPut(key, copy1);
+                return log.logPut(keyLog, copy1);
             }
         } catch(ex:AbortedTransactionException) {
             return null;
@@ -379,19 +379,20 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         try {
             log = logInitialIfNotLogged(id, key, false);
             val memory = log.getLastUsedMemoryUnit();
+            val keyLog = log.getLastUsedKeyLog();
             
             if (resilient && immediateRecovery && !txDesc)
                 ensureActiveStatus();
             
             /*** EarlyAcquire ***/
-            lockWriteRL(id, key, memory, log, delete);
+            lockWriteRL(id, key, memory, log, keyLog, delete);
             
             /*** Write Buffering ***/
             if (delete)
-                return log.logDelete(key);
+                return log.logDelete(keyLog);
             else {
                 val copy1 = (value == null)? null:value.clone();
-                return log.logPut(key, copy1);
+                return log.logPut(keyLog, copy1);
             }
         } catch(ex:AbortedTransactionException) {
             return null;
@@ -411,12 +412,13 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         try {
             log = logInitialIfNotLogged(id, key, false);
             val memory = log.getLastUsedMemoryUnit();
+            val keyLog = log.getLastUsedKeyLog();
             
             if (resilient && immediateRecovery && !txDesc)
                 ensureActiveStatus();
             
             /*** Early Acquire ***/
-            lockWriteRL(id, key, memory, log, delete);
+            lockWriteRL(id, key, memory, log, keyLog, delete);
             
             /*** Undo Logging ***/
             if (delete){
@@ -444,12 +446,13 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         try {
             log = logInitialIfNotLogged(id, key, false);
             val memory = log.getLastUsedMemoryUnit();
+            val keyLog = log.getLastUsedKeyLog();
             
             if (resilient && immediateRecovery && !txDesc)
                 ensureActiveStatus();
             
             /*** EarlyAcquire ***/
-            lockWriteRV(id, key, memory, log, delete);
+            lockWriteRV(id, key, memory, log, keyLog, delete);
             
             /*** Undo Logging ***/
             if (delete){
@@ -478,6 +481,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         try {
             log = logInitialIfNotLogged(id, key, false);
             val memory = log.getLastUsedMemoryUnit();
+            val keyLog = log.getLastUsedKeyLog();
             
             if (resilient && immediateRecovery && !txDesc)
                 ensureActiveStatus();
@@ -487,10 +491,10 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             /*** Write Buffering ***/
             val copy1 = (value == null)? null:value.clone();
             if (delete) {
-                return log.logDelete(key);
+                return log.logDelete(keyLog);
             }
             else
-                return log.logPut(key, copy1);
+                return log.logPut(keyLog, copy1);
             
         } catch(ex:AbortedTransactionException) {
             return null;
@@ -538,10 +542,11 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         try {
             log = logInitialIfNotLogged(id, key, true);
             val memory = log.getLastUsedMemoryUnit(); 
+            val keyLog = log.getLastUsedKeyLog();
             
             /*** Write Buffering ***/
             val copy = true; //return a different copy to use to avoid manipulating the log or the original data
-            return log.getValue(copy, key); 
+            return log.getValue(copy, keyLog); 
         } catch(ex:AbortedTransactionException) {
             return null;
         } catch(ex:Exception) {
@@ -561,10 +566,11 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             /*** ReadValidatoin: DO NOT ACQUIRE READ LOCK HERE ***/
             log = logInitialIfNotLogged(id, key, false);
             val memory = log.getLastUsedMemoryUnit();
+            val keyLog = log.getLastUsedKeyLog();
             
             /*** WriteBuffering: read value from buffer ***/
             val copy = true; //return a different copy to use to avoid manipulating the log or the original data
-            return log.getValue(copy, key);            
+            return log.getValue(copy, keyLog);            
         } catch(ex:AbortedTransactionException) {
             return null;
         } catch(ex:Exception) {
@@ -615,7 +621,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 
                 assert(!kLog.getReadOnly());
                 val deleted = kLog.getDeleted();
-                lockWriteRL(id, key, memory, log, deleted);
+                lockWriteRL(id, key, memory, log, kLog, deleted);
                 writeTx = true;
             }
             
