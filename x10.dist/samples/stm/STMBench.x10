@@ -213,6 +213,7 @@ public class STMBench {
                             val key = keys(start+x);
                             val read = readFlags(start+x);
                             val value = values(start+x);
+                            //read? Console.OUT.println("Tx["+tx.id+"] STMBench.read("+key+") ") : Console.OUT.println("Tx["+tx.id+"] STMBench.write("+key+") ") ;  
                             read? tx.get(key): tx.put(key, new CloneableLong(value));
                         }
                     });
@@ -288,7 +289,7 @@ public class STMBench {
             }
         }
         
-        Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
+        //Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
     }
 
     public static def printThroughput(map:ResilientNativeMap, producersCount:Long, iteration:Long, plh:PlaceLocalHandle[PlaceThroughput], d:Long, t:Long, h:Long, o:Long ) {
