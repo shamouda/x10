@@ -95,8 +95,13 @@ public class TxLog {
             val tmp = rdKeys(indx);
             rdKeys(indx) = rdKeys(last);
             rdKeys(last) = tmp;
+            
+            rdKeys(indx).setIndx(indx);
+            rdKeys(last).setIndx(last);
+            
             val log = rdKeys.removeLast();
             wtKeys.add(log);
+            log.setIndx(wtKeys.size()-1);
             return log;
         }
         
@@ -107,8 +112,12 @@ public class TxLog {
             val tmp = rdKeys(indx);
             rdKeys(indx) = rdKeys(last);
             rdKeys(last) = tmp;
+            rdKeys(indx).setIndx(indx);
+            rdKeys(last).setIndx(last);
+            
             val log = rdKeys.removeLast();
             wtKeys.add(log);
+            log.setIndx(wtKeys.size()-1);
         }
 
         public def logPut(key:String, copiedValue:Cloneable) {
@@ -131,20 +140,10 @@ public class TxLog {
             return log.delete();
         }
 
-        
         public def logDelete(log:TxKeyChange) {
             if (log.getReadOnly())
                 fromReadToWrite(log.indx());
             return log.delete();
-        }
-        
-        public def setAllWriteFlags(key:String, locked:Boolean, deleted:Boolean) {
-            var log:TxKeyChange = search(key, false); //get from write
-            if (log == null)
-                log = fromReadToWrite(key);
-            log.setReadOnly(false);
-            log.setLockedWrite(locked);
-            log.setDeleted(deleted);
         }
         
         public def setAllWriteFlags(log:TxKeyChange, locked:Boolean, deleted:Boolean) {
@@ -184,13 +183,15 @@ public class TxLog {
     }
     
     public def reset() {
+        val tmp = id;
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] TxLog.reset ");
         id = -1;
         keysList.clear();
         aborted = false;
         writeValidated = false;
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tmp+"] " + TxManager.txIdToString(tmp) + " here["+here+"] TxLog.reset done ");
     }
 
-    // get currently logged value (throws an exception if value was not set before)
     public def getValue(copy:Boolean, key:String) {
         val value = keysList.getOrThrow(key).getValue();
         var v:Cloneable = value;

@@ -60,11 +60,15 @@ public abstract class CommitHandler {
                 val virtual = txMembers.virtual;
                 val physical = txMembers.places;
                 for (var i:Long = 0; i < virtual.size ; i++) {
+                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursively virtual(" + i + "/"+childCount+")="+virtual(i)+" containedInParent="+parents.contains(virtual(i))+" ...");
                     if (!parents.contains(virtual(i))) {
                         val p = physical(i);
                         if (p.isDead())
-                            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursively target="+p+" DEAD ...");                    
-                        async at (p) {
+                            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursively target="+p+" DEAD ...");
+                        
+                        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " going to place ["+p+"]  ...");
+                        at (p) async {
+                            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " arrived to ["+p+"]  ...");
                             executeRecursively(closure, parents, deleteTxDesc);
                         }
                     }

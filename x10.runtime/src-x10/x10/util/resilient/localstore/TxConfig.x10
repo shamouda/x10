@@ -12,6 +12,8 @@
 
 package x10.util.resilient.localstore;
 
+import x10.util.resilient.localstore.tx.FatalTransactionException;
+
 public class TxConfig {
     public val TM:String; //baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB
     public val TM_REP:String; //lazy|eager
@@ -45,7 +47,8 @@ public class TxConfig {
        
     private def this(){
         TM = System.getenv("TM");
-        assert (TM != null && !TM.equals("")) : "you must specify the TM environment variable, allowed values = locking|RL_EA_UL|RL_EA_WB|...";
+        if ( TM == null || TM.equals(""))
+            throw new FatalTransactionException ("you must specify the TM environment variable, allowed values = locking|RL_EA_UL|RL_EA_WB|...");
 
         if (TM.equals("baseline") || TM.startsWith("locking") || TM.equals("RL_EA_UL") || TM.equals("RL_EA_WB")) {
             VALIDATION_REQUIRED = false;
@@ -55,7 +58,7 @@ public class TxConfig {
         }
         else {
             VALIDATION_REQUIRED = false;
-            assert(false) : "Invalid TM value, possible values are: baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB";
+            throw new FatalTransactionException ("Invalid TM value, possible values are: baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB");
         }
         
         WRITE_BUFFERING = TM.contains("WB");

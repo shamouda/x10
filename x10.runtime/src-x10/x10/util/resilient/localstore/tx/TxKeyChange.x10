@@ -41,15 +41,7 @@ public class TxKeyChange {
     private var memU:MemoryUnit;
     
     private var location:Long;
-
-    public def this(key:String, initTxId:Long, lockedRead:Boolean, memU:MemoryUnit, added:Boolean) {
-        this.key = key;
-        this.initTxId = initTxId;
-        this.lockedRead = lockedRead;
-        this.memU = memU;
-        this.added = added;
-    }
-    
+   
     public def this(){
         
     }

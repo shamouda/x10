@@ -121,18 +121,20 @@ public class MasterStore(immediateRecovery:Boolean) {
     public def filterCommitted(txList:ArrayList[Long]) {
     	if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " started MasterStore.filterCommitted ...");
         val list = new ArrayList[Long]();
-        val metadata = txManager.data.getMap();
         if (!TxConfig.get().LOCK_FREE)
-            metadata.lockAll();
+            txManager.data.lock(-1);
+        
+        val metadata = txManager.data.getMap();
         
         for (txId in txList) {
-            val obj = metadata.getOrThrowUnsafe("_TxDesc_"+"tx"+txId).getValueLocked(false, "_TxDesc_"+"tx"+txId, -1);
+            val obj = metadata.getOrThrow("_TxDesc_"+"tx"+txId).getValueLocked(false, "_TxDesc_"+"tx"+txId, -1);
             if (obj != null && ( (obj as TxDesc).status == TxDesc.COMMITTED || (obj as TxDesc).status == TxDesc.COMMITTING) ) {
                 list.add(txId);
             }
         }
+        
         if (!TxConfig.get().LOCK_FREE)
-            metadata.unlockAll();
+            txManager.data.unlock(-1);
         if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " completed MasterStore.filterCommitted ...");
         return list;
     }

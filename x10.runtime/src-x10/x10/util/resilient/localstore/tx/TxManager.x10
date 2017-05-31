@@ -259,8 +259,6 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
         } finally {
             log.unlock();
         }
-        
-        txLogManager.deleteAborted(log);
     }
     
     public def keySet(mapName:String, id:Long):Set[String] {
@@ -286,7 +284,6 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             }
             log.setLastUsedMemoryUnit(memory);
             log.setLastUsedKeyLog(keyLog);
-            
             return log;
         } catch(ex:AbortedTransactionException) {
             throw ex;
@@ -361,7 +358,7 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             }
         } catch(ex:AbortedTransactionException) {
             return null;
-        } catch(ex:ConcurrentTransactionsLimitExceeded) { /**SS_CHECK  repeat**/
+        } catch(ex:ConcurrentTransactionsLimitExceeded) {
             throw ex;
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
@@ -396,6 +393,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             }
         } catch(ex:AbortedTransactionException) {
             return null;
+        } catch(ex:ConcurrentTransactionsLimitExceeded) {
+            throw ex;
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
             return null;
@@ -413,13 +412,11 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             log = logInitialIfNotLogged(id, key, false);
             val memory = log.getLastUsedMemoryUnit();
             val keyLog = log.getLastUsedKeyLog();
-            
             if (resilient && immediateRecovery && !txDesc)
                 ensureActiveStatus();
             
             /*** Early Acquire ***/
             lockWriteRL(id, key, memory, log, keyLog, delete);
-            
             /*** Undo Logging ***/
             if (delete){
                 return memory.setValueLocked(null, key, id, delete);
@@ -430,6 +427,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             }
         } catch(ex:AbortedTransactionException) {
             return null;
+        } catch(ex:ConcurrentTransactionsLimitExceeded) {
+            throw ex;
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
             return null;
@@ -464,6 +463,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             }
         } catch(ex:AbortedTransactionException) {
             return null;
+        } catch(ex:ConcurrentTransactionsLimitExceeded) {
+            throw ex;
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
             return null;
@@ -498,6 +499,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             
         } catch(ex:AbortedTransactionException) {
             return null;
+        } catch(ex:ConcurrentTransactionsLimitExceeded) {
+            throw ex;
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
             return null;
@@ -518,7 +521,6 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             log = logInitialIfNotLogged(id, key, true);
             val memory = log.getLastUsedMemoryUnit();
             
-            
             /*** Undo Logging ***/
             //true = send a different copy to use to avoid manipulating the log or the original data
             val atomicV = memory.getValueLocked(true, key, id);
@@ -526,6 +528,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             return atomicV;
         } catch(ex:AbortedTransactionException) {
             return null;
+        } catch(ex:ConcurrentTransactionsLimitExceeded) {
+            throw ex;
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
             return null;
@@ -549,6 +553,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             return log.getValue(copy, keyLog); 
         } catch(ex:AbortedTransactionException) {
             return null;
+        } catch(ex:ConcurrentTransactionsLimitExceeded) {
+            throw ex;
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
             return null;
@@ -573,6 +579,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             return log.getValue(copy, keyLog);            
         } catch(ex:AbortedTransactionException) {
             return null;
+        } catch(ex:ConcurrentTransactionsLimitExceeded) {
+            throw ex;
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
             return null;
@@ -596,6 +604,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
             return memory.getValue(copy, key, id);
         } catch(ex:AbortedTransactionException) {
             return null;
+        } catch(ex:ConcurrentTransactionsLimitExceeded) {
+            throw ex;
         } catch(ex:Exception) {
             abortAndThrowException(log, ex);
             return null;
@@ -619,7 +629,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 val key = kLog.key();
                 val memory = kLog.getMemoryUnit();
                 
-                assert(!kLog.getReadOnly());
+                if (kLog.getReadOnly())
+                    throw new FatalTransactionException("Tx["+id+"] validate_RL_LA_WB  fatal error, key["+key+"] is read only");
                 val deleted = kLog.getDeleted();
                 lockWriteRL(id, key, memory, log, kLog, deleted);
                 writeTx = true;
@@ -647,7 +658,9 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 val kLog = writeList(i);
                 val key = kLog.key();
                 val memory = kLog.getMemoryUnit();
-                assert(!kLog.getReadOnly());
+                
+                if (kLog.getReadOnly())
+                    throw new FatalTransactionException("Tx["+id+"] validate_RV_LA_WB  fatal error, key["+key+"] is read only");
 
                 memory.lockWrite(id, key);
                 writeTx = true;
@@ -707,7 +720,9 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 val key = kLog.key();
                 val memory = kLog.getMemoryUnit();
                 
-                assert (!kLog.getLockedWrite());
+                if (kLog.getLockedWrite())
+                    throw new FatalTransactionException("Tx["+id+"] validate_RV_EA  fatal error, key["+key+"] is already locked for write");
+                
                 //lock read only key
                 
                 memory.lockRead(id, key); 
@@ -834,6 +849,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 memory.unlockWrite(log.id, key);
             }
         }
+        
+        txLogManager.deleteAborted(log);
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_UL completed");
     }
     
@@ -870,6 +887,8 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
                 memory.unlockWrite(log.id, key);
             }
         }
+        
+        txLogManager.deleteAborted(log);
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_WB completed");
     }
     
