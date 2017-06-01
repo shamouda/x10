@@ -15,6 +15,7 @@ package x10.util.resilient.localstore;
 import x10.util.RailUtils;
 import x10.util.Pair;
 import x10.util.ArrayList;
+import x10.util.GrowableRail;
 
 public class TxStatistics {
     
@@ -24,28 +25,28 @@ public class TxStatistics {
         }
     };
 
-    public static def mean(values:ArrayList[Double]) {
+    public static def mean(values:GrowableRail[Double]) {
         if (values.size() == 0)
             return 0.0;
         
         var sum:Double = 0;
-        for (x in values)
-            sum += x;
+        for (var i:Long = 0; i < values.size(); i++)
+            sum += values(i);
         return sum / values.size();
     }
     
-    public static def stdev(values:ArrayList[Double], mean:Double) {
+    public static def stdev(values:GrowableRail[Double], mean:Double) {
         if (values.size() <= 1)
             return 0.0;
         
         var sum:Double = 0;
-        for (x in values) {
-            sum += Math.pow( x - mean , 2);
+        for (var i:Long = 0; i < values.size(); i++) {
+            sum += Math.pow( values(i) - mean , 2);
         }
         return Math.sqrt(sum / (values.size() -1) ); // divide by N-1 because this is just a sample, not the whole population
     }
     
-    public static def boxPlot(values:ArrayList[Double]) {
+    public static def boxPlot(values:GrowableRail[Double]) {
         if (values == null || values.size() == 0)
             return new BoxPlot(0, 0, 0, 0, 0, 0, 0);
         val v = values.toRail();

@@ -12,47 +12,48 @@
 
 package x10.util.resilient.localstore;
 
-import x10.util.ArrayList;
+import x10.util.GrowableRail;
 import x10.util.concurrent.Lock;
 
 public class TxPlaceStatistics {
     
     public val p:Place;
     private transient val lock:Lock;
-    public val g_commitList:ArrayList[Double];
-    public val g_commitProcList:ArrayList[Double];  
-    public val g_commitPH1List:ArrayList[Double];
-    public val g_commitPH2List:ArrayList[Double];
-    public val g_txLoggingList:ArrayList[Double]; 
-    public val g_abortList:ArrayList[Double];
-    public val g_abortProcList:ArrayList[Double]; 
-    public val l_commitList:ArrayList[Double];
-    public val l_commitProcList:ArrayList[Double];
-    public val l_abortList:ArrayList[Double];
-    public val l_abortProcList:ArrayList[Double];
-    public val lk_totalList:ArrayList[Double];
-    public val lk_lockList:ArrayList[Double];
-    public val lk_procList:ArrayList[Double];
-    public val lk_unlockList:ArrayList[Double];
+    public val g_commitList:GrowableRail[Double];
+    public val g_commitProcList:GrowableRail[Double];  
+    public val g_commitPH1List:GrowableRail[Double];
+    public val g_commitPH2List:GrowableRail[Double];
+    public val g_txLoggingList:GrowableRail[Double]; 
+    public val g_abortList:GrowableRail[Double];
+    public val g_abortProcList:GrowableRail[Double]; 
+    public val l_commitList:GrowableRail[Double];
+    public val l_commitProcList:GrowableRail[Double];
+    public val l_abortList:GrowableRail[Double];
+    public val l_abortProcList:GrowableRail[Double];
+    public val lk_totalList:GrowableRail[Double];
+    public val lk_lockList:GrowableRail[Double];
+    public val lk_procList:GrowableRail[Double];
+    public val lk_unlockList:GrowableRail[Double];
 
     public def this() {
         p = here;
         lock = new Lock();
-        g_commitList = new ArrayList[Double]();
-        g_commitProcList = new ArrayList[Double]();  
-        g_commitPH1List = new ArrayList[Double]();
-        g_commitPH2List = new ArrayList[Double]();
-        g_txLoggingList = new ArrayList[Double](); 
-        g_abortList = new ArrayList[Double]();
-        g_abortProcList = new ArrayList[Double](); 
-        l_commitList = new ArrayList[Double]();
-        l_commitProcList = new ArrayList[Double]();
-        l_abortList = new ArrayList[Double]();
-        l_abortProcList = new ArrayList[Double]();
-        lk_totalList = new ArrayList[Double]();
-        lk_lockList = new ArrayList[Double]();
-        lk_procList = new ArrayList[Double]();
-        lk_unlockList = new ArrayList[Double]();
+        val cap = 10;
+        g_commitList = new GrowableRail[Double](cap);
+        g_commitProcList = new GrowableRail[Double](cap);  
+        g_commitPH1List = new GrowableRail[Double](cap);
+        g_commitPH2List = new GrowableRail[Double](cap);
+        g_txLoggingList = new GrowableRail[Double](cap); 
+        g_abortList = new GrowableRail[Double](cap);
+        g_abortProcList = new GrowableRail[Double](cap); 
+        l_commitList = new GrowableRail[Double](cap);
+        l_commitProcList = new GrowableRail[Double](cap);
+        l_abortList = new GrowableRail[Double](cap);
+        l_abortProcList = new GrowableRail[Double](cap);
+        lk_totalList = new GrowableRail[Double](cap);
+        lk_lockList = new GrowableRail[Double](cap);
+        lk_procList = new GrowableRail[Double](cap);
+        lk_unlockList = new GrowableRail[Double](cap);
     }
     
     public def clear() {

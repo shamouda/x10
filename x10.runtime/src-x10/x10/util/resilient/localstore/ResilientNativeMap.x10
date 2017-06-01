@@ -3,6 +3,7 @@ package x10.util.resilient.localstore;
 import x10.util.Set;
 import x10.util.HashMap;
 import x10.util.ArrayList;
+import x10.util.GrowableRail;
 import x10.util.RailUtils;
 import x10.util.resilient.localstore.tx.*;
 import x10.util.resilient.localstore.Cloneable;
@@ -293,27 +294,27 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
             pl_stat.add(pstat);
         }
         
-        val g_allCommitList = new ArrayList[Double]();
-        val g_allCommitProcList = new ArrayList[Double]();
-        val g_allPH1List = new ArrayList[Double]();
-        val g_allPH2List = new ArrayList[Double]();
-        val g_allTxLoggingList = new ArrayList[Double]();
-        val g_allAbortList = new ArrayList[Double]();
-        val g_allAbortProcList = new ArrayList[Double]();
+        val g_allCommitList = new GrowableRail[Double]();
+        val g_allCommitProcList = new GrowableRail[Double]();
+        val g_allPH1List = new GrowableRail[Double]();
+        val g_allPH2List = new GrowableRail[Double]();
+        val g_allTxLoggingList = new GrowableRail[Double]();
+        val g_allAbortList = new GrowableRail[Double]();
+        val g_allAbortProcList = new GrowableRail[Double]();
         var g_cPlaces:Long = 0;
         var g_aPlaces:Long = 0;
         
-        val l_allCommitList = new ArrayList[Double]();
-        val l_allCommitProcList = new ArrayList[Double]();
-        val l_allAbortList = new ArrayList[Double]();
-        val l_allAbortProcList = new ArrayList[Double]();
+        val l_allCommitList = new GrowableRail[Double]();
+        val l_allCommitProcList = new GrowableRail[Double]();
+        val l_allAbortList = new GrowableRail[Double]();
+        val l_allAbortProcList = new GrowableRail[Double]();
         var l_cPlaces:Long = 0;
         var l_aPlaces:Long = 0;
         
-        val lk_allTotalList = new ArrayList[Double]();
-        val lk_allLockList = new ArrayList[Double]();
-        val lk_allProcList = new ArrayList[Double]();
-        val lk_allUnlockList = new ArrayList[Double]();
+        val lk_allTotalList = new GrowableRail[Double]();
+        val lk_allLockList = new GrowableRail[Double]();
+        val lk_allProcList = new GrowableRail[Double]();
+        val lk_allUnlockList = new GrowableRail[Double]();
         var lk_Places:Long = 0;
         
         for (pstat in pl_stat) {
