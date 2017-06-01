@@ -5,8 +5,6 @@ import x10.util.resilient.localstore.Tx;
 import x10.util.ArrayList;
 import x10.util.concurrent.Future;
 import x10.util.Random;
-import x10.util.resilient.localstore.LockingRequest;
-import x10.util.resilient.localstore.LockingRequest.KeyInfo;
 import x10.util.resilient.localstore.LockingTx;
 import x10.util.resilient.localstore.TxConfig;
 
@@ -63,12 +61,12 @@ public class STMAppUtils {
 	            }) as Long;
 	        }
 	        return sum;
-        });
+        }, -1, -1);
         return result.output;
     }
     
     public static def sumAccountsLocking(map:ResilientNativeMap, activePG:PlaceGroup){
-		val result = map.executeLockingTransaction(new ArrayList[LockingRequest](), (tx:LockingTx) => {
+		val result = map.executeLockingTransaction(new Rail[Long](0),new Rail[String](0), new Rail[Boolean](0), 0, (tx:LockingTx) => {
 			var sum:Long = 0;
 	        for (var p:Long = 0; p < activePG.size(); p++) {
 	            sum += tx.evalAt(p, () => {
@@ -93,14 +91,15 @@ public class STMAppUtils {
     
     
     public static def printBenchmarkStartingMessage(name:String, accountsPerPlace:Long, 
-    		transfersPerPlace:Long, debugProgress:Long, sparePlaces:Long, readPercentage:Float) {
+    		transfersPerPlace:Long, debugProgress:Long, sparePlaces:Long, readPercentage:Float, optimized:Boolean) {
         Console.OUT.println("Running "+name+" Benchmark. "
         	+ " Places["+Place.numPlaces() +"] "
             + " AccountsPerPlace["+accountsPerPlace +"] "
             + " ActionsPerPlace["+transfersPerPlace+"] "
             + " DebugProgress["+debugProgress+"] "
             + " SparePlaces["+sparePlaces+"] "
-            + " ReadPercentage["+readPercentage+"] ");
+            + " ReadPercentage["+readPercentage+"] "
+            + " Optimized["+optimized+"] ");
         
         printEnv();
     }

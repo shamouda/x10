@@ -24,7 +24,7 @@ public class BankAsync {
         val optimized = Long.parseLong(args(3)) == 1;
         
         val sparePlaces = 0;
-        STMAppUtils.printBenchmarkStartingMessage("BankAsync", accountsPerPlace, transfersPerPlace, debugProgress, sparePlaces, -1F);
+        STMAppUtils.printBenchmarkStartingMessage("BankAsync", accountsPerPlace, transfersPerPlace, debugProgress, sparePlaces, -1F, optimized);
         val start = System.nanoTime();
         
         val supportShrinking = false;
@@ -103,10 +103,10 @@ public class BankAsync {
                 };
                 if (optimized) {
                     val members = STMAppUtils.createVirtualMembersRail(p1, p2);
-                    map.executeTransaction(members, bankClosure);
+                    map.executeTransaction(members, bankClosure, -1, -1);
                 }
                 else
-                    map.executeTransaction(bankClosure);
+                    map.executeTransaction(bankClosure, -1);
             }
         }
     }
