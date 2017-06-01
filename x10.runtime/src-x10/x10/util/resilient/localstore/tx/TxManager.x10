@@ -300,8 +300,9 @@ public abstract class TxManager(data:MapData, immediateRecovery:Boolean) {
     
     protected def abortAndThrowException(log:TxLog, ex:Exception) {
         if (log != null) {
+            val id = log.id;
             abort(log);
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+log.id+"] " + txIdToString (log.id)+ " " + here + "   TxManager.abortAndThrowException   throwing exception["+ex.getMessage()+"] ");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " " + here + "   TxManager.abortAndThrowException   throwing exception["+ex.getMessage()+"] ");
         }
         throw ex;
     }
