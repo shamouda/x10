@@ -43,13 +43,10 @@ public class TxLockCREW extends TxLock {
         val rdRail = new GrowableRail[Long](TxConfig.get().PREALLOC_READERS);
         
         public def add(id:Long, key:String) {
-            val before = toString();
             rdRail.add(id);
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ id +"] " + TxManager.txIdToString(id) + " key["+key+"] TXLOCK readers.add  before["+before+"]  after["+toString()+"]");
         }
         
         public def remove(id:Long, key:String) {
-            val before = toString();
             val last = rdRail.size() -1;
             var indx:Long = -1;
             for (indx = 0 ; indx < rdRail.size(); indx++) {
@@ -64,7 +61,6 @@ public class TxLockCREW extends TxLock {
             rdRail(last) = tmp;
             
             rdRail.removeLast();
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ id +"] " + TxManager.txIdToString(id) + " key["+key+"] TXLOCK readers.remove  before["+before+"]  after["+toString()+"]");
         }
         
         public def size() = rdRail.size();
