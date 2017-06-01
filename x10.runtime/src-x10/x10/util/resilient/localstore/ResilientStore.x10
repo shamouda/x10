@@ -20,7 +20,6 @@ import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.tx.TxManager;
 import x10.util.resilient.localstore.tx.logging.TxDesc;
-import x10.util.resilient.localstore.tx.TransactionsList;
 import x10.util.concurrent.Lock;
 import x10.compiler.Uncounted;
 import x10.util.resilient.localstore.recovery.*;

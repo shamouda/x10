@@ -20,7 +20,6 @@ import x10.util.concurrent.AtomicLong;
 import x10.compiler.Ifdef;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.tx.logging.TxDesc;
-import x10.util.resilient.localstore.tx.TransactionsList;
 import x10.compiler.Uncounted;
 import x10.util.resilient.localstore.recovery.DistributedRecoveryHelper;
 import x10.util.resilient.localstore.tx.logging.TxDescManager;
@@ -38,7 +37,7 @@ public class LocalStore(immediateRecovery:Boolean) {
     private var plh:PlaceLocalHandle[LocalStore];
     private transient var heartBeatOn:Boolean;
     private transient var lock:Lock;
-    public transient val txList:TransactionsList = new TransactionsList();
+    public transient val stat:TxPlaceStatistics = new TxPlaceStatistics();
     
     public transient var txDescManager:TxDescManager; //A resilient map for transactions' descriptors
     

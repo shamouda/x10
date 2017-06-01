@@ -18,7 +18,7 @@ import x10.util.concurrent.Lock;
 public class TxPlaceStatistics {
     
     public val p:Place;
-    private val lock:Lock;
+    private transient val lock:Lock;
     public val g_commitList:ArrayList[Double];
     public val g_commitProcList:ArrayList[Double];  
     public val g_commitPH1List:ArrayList[Double];
@@ -53,6 +53,24 @@ public class TxPlaceStatistics {
         lk_lockList = new ArrayList[Double]();
         lk_procList = new ArrayList[Double]();
         lk_unlockList = new ArrayList[Double]();
+    }
+    
+    public def clear() {
+        g_commitList.clear();
+        g_commitProcList.clear();  
+        g_commitPH1List.clear();
+        g_commitPH2List.clear();
+        g_txLoggingList.clear(); 
+        g_abortList.clear();
+        g_abortProcList.clear(); 
+        l_commitList.clear();
+        l_commitProcList.clear();
+        l_abortList.clear();
+        l_abortProcList.clear();
+        lk_totalList.clear();
+        lk_lockList.clear();
+        lk_procList.clear();
+        lk_unlockList.clear();
     }
     
     public def addCommittedTxStats(allTime:Double, processingTime:Double, ph1Time:Double, ph2Time:Double, loggingTime:Double) {

@@ -83,8 +83,13 @@ public class LocalTx extends AbstractTx {
     /***********************   Abort ************************/  
     
     public def abort() {
+        if (processingElapsedTime == 0)
+            processingElapsedTime = Timer.milliTime() - startTime;
+        
         plh().getMasterStore().abort(id);
         abortTime = Timer.milliTime();
+        plh().stat.addAbortedLocalTxStats(abortTime - startTime, 
+                processingElapsedTime);
     }
     
     /***********************   Local Commit Protocol ************************/  
@@ -93,6 +98,9 @@ public class LocalTx extends AbstractTx {
     }
     
     public def commit(ignoreDeadSlave:Boolean):Int {
+        if (processingElapsedTime == 0)
+            processingElapsedTime = Timer.milliTime() - startTime;
+        
         var success:Int = AbstractTx.SUCCESS;
         val id = this.id;
         val mapName = this.mapName;
@@ -121,6 +129,10 @@ public class LocalTx extends AbstractTx {
                 plh().getMasterStore().commit(id);
             }
             commitTime = Timer.milliTime();
+            
+            plh().stat.addCommittedLocalTxStats(commitTime - startTime, 
+                    processingElapsedTime);
+            
             return success;
         } catch(ex:Exception) { // slave is dead         
             //master abort

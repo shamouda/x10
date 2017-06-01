@@ -28,6 +28,7 @@ import x10.util.concurrent.Future;
 /*should be used in non-resilient mode only*/
 public class LockingTx extends AbstractTx {
     public transient val startTime:Long=Timer.milliTime(); ////
+    public transient var startProcessing:Long=0; ////
     public transient var lockingElapsedTime:Long=0; //////
     public transient var processingElapsedTime:Long=0; //// (including waitTime)
     public transient var unlockingElapsedTime:Long=0; ///////
@@ -94,9 +95,11 @@ public class LockingTx extends AbstractTx {
             }
         }
         lockingElapsedTime = Timer.milliTime() - startLock;
+        startProcessing = Timer.milliTime();
     }
 
     public def unlock() {
+        processingElapsedTime = Timer.milliTime() - startProcessing;
         //don't copy this in remote operations
         val members = this.members;
         val keys = this.keys;
@@ -129,6 +132,8 @@ public class LockingTx extends AbstractTx {
         }
         unlockingElapsedTime = Timer.milliTime() - startUnlock;
         totalElapsedTime = Timer.milliTime() - startTime;
+        
+        plh().stat.addLockingTxStats(totalElapsedTime, lockingElapsedTime, processingElapsedTime, unlockingElapsedTime);
     }
 
 }

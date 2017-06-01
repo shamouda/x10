@@ -88,13 +88,17 @@ public class Tx extends AbstractTx {
         else 
             return;
         
+        if (processingElapsedTime == 0)
+            processingElapsedTime = Timer.milliTime() - startTime;
+        
         try {
             commitHandler.abort(recovery);
-        }
-        catch (ex:Exception) {
+        } catch (ex:Exception) {
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here="+ here + " ignoring exception during abort ");    
         }
         abortTime = Timer.milliTime();
+        plh().stat.addAbortedTxStats(abortTime - startTime, 
+                processingElapsedTime);
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here="+ here + " aborted, allTxTime ["+(abortTime-startTime)+"] ms");
     }
 
@@ -114,7 +118,10 @@ public class Tx extends AbstractTx {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here=" + here + " commit started");
         if (!TxConfig.get().COMMIT)
             return AbstractTx.SUCCESS;
-                
+        
+        if (processingElapsedTime == 0)
+            processingElapsedTime = Timer.milliTime() - startTime;
+        
         val success:Int;
         try {
             success = commitHandler.commit(recovery);
@@ -124,6 +131,13 @@ public class Tx extends AbstractTx {
         }
 
         commitTime = Timer.milliTime();
+        
+        plh().stat.addCommittedTxStats(commitTime - startTime, 
+                processingElapsedTime,
+                commitHandler.phase1ElapsedTime,
+                commitHandler.phase2ElapsedTime,
+                commitHandler.txLoggingElapsedTime);
+        
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here=" + here + " committed, allTxTime [" + (commitTime-startTime) + "] ms");
         return success;
     }
