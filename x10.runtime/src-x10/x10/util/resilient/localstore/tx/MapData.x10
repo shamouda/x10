@@ -146,17 +146,13 @@ public class MapData {
     
     public def lock(txId:Long){
         if (!TxConfig.get().LOCK_FREE) {
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " " + here +" mapdata.lock() start");
             lock.lock();
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " " + here +" mapdata.lock() end");
         }
     }
     
     public def unlock(txId:Long) {
         if (!TxConfig.get().LOCK_FREE) {
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " " + here +" mapdata.unlock() start");
             lock.unlock();
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " " + here +" mapdata.unlock() end");
         }
     }
     
