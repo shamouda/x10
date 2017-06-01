@@ -17,6 +17,13 @@ import x10.util.Pair;
 import x10.util.ArrayList;
 
 public class TxStatistics {
+    
+    public static struct BoxPlot (min:Double, tenth:Double, q1:Double, median:Double, q3:Double, ninetyP:Double, max:Double) {
+        public def toString() { 
+        return min + ":" + tenth + ":" + q1 + ":" + median + ":" + q3 + ":" + ninetyP +":"+ max; 
+        }
+    };
+
     public static def mean(values:ArrayList[Double]) {
         if (values.size() == 0)
             return 0.0;
@@ -95,8 +102,4 @@ public class TxStatistics {
     }
 }
 
-class BoxPlot (min:Double, tenth:Double, q1:Double, median:Double, q3:Double, ninetyP:Double, max:Double) {
-    public def toString() { 
-        return min + ":" + tenth + ":" + q1 + ":" + median + ":" + q3 + ":" + ninetyP +":"+ max; 
-    }
-}
+
