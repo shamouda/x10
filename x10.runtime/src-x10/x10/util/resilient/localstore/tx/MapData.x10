@@ -15,6 +15,8 @@ import x10.util.resilient.localstore.tx.TxKeyChange;
  * We use a lock to synchronize access to the shared metadata hashmap.
  **/
 public class MapData {
+    var test:HashMap[String,MemU[String]];
+
     val metadata:HashMap[String,MemoryUnit];
     val lock:Lock;
     //var print:Boolean = false;
