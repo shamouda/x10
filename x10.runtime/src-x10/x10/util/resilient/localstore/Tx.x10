@@ -115,7 +115,13 @@ public class Tx extends AbstractTx {
         if (!TxConfig.get().COMMIT)
             return AbstractTx.SUCCESS;
                 
-        val success = commitHandler.commit(recovery);
+        val success:Int;
+        try {
+            success = commitHandler.commit(recovery);
+        }catch (ex:Exception) {
+            abortTime = Timer.milliTime();
+            throw ex;
+        }
 
         commitTime = Timer.milliTime();
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here=" + here + " committed, allTxTime [" + (commitTime-startTime) + "] ms");
