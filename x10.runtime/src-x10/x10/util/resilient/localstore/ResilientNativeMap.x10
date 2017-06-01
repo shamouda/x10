@@ -268,10 +268,11 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
             val confExList = (ex as MultipleExceptions).getExceptionsOfType[ConflictException]();
             val pauseExList = (ex as MultipleExceptions).getExceptionsOfType[StorePausedException]();
             val abortedExList = (ex as MultipleExceptions).getExceptionsOfType[AbortedTransactionException]();
-            
+            val maxConcurExList = (ex as MultipleExceptions).getExceptionsOfType[ConcurrentTransactionsLimitExceeded]();
+                    
             if ((ex as MultipleExceptions).exceptions.size > (deadExList.size + confExList.size + pauseExList.size + abortedExList.size)){
                 Console.OUT.println(here + " Unexpected MultipleExceptions   size("+(ex as MultipleExceptions).exceptions.size + ")  (" 
-                        + deadExList.size + " + " + confExList.size + " + " + pauseExList.size + " + " + abortedExList.size + ")");
+                        + deadExList.size + " + " + confExList.size + " + " + pauseExList.size + " + " + abortedExList.size + " + " + maxConcurExList.size + ")");
                 ex.printStackTrace();
                 throw ex;
             }
@@ -292,6 +293,8 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
                 dpe = true;
             }
         } else if (ex instanceof StorePausedException) {
+            System.threadSleep(TxConfig.get().DPE_SLEEP_MS);
+        } else if (ex instanceof ConcurrentTransactionsLimitExceeded) {
             System.threadSleep(TxConfig.get().DPE_SLEEP_MS);
         } else if (!(ex instanceof ConflictException || ex instanceof AbortedTransactionException  )) {
             throw ex;
