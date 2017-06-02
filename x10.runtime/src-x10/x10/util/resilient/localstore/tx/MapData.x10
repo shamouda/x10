@@ -17,7 +17,7 @@ import x10.util.resilient.localstore.tx.logging.TxDesc;
  **/
 public class MapData[K] {K haszero} {
     val metadata:HashMap[K,MemoryUnit[K]];
-    val txDescriptors:HashMap[Long,TxDesc];
+    val masterTxDesc:HashMap[Long,TxDesc];
 
     val lock:Lock;
 
@@ -26,14 +26,14 @@ public class MapData[K] {K haszero} {
     //var print:Boolean = false;
     public def this() {
         metadata = new HashMap[K,MemoryUnit[K]]();
-        txDescriptors = new HashMap[Long,TxDesc]();
+        masterTxDesc = new HashMap[Long,TxDesc]();
         txDescLock = new Lock();
         lock = new Lock();
     }
     
     public def this(values:HashMap[K,Cloneable]) {
         metadata = new HashMap[K,MemoryUnit[K]]();
-        txDescriptors = new HashMap[Long,TxDesc]();
+        masterTxDesc = new HashMap[Long,TxDesc]();
         txDescLock = new Lock();
         lock = new Lock();
         
@@ -120,9 +120,8 @@ public class MapData[K] {K haszero} {
             memory.lockRead(log.id);
         }
         
-        if (!keyLog.initilized) {
-            memory.initializeTxKeyLog(key, log.id, lockRead, added, keyLog);
-        }
+        memory.initializeTxKeyLog(key, log.id, lockRead, added, keyLog);
+        
         return memory;
     }
     
@@ -167,16 +166,20 @@ public class MapData[K] {K haszero} {
     public def getTxDesc(id:Long) {
     	try {
     		lockTxDesc();
-    		return txDescriptors.getOrThrow(id);
+    		if (TxConfig.get().TM_DEBUG) Console.OUT.println("TxDesc["+id+"] " + " here["+here+"] MapData.get() started ...");
+    		val desc = masterTxDesc.getOrElse(id, null);
+    		if (TxConfig.get().TM_DEBUG) Console.OUT.println("TxDesc["+id+"] " + " here["+here+"] MapData.get() completed => {"+desc+"} ...");
+    		return desc;
     	} finally {
     		unlockTxDesc();
     	}
     }
     
-    public def putTxDesc(id:Long, txDesc:TxDesc) {
+    public def putTxDesc(id:Long, desc:TxDesc) {
     	try {
     		lockTxDesc();
-    		txDescriptors.put(id, txDesc);
+    		masterTxDesc.put(id, desc);
+    		if (TxConfig.get().TM_DEBUG) Console.OUT.println("TxDesc["+id+"] " + " here["+here+"] MapData.put() => {"+desc+"} ...");
     	} finally {
     		unlockTxDesc();
     	}
@@ -185,8 +188,9 @@ public class MapData[K] {K haszero} {
     public def updateTxDescStatus(id:Long, newStatus:Long) {
     	try {
     		lockTxDesc();
-    		val desc = txDescriptors.getOrThrow(id);
+    		val desc = masterTxDesc.getOrThrow(id);
     		desc.status = newStatus;
+    		if (TxConfig.get().TM_DEBUG) Console.OUT.println("TxDesc["+id+"] " + " here["+here+"] MapData.updateTxDescStatus() => {"+desc+"} ...");
     	} finally {
     		unlockTxDesc();
     	}
@@ -195,13 +199,14 @@ public class MapData[K] {K haszero} {
     public def addTxDescMembers(id:Long, vMembers:Rail[Long]) {
     	try {
     		lockTxDesc();
-    		var desc:TxDesc = txDescriptors.getOrElse(id, null);
+    		var desc:TxDesc = masterTxDesc.getOrElse(id, null);
     		if (desc == null) {
     			val mapName = "";
     			desc = new TxDesc(id, mapName, false); 
-    			txDescriptors.put(id, desc);
+    			masterTxDesc.put(id, desc);
     		}
     		desc.addVirtualMembers(vMembers);
+    		if (TxConfig.get().TM_DEBUG) Console.OUT.println("TxDesc["+id+"] " + " here["+here+"] MapData.addTxDescMembers() => {"+desc+"} ...");
     	} finally {
     		unlockTxDesc();
     	}
@@ -210,16 +215,8 @@ public class MapData[K] {K haszero} {
     public def removeTxDesc(id:Long) {
     	try {
     		lockTxDesc();
-    		txDescriptors.remove(id);
-    	} finally {
-    		unlockTxDesc();
-    	}
-    }
-    
-    public def getTxDescMap() {
-    	try {
-    		lockTxDesc();
-    		return txDescriptors;
+    		masterTxDesc.remove(id);
+    		if (TxConfig.get().TM_DEBUG) Console.OUT.println("TxDesc["+id+"] " + " here["+here+"] MapData.removeTxDesc() ...");
     	} finally {
     		unlockTxDesc();
     	}

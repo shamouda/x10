@@ -42,8 +42,6 @@ public class TxKeyChange[K] {K haszero} {
     
     private var location:Long;
 
-    public var initilized:Boolean = false;
-   
     public def this(){
         
     }
@@ -57,7 +55,6 @@ public class TxKeyChange[K] {K haszero} {
         this.added = added;
         this.value = initValue;
         this.initVersion = initVersion;
-        initilized = true;
         //Console.OUT.println("Initializing TxKeyChange with key " + key);
     }
     

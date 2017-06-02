@@ -39,6 +39,7 @@ public class NonResilientCommitHandler[K] {K haszero} extends CommitHandler[K] {
     }
    
     private def commitPhaseOne() {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne() started ...");
         val validate_master = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { validate_local(plh, id); };
         val startP1 = Timer.milliTime();
         if (TxConfig.get().VALIDATION_REQUIRED) {
@@ -54,9 +55,11 @@ public class NonResilientCommitHandler[K] {K haszero} extends CommitHandler[K] {
             }
         }
         phase1ElapsedTime = Timer.milliTime() - startP1;
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseOne() completed ...");
     }
     
     private def commitPhaseTwo() {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseTwo() started ...");
         val commit_master = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { commit_local(plh, id); } ;
         val startP2 = Timer.milliTime();
         if (members != null)
@@ -64,6 +67,7 @@ public class NonResilientCommitHandler[K] {K haszero} extends CommitHandler[K] {
         else
             finish executeRecursively(commit_master, new HashSet[Long](), true);
         phase2ElapsedTime = Timer.milliTime() - startP2;
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commitPhaseTwo() completed ...");
     }
     
     private def validate_local(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {

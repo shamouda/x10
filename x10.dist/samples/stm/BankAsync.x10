@@ -29,7 +29,7 @@ public class BankAsync {
         
         val supportShrinking = false;
         val mgr = new PlaceManager(sparePlaces, supportShrinking);
-        val store = ResilientStore.make(mgr.activePlaces(), false);
+        val store = ResilientStore.make[String](mgr.activePlaces(), false);
         val map = store.makeMap("mapA");
         try {
             val startTransfer = System.nanoTime();
@@ -58,7 +58,7 @@ public class BankAsync {
         }
     }
     
-    public static def randomTransfer(map:ResilientNativeMap, activePG:PlaceGroup, accountsPerPlace:Long, transfersPerPlace:Long, debugProgress:Long, optimized:Boolean){
+    public static def randomTransfer(map:ResilientNativeMap[String], activePG:PlaceGroup, accountsPerPlace:Long, transfersPerPlace:Long, debugProgress:Long, optimized:Boolean){
         val accountsMAX = accountsPerPlace * activePG.size();
         finish for (p in activePG) at (p) async {
             val rand = new Random(p.id);
@@ -79,7 +79,7 @@ public class BankAsync {
                 val randAcc2 = "acc"+rand2;
                 val amount = Math.abs(rand.nextLong()%100);
                 
-                val bankClosure = (tx:Tx) => {
+                val bankClosure = (tx:Tx[String]) => {
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] TXSTARTED accounts["+randAcc1+","+randAcc2+"] places["+p1+","+p2+"] amount["+amount+"] ");
                     
                     tx.asyncAt(p1, () => {

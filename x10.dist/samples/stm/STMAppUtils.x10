@@ -23,7 +23,7 @@ public class STMAppUtils {
             return rail;
         }
     }
-    public static def restoreProgress(map:ResilientNativeMap, placeIndex:Long, defaultProg:Long){
+    public static def restoreProgress(map:ResilientNativeMap[String], placeIndex:Long, defaultProg:Long){
         val tx = map.startLocalTransaction();
         try {
             val cl = tx.get("p"+placeIndex);
@@ -41,9 +41,9 @@ public class STMAppUtils {
         }
     }
     
-    public static def sumAccounts(map:ResilientNativeMap, activePG:PlaceGroup){
+    public static def sumAccounts(map:ResilientNativeMap[String], activePG:PlaceGroup){
         val members = new Rail[Long](activePG.size(), (i:Long)=> i);
-        val result = map.executeTransaction(members, (tx:Tx) => {
+        val result = map.executeTransaction(members, (tx:Tx[String]) => {
             var sum:Long = 0;
 	        for (p in members) {
 	            sum += tx.evalAt(p, () => {
@@ -65,8 +65,8 @@ public class STMAppUtils {
         return result.output;
     }
     
-    public static def sumAccountsLocking(map:ResilientNativeMap, activePG:PlaceGroup){
-		val result = map.executeLockingTransaction(new Rail[Long](0),new Rail[String](0), new Rail[Boolean](0), 0, (tx:LockingTx) => {
+    public static def sumAccountsLocking(map:ResilientNativeMap[String], activePG:PlaceGroup){
+		val result = map.executeLockingTransaction(new Rail[Long](0),new Rail[String](0), new Rail[Boolean](0), 0, (tx:LockingTx[String]) => {
 			var sum:Long = 0;
 	        for (var p:Long = 0; p < activePG.size(); p++) {
 	            sum += tx.evalAt(p, () => {
