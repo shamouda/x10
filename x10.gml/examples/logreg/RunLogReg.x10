@@ -80,9 +80,7 @@ public class RunLogReg {
                 Console.OUT.println("Using "+sparePlaces+" spare place(s).");
             
             val startTime = Timer.milliTime();
-            val tmSupported = System.getenv("TM") != null;
-            val executor = tmSupported? new SPMDResilientIterativeExecutorSTM(checkpointFreq, sparePlaces, false, true):
-                    new SPMDResilientIterativeExecutor(checkpointFreq, sparePlaces, false, true);
+            val executor = new SPMDResilientIterativeExecutor(checkpointFreq, sparePlaces, false, true);
             val places = executor.activePlaces();
             val team = executor.team();         
             

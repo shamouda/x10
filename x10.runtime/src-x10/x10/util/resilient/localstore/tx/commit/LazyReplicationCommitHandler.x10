@@ -32,14 +32,14 @@ import x10.util.HashSet;
  *  
  * Should be used in resilient mode only
  * */
-public class LazyReplicationCommitHandler extends ResilientCommitHandler {
+public class LazyReplicationCommitHandler[K] {K haszero} extends ResilientCommitHandler[K] {
 	
-    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers) {
+    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, mapName:String, members:TxMembers) {
         super(plh, id, mapName, members);   
     }
     
     public def abort_resilient(recovery:Boolean){
-        val abort_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { abort_local_resilient(plh, id); } ;
+        val abort_master = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { abort_local_resilient(plh, id); } ;
         try {
             if (members != null)
                 finish executeFlat(abort_master, true);
@@ -64,7 +64,7 @@ public class LazyReplicationCommitHandler extends ResilientCommitHandler {
    
     private def commitPhaseOne(commitRecovery:Boolean) {
         if (!commitRecovery) {
-            val validate_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { validate_local_resilient(plh, id); };
+            val validate_master = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { validate_local_resilient(plh, id); };
             val startP1 = Timer.milliTime();
             try {
                 if (members != null)
@@ -82,7 +82,7 @@ public class LazyReplicationCommitHandler extends ResilientCommitHandler {
     }
     
     private def commitPhaseTwo() {
-        val commit_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { commit_local_resilient(plh, id); } ;
+        val commit_master = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { commit_local_resilient(plh, id); } ;
         
         val startP2 = Timer.milliTime();
         try {

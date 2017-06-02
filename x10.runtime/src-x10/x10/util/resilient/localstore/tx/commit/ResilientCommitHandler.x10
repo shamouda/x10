@@ -11,12 +11,12 @@ import x10.util.HashSet;
 import x10.compiler.Pinned;
 import x10.util.resilient.localstore.AbstractTx;
 
-public abstract class ResilientCommitHandler extends CommitHandler {
+public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandler[K] {
    
-    private val root = GlobalRef[ResilientCommitHandler](this);
+    private val root = GlobalRef[ResilientCommitHandler[K]](this);
     protected var nonFatalDeadPlace:Boolean = false;
     
-    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers) {
+    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, mapName:String, members:TxMembers) {
         super(plh, id, mapName, members);
     }
     
@@ -28,7 +28,7 @@ public abstract class ResilientCommitHandler extends CommitHandler {
             abort_resilient(recovery);
         }
         finally {
-            (root as GlobalRef[ResilientCommitHandler]{self.home == here}).forget();
+            (root as GlobalRef[ResilientCommitHandler[K]]{self.home == here}).forget();
         }
     }
     
@@ -42,11 +42,11 @@ public abstract class ResilientCommitHandler extends CommitHandler {
                 return AbstractTx.SUCCESS;
         }
         finally {
-            (root as GlobalRef[ResilientCommitHandler]{self.home == here}).forget();
+            (root as GlobalRef[ResilientCommitHandler[K]]{self.home == here}).forget();
         }
     }
     
-    protected def executeFlatSlaves(deadMasters:ArrayList[Place], closure:(PlaceLocalHandle[LocalStore],Long)=>void, deleteTxDesc:Boolean) {
+    protected def executeFlatSlaves(deadMasters:ArrayList[Place], closure:(PlaceLocalHandle[LocalStore[K]],Long)=>void, deleteTxDesc:Boolean) {
         for (p in deadMasters) {
             val slave = plh().getSlave(p);
             async at (slave) {
@@ -74,8 +74,8 @@ public abstract class ResilientCommitHandler extends CommitHandler {
         return list;
     }
     
-    protected def executeRecursivelyResilient(master_closure:(PlaceLocalHandle[LocalStore],Long)=>void,
-            slave_closure:(PlaceLocalHandle[LocalStore],Long)=>void, places:ArrayList[Place]) {
+    protected def executeRecursivelyResilient(master_closure:(PlaceLocalHandle[LocalStore[K]],Long)=>void,
+            slave_closure:(PlaceLocalHandle[LocalStore[K]],Long)=>void, places:ArrayList[Place]) {
         var str:String = "";
         for (x in places) {
             str += x + " , " ;
@@ -155,7 +155,7 @@ public abstract class ResilientCommitHandler extends CommitHandler {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient ended ...");
     }    
  
-    protected def abort_local_resilient(plh:PlaceLocalHandle[LocalStore], id:Long) {
+    protected def abort_local_resilient(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {
         var ex:Exception = null;
         if (!plh().getMasterStore().isReadOnlyTransaction(id)) {
             try {
@@ -176,7 +176,7 @@ public abstract class ResilientCommitHandler extends CommitHandler {
         }
     }
     
-    protected def commit_local_resilient(plh:PlaceLocalHandle[LocalStore], id:Long) {
+    protected def commit_local_resilient(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {
         var ex:Exception = null;
         if (!plh().getMasterStore().isReadOnlyTransaction(id)) {
             try {
@@ -197,7 +197,7 @@ public abstract class ResilientCommitHandler extends CommitHandler {
         }
     }
     
-    protected def validate_local_resilient(plh:PlaceLocalHandle[LocalStore], id:Long) {
+    protected def validate_local_resilient(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {
         if (TxConfig.get().VALIDATION_REQUIRED)
             plh().getMasterStore().validate(id);
         

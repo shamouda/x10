@@ -10,14 +10,14 @@ import x10.util.resilient.localstore.tx.*;
 import x10.util.resilient.localstore.TxMembers;
 import x10.util.HashSet;
 
-public class NonResilientCommitHandler extends CommitHandler {
+public class NonResilientCommitHandler[K] {K haszero} extends CommitHandler[K] {
     
-    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers) {
+    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, mapName:String, members:TxMembers) {
         super(plh, id, mapName, members);
     }
     
     public def abort(recovery:Boolean) {
-        val abort_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { abort_local(plh, id); } ;
+        val abort_master = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { abort_local(plh, id); } ;
         try {
             if (members != null)
                 finish executeFlat(abort_master, true);
@@ -39,7 +39,7 @@ public class NonResilientCommitHandler extends CommitHandler {
     }
    
     private def commitPhaseOne() {
-        val validate_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { validate_local(plh, id); };
+        val validate_master = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { validate_local(plh, id); };
         val startP1 = Timer.milliTime();
         if (TxConfig.get().VALIDATION_REQUIRED) {
             try {
@@ -57,7 +57,7 @@ public class NonResilientCommitHandler extends CommitHandler {
     }
     
     private def commitPhaseTwo() {
-        val commit_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { commit_local(plh, id); } ;
+        val commit_master = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { commit_local(plh, id); } ;
         val startP2 = Timer.milliTime();
         if (members != null)
             finish executeFlat(commit_master, true);
@@ -66,15 +66,15 @@ public class NonResilientCommitHandler extends CommitHandler {
         phase2ElapsedTime = Timer.milliTime() - startP2;
     }
     
-    private def validate_local(plh:PlaceLocalHandle[LocalStore], id:Long) {
+    private def validate_local(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {
         plh().getMasterStore().validate(id);
     }
     
-    private def commit_local(plh:PlaceLocalHandle[LocalStore], id:Long) {
+    private def commit_local(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {
         plh().getMasterStore().commit(id);
     }
     
-    private def abort_local(plh:PlaceLocalHandle[LocalStore], id:Long) {
+    private def abort_local(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {
         plh().getMasterStore().abort(id);
     }
 }

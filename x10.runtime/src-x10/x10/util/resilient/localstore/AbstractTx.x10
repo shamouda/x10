@@ -17,7 +17,10 @@ import x10.xrx.Runtime;
 import x10.util.concurrent.Future;
 import x10.util.resilient.localstore.tx.TxManager;
 
-public class AbstractTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String) {
+public class AbstractTx[K] {K haszero} {
+	public val plh:PlaceLocalHandle[LocalStore[K]];
+    public val mapName:String;
+    public val id:Long;
     protected static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     /* Constants */
@@ -30,9 +33,15 @@ public class AbstractTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Stri
     
     public static val SUCCESS = 0n;
     public static val SUCCESS_RECOVER_STORE = 1n;
-        
+    
+    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, mapName:String) {
+    	this.plh = plh;
+        this.mapName = mapName;
+        this.id = id;
+    }
+    
     /***************** Get ********************/
-    public def get(key:String):Cloneable {
+    public def get(key:K):Cloneable {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " GET_STARTED here=" + here + " Tx.get("+key+") ");
         val x = plh().getMasterStore().get(mapName, id, key);
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " GET_FINISHED here=" + here + " Tx.get("+key+") ");
@@ -40,7 +49,7 @@ public class AbstractTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Stri
     }
     
     /***************** PUT ********************/
-    public def put(key:String, value:Cloneable):Cloneable {
+    public def put(key:K, value:Cloneable):Cloneable {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " PUT_STARTED here=" + here + " Tx.put("+key+") ");
         val x = plh().getMasterStore().put(mapName, id, key, value);
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " PUT_FINISHED here=" + here + " Tx.put("+key+") ");
@@ -48,7 +57,7 @@ public class AbstractTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Stri
     }
     
     /***************** Delete ********************/
-    public def delete(key:String):Cloneable {
+    public def delete(key:K):Cloneable {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " DELETE_STARTED here=" + here + " Tx.delete("+key+") ");
         val x = plh().getMasterStore().delete(mapName, id, key);
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " DELETE_FINISHED here=" + here + " Tx.delete("+key+") ");
@@ -56,7 +65,7 @@ public class AbstractTx (plh:PlaceLocalHandle[LocalStore], id:Long, mapName:Stri
     }
     
     /***************** KeySet ********************/
-    public def keySet():Set[String] {
+    public def keySet():Set[K] {
         return plh().getMasterStore().keySet(mapName, id); 
     }
     

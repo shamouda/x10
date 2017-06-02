@@ -26,7 +26,7 @@ import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Future;
 
 /*should be used in non-resilient mode only*/
-public class LockingTx extends AbstractTx {
+public class LockingTx[K] {K haszero} extends AbstractTx[K] {
     public transient val startTime:Long=Timer.milliTime(); ////
     public transient var startProcessing:Long=0; ////
     public transient var lockingElapsedTime:Long=0; //////
@@ -35,11 +35,11 @@ public class LockingTx extends AbstractTx {
     public transient var totalElapsedTime:Long=0; //////
 
     public val members:Rail[Long];
-    public val keys:Rail[String];
+    public val keys:Rail[K];
     public val readFlags:Rail[Boolean];
     public val opPerPlace:Long;
 
-    public def this(plh:PlaceLocalHandle[LocalStore],id:Long,mapName:String,members:Rail[Long],keys:Rail[String],readFlags:Rail[Boolean],opPerPlace:Long)
+    public def this(plh:PlaceLocalHandle[LocalStore[K]],id:Long,mapName:String,members:Rail[Long],keys:Rail[K],readFlags:Rail[Boolean],opPerPlace:Long)
     {
         super(plh, id, mapName);
         this.members = members;

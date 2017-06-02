@@ -47,35 +47,35 @@ public class TxLockCREWBlocking extends TxLock {
             BWEnabled = false;
         }
     }
-    public def lockRead(txId:Long, key:String) {
+    public def lockRead(txId:Long) {
         if (BWEnabled) 
-            lockReadBW(txId, key);
+            lockReadBW(txId);
         else
-            lockReadSem(txId, key);
+            lockReadSem(txId);
     }
     
-    public def unlockRead(txId:Long, key:String) {
+    public def unlockRead(txId:Long) {
         if (BWEnabled) 
-            unlockReadBW(txId, key);
+            unlockReadBW(txId);
         else
-            unlockReadSem(txId, key);
+            unlockReadSem(txId);
     }
     
-    public def lockWrite(txId:Long, key:String) {
+    public def lockWrite(txId:Long) {
         if (BWEnabled)
-            lockWriteBW(txId, key);
+            lockWriteBW(txId);
         else
-            lockWriteSem(txId, key);
+            lockWriteSem(txId);
     }
   
-    public def unlockWrite(txId:Long, key:String) {
+    public def unlockWrite(txId:Long) {
         if (BWEnabled)
-            unlockWriteBW(txId, key);
+            unlockWriteBW(txId);
         else
-            unlockWriteSem(txId, key);
+            unlockWriteSem(txId);
     }
 
-    private def lockReadBW(txId:Long, key:String) {
+    private def lockReadBW(txId:Long) {
         lock.lock();
         while (writer > 0n) {
             lock.unlock();
@@ -86,13 +86,13 @@ public class TxLockCREWBlocking extends TxLock {
         lock.unlock();
     }
     
-    private def unlockReadBW(txId:Long, key:String) {
+    private def unlockReadBW(txId:Long) {
         lock.lock();
         readers--;
         lock.unlock();
     }
     
-    private def lockWriteBW(txId:Long, key:String) {
+    private def lockWriteBW(txId:Long) {
         lock.lock();
         while (readers > 0n) {
             lock.unlock();
@@ -103,33 +103,33 @@ public class TxLockCREWBlocking extends TxLock {
         lock.unlock();
     }
   
-    private def unlockWriteBW(txId:Long, key:String) {
+    private def unlockWriteBW(txId:Long) {
         lock.lock();
         writer--;
         lock.unlock();
     }
     
-    private def lockReadSem(txId:Long, key:String) {
+    private def lockReadSem(txId:Long) {
         sem.acquireRead();
     }
     
-    private def unlockReadSem(txId:Long, key:String) {
+    private def unlockReadSem(txId:Long) {
         sem.releaseRead();
     }
     
-    private def lockWriteSem(txId:Long, key:String) {
+    private def lockWriteSem(txId:Long) {
         sem.acquireWrite();
     }
   
-    private def unlockWriteSem(txId:Long, key:String) {
+    private def unlockWriteSem(txId:Long) {
         sem.releaseWrite();
     }
     
-    public def tryLockRead(txId:Long, key:String):Boolean {
+    public def tryLockRead(txId:Long):Boolean {
         throw new UnsupportedOperationException("TxLockCREWBlocking.tryLockRead() not supported ...");
     }
     
-    public def tryLockWrite(txId:Long, key:String):Boolean {
+    public def tryLockWrite(txId:Long):Boolean {
         throw new UnsupportedOperationException("TxLockCREWBlocking.tryLockWrite() not supported ...");
     }
     

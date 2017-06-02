@@ -16,55 +16,77 @@ import x10.util.resilient.localstore.tx.TxManager;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.tx.StorePausedException;
+import x10.util.resilient.localstore.LocalStore;
 
-public class TxDescManager(map:ResilientNativeMap) {
+public class TxDescManager[K] {K haszero} {
+	public val plh:PlaceLocalHandle[LocalStore[K]];
     public static val FROM_SLAVE = false;
     public static val FROM_MASTER = true;
+    protected static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
+    
+    public def this (plh:PlaceLocalHandle[LocalStore[K]]) {K haszero} {
+    	this.plh =  plh;
+    }
     
     public def add(id:Long, members:Rail[Long], ignoreDeadSlave:Boolean) {
         val staticMembers = members != null && members.size > 0;
-        val desc = new TxDesc(id, map.name, staticMembers);
+        val mapName = "";
+        val desc = new TxDesc(id, mapName, staticMembers);
         desc.addVirtualMembers(members);
-        val localTx = map.startLocalTransaction();
-        if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " TxDesc.add localTx["+localTx.id+"] started ...");
-        localTx.put("tx"+id, desc);
-        localTx.commit(ignoreDeadSlave);
-        if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " TxDesc.add localTx["+localTx.id+"] completed ...");
+        try {
+            if (resilient && !TxConfig.get().DISABLE_SLAVE) {
+                finish at (plh().slave) async {
+                    plh().slaveStore.putTransDescriptor(id, desc);
+                }
+            }
+        } catch(exSl:Exception) {
+        	if (!ignoreDeadSlave)
+        		throw exSl;
+        }
+        plh().getMasterStore().getState().putTxDesc(id, desc);
+        
     }
     
     public def delete(id:Long, ignoreDeadSlave:Boolean) {
-        val localTx = map.startLocalTransaction();
-        if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " TxDesc.delete localTx["+localTx.id+"] started ...");
-        localTx.deleteTxDesc("tx"+id);
-        localTx.commit(ignoreDeadSlave);
-        if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " TxDesc.delete localTx["+localTx.id+"] completed ...");
+    	try {
+            if (resilient && !TxConfig.get().DISABLE_SLAVE) {
+                finish at (plh().slave) async {
+                    plh().slaveStore.deleteTransDescriptor(id);
+                }
+            }
+        } catch(exSl:Exception) {
+        	if (!ignoreDeadSlave)
+        		throw exSl;
+        }
+    	plh().getMasterStore().getState().removeTxDesc(id);
     }
     
     public def updateStatus(id:Long, newStatus:Long, ignoreDeadSlave:Boolean) {
-        val localTx = map.startLocalTransaction();
-        if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " TxDesc.updateStatus localTx["+localTx.id+"] started ...");
-        val desc = localTx.get("tx"+id) as TxDesc;
-        assert (desc != null) : "TxDesc bug detected in updateStatus NULL desc";
-        desc.status = newStatus;
-        localTx.put("tx"+id, desc);
-        localTx.commit(ignoreDeadSlave);
-        if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " TxDesc.updateStatus localTx["+localTx.id+"] completed ...");
+    	try {
+            if (resilient && !TxConfig.get().DISABLE_SLAVE) {
+                finish at (plh().slave) async {
+                    plh().slaveStore.updateTxDescStatus(id, newStatus);
+                }
+            }
+        } catch(exSl:Exception) {
+        	if (!ignoreDeadSlave)
+        		throw exSl;
+        }
+    	plh().getMasterStore().getState().updateTxDescStatus(id, newStatus);
     }
     
     public def addVirtualMembers(id:Long, vMembers:Rail[Long], ignoreDeadSlave:Boolean) {
-        var s:String = "";
-        for (r in vMembers)
-            s += r + " ";
-        val localTx = map.startLocalTransaction();
-        if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " TxDesc.addVirtualMembers{"+s+"} localTx["+localTx.id+"] started ...");
-        var desc:TxDesc = localTx.get("tx"+id) as TxDesc;
-        if (desc == null)
-            desc = new TxDesc(id, map.name, false); 
-        desc.addVirtualMembers(vMembers);
-        localTx.put("tx"+id, desc);
-        localTx.commit(ignoreDeadSlave);
-        if(TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " TxDesc.addVirtualMembers{"+s+"} localTx["+localTx.id+"] completed ...");
-    
+    	try {
+            if (resilient && !TxConfig.get().DISABLE_SLAVE) {
+                finish at (plh().slave) async {
+                    plh().slaveStore.addTxDescMembers(id, vMembers);
+                }
+            }
+        } catch(exSl:Exception) {
+        	if (!ignoreDeadSlave)
+        		throw exSl;
+        }
+    	plh().getMasterStore().getState().addTxDescMembers(id, vMembers);
     }
     
     public def getVirtualMembers(id:Long, masterType:Boolean) {
@@ -79,28 +101,23 @@ public class TxDescManager(map:ResilientNativeMap) {
     }
     
     private def getVirtualMembersFromMasterStore(id:Long) {
-        val localTx = map.startLocalTransaction();
-        val desc = localTx.get("tx"+id) as TxDesc;
-        localTx.commit(true);
-        if (desc == null) {
-            return null;
-        }
+        val desc = plh().getMasterStore().getState().getTxDesc(id);
+        if (desc == null)
+        	return null;
         return desc.getVirtualMembers();
     }
     
     private def getVirtualMembersFromSlaveStore(id:Long) {
-        val desc = map.plh().slaveStore.getTransDescriptor(id);
-        if (desc == null) {
+        val desc = plh().slaveStore.getTransDescriptor(id);
+        if (desc == null) 
             return null;
-        }
         else
             return desc.getVirtualMembers();
     }
     
     
     public def deleteTxDescFromSlaveStore(id:Long) {
-        map.plh().slaveStore.deleteTransDescriptor(id);
+        plh().slaveStore.deleteTransDescriptor(id);
     }
-    
     
 }

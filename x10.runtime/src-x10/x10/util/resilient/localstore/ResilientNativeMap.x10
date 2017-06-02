@@ -12,41 +12,48 @@ import x10.xrx.Runtime;
 import x10.util.Timer;
 import x10.util.resilient.localstore.tx.logging.TxDesc;
 
-public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) {
+public class ResilientNativeMap[K] {K haszero} {
+	public val name:String;
+    public val plh:PlaceLocalHandle[LocalStore[K]];
+
     private static val TM_STAT_ALL = System.getenv("TM_STAT_ALL") != null && System.getenv("TM_STAT_ALL").equals("1");
 
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     private var baselineTxId:Long = 0;
     
+    public def this(name:String, plh:PlaceLocalHandle[LocalStore[K]]){
+    	this.name = name;
+    	this.plh = plh;
+    }
     /** 
      * Get the value of key k in the resilient map.
      */
-    public def get(k:String) {
-        return executeLocalTransaction((tx:LocalTx) => tx.get(k) ).output as Cloneable;
+    public def get(key:K) {
+        return executeLocalTransaction((tx:LocalTx[K]) => tx.get(key) ).output as Cloneable;
     }
 
     /**
      * Associate value v with key k in the resilient map.
      */
-    public def set(k:String, v:Cloneable) {
-        return executeLocalTransaction((tx:LocalTx) => tx.put(k,v) ).output as Cloneable;
+    public def set(key:K, v:Cloneable) {
+        return executeLocalTransaction((tx:LocalTx[K]) => tx.put(key,v) ).output as Cloneable;
     }
 
     /**
      * Remove any value associated with key k from the resilient map.
      */
-    public def delete(k:String) {
-        return executeLocalTransaction((tx:LocalTx) => tx.delete(k) ).output as Cloneable;
+    public def delete(key:K) {
+        return executeLocalTransaction((tx:LocalTx[K]) => tx.delete(key) ).output as Cloneable;
     }
 
-    public def keySet():Set[String] {
+    public def keySet():Set[K] {
         val trans = startLocalTransaction();
         val set = trans.keySet();
         trans.commit();
         return set;
     }
     
-    public def setAll(data:HashMap[String,Cloneable]) {
+    public def setAll(data:HashMap[K,Cloneable]) {
         if (data == null)
             return;        
         val trans = startLocalTransaction();
@@ -58,12 +65,12 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
         trans.commit();
     }
     
-    public def set2(key:String, value:Cloneable, place:Place, key2:String, value2:Cloneable) {
+    public def set2(key:K, value:Cloneable, place:Place, key2:K, value2:Cloneable) {
         throw new Exception("method deprecated");
     }
     
-    public def set2(key:String, value:Cloneable, key2:String, value2:Cloneable) {        
-        return executeLocalTransaction((tx:LocalTx) => { tx.put(key, value); tx.put(key2, value2) });
+    public def set2(key:K, value:Cloneable, key2:K, value2:Cloneable) {        
+        return executeLocalTransaction((tx:LocalTx[K]) => { tx.put(key, value); tx.put(key2, value2) });
     }
     
     /***********************  Places functions ****************************/
@@ -77,13 +84,13 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     
     /***********************   Local Transactions ****************************/
     
-    public def startLocalTransaction():LocalTx {
+    public def startLocalTransaction():LocalTx[K] {
         assert(plh().virtualPlaceId != -1) : here + " LocalTx assertion error  virtual place id = -1";
         val id = plh().getMasterStore().getNextTransactionId();
-        return new LocalTx(plh, id, name);
+        return new LocalTx[K](plh, id, name);
     }
     
-    public def executeLocalTransaction(closure:(LocalTx)=>Any) {
+    public def executeLocalTransaction(closure:(LocalTx[K])=>Any) {
         var out:Any;
         var commitStatus:Int = -1n;
 
@@ -108,7 +115,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
         return new TxResult(commitStatus, out);
     }
     
-    public def executeLocalTransaction(target:Place, closure:(LocalTx)=>Any) {
+    public def executeLocalTransaction(target:Place, closure:(LocalTx[K])=>Any) {
         val txResult = at (target) {
             var out:Any;
             var commitStatus:Int = -1n;
@@ -138,11 +145,11 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     }
     
     /***********************   Global Transactions ****************************/
-    private def startGlobalTransaction():Tx {
+    private def startGlobalTransaction():Tx[K] {
         return startGlobalTransaction(null);
     }
     
-    private def startGlobalTransaction(members:TxMembers):Tx {
+    private def startGlobalTransaction(members:TxMembers):Tx[K] {
         val id = plh().getMasterStore().getNextTransactionId();
         val tx = new Tx(plh, id, name, members);
         try {
@@ -159,18 +166,18 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
         return tx;
     }
     
-    public def restartGlobalTransaction(txDesc:TxDesc):Tx {
+    public def restartGlobalTransaction(txDesc:TxDesc):Tx[K] {
         assert(plh().virtualPlaceId != -1);
         val includeDead = true; // The commitHandler will take the correct actions regarding the dead master
         val members = txDesc.staticMembers? plh().getTxMembers(txDesc.virtualMembers, includeDead):null;
         return new Tx(plh, txDesc.id, name,  members);
     }
     
-    public def executeTransaction(closure:(Tx)=>Any, maxRetries:Long):TxResult {
+    public def executeTransaction(closure:(Tx[K])=>Any, maxRetries:Long):TxResult {
         return executeTransaction(null, closure, maxRetries, -1);
     }
     
-    public def executeTransaction(virtualMembers:Rail[Long], closure:(Tx)=>Any, maxRetries:Long, maxTimeNS:Long):TxResult {
+    public def executeTransaction(virtualMembers:Rail[Long], closure:(Tx[K])=>Any, maxRetries:Long, maxTimeNS:Long):TxResult {
         val beginning = System.nanoTime();
         var members:TxMembers = null;
         if (virtualMembers != null) 
@@ -184,7 +191,7 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
                 throw new FatalTransactionException("Reached maximum limit for retrying a transaction");
             retryCount++;
             
-            var tx:Tx = null; 
+            var tx:Tx[K] = null; 
             var commitCalled:Boolean = false;
             try {
                 tx = startGlobalTransaction(members);
@@ -215,13 +222,13 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     
     /***********************   Lock-based Transactions ****************************/
     
-    private def startLockingTransaction(members:Rail[Long], keys:Rail[String], readFlags:Rail[Boolean], o:Long):LockingTx {
+    private def startLockingTransaction(members:Rail[Long], keys:Rail[K], readFlags:Rail[Boolean], o:Long):LockingTx[K] {
         assert(plh().virtualPlaceId != -1);
         val id = plh().getMasterStore().getNextTransactionId();
         return new LockingTx(plh, id, name, members, keys, readFlags, o);
     }
     
-    public def executeLockingTransaction(members:Rail[Long], keys:Rail[String], readFlags:Rail[Boolean], o:Long, closure:(LockingTx)=>Any) {
+    public def executeLockingTransaction(members:Rail[Long], keys:Rail[K], readFlags:Rail[Boolean], o:Long, closure:(LockingTx[K])=>Any) {
         val tx = startLockingTransaction(members, keys, readFlags, o);
         tx.lock();
         val out = closure(tx);
@@ -231,14 +238,14 @@ public class ResilientNativeMap (name:String, plh:PlaceLocalHandle[LocalStore]) 
     
     
     /**************Baseline Operations*****************/
-    private def startBaselineTransaction():AbstractTx {
+    private def startBaselineTransaction():AbstractTx[K] {
         assert(plh().virtualPlaceId != -1);
         val id = baselineTxId ++;
-        val tx = new AbstractTx(plh, id, name);
+        val tx = new AbstractTx[K](plh, id, name);
         return tx;
     }
     
-    public def executeBaselineTransaction(closure:(AbstractTx)=>Any) {
+    public def executeBaselineTransaction(closure:(AbstractTx[K])=>Any) {
         val tx = startBaselineTransaction();
         val out = closure(tx);
         return out;

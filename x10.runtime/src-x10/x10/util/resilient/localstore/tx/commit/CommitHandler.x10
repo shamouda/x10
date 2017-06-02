@@ -11,7 +11,7 @@ import x10.util.HashSet;
 import x10.compiler.Pinned;
 import x10.util.resilient.localstore.tx.logging.TxDescManager;
 
-public abstract class CommitHandler {
+public abstract class CommitHandler[K] {K haszero} {
 	public transient var phase1ElapsedTime:Long = 0;
     public transient var phase2ElapsedTime:Long = 0;
 	public transient var txLoggingElapsedTime:Long = 0;
@@ -19,19 +19,19 @@ public abstract class CommitHandler {
     public abstract def abort(recovery:Boolean):void;
     public abstract def commit(commitRecovery:Boolean):Int;
     
-    protected plh:PlaceLocalHandle[LocalStore];
+    protected plh:PlaceLocalHandle[LocalStore[K]];
     protected id:Long;
     protected mapName:String;
     protected members:TxMembers;
     
-    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers) {
+    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, mapName:String, members:TxMembers) {
     	this.plh = plh;
     	this.id = id;
     	this.mapName = mapName;
     	this.members = members;
     }
     
-    protected def executeFlat(closure:(PlaceLocalHandle[LocalStore],Long)=>void, deleteTxDesc:Boolean) {
+    protected def executeFlat(closure:(PlaceLocalHandle[LocalStore[K]],Long)=>void, deleteTxDesc:Boolean) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] executeFlat started ...");
                 
         for (p in members.pg()) {
@@ -46,7 +46,7 @@ public abstract class CommitHandler {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] executeFlat ended children ["+members.pg().size()+"] ...");
     }
     
-    protected def executeRecursively(closure:(PlaceLocalHandle[LocalStore],Long)=>void, parents:HashSet[Long], deleteTxDesc:Boolean) {
+    protected def executeRecursively(closure:(PlaceLocalHandle[LocalStore[K]],Long)=>void, parents:HashSet[Long], deleteTxDesc:Boolean) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] executeRecursively started ...");
         closure(plh, id);
         var childCount:Long = 0;
@@ -81,9 +81,5 @@ public abstract class CommitHandler {
         }
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] executeRecursively ended children ["+childCount+"] ...");
     }
-    
-    
-
-    
     
 }

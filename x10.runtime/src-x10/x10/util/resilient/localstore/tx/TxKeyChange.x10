@@ -19,8 +19,8 @@ import x10.util.resilient.localstore.Cloneable;
  * In UL: the value represents the initial value, inplace changes occur on the Map, we use the logged initial value for rollback.
  * In WB: the value is the current value local to the transaction, changes occur on the log value (not directly on the Map), we use this value for commit.
  **/
-public class TxKeyChange {
-    private var key:String;
+public class TxKeyChange[K] {K haszero} {
+    private var key:K;
 
     /*A copy of the value, used to isolate the transaction updates for the actual value*/
     private var value:Cloneable;
@@ -38,7 +38,7 @@ public class TxKeyChange {
 
     private var added:Boolean = false;
     private var deleted:Boolean = false;
-    private var memU:MemoryUnit;
+    private var memU:MemoryUnit[K];
     
     private var location:Long;
    
@@ -46,7 +46,7 @@ public class TxKeyChange {
         
     }
     
-    public def init(key:String, initTxId:Long, lockedRead:Boolean, memU:MemoryUnit, added:Boolean,
+    public def init(key:K, initTxId:Long, lockedRead:Boolean, memU:MemoryUnit[K], added:Boolean,
             initValue:Cloneable, initVersion:Int) {
         this.key = key;
         this.initTxId = initTxId;

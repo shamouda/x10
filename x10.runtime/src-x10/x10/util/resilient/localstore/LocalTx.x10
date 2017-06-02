@@ -21,18 +21,18 @@ import x10.util.resilient.localstore.Cloneable;
 import x10.util.Timer;
 import x10.util.concurrent.Future;
 
-public class LocalTx extends AbstractTx {
+public class LocalTx[K] {K haszero} extends AbstractTx[K] {
     public transient val startTime:Long = Timer.milliTime();
     public transient var commitTime:Long = 0;
     public transient var abortTime:Long = 0;   
     public transient var processingElapsedTime:Long = 0;
     
-    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String) {
+    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, mapName:String) {
         super(plh, id, mapName);
     }
     
     /***************** Get ********************/
-    public def get(key:String):Cloneable {
+    public def get(key:K):Cloneable {
         try {
             return plh().getMasterStore().get(mapName, id, key);
         }catch(ex:Exception){
@@ -42,7 +42,7 @@ public class LocalTx extends AbstractTx {
     }
 
     /***************** PUT ********************/
-    public def put(key:String, value:Cloneable):Cloneable {
+    public def put(key:K, value:Cloneable):Cloneable {
         try {
             return plh().getMasterStore().put(mapName, id, key, value);
         }catch(ex:Exception){
@@ -52,7 +52,7 @@ public class LocalTx extends AbstractTx {
     }
     
     /***************** Delete ********************/
-    public def delete(key:String):Cloneable {
+    public def delete(key:K):Cloneable {
         try {
             return plh().getMasterStore().delete(mapName, id, key);
         }catch(ex:Exception){
@@ -61,7 +61,7 @@ public class LocalTx extends AbstractTx {
         }
     }
     
-    public def deleteTxDesc(key:String):Cloneable {
+    public def deleteTxDesc(key:K):Cloneable {
         try {
             return plh().getMasterStore().deleteTxDesc(mapName, id, key);
         }catch(ex:Exception){
@@ -71,7 +71,7 @@ public class LocalTx extends AbstractTx {
     }
     
     /***************** KeySet ********************/
-    public def keySet():Set[String] {
+    public def keySet():Set[K] {
         try {
             return plh().getMasterStore().keySet(mapName, id);
         }catch(ex:Exception){

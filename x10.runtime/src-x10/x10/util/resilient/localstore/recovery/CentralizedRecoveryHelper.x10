@@ -9,7 +9,7 @@ import x10.util.resilient.localstore.*;
 public class CentralizedRecoveryHelper {
     
     /*******************  Centralized Recovery starting at Place(0)  ****************************/
-    public static def recover(plh:PlaceLocalHandle[LocalStore], changes:ChangeDescription):void {
+    public static def recover[K](plh:PlaceLocalHandle[LocalStore[K]], changes:ChangeDescription) {K haszero} {
         Console.OUT.println("CentralizedRecoveryHelper.recover started ...");
         var i:Long = 0;
         finish for (deadPlace in changes.removedPlaces) {

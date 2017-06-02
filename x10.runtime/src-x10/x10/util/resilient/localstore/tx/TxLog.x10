@@ -28,14 +28,14 @@ import x10.util.GrowableRail;
  * However, an abort request may occur concurrenctly with other requests, that is why we have a lock to prevent
  * interleaving between abort and other operations.
  **/
-public class TxLog {
-    private static class TxLogKeysList {
-        private val rdKeys:GrowableRail[TxKeyChange];
-        private val wtKeys:GrowableRail[TxKeyChange];
+public class TxLog[K] {K haszero} {
+    private static class TxLogKeysList[K] {K haszero} {
+        private val rdKeys:GrowableRail[TxKeyChange[K]];
+        private val wtKeys:GrowableRail[TxKeyChange[K]];
     
         public def this() {
-            rdKeys = new GrowableRail[TxKeyChange](TxConfig.get().PREALLOC_TXKEYS);
-            wtKeys = new GrowableRail[TxKeyChange](TxConfig.get().PREALLOC_TXKEYS);
+            rdKeys = new GrowableRail[TxKeyChange[K]](TxConfig.get().PREALLOC_TXKEYS);
+            wtKeys = new GrowableRail[TxKeyChange[K]](TxConfig.get().PREALLOC_TXKEYS);
         }
     
         public def clear() {
@@ -55,12 +55,12 @@ public class TxLog {
             return rdKeys;
         }
         
-        public def add(log:TxKeyChange) {
+        public def add(log:TxKeyChange[K]) {
             rdKeys.add(log);
             log.setIndx(rdKeys.size()-1);
         }
         
-        private def search(key:String, read:Boolean) {
+        private def search(key:K, read:Boolean) {
             val rail = read ? rdKeys : wtKeys;
             for (var i:Long = 0; i < rail.size(); i++) {
                 if (rail(i).key().equals(key))
@@ -69,25 +69,25 @@ public class TxLog {
             return null;
         }
         
-        public def get(key:String) {
+        public def get(key:K) {
             val rdVal = search(key, true);
             if (rdVal != null)
                 return rdVal;
             return search(key, false);
         }
         
-        public def getOrThrow(key:String) {
+        public def getOrThrow(key:K) {
             val obj = get(key);            
             if (obj == null)
                 throw new Exception("Not found:" + key);
             return obj;
         }
     
-        private def fromReadToWrite(key:String) {
+        private def fromReadToWrite(key:K) {
             val last = rdKeys.size() -1;
             var indx:Long = -1;
             for (indx = 0 ; indx < rdKeys.size(); indx++) {
-                if (rdKeys(indx).key().equals(key))
+                if (rdKeys(indx).key() == key)
                     break;
             }
             assert (indx != -1) : "fatal txkeychange not found";
@@ -120,33 +120,33 @@ public class TxLog {
             log.setIndx(wtKeys.size()-1);
         }
 
-        public def logPut(key:String, copiedValue:Cloneable) {
-            var log:TxKeyChange = search(key, false); //get from write
+        public def logPut(key:K, copiedValue:Cloneable) {
+            var log:TxKeyChange[K] = search(key, false); //get from write
             if (log == null)
                 log = fromReadToWrite(key);
             return log.update(copiedValue);
         }
         
-        public def logPut(log:TxKeyChange, copiedValue:Cloneable) {
+        public def logPut(log:TxKeyChange[K], copiedValue:Cloneable) {
             if (log.getReadOnly())
                 fromReadToWrite(log.indx());
             return log.update(copiedValue);
         }
         
-        public def logDelete(key:String) {
-            var log:TxKeyChange = search(key, false); //get from write
+        public def logDelete(key:K) {
+            var log:TxKeyChange[K] = search(key, false); //get from write
             if (log == null)
                 log = fromReadToWrite(key);
             return log.delete();
         }
 
-        public def logDelete(log:TxKeyChange) {
+        public def logDelete(log:TxKeyChange[K]) {
             if (log.getReadOnly())
                 fromReadToWrite(log.indx());
             return log.delete();
         }
         
-        public def setAllWriteFlags(log:TxKeyChange, locked:Boolean, deleted:Boolean) {
+        public def setAllWriteFlags(log:TxKeyChange[K], locked:Boolean, deleted:Boolean) {
             if (log.getReadOnly())
                 fromReadToWrite(log.indx());
             log.setReadOnly(false);
@@ -155,28 +155,28 @@ public class TxLog {
         }
     }
 
-    private val keysList:TxLogKeysList;
+    private val keysList:TxLogKeysList[K];
     public var aborted:Boolean = false;
     public var writeValidated:Boolean = false;
     public var id:Long = -1;
     private var lock:Lock;
     
     //used to reduce searching for memory units after calling TxManager.logInitialIfNotLogged
-    private var lastUsedMemoryUnit:MemoryUnit;
-    private var lastUsedKeyLog:TxKeyChange;
+    private var lastUsedMemoryUnit:MemoryUnit[K];
+    private var lastUsedKeyLog:TxKeyChange[K];
     
     public def this() {
-        keysList = new TxLogKeysList();
+        keysList = new TxLogKeysList[K]();
         if (!TxConfig.get().LOCK_FREE)
             lock = new Lock();
         else
             lock = null;
     }
     
-    public def getOrAddKeyLog(key:String) { 
-        var log:TxKeyChange = keysList.get(key);
+    public def getOrAddKeyLog(key:K) { 
+        var log:TxKeyChange[K] = keysList.get(key);
         if (log == null) {
-            log = new TxKeyChange();
+            log = new TxKeyChange[K]();
             keysList.add(log);
         }
         return log;
@@ -192,7 +192,7 @@ public class TxLog {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tmp+"] " + TxManager.txIdToString(tmp) + " here["+here+"] TxLog.reset done ");
     }
 
-    public def getValue(copy:Boolean, key:String) {
+    public def getValue(copy:Boolean, key:K) {
         val value = keysList.getOrThrow(key).getValue();
         var v:Cloneable = value;
         if (copy) {
@@ -201,7 +201,7 @@ public class TxLog {
         return v;
     }
     
-    public def getValue(copy:Boolean, keyLog:TxKeyChange) {
+    public def getValue(copy:Boolean, keyLog:TxKeyChange[K]) {
         val value = keyLog.getValue();
         var v:Cloneable = value;
         if (copy) {
@@ -212,87 +212,65 @@ public class TxLog {
     
     
     public def getLastUsedMemoryUnit() = lastUsedMemoryUnit;
-    public def setLastUsedMemoryUnit(memU:MemoryUnit) {
+    public def setLastUsedMemoryUnit(memU:MemoryUnit[K]) {
         lastUsedMemoryUnit = memU;
     }
     
     public def getLastUsedKeyLog() = lastUsedKeyLog;
-    public def setLastUsedKeyLog(kLog:TxKeyChange) {
+    public def setLastUsedKeyLog(kLog:TxKeyChange[K]) {
         lastUsedKeyLog = kLog;
     }
     
     // get version
-    public def getInitVersion(key:String) {
+    public def getInitVersion(key:K) {
         return keysList.getOrThrow(key).getInitVersion();
     }
     
     // get TxId
-    public def getInitTxId(key:String) {
+    public def getInitTxId(key:K) {
         return keysList.getOrThrow(key).getInitTxId();
     }
        
-    public def getMemoryUnit(key:String) {
-        var log:TxKeyChange = keysList.get(key);
+    public def getMemoryUnit(key:K) {
+        var log:TxKeyChange[K] = keysList.get(key);
         if (log == null)
             return null;
         else
             return log.getMemoryUnit();
     }
 
-    public def logPut(keyLog:TxKeyChange, copiedValue:Cloneable) {
+    public def logPut(keyLog:TxKeyChange[K], copiedValue:Cloneable) {
         return keysList.logPut(keyLog, copiedValue);
     }
     
-    public def logDelete(keyLog:TxKeyChange) {
+    public def logDelete(keyLog:TxKeyChange[K]) {
         return keysList.logDelete(keyLog);
     }
     
-    public def setAllWriteFlags(keyLog:TxKeyChange, locked:Boolean, deleted:Boolean) {
+    public def setAllWriteFlags(keyLog:TxKeyChange[K], locked:Boolean, deleted:Boolean) {
         keysList.setAllWriteFlags(keyLog, locked, deleted);
     }
     
     //*used by Undo Logging*//
-    public def getReadOnly(key:String) {
+    public def getReadOnly(key:K) {
         return keysList.getOrThrow(key).getReadOnly();
     }
     
-    public def getDeleted(key:String) {
+    public def getDeleted(key:K) {
         return keysList.getOrThrow(key).getDeleted();
     }
     
     // mark as locked for read
-    public def setLockedRead(key:String, lr:Boolean) {
+    public def setLockedRead(key:K, lr:Boolean) {
         keysList.getOrThrow(key).setLockedRead(lr);
-    }
-    
-    public def getLockedRead(key:String) {
-        var result:Boolean = false;
-        val log = keysList.get(key);
-        if (log == null)
-            result = false;
-        else
-            result = log.getLockedRead();
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] key["+key+"] getLockedRead?["+result+"]");
-        return result;
-    }
-    
-    public def getLockedWrite(key:String) {
-        var result:Boolean = false;
-        val log = keysList.get(key);
-        if (log == null)
-            result = false;
-        else
-            result = log.getLockedWrite();
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] key["+key+"] getLockedWrite?["+result+"]");
-        return result;
     }
     
     public def isReadOnlyTransaction() {
         return keysList.isReadOnlyTransaction();
     }
     
-    public def prepareCommitLog():HashMap[String,Cloneable] {
-        val map = new HashMap[String,Cloneable]();
+    public def prepareCommitLog():HashMap[K,Cloneable] {
+        val map = new HashMap[K,Cloneable]();
         val wtKeys = keysList.getWriteKeys();
         if (TxConfig.get().WRITE_BUFFERING) {
             for (var i:Long = 0 ; i < wtKeys.size(); i++) {

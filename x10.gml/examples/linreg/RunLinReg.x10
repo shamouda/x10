@@ -88,9 +88,7 @@ public class RunLinReg {
         }
         
         val startTime = Timer.milliTime();
-        val tmSupported = System.getenv("TM") != null;
-        val executor = tmSupported? new SPMDResilientIterativeExecutorSTM(checkpointFrequency, sparePlaces, false, true) : 
-            new SPMDResilientIterativeExecutor(checkpointFrequency, sparePlaces, false, true);
+        val executor = new SPMDResilientIterativeExecutor(checkpointFrequency, sparePlaces, false, true);
         val places = executor.activePlaces();
         val team = executor.team();
         

@@ -26,15 +26,15 @@ import x10.compiler.Uncounted;
  * 
  * Should be used in resilient mode only.
  * */
-public class EagerReplicationCommitHandler extends ResilientCommitHandler {
+public class EagerReplicationCommitHandler[K] {K haszero} extends ResilientCommitHandler[K] {
     
-    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers) {
+    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, mapName:String, members:TxMembers) {
         super(plh, id, mapName, members);
     }
     
     private def asyncDeleteDescriptors(recovery:Boolean, masters:ArrayList[Place]) {
-        val deleteDesc_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { plh().txDescManager.delete(id, true); } ;
-        val deleteDesc_slave = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { plh().txDescManager.deleteTxDescFromSlaveStore(id); } ;
+        val deleteDesc_master = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { plh().txDescManager.delete(id, true); } ;
+        val deleteDesc_slave = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { plh().txDescManager.deleteTxDescFromSlaveStore(id); } ;
     
         @Uncounted async {
             try {
@@ -54,8 +54,8 @@ public class EagerReplicationCommitHandler extends ResilientCommitHandler {
      **/
     public def abort_resilient(recovery:Boolean){
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " abort_resilient started ...");
-        val abort_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { abort_local_resilient(plh, id); } ;
-        val abort_slave = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { plh().slaveStore.abort(id); } ;
+        val abort_master = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { abort_local_resilient(plh, id); } ;
+        val abort_slave = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { plh().slaveStore.abort(id); } ;
         if (members != null) {
             try { 
                 finish executeFlat(abort_master, true);
@@ -104,8 +104,8 @@ public class EagerReplicationCommitHandler extends ResilientCommitHandler {
     }
    
     private def commitPhaseOne() {
-        val validate_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { validate_local_resilient(plh, id); };
-        val validate_slave = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => {  };
+        val validate_master = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { validate_local_resilient(plh, id); };
+        val validate_slave = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => {  };
         val startP1 = Timer.milliTime();
         try {
             if (members != null)
@@ -126,8 +126,8 @@ public class EagerReplicationCommitHandler extends ResilientCommitHandler {
     }
     
     private def commitPhaseTwo(recovery:Boolean) {
-        val commit_master = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { commit_local_resilient(plh, id); } ;
-        val commit_slave = (plh:PlaceLocalHandle[LocalStore], id:Long ):void => { plh().slaveStore.commit(id); } ;
+        val commit_master = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { commit_local_resilient(plh, id); } ;
+        val commit_slave = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { plh().slaveStore.commit(id); } ;
         val startP2 = Timer.milliTime();
         if (members != null) {
             try {

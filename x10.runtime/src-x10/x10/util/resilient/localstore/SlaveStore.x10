@@ -23,51 +23,60 @@ import x10.util.resilient.localstore.tx.logging.TxDesc;
 
 /* Slave methods are being called by only one place at a time,
  * either its master during normal execution, or the store coordinator during failure recovery */
-public class SlaveStore {
+public class SlaveStore[K] {K haszero} {
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
-    private var masterState:HashMap[String,Cloneable];
+    private var masterState:HashMap[K,Cloneable];
     // the order of the transactions in this list is important for recovery
     // TODO: change to a HashMap[place index, list]
-    private var logs:ArrayList[TxSlaveLog]; 
+    private var logs:ArrayList[TxSlaveLog[K]]; 
     private transient val lock:Lock;
+    
+    private val masterTxDesc:HashMap[Long,TxDesc] = new HashMap[Long,TxDesc]();
+    private transient val txDescLock:Lock;
     
     public def this() {
         assert(resilient);
-        masterState = new HashMap[String,Cloneable]();
-        logs = new ArrayList[TxSlaveLog]();
-        if (!TxConfig.get().LOCK_FREE)
+        masterState = new HashMap[K,Cloneable]();
+        logs = new ArrayList[TxSlaveLog[K]]();
+        if (!TxConfig.get().LOCK_FREE) {
             lock = new Lock();
-        else
+            txDescLock = new Lock();
+        } else {
             lock = null;
+            txDescLock = null;
+        }
     }
     
-    public def this(state:HashMap[String,Cloneable]) {
+    public def this(state:HashMap[K,Cloneable]) {
         assert(resilient);
         masterState = state;
-        logs = new ArrayList[TxSlaveLog]();
-        if (!TxConfig.get().LOCK_FREE)
+        logs = new ArrayList[TxSlaveLog[K]]();
+        if (!TxConfig.get().LOCK_FREE) {
             lock = new Lock();
-        else
+            txDescLock = new Lock();
+        } else {
             lock = null;
+            txDescLock = null;
+        }
     }
     
     /******* Recovery functions (called by one place) , no risk of race condition *******/
-    public def addMasterPlace(state:HashMap[String,Cloneable]) {
+    public def addMasterPlace(state:HashMap[K,Cloneable]) {
         masterState = state;
-        logs = new ArrayList[TxSlaveLog]();
+        logs = new ArrayList[TxSlaveLog[K]]();
     }
     
-    public def getSlaveMasterState():HashMap[String,Cloneable] {
+    public def getSlaveMasterState():HashMap[K,Cloneable] {
         return masterState;
     }
     /******* Prepare/Commit/Abort functions *******/
     /*Used by LocalTx to commit a transaction. TransLog is applied immediately and not saved in the logs map*/
-    public def commit(id:Long, transLog:HashMap[String,Cloneable], ownerPlaceIndex:Long) {
+    public def commit(id:Long, transLog:HashMap[K,Cloneable], ownerPlaceIndex:Long) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.commitLocalTx() started ...");
         try {
             slaveLock();
-            commitLockAcquired(new TxSlaveLog(id, ownerPlaceIndex, transLog));
+            commitLockAcquired(new TxSlaveLog[K](id, ownerPlaceIndex, transLog));
         }
         finally {
             slaveUnlock();
@@ -91,7 +100,7 @@ public class SlaveStore {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.commitGlobalTx() committed ...");
     }
     
-    private def commitLockAcquired(txLog:TxSlaveLog) {
+    private def commitLockAcquired(txLog:TxSlaveLog[K]) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] " + TxManager.txIdToString(txLog.id) + " here["+here+"] SlaveStore.commitLockAcquired() started ...");
         try {
             val data = masterState;
@@ -111,13 +120,13 @@ public class SlaveStore {
         }
     }
     
-    public def prepare(id:Long, entries:HashMap[String,Cloneable], ownerPlaceIndex:Long) {
+    public def prepare(id:Long, entries:HashMap[K,Cloneable], ownerPlaceIndex:Long) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.prepare() started ...");
         try {
             slaveLock();
-            var txSlaveLog:TxSlaveLog = getLog(id);
+            var txSlaveLog:TxSlaveLog[K] = getLog(id);
             if (txSlaveLog == null) {
-                txSlaveLog = new TxSlaveLog(id, ownerPlaceIndex);
+                txSlaveLog = new TxSlaveLog[K](id, ownerPlaceIndex);
                 logs.add(txSlaveLog);
             }
             txSlaveLog.transLog = entries;
@@ -140,19 +149,6 @@ public class SlaveStore {
             slaveUnlock();
         }
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.abort() completed ...");
-    }
-    
-    public def filterCommitted(txList:ArrayList[Long]) {
-    	if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " started SlaveStore.filterCommitted ...");
-        val list = new ArrayList[Long]();
-        for (txId in txList) {
-            val obj = masterState.getOrElse("_TxDesc_"+"tx"+txId, null);
-            if (obj != null && ((obj as TxDesc).status == TxDesc.COMMITTED || (obj as TxDesc).status == TxDesc.COMMITTING)) {
-                list.add(txId);
-            }
-        }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " completed SlaveStore.filterCommitted ...");
-        return list;
     }
     
     public def clusterTransactions() {
@@ -220,6 +216,7 @@ public class SlaveStore {
             lock.unlock();
     }
     
+    
     public def waitUntilPaused() {
         assert (!TxConfig.get().TM_REP.equals("lazy")) : "bug, SlaveStore.waitUntilPaused should not be called with lazy replication";
         try {
@@ -251,60 +248,105 @@ public class SlaveStore {
     public def getTransDescriptors(place:Place):ArrayList[TxDesc] {
         val result = new ArrayList[TxDesc]();
         try {
-            slaveLock();
-            if (masterState != null) {
-                val set = masterState.keySet();
-                val iter = set.iterator();
-                while (iter.hasNext()) {
-                    val key = iter.next();
-                    if (key.contains("_TxDesc_")) {
-                        val obj = masterState.get(key);
-                        if (obj != null) {
-                            val desc = obj as TxDesc;
-                            val placeId = TxConfig.getTxPlaceId(desc.id);
-                            if (placeId == (place.id) as Int)
-                                result.add(desc);
-                        }
-                    }
-                }
-            }
+        	lockTxDesc();
+        	val iter = masterTxDesc.keySet().iterator();
+        	while (iter.hasNext()) {
+        		val id = iter.next();
+        		val txdesc = masterTxDesc.getOrThrow(id);
+        		result.add(txdesc);
+        	} /*FIX_TX_DESC: why did we need to check the place id???*/
         }
         finally {
-            slaveUnlock();
+        	unlockTxDesc();
         }
         return result;
     }
     
     public def getTransDescriptor(txId:Long):TxDesc {
-        var result:Cloneable = null;
         try {
-            slaveLock();
-            if (masterState != null) {
-                result = masterState.getOrElse("_TxDesc_tx"+txId, null);
-            }
+        	lockTxDesc();
+            return masterTxDesc.getOrElse(txId, null);
         }
         finally {
-            slaveUnlock();
+        	unlockTxDesc();
         }
-        if (result == null) {
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " slaveStore.getTransDescriptor(" + txId + ") result[NULL] ...");
-            return null;
+    }
+    
+    public def putTransDescriptor(txId:Long, desc:TxDesc) {
+        try {
+        	lockTxDesc();
+            masterTxDesc.put(txId, desc);
         }
-        else {
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " slaveStore.getTransDescriptor(" + txId + ") result["+(result as TxDesc)+"] ...");
-            return result as TxDesc;
+        finally {
+        	unlockTxDesc();
+        }
+    }
+    
+    
+    public def filterCommitted(txList:ArrayList[Long]) {
+    	try {
+        	lockTxDesc();
+	    	if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " started SlaveStore.filterCommitted ...");
+	        val list = new ArrayList[Long]();
+	        for (txId in txList) {
+	            val obj = masterTxDesc.getOrElse(txId, null);
+	            if (obj != null && (obj.status == TxDesc.COMMITTED || obj.status == TxDesc.COMMITTING)) {
+	                list.add(txId);
+	            }
+	        }
+	        if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " completed SlaveStore.filterCommitted ...");
+	        return list;
+    	} finally {
+        	unlockTxDesc();
         }
     }
     
     public def deleteTransDescriptor(txId:Long) {
         try {
-            slaveLock();
-            if (masterState != null) {
-                masterState.delete("_TxDesc_tx"+txId);
-            }
+        	lockTxDesc();
+        	masterTxDesc.remove(txId);
         }
         finally {
-            slaveUnlock();
+        	unlockTxDesc();
+        }
+    }
+    
+    public def updateTxDescStatus(id:Long, newStatus:Long) {
+    	try {
+        	lockTxDesc();
+        	val desc = masterTxDesc.getOrThrow(id);
+    		desc.status = newStatus;
+    		masterTxDesc.put(id, desc);
+        }
+        finally {
+        	unlockTxDesc();
+        }
+    }
+    
+    public def addTxDescMembers(id:Long, vMembers:Rail[Long]) {
+    	try {
+    		lockTxDesc();
+    		var desc:TxDesc = masterTxDesc.getOrElse(id, null);
+    		if (desc == null) {
+    			val mapName = "";
+    			desc = new TxDesc(id, mapName, false); 
+    			masterTxDesc.put(id, desc);
+    		}
+    		desc.addVirtualMembers(vMembers);
+    	} finally {
+    		unlockTxDesc();
+    	}
+    }
+    
+    public def lockTxDesc(){
+        if (!TxConfig.get().LOCK_FREE) {
+        	txDescLock.lock();
+        }
+    }
+    
+    public def unlockTxDesc() {
+        if (!TxConfig.get().LOCK_FREE) {
+        	txDescLock.unlock();
         }
     }
     

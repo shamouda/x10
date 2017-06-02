@@ -10,59 +10,59 @@ import x10.util.ArrayList;
  * Acquire: Early Acquire
  * Write: Undo Logging
  * */
-public class TxManager_RL_EA_UL extends TxManager {
+public class TxManager_RL_EA_UL[K] {K haszero} extends TxManager[K] {
 
-    public def this(data:MapData, immediateRecovery:Boolean) {
+    public def this(data:MapData[K], immediateRecovery:Boolean) {
         super(data, immediateRecovery);
         if (here.id == 0) Console.OUT.println("TxManager_RL_EA_UL");
     }
     
-    public def get(id:Long, key:String):Cloneable {
+    public def get(id:Long, key:K):Cloneable {
         return get_RL_UL(id, key);
     }
     
-    public def put(id:Long, key:String, value:Cloneable):Cloneable {
+    public def put(id:Long, key:K, value:Cloneable):Cloneable {
         return put_RL_EA_UL(id, key, value, false, false);
     }
     
-    public def delete(id:Long, key:String, txDesc:Boolean):Cloneable {
+    public def delete(id:Long, key:K, txDesc:Boolean):Cloneable {
         return put_RL_EA_UL(id, key, null, true, txDesc);
     }
     
-    public def commit(log:TxLog) {
+    public def commit(log:TxLog[K]) {
         commit_UL(log);
     }
     
-    public def abort(log:TxLog) {
+    public def abort(log:TxLog[K]) {
         abort_UL(log);
     }
 
-    public def validate(log:TxLog) {
+    public def validate(log:TxLog[K]) {
         throw new Exception("validate() is not needed for TxManager_RL_EA_UL");
     }
     
-    public def lockRead(id:Long, key:String) {
+    public def lockRead(id:Long, key:K) {
         throw new Exception("lockRead not supported");
     }
-    public def lockWrite(id:Long, key:String) {
+    public def lockWrite(id:Long, key:K) {
         throw new Exception("lockWrite not supported for lock based tx manager");
     }
-    public def unlockRead(id:Long, key:String) {
+    public def unlockRead(id:Long, key:K) {
         throw new Exception("unlockRead not supported for lock based tx manager");
     }
-    public def unlockWrite(id:Long, key:String) {
+    public def unlockWrite(id:Long, key:K) {
         throw new Exception("unlockWrite not supported for lock based tx manager");
     }
-    public def lockRead(id:Long, keys:ArrayList[String]) {
+    public def lockRead(id:Long, keys:ArrayList[K]) {
         throw new Exception("operation not supported");
     }
-    public def lockWrite(id:Long, keys:ArrayList[String]) {
+    public def lockWrite(id:Long, keys:ArrayList[K]) {
         throw new Exception("operation not supported");
     }
-    public def unlockRead(id:Long, keys:ArrayList[String]) {
+    public def unlockRead(id:Long, keys:ArrayList[K]) {
         throw new Exception("operation not supported");
     }
-    public def unlockWrite(id:Long, keys:ArrayList[String]) {
+    public def unlockWrite(id:Long, keys:ArrayList[K]) {
         throw new Exception("operation not supported");
     }
 }

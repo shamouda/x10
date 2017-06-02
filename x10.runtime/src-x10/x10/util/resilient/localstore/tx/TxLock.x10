@@ -16,22 +16,22 @@ import x10.util.concurrent.Lock;
 
 public abstract class TxLock {
     
-    public abstract def tryLockRead(txId:Long, key:String):Boolean;
+    public abstract def tryLockRead(txId:Long):Boolean;
     
-    public abstract def tryLockWrite(txId:Long, key:String):Boolean;
+    public abstract def tryLockWrite(txId:Long):Boolean;
     
-    public abstract def lockRead(txId:Long, key:String):void;
+    public abstract def lockRead(txId:Long):void;
     
-    public abstract def lockWrite(txId:Long, key:String):void;
+    public abstract def lockWrite(txId:Long):void;
   
-    public abstract def unlockRead(txId:Long, key:String):void;
+    public abstract def unlockRead(txId:Long):void;
     
-    public abstract def unlockWrite(txId:Long, key:String):void;
+    public abstract def unlockWrite(txId:Long):void;
     
-    public def lock(txId:Long, key:String) {
-        lockWrite(txId, key);
+    public def lock(txId:Long) {
+        lockWrite(txId);
     }
-    public def unlock(txId:Long, key:String) {
-        unlockWrite(txId, key);
+    public def unlock(txId:Long) {
+        unlockWrite(txId);
     }
 }

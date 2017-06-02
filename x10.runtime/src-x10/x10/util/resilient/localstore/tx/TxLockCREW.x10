@@ -42,11 +42,11 @@ public class TxLockCREW extends TxLock {
     private static class ReadersList {
         val rdRail = new GrowableRail[Long](TxConfig.get().PREALLOC_READERS);
         
-        public def add(id:Long, key:String) {
+        public def add(id:Long) {
             rdRail.add(id);
         }
         
-        public def remove(id:Long, key:String) {
+        public def remove(id:Long) {
             val last = rdRail.size() -1;
             var indx:Long = -1;
             for (indx = 0 ; indx < rdRail.size(); indx++) {
@@ -79,44 +79,44 @@ public class TxLockCREW extends TxLock {
         
     }
     
-    public def lockRead(txId:Long, key:String) {
+    public def lockRead(txId:Long) {
         try {
             lock.lock();
             var conflict:Boolean = true;
             if (writer == -1 && waitingWriter == -1) {
                 if(readers.contains(txId)) 
-                    throw new FatalTransactionException ("lockRead bug, locking an already locked key  key["+key+"] Tx[" + txId + "] writer[" + writer + "] readers ["+readers.toString() + "] ");
-                readers.add(txId, key);
+                    throw new FatalTransactionException ("lockRead bug, locking an already locked Tx[" + txId + "] writer[" + writer + "] readers ["+readers.toString() + "] ");
+                readers.add(txId);
                 conflict = false;
             }
             else if (waitingWriter == -1 && stronger(txId, writer)) {
-                if (waitReaderWriterLocked(txId, key)) {
-                    readers.add(txId, key);
+                if (waitReaderWriterLocked(txId)) {
+                    readers.add(txId);
                     conflict = false;
                 }
             }
             
             if (conflict) {
                 if (resilient)
-                    checkDeadLockers(key);
+                    checkDeadLockers();
                 if (writer == txId) 
-                    throw new FatalTransactionException ("lockRead bug, downgrade is not supported key["+key+"] Tx[" + txId + "] writer[" + writer + "] readers ["+readers.toString() + "] ");
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] lockRead CONFLICT, writer["+writer+"] waitingWriter["+waitingWriter+"] ");
-                throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId) + " key ["+key+"] ", here);
+                    throw new FatalTransactionException ("lockRead bug, downgrade is not supported Tx[" + txId + "] writer[" + writer + "] readers ["+readers.toString() + "] ");
+                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK lockRead CONFLICT, writer["+writer+"] waitingWriter["+waitingWriter+"] ");
+                throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId), here);
             }
             else
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] lockRead done, writer["+writer+"] readers["+readers.toString()+"] ");              
+                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK lockRead done, writer["+writer+"] readers["+readers.toString()+"] ");              
         }
         finally {
             lock.unlock();
         }
     }
     
-    public def lockWrite(txId:Long, key:String) {
+    public def lockWrite(txId:Long) {
         try {
             lock.lock();
             if (writer == txId)
-                throw new FatalTransactionException ("lockWrite bug, locking an already locked key key["+key+"] Tx[" + txId + "] writer[" + writer + "] readers ["+readers.toString() + "] ");
+                throw new FatalTransactionException ("lockWrite bug, locking an already locked Tx[" + txId + "] writer[" + writer + "] readers ["+readers.toString() + "] ");
             
             var conflict:Boolean = true;            
             if (readers.size() == 0 && writer == -1 && waitingWriter == -1) { 
@@ -124,34 +124,34 @@ public class TxLockCREW extends TxLock {
                 conflict = false;
             }
             else if (readers.size() == 1 && readers.get(0) == txId) { 
-                readers.remove(txId, key);
+                readers.remove(txId);
                 writer = txId;
                 conflict = false;
             }
             else if (readers.size() > 0 && !readers.contains(txId) && strongerThanReaders(txId)) {  
-                if (waitWriterReadersLocked(0, txId, key)) {
+                if (waitWriterReadersLocked(0, txId)) {
                     writer = txId;
                     conflict = false;
                 }
             }
             else if (readers.size() > 0 && readers.contains(txId)) {
-                if (waitWriterReadersLocked(1, txId, key)) {
-                    readers.remove(txId, key);
+                if (waitWriterReadersLocked(1, txId)) {
+                    readers.remove(txId);
                     writer = txId;
                     conflict = false;
                 }
                 else {
-                    readers.remove(txId, key);
+                    readers.remove(txId);
                 }
             }           
             else if (writer != -1 && stronger(txId, writer)){ 
-                if (waitWriterWriterLocked(txId, key)) {
+                if (waitWriterWriterLocked(txId)) {
                     writer = txId;
                     conflict = false;
                 }
             }
             else if (waitingWriter != -1 && stronger(txId, waitingWriter)){
-                if (waitWriterWriterLocked(txId, key)) {
+                if (waitWriterWriterLocked(txId)) {
                     writer = txId;
                     conflict = false;
                 }
@@ -159,57 +159,57 @@ public class TxLockCREW extends TxLock {
             
             if (conflict) {
                 if (resilient)
-                    checkDeadLockers(key);
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] lockWrite CONFLICT, writer["+writer+"] readers["+readers.toString()+"] ");
-                throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId) + " key ["+key+"] ", here);
+                    checkDeadLockers();
+                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK lockWrite CONFLICT, writer["+writer+"] readers["+readers.toString()+"] ");
+                throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId) , here);
             }
             else
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] lockWrite done, writer["+writer+"] readers["+readers.toString()+"]");
+                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK lockWrite done, writer["+writer+"] readers["+readers.toString()+"]");
         }
         finally {
             lock.unlock();
         }
     }
     
-    public def unlockRead(txId:Long, key:String) {
+    public def unlockRead(txId:Long) {
         lock.lock();
         if (! (readers.contains(txId) && writer == -1))
-            throw new FatalTransactionException ("unlockRead bug, unlocking an unlocked key["+key+"] Tx[" + txId + "] writer["+writer+"] readers["+readers.toString()+"] ");
-        readers.remove(txId, key);
+            throw new FatalTransactionException ("unlockRead bug, unlocking an unlocked Tx[" + txId + "] writer["+writer+"] readers["+readers.toString()+"] ");
+        readers.remove(txId);
         lock.unlock();
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] unlockRead done");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK unlockRead done");
     }
     
-    public def unlockWrite(txId:Long, key:String) {
+    public def unlockWrite(txId:Long) {
         lock.lock();
         if (! (readers.size() == 0 && writer == txId) )
-            throw new FatalTransactionException ("unlockWrite bug, unlocking an unlocked key["+key+"] Tx[" + txId + "] writer["+writer+"] readers["+readers.toString()+"] ");
+            throw new FatalTransactionException ("unlockWrite bug, unlocking an unlocked Tx[" + txId + "] writer["+writer+"] readers["+readers.toString()+"] ");
         writer = -1;
         lock.unlock();
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] unlockWrite done");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK unlockWrite done");
     }
     
-    public def tryLockRead(txId:Long, key:String) { 
-        lockRead(txId, key); 
+    public def tryLockRead(txId:Long) { 
+        lockRead(txId); 
         return true;
     }
     
-    public def tryLockWrite(txId:Long, key:String) { 
-        lockWrite(txId, key); 
+    public def tryLockWrite(txId:Long) { 
+        lockWrite(txId); 
         return true; 
     }
     
     /*
      * A reader waiting for readers to unlock
      * */
-    private def waitReaderWriterLocked(txId:Long, key:String) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitReaderWriterLocked started");
+    private def waitReaderWriterLocked(txId:Long) {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK waitReaderWriterLocked started");
         try {
             Runtime.increaseParallelism("waitReaderWriterLocked");
             var count:Long = 0;
             while (waitingWriter == -1 && writer != -1 && stronger(txId, writer)) {  //waiting writers get access first
                 if (resilient)
-                    checkDeadLockers(key);
+                    checkDeadLockers();
                 lock.unlock();
                 TxConfig.waitSleep();                   
                 lock.lock();
@@ -224,7 +224,7 @@ public class TxLockCREW extends TxLock {
         } finally {
             Runtime.decreaseParallelism(1n, "waitReaderWriterLocked");    
         }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitReaderWriterLocked completed"); 
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK waitReaderWriterLocked completed"); 
         
         if (writer == -1 && waitingWriter == -1)
             return true;
@@ -237,8 +237,8 @@ public class TxLockCREW extends TxLock {
      * minLimit:  pass 0, if you want to wait until all readers unlock
      *            pass 1, if a current reader wants to upgrade
      * */
-    private def waitWriterReadersLocked(minLimit:Long, txId:Long, key:String) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitWriterReadersLocked started"); 
+    private def waitWriterReadersLocked(minLimit:Long, txId:Long) {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK waitWriterReadersLocked started"); 
         
         if (waitingWriter == -1 || stronger (txId, waitingWriter))
             waitingWriter = txId;
@@ -250,7 +250,7 @@ public class TxLockCREW extends TxLock {
             var count:Long = 0;
             while (readers.size() > minLimit && waitingWriter == txId) {
                 if (resilient)
-                    checkDeadLockers(key);
+                    checkDeadLockers();
                 lock.unlock();
                 TxConfig.waitSleep();                     
                 lock.lock();
@@ -267,7 +267,7 @@ public class TxLockCREW extends TxLock {
             Runtime.decreaseParallelism(1n, "waitWriterReadersLocked");
         }
         
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitWriterReadersLocked completed");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " waitWriterReadersLocked completed");
         
         if (waitingWriter == txId) {
             waitingWriter = -1;
@@ -277,8 +277,8 @@ public class TxLockCREW extends TxLock {
             return false;
     }
     
-    private def waitWriterWriterLocked(txId:Long, key:String) {        
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitWriterWriterLocked started"); 
+    private def waitWriterWriterLocked(txId:Long) {        
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " waitWriterWriterLocked started"); 
         if (waitingWriter == -1 || stronger (txId, waitingWriter))
             waitingWriter = txId;
         else 
@@ -289,7 +289,7 @@ public class TxLockCREW extends TxLock {
             var count:Long = 0;
             while (writer != -1 && waitingWriter == txId) {
                 if (resilient)
-                    checkDeadLockers(key);
+                    checkDeadLockers();
                 lock.unlock();
                 TxConfig.waitSleep();   
                 lock.lock();
@@ -306,7 +306,7 @@ public class TxLockCREW extends TxLock {
             Runtime.decreaseParallelism(1n, "waitWriterWriterLocked");
         }
         
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK key[" + key + "] waitWriterWriterLocked completed"); 
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK waitWriterWriterLocked completed"); 
         if (waitingWriter == txId) {
             waitingWriter = -1;
             return true;
@@ -344,12 +344,12 @@ public class TxLockCREW extends TxLock {
         return res;
     }
     
-    private def checkDeadLockers(key:String) {
+    private def checkDeadLockers() {
         for (var i:Long = 0; i < readers.size(); i++) {
             val txId = readers.get(i);
-            TxManager.checkDeadCoordinator(txId, key);
+            TxManager.checkDeadCoordinator(txId);
         }
         if (writer != -1)
-            TxManager.checkDeadCoordinator(writer, key);
+            TxManager.checkDeadCoordinator(writer);
     }
 }

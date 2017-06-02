@@ -20,12 +20,12 @@ import x10.util.HashMap;
 import x10.util.resilient.localstore.TxResult;
 
 public class NativeStore[V]{V haszero, V <: Cloneable} extends Store[V] {
-    val store:ResilientStore;
-      val map:ResilientNativeMap;
+      val store:ResilientStore[String];
+      val map:ResilientNativeMap[String];
 
       def this(name:String, activePlaces:PlaceGroup) {
           val immediateRecovery = false;
-          store = ResilientStore.make(activePlaces, immediateRecovery);
+          store = ResilientStore.make[String](activePlaces, immediateRecovery);
           map = store.makeMap("_map_" + name);
       }
 
@@ -57,7 +57,7 @@ public class NativeStore[V]{V haszero, V <: Cloneable} extends Store[V] {
           store.updateForChangedPlaces(changes);
       }
   
-      public def executeTransaction(members:Rail[Long], closure:(Tx)=>Any):TxResult {
+      public def executeTransaction(members:Rail[Long], closure:(Tx[String])=>Any):TxResult {
           return map.executeTransaction(members, closure, -1, -1);
       }
 }

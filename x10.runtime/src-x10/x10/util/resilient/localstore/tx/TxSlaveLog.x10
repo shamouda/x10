@@ -15,15 +15,19 @@ package x10.util.resilient.localstore.tx;
 import x10.util.HashMap;
 import x10.util.resilient.localstore.Cloneable;
 
-public class TxSlaveLog(id:Long, ownerPlaceIndex:Long) {
-    public var transLog:HashMap[String,Cloneable];
-    
+public class TxSlaveLog[K] {K haszero} {
+    public var transLog:HashMap[K,Cloneable];
+    public val id:Long;
+    public val ownerPlaceIndex:Long;
+
     public def this(id:Long, ownerPlaceIndex:Long) {
-    	property(id, ownerPlaceIndex);
+    	this.id = id;
+    	this.ownerPlaceIndex = ownerPlaceIndex;
     }
     
-    public def this(id:Long, ownerPlaceIndex:Long, transLog:HashMap[String,Cloneable]) {
-    	property(id, ownerPlaceIndex);
+    public def this(id:Long, ownerPlaceIndex:Long, transLog:HashMap[K,Cloneable]) {
+    	this.id = id;
+    	this.ownerPlaceIndex = ownerPlaceIndex;
     	this.transLog = transLog;
     }
     

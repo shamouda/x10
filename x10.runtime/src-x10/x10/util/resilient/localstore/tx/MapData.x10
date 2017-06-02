@@ -9,31 +9,39 @@ import x10.util.resilient.localstore.tx.SafeBucketHashMap;
 import x10.util.resilient.localstore.tx.TxManager;
 import x10.util.resilient.localstore.tx.TxLog;
 import x10.util.resilient.localstore.tx.TxKeyChange;
+import x10.util.resilient.localstore.tx.logging.TxDesc;
 
 /*
  * MapData may be accessed by different transactions at the same time.
  * We use a lock to synchronize access to the shared metadata hashmap.
  **/
-public class MapData {
-    var test:HashMap[String,MemU[String]];
+public class MapData[K] {K haszero} {
+    val metadata:HashMap[K,MemoryUnit[K]];
+    val txDescriptors:HashMap[Long,TxDesc];
 
-    val metadata:HashMap[String,MemoryUnit];
     val lock:Lock;
+
+    val txDescLock:Lock;
+
     //var print:Boolean = false;
     public def this() {
-        metadata = new HashMap[String,MemoryUnit]();
+        metadata = new HashMap[K,MemoryUnit[K]]();
+        txDescriptors = new HashMap[Long,TxDesc]();
+        txDescLock = new Lock();
         lock = new Lock();
     }
     
-    public def this(values:HashMap[String,Cloneable]) {
-        metadata = new HashMap[String,MemoryUnit]();
+    public def this(values:HashMap[K,Cloneable]) {
+        metadata = new HashMap[K,MemoryUnit[K]]();
+        txDescriptors = new HashMap[Long,TxDesc]();
+        txDescLock = new Lock();
         lock = new Lock();
         
         val iter = values.keySet().iterator();
         while (iter.hasNext()) {
             val k = iter.next();
             val v = values.getOrThrow(k);
-            metadata.put(k, new MemoryUnit(v));
+            metadata.put(k, new MemoryUnit[K](v));
         }
     }
     
@@ -42,7 +50,7 @@ public class MapData {
     public def getKeyValueMap() {
         try {
             lock(-1);
-            val values = new HashMap[String,Cloneable]();
+            val values = new HashMap[K,Cloneable]();
             val iter = metadata.keySet().iterator();
             while (iter.hasNext()) {
                 val k = iter.next();
@@ -59,13 +67,13 @@ public class MapData {
         }
     }
     
-    public def getMemoryUnit(k:String):MemoryUnit {
-        var res:MemoryUnit = null;
+    public def getMemoryUnit(k:K):MemoryUnit[K] {
+        var res:MemoryUnit[K] = null;
         try {
             lock(-1);
             res = metadata.getOrElse(k, null);
             if (res == null) {
-                res = new MemoryUnit(null);
+                res = new MemoryUnit[K](null);
                 metadata.put(k, res);
                 //if (print)
                 //    Console.OUT.println(here + " MapData.put ("+k+")");
@@ -75,16 +83,16 @@ public class MapData {
                     //print = true;
                 }
             }
-            res.ensureNotDeleted(k);
+            res.ensureNotDeleted();
             return res;
         }finally {
             unlock(-1);
         }
     }
     
-    public def initLog(key:String, active:Boolean, log:TxLog, keyLog:TxKeyChange, lockRead:Boolean):MemoryUnit {
+    public def initLog(key:K, active:Boolean, log:TxLog[K], keyLog:TxKeyChange[K], lockRead:Boolean):MemoryUnit[K] {
         val txId = log.id;
-        var memory:MemoryUnit = null;
+        var memory:MemoryUnit[K] = null;
         var added:Boolean  = false;
         try {
             lock(txId);
@@ -92,7 +100,7 @@ public class MapData {
             if (memory == null) {
                 if (!active)
                     throw new StorePausedException(here + " MapData can not put values while the store is paused ");
-                memory = new MemoryUnit(null);
+                memory = new MemoryUnit[K](null);
                 metadata.put(key, memory);
                 //if (print)
                 //    Console.OUT.println(here + " MapData.put ("+k+")");
@@ -107,9 +115,9 @@ public class MapData {
             unlock(txId);
         }
         
-        memory.ensureNotDeleted(key);
+        memory.ensureNotDeleted();
         if (lockRead) {
-            memory.lockRead(log.id, key);
+            memory.lockRead(log.id);
         }
         
         if (keyLog.key() == null) {
@@ -119,11 +127,11 @@ public class MapData {
     }
     
     
-    public def deleteMemoryUnit(txId:Long, k:String):void {
+    public def deleteMemoryUnit(txId:Long, key:K):void {
         try {
             lock(txId);
-            metadata.delete(k);
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " MapData.delete(" + k + ")");
+            metadata.delete(key);
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " MapData.delete(" + key + ")");
         }finally {
             unlock(txId);
         }
@@ -132,13 +140,11 @@ public class MapData {
     public def keySet(mapName:String) {
         try {
             lock(-1);
-            val set = new HashSet[String]();
+            val set = new HashSet[K]();
             val iter = metadata.keySet().iterator();
             while (iter.hasNext()) {
                 val key = iter.next();
-                if (key.startsWith(mapName)) {
-                    set.add(key.substring(mapName.length() as Int , key.length() as Int));
-                }
+                set.add(key);
             }
             return set;
         }finally {
@@ -158,6 +164,79 @@ public class MapData {
         }
     }
     
+    public def getTxDesc(id:Long) {
+    	try {
+    		lockTxDesc();
+    		return txDescriptors.getOrThrow(id);
+    	} finally {
+    		unlockTxDesc();
+    	}
+    }
+    
+    public def putTxDesc(id:Long, txDesc:TxDesc) {
+    	try {
+    		lockTxDesc();
+    		txDescriptors.put(id, txDesc);
+    	} finally {
+    		unlockTxDesc();
+    	}
+    }
+    
+    public def updateTxDescStatus(id:Long, newStatus:Long) {
+    	try {
+    		lockTxDesc();
+    		val desc = txDescriptors.getOrThrow(id);
+    		desc.status = newStatus;
+    	} finally {
+    		unlockTxDesc();
+    	}
+    }
+    
+    public def addTxDescMembers(id:Long, vMembers:Rail[Long]) {
+    	try {
+    		lockTxDesc();
+    		var desc:TxDesc = txDescriptors.getOrElse(id, null);
+    		if (desc == null) {
+    			val mapName = "";
+    			desc = new TxDesc(id, mapName, false); 
+    			txDescriptors.put(id, desc);
+    		}
+    		desc.addVirtualMembers(vMembers);
+    	} finally {
+    		unlockTxDesc();
+    	}
+    }
+    
+    public def removeTxDesc(id:Long) {
+    	try {
+    		lockTxDesc();
+    		txDescriptors.remove(id);
+    	} finally {
+    		unlockTxDesc();
+    	}
+    }
+    
+    public def getTxDescMap() {
+    	try {
+    		lockTxDesc();
+    		return txDescriptors;
+    	} finally {
+    		unlockTxDesc();
+    	}
+    }
+    
+    public def lockTxDesc(){
+        if (!TxConfig.get().LOCK_FREE) {
+        	txDescLock.lock();
+        }
+    }
+    
+    public def unlockTxDesc() {
+        if (!TxConfig.get().LOCK_FREE) {
+        	txDescLock.unlock();
+        }
+    }
+    
     public def toString() {
         try {
             lock(-1);
@@ -174,19 +253,19 @@ public class MapData {
         }
     }
     
-    public def baselineGetValue(k:String):Cloneable {
-        val memU = metadata.getOrElse(k, null);
+    public def baselineGetValue(key:K):Cloneable {
+        val memU = metadata.getOrElse(key, null);
         if (memU == null)
             return null;
         else
             return memU.baselineGet();
     }
     
-    public def baselinePutValue(k:String, value:Cloneable):Cloneable {
-        var memU:MemoryUnit = metadata.getOrElse(k, null);
+    public def baselinePutValue(key:K, value:Cloneable):Cloneable {
+        var memU:MemoryUnit[K] = metadata.getOrElse(key, null);
         if (memU == null) {
-            memU = new MemoryUnit(value);
-            metadata.put(k, memU);
+            memU = new MemoryUnit[K](value);
+            metadata.put(key, memU);
         }
         
         if (memU == null)

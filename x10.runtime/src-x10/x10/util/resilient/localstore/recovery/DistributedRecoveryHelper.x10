@@ -11,9 +11,9 @@ import x10.util.resilient.localstore.tx.logging.TxDesc;
 /**
  * Should be called by the local store when it detects that its slave has died.
  **/
-public class DistributedRecoveryHelper {
+public class DistributedRecoveryHelper[K] {K haszero} {
     
-    public static def recoverSlave(plh:PlaceLocalHandle[LocalStore]) {
+    public static def recoverSlave[K](plh:PlaceLocalHandle[LocalStore[K]]) {K haszero} {
     	Console.OUT.println("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: started ...");
     	val start = System.nanoTime();
     	val deadSlave = plh().slave;
@@ -23,7 +23,7 @@ public class DistributedRecoveryHelper {
     	recoverSlave(plh, spare, start);
     }
     
-    public static def recoverSlave(plh:PlaceLocalHandle[LocalStore], spare:Place, timeStartRecoveryNS:Long) {
+    public static def recoverSlave[K](plh:PlaceLocalHandle[LocalStore[K]], spare:Place, timeStartRecoveryNS:Long) {K haszero} {
         val startTimeNS = timeStartRecoveryNS == -1? System.nanoTime() : timeStartRecoveryNS;
         Console.OUT.println("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: started given already allocated spare " + spare);
         val deadSlave = plh().slave;
@@ -57,7 +57,7 @@ public class DistributedRecoveryHelper {
     }
     
     
-    private static def createMasterStoreAtSpare(plh:PlaceLocalHandle[LocalStore], spare:Place, oldActivePlaces:PlaceGroup, deadPlace:Place) {
+    private static def createMasterStoreAtSpare[K](plh:PlaceLocalHandle[LocalStore[K]], spare:Place, oldActivePlaces:PlaceGroup, deadPlace:Place) {K haszero} {
         Console.OUT.println("Recovering " + here + " Slave of the dead master ...");
     	actAsCoordinator(plh, deadPlace);
         
@@ -79,7 +79,7 @@ public class DistributedRecoveryHelper {
         }
     }
     
-    private static def createSlaveStoreAtSpare(plh:PlaceLocalHandle[LocalStore], spare:Place, deadPlaceVirtualId:Long) {
+    private static def createSlaveStoreAtSpare[K](plh:PlaceLocalHandle[LocalStore[K]], spare:Place, deadPlaceVirtualId:Long) {K haszero} {
         Console.OUT.println("Recovering " + here + " Master of the dead slave, prepare a slave replica for the spare place ...");
     	plh().getMasterStore().waitUntilPaused();
     	val masterState = plh().getMasterStore().getState().getKeyValueMap();
@@ -95,7 +95,7 @@ public class DistributedRecoveryHelper {
         plh().getMasterStore().reactivate();
     }
     
-    private static def allocateSparePlace(plh:PlaceLocalHandle[LocalStore], deadPlaceVirtualId:Long, oldActivePlaces:PlaceGroup) {
+    private static def allocateSparePlace[K](plh:PlaceLocalHandle[LocalStore[K]], deadPlaceVirtualId:Long, oldActivePlaces:PlaceGroup) {K haszero} {
         val nPlaces = Place.numAllPlaces();
         val nActive = oldActivePlaces.size();
         var placeIndx:Long = -1;
@@ -124,7 +124,7 @@ public class DistributedRecoveryHelper {
         return Place(placeIndx);
     }
     
-    private static def actAsCoordinator(plh:PlaceLocalHandle[LocalStore], deadPlace:Place) {
+    private static def actAsCoordinator[K](plh:PlaceLocalHandle[LocalStore[K]], deadPlace:Place) {K haszero} {
         Console.OUT.println("Recovering " + here + " slave acting as master to complete dead master's transactions ...");
     	val txDescs = plh().slaveStore.getTransDescriptors(deadPlace);
     	for (txDesc in txDescs) {
@@ -151,7 +151,7 @@ public class DistributedRecoveryHelper {
         Console.OUT.println("Recovering " + here + " slave acting as master to complete dead master's transactions done ...");
     }
     
-    private static def updateSlaveData(plh:PlaceLocalHandle[LocalStore], oldActivePlaces:PlaceGroup) {
+    private static def updateSlaveData[K](plh:PlaceLocalHandle[LocalStore[K]], oldActivePlaces:PlaceGroup) {K haszero} {
     	Console.OUT.println(here+ " UpdateSlaveData: slave["+here+"] is asking other masters about the status of prepared transactions ...");
         val committed = GlobalRef(new ArrayList[Long]());
         val committedLock = GlobalRef(new Lock());

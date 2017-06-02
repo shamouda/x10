@@ -25,8 +25,8 @@ import x10.compiler.Immediate;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Lock;
 
-public class Tx extends AbstractTx {
-    private val commitHandler:CommitHandler;
+public class Tx[K] {K haszero} extends AbstractTx[K] {
+    private val commitHandler:CommitHandler[K];
     
     public transient val startTime:Long = Timer.milliTime();
     public transient var commitTime:Long = -1;
@@ -41,7 +41,7 @@ public class Tx extends AbstractTx {
     
     private val members:TxMembers;
     
-    public def this(plh:PlaceLocalHandle[LocalStore], id:Long, mapName:String, members:TxMembers) {
+    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, mapName:String, members:TxMembers) {
         super(plh, id, mapName);
         this.members = members;
         
@@ -54,23 +54,18 @@ public class Tx extends AbstractTx {
         	
         if (resilient) {
             if (TxConfig.get().DISABLE_SLAVE) {
-                commitHandler = new NonResilientCommitHandler(plh, id, mapName, members);
+                commitHandler = new NonResilientCommitHandler[K](plh, id, mapName, members);
             }
             else {
                 if (TxConfig.get().TM_REP.equals("lazy"))
-                    commitHandler = new LazyReplicationCommitHandler(plh, id, mapName, members);
+                    commitHandler = new LazyReplicationCommitHandler[K](plh, id, mapName, members);
                 else   
-                    commitHandler = new EagerReplicationCommitHandler(plh, id, mapName, members);
+                    commitHandler = new EagerReplicationCommitHandler[K](plh, id, mapName, members);
             }
         }
         else
-        	commitHandler = new NonResilientCommitHandler(plh, id, mapName, members);
+        	commitHandler = new NonResilientCommitHandler[K](plh, id, mapName, members);
     }
-    
-    /********** Setting the pre-commit time for statistical analysis **********/   
-    public def getPhase1ElapsedTime() = commitHandler.phase1ElapsedTime;
-    public def getPhase2ElapsedTime() = commitHandler.phase2ElapsedTime;
-    public def getTxLoggingElapsedTime() = commitHandler.txLoggingElapsedTime;
 
     /*********************** Abort ************************/  
     public def abortRecovery() {

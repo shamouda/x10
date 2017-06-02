@@ -25,48 +25,51 @@ import x10.util.resilient.localstore.recovery.DistributedRecoveryHelper;
 import x10.util.resilient.localstore.tx.logging.TxDescManager;
 import x10.util.resilient.localstore.tx.StorePausedException;
 
-public class LocalStore(immediateRecovery:Boolean) {
+public class LocalStore[K] {K haszero} {
+	public val immediateRecovery:Boolean;
     private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
-    
-    private transient var masterStore:MasterStore = null;
+    private transient var masterStore:MasterStore[K] = null;
     public transient var virtualPlaceId:Long = -1; //-1 means a spare place
     public transient var slave:Place;
     public transient var oldSlave:Place;
-    public transient var slaveStore:SlaveStore = null;
+    public transient var slaveStore:SlaveStore[K] = null;
     public transient var activePlaces:PlaceGroup;
-    private var plh:PlaceLocalHandle[LocalStore];
-    private transient var heartBeatOn:Boolean;
+    private var plh:PlaceLocalHandle[LocalStore[K]];
     private transient var lock:Lock;
     public transient val stat:TxPlaceStatistics = new TxPlaceStatistics();
-    
-    public transient var txDescManager:TxDescManager; //A resilient map for transactions' descriptors
+    public transient var txDescManager:TxDescManager[K];
     
     private val replacementHistory = new HashMap[Long, Long] ();
     
     public def this(active:PlaceGroup, immediateRecovery:Boolean) {
-        property(immediateRecovery);
+        this.immediateRecovery = immediateRecovery;
         lock = new Lock();
         
         if (active.contains(here)) {
             this.activePlaces = active;
             this.virtualPlaceId = active.indexOf(here);
-            masterStore = new MasterStore(new HashMap[String,Cloneable](), immediateRecovery);
+            masterStore = new MasterStore[K](new HashMap[K,Cloneable](), immediateRecovery);
             if (resilient && !TxConfig.get().DISABLE_SLAVE) {
-                slaveStore = new SlaveStore();
+                slaveStore = new SlaveStore[K]();
                 this.slave = active.next(here);
                 this.oldSlave = this.slave;
             }
         } //else, I am a spare place, initialize me using joinAsMaster(...)
     }
     
+    public def setPLH(plh:PlaceLocalHandle[LocalStore[K]]) {
+        this.plh = plh;
+        this.txDescManager = new TxDescManager[K]( plh );
+    }
+    
     /*CentralizedRecovery: used when a spare place joins*/
-    public def joinAsMaster (active:PlaceGroup, data:HashMap[String,Cloneable]) {
+    public def joinAsMaster (active:PlaceGroup, data:HashMap[K,Cloneable]) {
         plh().lock();
         assert(resilient && virtualPlaceId == -1) : "virtualPlaceId  is not -1 (="+virtualPlaceId+") ";
         this.activePlaces = active;
         this.virtualPlaceId = active.indexOf(here);
         masterStore = new MasterStore(data, immediateRecovery);
-        slaveStore = new SlaveStore();
+        slaveStore = new SlaveStore[K]();
         this.slave = active.next(here);
         this.oldSlave = this.slave;
         plh().unlock();
@@ -151,11 +154,6 @@ public class LocalStore(immediateRecovery:Boolean) {
         } finally {
             plh().unlock();
         }
-    }
-    
-    public def setPLH(plh:PlaceLocalHandle[LocalStore]) {
-        this.plh = plh;
-        this.txDescManager = new TxDescManager(new ResilientNativeMap("_TxDesc_", plh));
     }
     
     /**************     ActivePlaces utility methods     ****************/
@@ -404,7 +402,7 @@ public class LocalStore(immediateRecovery:Boolean) {
         return masterStore;
     }
     
-    public def setMasterStore(m:MasterStore) {
+    public def setMasterStore(m:MasterStore[K]) {
         this.masterStore = m;
     }
     

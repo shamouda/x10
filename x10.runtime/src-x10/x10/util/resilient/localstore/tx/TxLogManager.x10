@@ -3,16 +3,16 @@ package x10.util.resilient.localstore.tx;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.concurrent.Lock;
 
-public class TxLogManager {
-    private val txLogs:Rail[TxLog];
+public class TxLogManager[K] {K haszero} {
+    private val txLogs:Rail[TxLog[K]];
     private val lock:Lock;
     private var insertIndex:Long;
     
     public def this() {
-        txLogs = new Rail[TxLog](TxConfig.get().MAX_CONCURRENT_TXS);
+        txLogs = new Rail[TxLog[K]](TxConfig.get().MAX_CONCURRENT_TXS);
         //pre-allocate transaction logs
         for (var i:Long = 0 ; i < TxConfig.get().MAX_CONCURRENT_TXS; i++) {
-            txLogs(i) = new TxLog();
+            txLogs(i) = new TxLog[K]();
         }
         lock = new Lock();
         insertIndex = 0;
@@ -40,7 +40,7 @@ public class TxLogManager {
                 if (txLogs(i).id == id)
                     return txLogs(i);
             }
-            var obj:TxLog = null;
+            var obj:TxLog[K] = null;
             for (var i:Long = 0 ; i < TxConfig.get().MAX_CONCURRENT_TXS; i++) {
                 if (txLogs(i).id == -1) {
                     txLogs(i).id = id;
@@ -58,7 +58,7 @@ public class TxLogManager {
         }
     }
     
-    public def delete(log:TxLog) {
+    public def delete(log:TxLog[K]) {
         try {
             lock();
             log.reset();
@@ -68,7 +68,7 @@ public class TxLogManager {
         }
     }
     
-    public def deleteAborted(log:TxLog) {
+    public def deleteAborted(log:TxLog[K]) {
         //SS_CHECK keep track of aborted transactions
         delete(log);
     }

@@ -16,7 +16,7 @@ import x10.util.concurrent.Lock;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.TxConfig;
 
-public class MemoryUnit {
+public class MemoryUnit[K] {K haszero} {
     
     private var version:Int;
     private var value:Cloneable;
@@ -41,10 +41,10 @@ public class MemoryUnit {
         }
     }
     
-    public def getValue(copy:Boolean, key:String, txId:Long) {
+    public def getValue(copy:Boolean, key:K, txId:Long) {
         try {
             lockExclusive(); //lock is used to ensure that value/version are always in sync as a composite value
-            ensureNotDeleted(key);
+            ensureNotDeleted();
             var v:Cloneable = value;
             if (copy) {
                 v = value == null?null:value.clone();
@@ -56,11 +56,11 @@ public class MemoryUnit {
         }
     }
     
-    public def initializeTxKeyLog(key:String, txId:Long, locked:Boolean, added:Boolean, keyLog:TxKeyChange) {
+    public def initializeTxKeyLog(key:K, txId:Long, locked:Boolean, added:Boolean, keyLog:TxKeyChange[K]) {
         try {
             if (!locked)
                 lockExclusive(); 
-            ensureNotDeleted(key);
+            ensureNotDeleted();
             val v = value == null?null:value.clone();
             keyLog.init(key, txId, locked, this, added, v, version);
         }
@@ -70,47 +70,47 @@ public class MemoryUnit {
         }
     }
     
-    public def rollbackValueLocked(oldValue:Cloneable, oldVersion:Int, key:String, txId:Long) {
+    public def rollbackValueLocked(oldValue:Cloneable, oldVersion:Int, key:K, txId:Long) {
         version = oldVersion; 
         value = oldValue;
         deleted = false;
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " rollsetvv key["+key+"] ver["+version+"] val["+value+"]");
     }
        
-    public def lockRead(txId:Long, key:String) {
+    public def lockRead(txId:Long) {
         if (!TxConfig.get().LOCK_FREE) {
-            txLock.lockRead(txId, key);
+            txLock.lockRead(txId);
             try {
-                ensureNotDeleted(key);
+                ensureNotDeleted();
             }
             catch(ex:Exception) {
-                txLock.unlockRead(txId, key);
+                txLock.unlockRead(txId);
                 throw ex;
             }
         }
     }
     
-    public def unlockRead(txId:Long, key:String) {
+    public def unlockRead(txId:Long) {
         if (!TxConfig.get().LOCK_FREE)
-            txLock.unlockRead(txId, key);
+            txLock.unlockRead(txId);
     }
     
-    public def lockWrite(txId:Long, key:String) {
+    public def lockWrite(txId:Long) {
         if (!TxConfig.get().LOCK_FREE) {
-            txLock.lockWrite(txId, key);
+            txLock.lockWrite(txId);
             try {
-                ensureNotDeleted(key);
+                ensureNotDeleted();
             }
             catch(ex:Exception) {
-                txLock.unlockWrite(txId, key);
+                txLock.unlockWrite(txId);
                 throw ex;
             }
         }
     }
     
-    public def unlockWrite(txId:Long, key:String) {
+    public def unlockWrite(txId:Long) {
         if (!TxConfig.get().LOCK_FREE)
-            txLock.unlockWrite(txId, key);
+            txLock.unlockWrite(txId);
     }
 
     public def toString() {
@@ -121,16 +121,16 @@ public class MemoryUnit {
         deleted = true;
     }
     
-    public def ensureNotDeleted(key:String) {
+    public def ensureNotDeleted() {
         if (deleted)
-            throw new ConflictException("ConflictException here["+here+"] accessing a deleted memory unit key["+key+"]", here);
+            throw new ConflictException("ConflictException here["+here+"] accessing a deleted memory unit ", here);
     }
     
     public def isDeletedLocked() = deleted;
     
     /********  Lock based methods *********/
-    public def getValueLocked(copy:Boolean, key:String, txId:Long) {
-        ensureNotDeleted(key);
+    public def getValueLocked(copy:Boolean, key:K, txId:Long) {
+        ensureNotDeleted();
         var v:Cloneable = value;
         if (copy) {
             v = value == null?null:value.clone();
@@ -139,13 +139,13 @@ public class MemoryUnit {
         return v;
     }
     
-    public def getVersionLocked(copy:Boolean, key:String, txId:Long) {
-        ensureNotDeleted(key);
+    public def getVersionLocked(copy:Boolean, key:K, txId:Long) {
+        ensureNotDeleted();
         return version;
     }
     
-    public def setValueLocked(v:Cloneable, key:String, txId:Long, deleted:Boolean) {
-        ensureNotDeleted(key);
+    public def setValueLocked(v:Cloneable, key:K, txId:Long, deleted:Boolean) {
+        ensureNotDeleted();
         val oldValue = value;
         version++;
         value = v;

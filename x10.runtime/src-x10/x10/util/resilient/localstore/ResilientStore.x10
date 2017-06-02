@@ -30,22 +30,22 @@ import x10.util.resilient.localstore.recovery.*;
  * The mapping between masters and slaves is specififed by
  * the next/prev operations on the activePlaces PlaceGroup.
  */
-public class ResilientStore {
+public class ResilientStore[K] {K haszero} {
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
-    public val plh:PlaceLocalHandle[LocalStore];
+    public val plh:PlaceLocalHandle[LocalStore[K]];
     
     private transient val lock:Lock;
     
-    private def this(plh:PlaceLocalHandle[LocalStore]) {
+    private def this(plh:PlaceLocalHandle[LocalStore[K]]) {
         this.plh = plh;
         this.lock = new Lock();
     }
     
-    public static def make(pg:PlaceGroup, immediateRecovery:Boolean):ResilientStore {
+    public static def make[K](pg:PlaceGroup, immediateRecovery:Boolean) {K haszero} {
         Console.OUT.println("Creating a resilient store with "+pg.size()+" active places, immediateRecovery = " + immediateRecovery);
-        val plh = PlaceLocalHandle.make[LocalStore](Place.places(), ()=> new LocalStore(pg, immediateRecovery) );
-        val store = new ResilientStore(plh);
+        val plh = PlaceLocalHandle.make[LocalStore[K]](Place.places(), ()=> new LocalStore[K](pg, immediateRecovery) );
+        val store = new ResilientStore[K](plh);
         
         Place.places().broadcastFlat(()=> { 
         	plh().setPLH(plh); 
@@ -55,8 +55,8 @@ public class ResilientStore {
         return store;
     }
     
-    public def makeMap(name:String):ResilientNativeMap {
-    	return new ResilientNativeMap(name, plh);
+    public def makeMap(name:String):ResilientNativeMap[K] {
+    	return new ResilientNativeMap[K](name, plh);
     }
     
     public def getVirtualPlaceId() = plh().getVirtualPlaceId();
