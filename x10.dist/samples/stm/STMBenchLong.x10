@@ -23,7 +23,7 @@ import x10.util.HashSet;
 import x10.compiler.Uncounted;
 import x10.util.Team;
 
-public class STMBench {
+public class STMBenchLong {
     private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     public static def main(args:Rail[String]) {
@@ -78,7 +78,7 @@ public class STMBench {
         val throughputPLH = PlaceLocalHandle.make[PlaceThroughput](Place.places(), ()=> new PlaceThroughput(here.id, t) );
                 
         val immediateRecovery = true;
-        val store = ResilientStore.make[String](activePlaces, immediateRecovery);
+        val store = ResilientStore.make[Long](activePlaces, immediateRecovery);
         val map = store.makeMap("map");
         
         val startWarmup = Timer.milliTime();
@@ -114,7 +114,7 @@ public class STMBench {
         }
     }
     
-    public static def runIteration(map:ResilientNativeMap[String], producersCount:Long, 
+    public static def runIteration(map:ResilientNativeMap[Long], producersCount:Long, 
             d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, f:Boolean, victims:VictimsList, optimized:Boolean,
             throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
         val activePlaces = map.getActivePlaces();
@@ -138,7 +138,7 @@ public class STMBench {
         }
     }
 
-    private static def startPlace(pl:Place, map:ResilientNativeMap[String], activePlacesCount:Long, producersCount:Long, 
+    private static def startPlace(pl:Place, map:ResilientNativeMap[Long], activePlacesCount:Long, producersCount:Long, 
             d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, f:Boolean, victims:VictimsList, optimized:Boolean,
             throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
         
@@ -182,7 +182,7 @@ public class STMBench {
         }
     }
     
-    public static def produce(map:ResilientNativeMap[String], activePlacesCount:Long, myVirtualPlaceId:Long, producersCount:Long, producerId:Long, 
+    public static def produce(map:ResilientNativeMap[Long], activePlacesCount:Long, myVirtualPlaceId:Long, producersCount:Long, producerId:Long, 
             d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, f:Boolean, victims:VictimsList, optimized:Boolean,
             throughput:PlaceLocalHandle[PlaceThroughput]) {
         throughput().started = true;
@@ -195,7 +195,7 @@ public class STMBench {
 
         //pre-allocate rails
         val virtualMembers = new Rail[Long](h);
-        val keys = new Rail[String] (h*o);
+        val keys = new Rail[Long] (h*o);
         val tmpKeys = new Rail[Long] (o);
         val values = new Rail[Long] (h*o);
         val readFlags = new Rail[Boolean] (h*o);
@@ -204,7 +204,7 @@ public class STMBench {
             val innerStr = nextTransactionMembers(rand, activePlacesCount, h, myVirtualPlaceId, virtualMembers, f);
             nextRandomOperations(rand, activePlacesCount, virtualMembers, r, u, o, keys, values, readFlags, tmpKeys);
             
-            val distClosure = (tx:AbstractTx[String]) => {
+            val distClosure = (tx:AbstractTx[Long]) => {
                 for (var m:Long = 0; m < h; m++) {
                     val start = m*o;
                     val dest = virtualMembers(m);
@@ -221,7 +221,7 @@ public class STMBench {
                 return null;
             };
             
-            val localClosure = (tx:AbstractTx[String]) => {
+            val localClosure = (tx:AbstractTx[Long]) => {
                 for (var x:Long = 0; x < o; x++) {
                     val key = keys(x);
                     val read = readFlags(x);
@@ -292,7 +292,7 @@ public class STMBench {
         //Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
     }
 
-    public static def printThroughput(map:ResilientNativeMap[String], producersCount:Long, iteration:Long, plh:PlaceLocalHandle[PlaceThroughput], d:Long, t:Long, h:Long, o:Long ) {
+    public static def printThroughput(map:ResilientNativeMap[Long], producersCount:Long, iteration:Long, plh:PlaceLocalHandle[PlaceThroughput], d:Long, t:Long, h:Long, o:Long ) {
         map.printTxStatistics();
         
         Console.OUT.println("========================================================================");
@@ -333,7 +333,7 @@ public class STMBench {
         Console.OUT.println("========================================================================");
     }
     
-    public static def resetStatistics(map:ResilientNativeMap[String], plh:PlaceLocalHandle[PlaceThroughput]) {
+    public static def resetStatistics(map:ResilientNativeMap[Long], plh:PlaceLocalHandle[PlaceThroughput]) {
         map.resetTxStatistics();
         Place.places().broadcastFlat(()=>{plh().reset();}, (p:Place)=>true);
     }
@@ -370,7 +370,7 @@ public class STMBench {
     }
     
     public static def nextRandomOperations(rand:Random, activePlacesCount:Long, virtualMembers:Rail[Long], r:Long, u:Float, o:Long,
-            keys:Rail[String], values:Rail[Long], readFlags:Rail[Boolean], tmpKeys:Rail[Long]) {
+            keys:Rail[Long], values:Rail[Long], readFlags:Rail[Boolean], tmpKeys:Rail[Long]) {
         val h = virtualMembers.size;
         val keysPerPlace = r / activePlacesCount;
         
@@ -403,7 +403,7 @@ public class STMBench {
                 RailUtils.sort(tmpKeys);
             
             for (var x:Long = 0; x < o; x++) {
-                 keys(start+x) = String.valueOf ( baseKey + tmpKeys(x) );
+                 keys(start+x) = baseKey + tmpKeys(x); //String.valueOf ( baseKey + tmpKeys(x) );
             }
         }
     }

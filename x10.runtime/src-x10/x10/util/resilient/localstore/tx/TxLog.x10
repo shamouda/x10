@@ -57,6 +57,7 @@ public class TxLog[K] {K haszero} {
         
         public def add(log:TxKeyChange[K]) {
             rdKeys.add(log);
+            //Console.OUT.println("TxLogKeysList adding key  { " + log + " } ");
             log.setIndx(rdKeys.size()-1);
         }
         
@@ -87,7 +88,7 @@ public class TxLog[K] {K haszero} {
             val last = rdKeys.size() -1;
             var indx:Long = -1;
             for (indx = 0 ; indx < rdKeys.size(); indx++) {
-                if (rdKeys(indx).key() == key)
+                if (rdKeys(indx).key().equals(key))
                     break;
             }
             assert (indx != -1) : "fatal txkeychange not found";
@@ -105,7 +106,7 @@ public class TxLog[K] {K haszero} {
             return log;
         }
         
-        private def fromReadToWrite(indx:Long) {
+        private def fromReadToWriteByIndex(indx:Long) {
             val last = rdKeys.size() -1;
             assert (indx != -1) : "fatal txkeychange not found";
             //swap with last
@@ -129,7 +130,7 @@ public class TxLog[K] {K haszero} {
         
         public def logPut(log:TxKeyChange[K], copiedValue:Cloneable) {
             if (log.getReadOnly())
-                fromReadToWrite(log.indx());
+                fromReadToWriteByIndex(log.indx());
             return log.update(copiedValue);
         }
         
@@ -142,16 +143,32 @@ public class TxLog[K] {K haszero} {
 
         public def logDelete(log:TxKeyChange[K]) {
             if (log.getReadOnly())
-                fromReadToWrite(log.indx());
+                fromReadToWriteByIndex(log.indx());
             return log.delete();
         }
         
         public def setAllWriteFlags(log:TxKeyChange[K], locked:Boolean, deleted:Boolean) {
             if (log.getReadOnly())
-                fromReadToWrite(log.indx());
+                fromReadToWriteByIndex(log.indx());
             log.setReadOnly(false);
             log.setLockedWrite(locked);
             log.setDeleted(deleted);
+        }
+        
+        public def writeKeysAsString() {
+            var str:String = "";
+            for (var i:Long = 0 ; i < wtKeys.size(); i++) {
+                str += wtKeys(i).key() + " "; 
+            }
+            return str;
+        }
+        
+        public def readKeysAsString() {
+            var str:String = "";
+            for (var i:Long = 0 ; i < rdKeys.size(); i++) {
+                str += rdKeys(i).key() + " "; 
+            }
+            return str;
         }
     }
 
@@ -270,6 +287,8 @@ public class TxLog[K] {K haszero} {
     }
     
     public def prepareCommitLog():HashMap[K,Cloneable] {
+        //Console.OUT.println("prepareCommitLog readKeys {" + keysList.readKeysAsString() + "}  writeKeys {" + keysList.writeKeysAsString() + "} ");
+        
         val map = new HashMap[K,Cloneable]();
         val wtKeys = keysList.getWriteKeys();
         if (TxConfig.get().WRITE_BUFFERING) {
@@ -283,6 +302,11 @@ public class TxLog[K] {K haszero} {
                 val log = wtKeys(i);
                 val key = log.key();
                 val memory = log.getMemoryUnit();
+                if (memory == null) {
+                    Console.OUT.println("TxLog fatal bug, key["+key+"] has null memory unit");
+                    throw new FatalTransactionException("TxLog fatal bug, key["+key+"] has null memory unit");
+                }
+                
                 if (memory.isDeletedLocked()) {
                     map.put(key, null);
                 }

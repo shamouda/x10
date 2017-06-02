@@ -41,6 +41,8 @@ public class TxKeyChange[K] {K haszero} {
     private var memU:MemoryUnit[K];
     
     private var location:Long;
+
+    public var initilized:Boolean = false;
    
     public def this(){
         
@@ -55,6 +57,8 @@ public class TxKeyChange[K] {K haszero} {
         this.added = added;
         this.value = initValue;
         this.initVersion = initVersion;
+        initilized = true;
+        //Console.OUT.println("Initializing TxKeyChange with key " + key);
     }
     
     public def indx() = location;
@@ -105,4 +109,8 @@ public class TxKeyChange[K] {K haszero} {
     public def getLockedRead() = lockedRead;
     public def getLockedWrite() = lockedWrite;
     public def getAdded() = added;
+    
+    public def toString() {
+        return "TxKeyChange: key["+key+"] initVersion["+initVersion+"] memU["+memU+"]";
+    }
 }

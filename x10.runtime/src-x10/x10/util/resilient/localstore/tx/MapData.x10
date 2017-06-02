@@ -120,7 +120,7 @@ public class MapData[K] {K haszero} {
             memory.lockRead(log.id);
         }
         
-        if (keyLog.key() == null) {
+        if (!keyLog.initilized) {
             memory.initializeTxKeyLog(key, log.id, lockRead, added, keyLog);
         }
         return memory;
