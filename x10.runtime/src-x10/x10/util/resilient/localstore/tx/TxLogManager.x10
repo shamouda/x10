@@ -5,21 +5,33 @@ import x10.util.concurrent.Lock;
 
 public class TxLogManager[K] {K haszero} {
     private val txLogs:Rail[TxLog[K]];
+    private val lockingTxLogs:Rail[LockingTxLog[K]];
+
     private val lock:Lock;
     private var insertIndex:Long;
     
     public def this() {
-        txLogs = new Rail[TxLog[K]](TxConfig.get().MAX_CONCURRENT_TXS);
         //pre-allocate transaction logs
-        for (var i:Long = 0 ; i < TxConfig.get().MAX_CONCURRENT_TXS; i++) {
-            txLogs(i) = new TxLog[K]();
+        if (TxConfig.get().STM) {
+            txLogs = new Rail[TxLog[K]](TxConfig.get().MAX_CONCURRENT_TXS);
+            for (var i:Long = 0 ; i < TxConfig.get().MAX_CONCURRENT_TXS; i++) {
+                txLogs(i) = new TxLog[K]();
+            }
+            lockingTxLogs = null;
+        } else {
+            lockingTxLogs = new Rail[LockingTxLog[K]](TxConfig.get().MAX_CONCURRENT_TXS);
+            for (var i:Long = 0 ; i < TxConfig.get().MAX_CONCURRENT_TXS; i++) {
+                lockingTxLogs(i) = new LockingTxLog[K]();
+            }
+            txLogs = null;
         }
+        
         lock = new Lock();
         insertIndex = 0;
     }
     
     
-    public def search(id:Long) {
+    public def searchTxLog(id:Long) {
         try {
             lock();
             for (var i:Long = 0 ; i < TxConfig.get().MAX_CONCURRENT_TXS; i++) {
@@ -33,7 +45,7 @@ public class TxLogManager[K] {K haszero} {
         }
     }
     
-    public def getOrAdd(id:Long) {
+    public def getOrAddTxLog(id:Long) {
         try {
             lock();
             for (var i:Long = 0 ; i < TxConfig.get().MAX_CONCURRENT_TXS; i++) {
@@ -58,7 +70,7 @@ public class TxLogManager[K] {K haszero} {
         }
     }
     
-    public def delete(log:TxLog[K]) {
+    public def deleteTxLog(log:TxLog[K]) {
         try {
             lock();
             log.reset();
@@ -68,9 +80,47 @@ public class TxLogManager[K] {K haszero} {
         }
     }
     
-    public def deleteAborted(log:TxLog[K]) {
+    public def deleteAbortedTxLog(log:TxLog[K]) {
         //SS_CHECK keep track of aborted transactions
-        delete(log);
+        deleteTxLog(log);
+    }
+    
+    
+    public def deleteLockingLog(log:LockingTxLog[K]) {
+        try {
+            lock();
+            log.reset();
+        }
+        finally {
+            unlock();
+        }
+    }
+    
+    public def getOrAddLockingLog(id:Long) {
+        try {
+            lock();
+            for (var i:Long = 0 ; i < TxConfig.get().MAX_CONCURRENT_TXS; i++) {
+                if (lockingTxLogs(i).id == id)
+                    return lockingTxLogs(i);
+            }
+            var s:String = "";
+            var obj:LockingTxLog[K] = null;
+            for (var i:Long = 0 ; i < TxConfig.get().MAX_CONCURRENT_TXS; i++) {
+                s += lockingTxLogs(i).id + " , ";
+                if (lockingTxLogs(i).id == -1) {
+                    lockingTxLogs(i).id = id;
+                    obj = lockingTxLogs(i);                  
+                    break;
+                }
+            }
+            if (obj == null) {
+                throw new ConcurrentTransactionsLimitExceeded(here + " ConcurrentTransactionsLimitExceeded");
+            }
+            return obj;
+        }
+        finally {
+            unlock();
+        }
     }
     
     public def activeTransactionsExist() {

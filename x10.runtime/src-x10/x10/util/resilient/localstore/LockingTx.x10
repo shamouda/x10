@@ -59,39 +59,17 @@ public class LockingTx[K] {K haszero} extends AbstractTx[K] {
         val opPerPlace = this.opPerPlace;
         
         val startLock = Timer.milliTime();
-        
-        if (members.size == 1 && members(0) == here.id) {//local locking
-            if (!TxConfig.get().DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
-                Runtime.increaseParallelism();
-            
-            for (var x:Long = 0; x < opPerPlace ; x++) {
-                if (readFlags(x))
-                    plh().getMasterStore().lockRead(mapName, id, keys(x));
-                else
-                    plh().getMasterStore().lockWrite(mapName, id, keys(x));
-            }
-            
-            if (!TxConfig.get().DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
-                Runtime.decreaseParallelism(1n);
-        }
-        else {
-            finish for (var i:Long = 0; i < members.size; i++) {
-                val dest = members(i);
-                val start = opPerPlace*i;
-                at (Place(dest)) { //locking must be done sequentially
-                    if (!TxConfig.get().DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
-                        Runtime.increaseParallelism();
-                    
-                    for (var x:Long = 0; x < opPerPlace ; x++) {
-                        if (readFlags(start+x))
-                            plh().getMasterStore().lockRead(mapName, id, keys(start+x));
-                        else
-                            plh().getMasterStore().lockWrite(mapName, id, keys(start+x));
-                    }
-                    
-                    if (!TxConfig.get().DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
-                        Runtime.decreaseParallelism(1n);
-                }
+        finish for (var i:Long = 0; i < members.size; i++) {
+            val dest = members(i);
+            val start = opPerPlace*i;
+            at (Place(dest)) { //locking must be done sequentially
+                if (!TxConfig.get().DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
+                    Runtime.increaseParallelism();
+                
+                plh().getMasterStore().lockAll(id, start, opPerPlace, keys, readFlags);
+                
+                if (!TxConfig.get().DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
+                    Runtime.decreaseParallelism(1n);
             }
         }
         lockingElapsedTime = Timer.milliTime() - startLock;
@@ -108,26 +86,11 @@ public class LockingTx[K] {K haszero} extends AbstractTx[K] {
         val opPerPlace = this.opPerPlace;
         
         val startUnlock = Timer.milliTime();
-        if (members.size == 1 && members(0) == here.id) {//local locking
-            for (var x:Long = 0; x < opPerPlace ; x++) {
-                if (readFlags(x))
-                    plh().getMasterStore().unlockRead(mapName, id, keys(x));
-                else
-                    plh().getMasterStore().unlockWrite(mapName, id, keys(x));
-            }
-        }
-        else {
-            finish for (var i:Long = 0; i < members.size; i++) {
-                val dest = members(i);
-                val start = opPerPlace*i;
-                at (Place(dest)) async {
-                    for (var x:Long = 0; x < opPerPlace ; x++) {
-                        if (readFlags(start+x))
-                            plh().getMasterStore().unlockRead(mapName, id, keys(start+x));
-                        else
-                            plh().getMasterStore().unlockWrite(mapName, id, keys(start+x));
-                    }
-                }
+        finish for (var i:Long = 0; i < members.size; i++) {
+            val dest = members(i);
+            val start = opPerPlace*i;
+            at (Place(dest)) async {
+                plh().getMasterStore().unlockAll(id, start, opPerPlace, keys, readFlags);
             }
         }
         unlockingElapsedTime = Timer.milliTime() - startUnlock;

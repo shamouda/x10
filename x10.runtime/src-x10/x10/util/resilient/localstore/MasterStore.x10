@@ -90,20 +90,12 @@ public class MasterStore[K] {K haszero} {
     }
     
     /*Lock based method*/
-    public def lockRead(mapName:String, id:Long, key:K) {
-         txManager.lockRead(id, key);
+    public def lockAll(id:Long, start:Long, opPerPlace:Long, keys:Rail[K],readFlags:Rail[Boolean]) {
+        txManager.lockAll(id, start, opPerPlace, keys, readFlags);
     }
     
-    public def lockWrite(mapName:String, id:Long, key:K) {
-        txManager.lockWrite(id, key);
-    }
-    
-    public def unlockRead(mapName:String, id:Long, key:K) {
-        txManager.unlockRead(id, key);
-    }
-    
-    public def unlockWrite(mapName:String, id:Long, key:K) {
-        txManager.unlockWrite(id, key);
+    public def unlockAll(id:Long, start:Long, opPerPlace:Long, keys:Rail[K],readFlags:Rail[Boolean]) {
+        txManager.unlockAll(id, start, opPerPlace, keys, readFlags);
     }
     
     public def getLocked(mapName:String, id:Long, key:K):Cloneable {

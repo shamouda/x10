@@ -23,33 +23,13 @@ public class TxManager_Locking[K] {K haszero} extends TxManager[K]  {
         throw new Exception("operation not supported for lock based tx manager");
     }
     
-    public def lockRead(id:Long, key:K) {
-        lockRead_Locking(id, key);
-    }
-        
-    public def lockWrite(id:Long, key:K) {
-        lockWrite_Locking(id, key);
+    
+    public def lockAll(id:Long, start:Long, opPerPlace:Long, keys:Rail[K],readFlags:Rail[Boolean]) {
+        super.lock(id, start, opPerPlace, keys, readFlags);
     }
     
-    public def unlockRead(id:Long, key:K) {
-        unlockRead_Locking(id, key);
-    }
-    
-    public def unlockWrite(id:Long, key:K) {
-        unlockWrite_Locking(id, key);
-    }
-    
-    public def lockRead(id:Long, keys:ArrayList[K]) {
-        lockRead_Locking(id, keys);
-    }
-    public def lockWrite(id:Long, keys:ArrayList[K]) {
-        lockWrite_Locking(id, keys);
-    }
-    public def unlockRead(id:Long, keys:ArrayList[K]) {
-        unlockRead_Locking(id, keys);
-    }
-    public def unlockWrite(id:Long, keys:ArrayList[K]) {
-        unlockWrite_Locking(id, keys);
+    public def unlockAll(id:Long, start:Long, opPerPlace:Long, keys:Rail[K],readFlags:Rail[Boolean]) {
+        super.unlock(id, start, opPerPlace, keys, readFlags);
     }
     
     public def commit(log:TxLog[K]) {

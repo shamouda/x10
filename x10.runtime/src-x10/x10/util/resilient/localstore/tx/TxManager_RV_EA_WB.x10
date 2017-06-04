@@ -42,28 +42,11 @@ public class TxManager_RV_EA_WB[K] {K haszero} extends TxManager[K]  {
         abort_WB(log);
     }
     
-    public def lockRead(id:Long, key:K) {
-        throw new Exception("lockRead not supported");
+    public def lockAll(id:Long, start:Long, opPerPlace:Long, keys:Rail[K],readFlags:Rail[Boolean]) {
+        throw new Exception("operation not supported for baseline tx manager");
     }
-    public def lockWrite(id:Long, key:K) {
-        throw new Exception("lockWrite not supported for lock based tx manager");
-    }
-    public def unlockRead(id:Long, key:K) {
-        throw new Exception("unlockRead not supported for lock based tx manager");
-    }
-    public def unlockWrite(id:Long, key:K) {
-        throw new Exception("unlockWrite not supported for lock based tx manager");
-    }
-    public def lockRead(id:Long, keys:ArrayList[K]) {
-        throw new Exception("operation not supported");
-    }
-    public def lockWrite(id:Long, keys:ArrayList[K]) {
-        throw new Exception("operation not supported");
-    }
-    public def unlockRead(id:Long, keys:ArrayList[K]) {
-        throw new Exception("operation not supported");
-    }
-    public def unlockWrite(id:Long, keys:ArrayList[K]) {
-        throw new Exception("operation not supported");
+    
+    public def unlockAll(id:Long, start:Long, opPerPlace:Long, keys:Rail[K],readFlags:Rail[Boolean]) {
+        throw new Exception("operation not supported for baseline tx manager");
     }
 }

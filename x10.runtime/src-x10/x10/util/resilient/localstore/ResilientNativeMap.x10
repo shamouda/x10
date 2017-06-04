@@ -231,7 +231,8 @@ public class ResilientNativeMap[K] {K haszero} {
     public def executeLockingTransaction(members:Rail[Long], keys:Rail[K], readFlags:Rail[Boolean], o:Long, closure:(LockingTx[K])=>Any) {
         val tx = startLockingTransaction(members, keys, readFlags, o);
         tx.lock();
-        val out = closure(tx);
+        val out:Any;
+        finish {out = closure(tx);}
         tx.unlock();
         return new TxResult(Tx.SUCCESS, out);
     }
