@@ -40,6 +40,7 @@ public class TxDescManager[K] {K haszero} {
                 }
             }
         } catch(exSl:Exception) {
+            plh().asyncSlaveRecovery();
         	if (!ignoreDeadSlave)
         		throw exSl;
         }
@@ -55,6 +56,7 @@ public class TxDescManager[K] {K haszero} {
                 }
             }
         } catch(exSl:Exception) {
+            plh().asyncSlaveRecovery();
         	if (!ignoreDeadSlave)
         		throw exSl;
         }
@@ -69,6 +71,7 @@ public class TxDescManager[K] {K haszero} {
                 }
             }
         } catch(exSl:Exception) {
+            plh().asyncSlaveRecovery();
         	if (!ignoreDeadSlave)
         		throw exSl;
         }
@@ -83,6 +86,7 @@ public class TxDescManager[K] {K haszero} {
                 }
             }
         } catch(exSl:Exception) {
+            plh().asyncSlaveRecovery();
         	if (!ignoreDeadSlave)
         		throw exSl;
         }

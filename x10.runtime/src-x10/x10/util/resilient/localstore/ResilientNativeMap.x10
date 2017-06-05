@@ -66,7 +66,18 @@ public class ResilientNativeMap[K] {K haszero} {
     }
     
     public def set2(key:K, value:Cloneable, place:Place, key2:K, value2:Cloneable) {
-        throw new Exception("method deprecated");
+        val dest = plh().getPlaceIndex(place);
+        val members = new Rail[Long](2);
+        members(0) = plh().virtualPlaceId;
+        members(1) = dest;
+        val distClosure = (tx:AbstractTx[K]) => {
+            tx.put(key, value);
+            tx.asyncAt(dest, () => {
+                tx.put(key2, value2);
+            });
+            return null;
+        };
+        executeTransaction(members, distClosure, -1, -1);
     }
     
     public def set2(key:K, value:Cloneable, key2:K, value2:Cloneable) {        

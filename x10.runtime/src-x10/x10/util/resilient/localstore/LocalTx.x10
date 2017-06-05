@@ -118,7 +118,6 @@ public class LocalTx[K] {K haszero} extends AbstractTx[K] {
                     }
                 }
             } catch(exSl:Exception) {
-            	plh().asyncSlaveRecovery();
             	if (!ignoreDeadSlave)
             		throw exSl;
                 success = AbstractTx.SUCCESS_RECOVER_STORE;

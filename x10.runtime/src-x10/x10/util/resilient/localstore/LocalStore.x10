@@ -301,18 +301,6 @@ public class LocalStore[K] {K haszero} {
         }
     }
     
-    public def physicalToVirtual(members:PlaceGroup):Rail[Long] {
-        try {
-            lock();
-            val rail = new Rail[Long](members.size());
-            for (var i:Long = 0; i <  members.size(); i++)
-                rail(i) = activePlaces.indexOf(members(i));
-            return rail;
-        } finally {
-            unlock();
-        }
-    }
-    
     public def getTxMembers(virtualMembers:Rail[Long], includeDead:Boolean):TxMembers {
         try {
             lock();
@@ -334,21 +322,10 @@ public class LocalStore[K] {K haszero} {
         }
     }
     
-    public def physicalToVirtual(p1:Place, p2:Place) {
-        try {
-            lock();
-            val indx1 = activePlaces.indexOf(p1);
-            val indx2 = activePlaces.indexOf(p2);
-            val rail = new Rail[Long](2);
-            rail(0) = indx1;
-            rail(1) = indx2;
-            return rail;
-        } finally {
-            unlock();
-        }
+    public def getPlaceIndex(p:Place) {
+        return activePlaces.indexOf(p);
     }
-    
-    
+        
     /*******************************************/
     public def lock() {
         if (!TxConfig.get().LOCK_FREE)
@@ -362,13 +339,12 @@ public class LocalStore[K] {K haszero} {
     
     /********************Transparent Recovery methods********************************/
     public def asyncSlaveRecovery() {
-        if (!immediateRecovery)
+        if (!immediateRecovery || !slave.isDead())
             return;
         
-        assert (slave.isDead()) : "bug in LocalStore, calling asyncSlaveRecovery although the slave is alive";
         assert (virtualPlaceId != -1) : "bug in LocalStore, virtualPlaceId ("+virtualPlaceId+") = -1";
         
-        if ( masterStore.isActive() ) {
+        if ( slave.isDead() && masterStore.isActive() ) {
              masterStore.pausing();
             @Uncounted async {
                 DistributedRecoveryHelper.recoverSlave(plh);
@@ -379,13 +355,12 @@ public class LocalStore[K] {K haszero} {
     //synchronized version of asyncSlaveRecovery
     public def recoverSlave(spare:Place) {
         Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+")");
-        if (immediateRecovery)
+        if (immediateRecovery || !slave.isDead())
             return;
         
-        assert (slave.isDead()) : "bug in LocalStore, calling asyncSlaveRecovery although the slave is alive";
         assert (virtualPlaceId != -1) : "bug in LocalStore, virtualPlaceId ("+virtualPlaceId+") = -1";
         
-        if ( masterStore.isActive() ) {
+        if ( slave.isDead() && masterStore.isActive() ) {
              Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+") master is active");
              masterStore.pausing();
              DistributedRecoveryHelper.recoverSlave(plh, spare, -1);
