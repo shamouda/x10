@@ -39,9 +39,9 @@ public class LockingTx[K] {K haszero} extends AbstractTx[K] {
     public val readFlags:Rail[Boolean];
     public val opPerPlace:Long;
 
-    public def this(plh:PlaceLocalHandle[LocalStore[K]],id:Long,mapName:String,members:Rail[Long],keys:Rail[K],readFlags:Rail[Boolean],opPerPlace:Long)
+    public def this(plh:PlaceLocalHandle[LocalStore[K]],id:Long,members:Rail[Long],keys:Rail[K],readFlags:Rail[Boolean],opPerPlace:Long)
     {
-        super(plh, id, mapName);
+        super(plh, id);
         this.members = members;
         this.keys = keys;
         this.readFlags = readFlags;

@@ -43,7 +43,7 @@ public class BankAsyncResilient {
         val mgr = new PlaceManager(sparePlaces, supportShrinking);
         val immediateRecovery = false;
         val store = ResilientStore.make(mgr.activePlaces(), immediateRecovery);
-        val map = store.makeMap("mapA");
+        val map = store.makeMap();
         try {
             val startTransfer = System.nanoTime();
             var recover:Boolean = false;

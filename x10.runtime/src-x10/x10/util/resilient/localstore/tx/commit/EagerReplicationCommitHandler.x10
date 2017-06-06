@@ -28,8 +28,8 @@ import x10.compiler.Uncounted;
  * */
 public class EagerReplicationCommitHandler[K] {K haszero} extends ResilientCommitHandler[K] {
     
-    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, mapName:String, members:TxMembers) {
-        super(plh, id, mapName, members);
+    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, members:TxMembers) {
+        super(plh, id, members);
     }
     
     private def asyncDeleteDescriptors(recovery:Boolean, masters:ArrayList[Place]) {
@@ -76,7 +76,7 @@ public class EagerReplicationCommitHandler[K] {K haszero} extends ResilientCommi
                 if (childrenVirtual != null) {
                     val places = plh().getTxMembers( childrenVirtual , true).places;
                                         
-                    for (var i:Long = 0; i<childrenVirtual.size; i++) {
+                    for (var i:Long = 0; i<childrenVirtual.size(); i++) {
                         if (plh().getSlave(childrenVirtual(i)).id != here.id) {
                             masters.add(places(i));
                         }
@@ -157,7 +157,7 @@ public class EagerReplicationCommitHandler[K] {K haszero} extends ResilientCommi
                 if (childrenVirtual != null) {
                     val places = plh().getTxMembers( childrenVirtual , true).places;
                                         
-                    for (var i:Long = 0; i<childrenVirtual.size; i++) {
+                    for (var i:Long = 0; i<childrenVirtual.size(); i++) {
                         if (plh().getSlave(childrenVirtual(i)).id != here.id) {
                             masters.add(places(i));
                         }

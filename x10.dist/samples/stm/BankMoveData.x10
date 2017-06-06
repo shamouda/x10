@@ -26,7 +26,7 @@ public class BankMoveData {
         val supportShrinking = false;
         val mgr = new PlaceManager(sparePlaces, supportShrinking);
         val store = ResilientStore.make(mgr.activePlaces());
-        val map = store.makeMap("mapA");
+        val map = store.makeMap();
         try {
             val startTransfer = System.nanoTime();
             randomTransfer(map, mgr.activePlaces(), accountsPerPlace, transfersPerPlace, debugProgress);

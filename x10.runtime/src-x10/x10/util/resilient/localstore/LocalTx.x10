@@ -23,20 +23,18 @@ import x10.util.concurrent.Future;
 
 public class LocalTx[K] {K haszero} extends AbstractTx[K] {
     public transient val startTime:Long = Timer.milliTime();
-    public transient var commitTime:Long = 0;
-    public transient var abortTime:Long = 0;   
     public transient var processingElapsedTime:Long = 0;
     
-    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, mapName:String) {
-        super(plh, id, mapName);
+    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {
+        super(plh, id);
     }
     
     /***************** Get ********************/
     public def get(key:K):Cloneable {
         try {
-            return plh().getMasterStore().get(mapName, id, key);
+            return plh().getMasterStore().get(id, key);
         }catch(ex:Exception){
-            abortTime = Timer.milliTime();
+            updateAbortStat();
             throw ex;
         }
     }
@@ -44,9 +42,9 @@ public class LocalTx[K] {K haszero} extends AbstractTx[K] {
     /***************** PUT ********************/
     public def put(key:K, value:Cloneable):Cloneable {
         try {
-            return plh().getMasterStore().put(mapName, id, key, value);
+            return plh().getMasterStore().put(id, key, value);
         }catch(ex:Exception){
-            abortTime = Timer.milliTime();
+            updateAbortStat();
             throw ex;
         }
     }
@@ -54,18 +52,9 @@ public class LocalTx[K] {K haszero} extends AbstractTx[K] {
     /***************** Delete ********************/
     public def delete(key:K):Cloneable {
         try {
-            return plh().getMasterStore().delete(mapName, id, key);
+            return plh().getMasterStore().delete(id, key);
         }catch(ex:Exception){
-            abortTime = Timer.milliTime();
-            throw ex;
-        }
-    }
-    
-    public def deleteTxDesc(key:K):Cloneable {
-        try {
-            return plh().getMasterStore().deleteTxDesc(mapName, id, key);
-        }catch(ex:Exception){
-            abortTime = Timer.milliTime();
+            updateAbortStat();
             throw ex;
         }
     }
@@ -73,22 +62,29 @@ public class LocalTx[K] {K haszero} extends AbstractTx[K] {
     /***************** KeySet ********************/
     public def keySet():Set[K] {
         try {
-            return plh().getMasterStore().keySet(mapName, id);
+            return plh().getMasterStore().keySet(id);
         }catch(ex:Exception){
-            abortTime = Timer.milliTime();
+            updateAbortStat();
             throw ex;
         }
     }
 
     /***********************   Abort ************************/  
     
+    private def updateAbortStat() {
+        if (processingElapsedTime == 0)
+            processingElapsedTime = Timer.milliTime() - startTime;
+        plh().stat.addAbortedLocalTxStats(Timer.milliTime() - startTime, 
+                processingElapsedTime);
+    }
+    
     public def abort() {
         if (processingElapsedTime == 0)
             processingElapsedTime = Timer.milliTime() - startTime;
         
         plh().getMasterStore().abort(id);
-        abortTime = Timer.milliTime();
-        plh().stat.addAbortedLocalTxStats(abortTime - startTime, 
+        
+        plh().stat.addAbortedLocalTxStats(Timer.milliTime() - startTime, 
                 processingElapsedTime);
     }
     
@@ -103,7 +99,6 @@ public class LocalTx[K] {K haszero} extends AbstractTx[K] {
         
         var success:Int = AbstractTx.SUCCESS;
         val id = this.id;
-        val mapName = this.mapName;
         val plh = this.plh;
         val ownerPlaceIndex = plh().virtualPlaceId;
         try {
@@ -111,25 +106,24 @@ public class LocalTx[K] {K haszero} extends AbstractTx[K] {
                 plh().getMasterStore().validate(id);
             
             val log = plh().getMasterStore().getTxCommitLog(id);
-            try {
-                if (resilient && log != null && log.size() > 0 && !TxConfig.get().DISABLE_SLAVE) {
+            if (resilient && log != null && log.size() > 0 && !TxConfig.get().DISABLE_SLAVE) {
+                try {
                     finish at (plh().slave) async {
                         plh().slaveStore.commit(id, log, ownerPlaceIndex);
                     }
+                } catch(exSl:Exception) {
+                	if (!ignoreDeadSlave)
+                		throw exSl;
+                    success = AbstractTx.SUCCESS_RECOVER_STORE;
                 }
-            } catch(exSl:Exception) {
-            	if (!ignoreDeadSlave)
-            		throw exSl;
-                success = AbstractTx.SUCCESS_RECOVER_STORE;
             }
             
             if (log != null) {
                 //master commit
                 plh().getMasterStore().commit(id);
             }
-            commitTime = Timer.milliTime();
             
-            plh().stat.addCommittedLocalTxStats(commitTime - startTime, 
+            plh().stat.addCommittedLocalTxStats(Timer.milliTime() - startTime, 
                     processingElapsedTime);
             
             return success;

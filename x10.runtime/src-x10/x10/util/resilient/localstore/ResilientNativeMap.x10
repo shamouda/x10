@@ -13,7 +13,6 @@ import x10.util.Timer;
 import x10.util.resilient.localstore.tx.logging.TxDesc;
 
 public class ResilientNativeMap[K] {K haszero} {
-	public val name:String;
     public val plh:PlaceLocalHandle[LocalStore[K]];
 
     private static val TM_STAT_ALL = System.getenv("TM_STAT_ALL") != null && System.getenv("TM_STAT_ALL").equals("1");
@@ -21,8 +20,7 @@ public class ResilientNativeMap[K] {K haszero} {
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     private var baselineTxId:Long = 0;
     
-    public def this(name:String, plh:PlaceLocalHandle[LocalStore[K]]){
-    	this.name = name;
+    public def this(plh:PlaceLocalHandle[LocalStore[K]]){
     	this.plh = plh;
     }
     /** 
@@ -98,7 +96,7 @@ public class ResilientNativeMap[K] {K haszero} {
     public def startLocalTransaction():LocalTx[K] {
         assert(plh().virtualPlaceId != -1) : here + " LocalTx assertion error  virtual place id = -1";
         val id = plh().getMasterStore().getNextTransactionId();
-        return new LocalTx[K](plh, id, name);
+        return new LocalTx[K](plh, id);
     }
     
     public def executeLocalTransaction(closure:(LocalTx[K])=>Any) {
@@ -162,7 +160,7 @@ public class ResilientNativeMap[K] {K haszero} {
     
     private def startGlobalTransaction(members:TxMembers):Tx[K] {
         val id = plh().getMasterStore().getNextTransactionId();
-        val tx = new Tx(plh, id, name, members);
+        val tx = new Tx(plh, id, members);
         try {
             var predefinedMembers:Rail[Long] = null;
             if (members != null)
@@ -180,8 +178,8 @@ public class ResilientNativeMap[K] {K haszero} {
     public def restartGlobalTransaction(txDesc:TxDesc):Tx[K] {
         assert(plh().virtualPlaceId != -1);
         val includeDead = true; // The commitHandler will take the correct actions regarding the dead master
-        val members = txDesc.staticMembers? plh().getTxMembers(txDesc.virtualMembers, includeDead):null;
-        return new Tx(plh, txDesc.id, name,  members);
+        val members = txDesc.staticMembers? plh().getTxMembers(txDesc.virtualMembers.toRail(), includeDead):null;
+        return new Tx(plh, txDesc.id, members);
     }
     
     public def executeTransaction(closure:(Tx[K])=>Any, maxRetries:Long):TxResult {
@@ -236,7 +234,7 @@ public class ResilientNativeMap[K] {K haszero} {
     private def startLockingTransaction(members:Rail[Long], keys:Rail[K], readFlags:Rail[Boolean], o:Long):LockingTx[K] {
         assert(plh().virtualPlaceId != -1);
         val id = plh().getMasterStore().getNextTransactionId();
-        return new LockingTx(plh, id, name, members, keys, readFlags, o);
+        return new LockingTx(plh, id, members, keys, readFlags, o);
     }
     
     public def executeLockingTransaction(members:Rail[Long], keys:Rail[K], readFlags:Rail[Boolean], o:Long, closure:(LockingTx[K])=>Any) {
@@ -253,7 +251,7 @@ public class ResilientNativeMap[K] {K haszero} {
     private def startBaselineTransaction():AbstractTx[K] {
         assert(plh().virtualPlaceId != -1);
         val id = baselineTxId ++;
-        val tx = new AbstractTx[K](plh, id, name);
+        val tx = new AbstractTx[K](plh, id);
         return tx;
     }
     

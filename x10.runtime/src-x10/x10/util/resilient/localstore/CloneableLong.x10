@@ -12,12 +12,7 @@
 
 package x10.util.resilient.localstore;
 
-public class CloneableLong implements Cloneable {
-    public var v:Long;
-        
-    public def this(v:Long) {
-        this.v = v;
-    }
+public struct CloneableLong(v:Long) implements Cloneable {
     
     public def clone():Cloneable {
         return new CloneableLong(v);

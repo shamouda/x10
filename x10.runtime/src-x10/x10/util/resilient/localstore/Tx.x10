@@ -27,22 +27,15 @@ import x10.util.concurrent.Lock;
 
 public class Tx[K] {K haszero} extends AbstractTx[K] {
     private val commitHandler:CommitHandler[K];
-    
     public transient val startTime:Long = Timer.milliTime();
-    public transient var commitTime:Long = -1;
-    public transient var abortTime:Long = -1;
     
     // consumed time
     public transient var processingElapsedTime:Long = 0; ////including waitTime
     public transient var txLoggingElapsedTime:Long = 0;
-    
-    /* resilient mode variables */
-    private transient var aborted:Boolean = false;
-    
     private val members:TxMembers;
     
-    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, mapName:String, members:TxMembers) {
-        super(plh, id, mapName);
+    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, members:TxMembers) {
+        super(plh, id);
         this.members = members;
         
         if (TxConfig.get().TM_DEBUG) {
@@ -54,17 +47,14 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
         	
         if (resilient) {
             if (TxConfig.get().DISABLE_SLAVE) {
-                commitHandler = new NonResilientCommitHandler[K](plh, id, mapName, members);
+                commitHandler = new NonResilientCommitHandler[K](plh, id, members);
             }
             else {
-                if (TxConfig.get().TM_REP.equals("lazy"))
-                    commitHandler = new LazyReplicationCommitHandler[K](plh, id, mapName, members);
-                else   
-                    commitHandler = new EagerReplicationCommitHandler[K](plh, id, mapName, members);
+                commitHandler = new EagerReplicationCommitHandler[K](plh, id, members);
             }
         }
         else
-        	commitHandler = new NonResilientCommitHandler[K](plh, id, mapName, members);
+        	commitHandler = new NonResilientCommitHandler[K](plh, id, members);
     }
 
     /*********************** Abort ************************/  
@@ -77,11 +67,7 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
     }
     
     private def abort(recovery:Boolean) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here="+ here + " abort started alreadyAborted = " + aborted);
-        if (!aborted)
-            aborted = true;
-        else 
-            return;
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here="+ here + " abort started ");
         
         if (processingElapsedTime == 0)
             processingElapsedTime = Timer.milliTime() - startTime;
@@ -91,10 +77,9 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
         } catch (ex:Exception) {
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here="+ here + " ignoring exception during abort ");    
         }
-        abortTime = Timer.milliTime();
-        plh().stat.addAbortedTxStats(abortTime - startTime, 
+        plh().stat.addAbortedTxStats(Timer.milliTime() - startTime, 
                 processingElapsedTime);
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here="+ here + " aborted, allTxTime ["+(abortTime-startTime)+"] ms");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here="+ here + " aborted ");
     }
 
     
@@ -121,20 +106,17 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
         try {
             success = commitHandler.commit(recovery);
         }catch (ex:Exception) {
-            abortTime = Timer.milliTime();
-            plh().stat.addAbortedTxStats(abortTime - startTime, processingElapsedTime);
+            plh().stat.addAbortedTxStats(Timer.milliTime() - startTime, processingElapsedTime);
             throw ex;
         }
 
-        commitTime = Timer.milliTime();
-        
-        plh().stat.addCommittedTxStats(commitTime - startTime, 
+        plh().stat.addCommittedTxStats(Timer.milliTime() - startTime, 
                 processingElapsedTime,
                 commitHandler.phase1ElapsedTime,
                 commitHandler.phase2ElapsedTime,
                 commitHandler.txLoggingElapsedTime);
         
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here=" + here + " committed, allTxTime [" + (commitTime-startTime) + "] ms");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here=" + here + " committed");
         return success;
     }
     

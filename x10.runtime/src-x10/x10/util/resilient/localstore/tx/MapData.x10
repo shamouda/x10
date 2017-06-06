@@ -136,7 +136,7 @@ public class MapData[K] {K haszero} {
         }
     }
     
-    public def keySet(mapName:String) {
+    public def keySet() {
         try {
             lock(-1);
             val set = new HashSet[K]();
@@ -202,7 +202,7 @@ public class MapData[K] {K haszero} {
     		var desc:TxDesc = masterTxDesc.getOrElse(id, null);
     		if (desc == null) {
     			val mapName = "";
-    			desc = new TxDesc(id, mapName, false); 
+    			desc = new TxDesc(id, false); 
     			masterTxDesc.put(id, desc);
     		}
     		desc.addVirtualMembers(vMembers);

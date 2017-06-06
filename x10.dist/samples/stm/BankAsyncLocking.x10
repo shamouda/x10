@@ -28,7 +28,7 @@ public class BankAsyncLocking {
         val mgr = new PlaceManager(sparePlaces, supportShrinking);
         val store = ResilientStore.make(mgr.activePlaces());
 
-        val map = store.makeMap("mapA");
+        val map = store.makeMap();
         val locker = map.getLockManager();
         try {
             val startTransfer = System.nanoTime();

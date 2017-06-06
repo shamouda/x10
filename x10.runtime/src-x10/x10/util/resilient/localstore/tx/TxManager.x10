@@ -237,8 +237,8 @@ public abstract class TxManager[K] {K haszero} {
         }
     }
     
-    public def keySet(mapName:String, id:Long):Set[K] {
-        return data.keySet(mapName);
+    public def keySet(id:Long):Set[K] {
+        return data.keySet();
     }
     
     /********************** Utils ***************************/

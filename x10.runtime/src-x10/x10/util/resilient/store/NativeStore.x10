@@ -23,10 +23,10 @@ public class NativeStore[V]{V haszero, V <: Cloneable} extends Store[V] {
       val store:ResilientStore[String];
       val map:ResilientNativeMap[String];
 
-      def this(name:String, activePlaces:PlaceGroup) {
+      def this(activePlaces:PlaceGroup) {
           val immediateRecovery = false;
           store = ResilientStore.make[String](activePlaces, immediateRecovery);
-          map = store.makeMap("_map_" + name);
+          map = store.makeMap();
       }
 
       public def get(key:String) = map.get(key) as V;

@@ -30,65 +30,64 @@ public class TxDescManager[K] {K haszero} {
     
     public def add(id:Long, members:Rail[Long], ignoreDeadSlave:Boolean) {
         val staticMembers = members != null && members.size > 0;
-        val mapName = "";
-        val desc = new TxDesc(id, mapName, staticMembers);
+        val desc = new TxDesc(id, staticMembers);
         desc.addVirtualMembers(members);
-        try {
-            if (resilient && !TxConfig.get().DISABLE_SLAVE) {
+        if (resilient && !TxConfig.get().DISABLE_SLAVE) {
+            try {
                 finish at (plh().slave) async {
                     plh().slaveStore.putTransDescriptor(id, desc);
                 }
+            } catch(exSl:Exception) {
+                plh().asyncSlaveRecovery();
+            	if (!ignoreDeadSlave)
+            		throw exSl;
             }
-        } catch(exSl:Exception) {
-            plh().asyncSlaveRecovery();
-        	if (!ignoreDeadSlave)
-        		throw exSl;
         }
         plh().getMasterStore().getState().putTxDesc(id, desc);
         
     }
     
     public def delete(id:Long, ignoreDeadSlave:Boolean) {
-    	try {
-            if (resilient && !TxConfig.get().DISABLE_SLAVE) {
+        if (resilient && !TxConfig.get().DISABLE_SLAVE) {
+            try {
                 finish at (plh().slave) async {
                     plh().slaveStore.deleteTransDescriptor(id);
                 }
+            } catch(exSl:Exception) {
+                plh().asyncSlaveRecovery();
+            	if (!ignoreDeadSlave)
+            		throw exSl;
             }
-        } catch(exSl:Exception) {
-            plh().asyncSlaveRecovery();
-        	if (!ignoreDeadSlave)
-        		throw exSl;
         }
     	plh().getMasterStore().getState().removeTxDesc(id);
     }
     
     public def updateStatus(id:Long, newStatus:Long, ignoreDeadSlave:Boolean) {
-    	try {
-            if (resilient && !TxConfig.get().DISABLE_SLAVE) {
+        if (resilient && !TxConfig.get().DISABLE_SLAVE) {
+            try {
                 finish at (plh().slave) async {
                     plh().slaveStore.updateTxDescStatus(id, newStatus);
                 }
+            } catch(exSl:Exception) {
+                plh().asyncSlaveRecovery();
+            	if (!ignoreDeadSlave)
+            		throw exSl;
             }
-        } catch(exSl:Exception) {
-            plh().asyncSlaveRecovery();
-        	if (!ignoreDeadSlave)
-        		throw exSl;
         }
     	plh().getMasterStore().getState().updateTxDescStatus(id, newStatus);
     }
     
     public def addVirtualMembers(id:Long, vMembers:Rail[Long], ignoreDeadSlave:Boolean) {
-    	try {
-            if (resilient && !TxConfig.get().DISABLE_SLAVE) {
+        if (resilient && !TxConfig.get().DISABLE_SLAVE) {
+            try {
                 finish at (plh().slave) async {
                     plh().slaveStore.addTxDescMembers(id, vMembers);
                 }
+            } catch(exSl:Exception) {
+                plh().asyncSlaveRecovery();
+            	if (!ignoreDeadSlave)
+            		throw exSl;
             }
-        } catch(exSl:Exception) {
-            plh().asyncSlaveRecovery();
-        	if (!ignoreDeadSlave)
-        		throw exSl;
         }
     	plh().getMasterStore().getState().addTxDescMembers(id, vMembers);
     }
@@ -119,9 +118,7 @@ public class TxDescManager[K] {K haszero} {
             return desc.getVirtualMembers();
     }
     
-    
     public def deleteTxDescFromSlaveStore(id:Long) {
         plh().slaveStore.deleteTransDescriptor(id);
     }
-    
 }

@@ -30,7 +30,7 @@ public class BankAsync {
         val supportShrinking = false;
         val mgr = new PlaceManager(sparePlaces, supportShrinking);
         val store = ResilientStore.make[String](mgr.activePlaces(), false);
-        val map = store.makeMap("mapA");
+        val map = store.makeMap();
         try {
             val startTransfer = System.nanoTime();
             randomTransfer(map, mgr.activePlaces(), accountsPerPlace, transfersPerPlace, debugProgress, optimized);

@@ -16,8 +16,8 @@ public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandle
     private val root = GlobalRef[ResilientCommitHandler[K]](this);
     protected var nonFatalDeadPlace:Boolean = false;
     
-    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, mapName:String, members:TxMembers) {
-        super(plh, id, mapName, members);
+    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, members:TxMembers) {
+        super(plh, id, members);
     }
     
     protected abstract def abort_resilient(recovery:Boolean):void;
@@ -112,7 +112,7 @@ public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandle
                         val childrenVirtual = plh().txDescManager.getVirtualMembers(id, masterVal);
                         if (childrenVirtual != null) {
                             val physical = plh().getTxMembers( childrenVirtual , true).places;
-                            for (var i:Long = 0; i < childrenVirtual.size; i++) {
+                            for (var i:Long = 0; i < childrenVirtual.size(); i++) {
                                 val p = physical(i);
                                 if (!parents.contains(childrenVirtual(i))) {
                                     at (p) async {

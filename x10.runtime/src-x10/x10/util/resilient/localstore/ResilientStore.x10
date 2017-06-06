@@ -55,8 +55,8 @@ public class ResilientStore[K] {K haszero} {
         return store;
     }
     
-    public def makeMap(name:String):ResilientNativeMap[K] {
-    	return new ResilientNativeMap[K](name, plh);
+    public def makeMap():ResilientNativeMap[K] {
+    	return new ResilientNativeMap[K](plh);
     }
     
     public def getVirtualPlaceId() = plh().getVirtualPlaceId();

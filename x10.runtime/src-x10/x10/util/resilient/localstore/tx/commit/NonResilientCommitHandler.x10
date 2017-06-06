@@ -12,8 +12,8 @@ import x10.util.HashSet;
 
 public class NonResilientCommitHandler[K] {K haszero} extends CommitHandler[K] {
     
-    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, mapName:String, members:TxMembers) {
-        super(plh, id, mapName, members);
+    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, members:TxMembers) {
+        super(plh, id, members);
     }
     
     public def abort(recovery:Boolean) {

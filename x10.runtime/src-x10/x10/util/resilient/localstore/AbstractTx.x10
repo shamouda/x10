@@ -19,7 +19,6 @@ import x10.util.resilient.localstore.tx.TxManager;
 
 public class AbstractTx[K] {K haszero} {
 	public val plh:PlaceLocalHandle[LocalStore[K]];
-    public val mapName:String;
     public val id:Long;
     protected static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
@@ -34,50 +33,38 @@ public class AbstractTx[K] {K haszero} {
     public static val SUCCESS = 0n;
     public static val SUCCESS_RECOVER_STORE = 1n;
     
-    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, mapName:String) {
+    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {
     	this.plh = plh;
-        this.mapName = mapName;
         this.id = id;
     }
     
     /***************** Get ********************/
     public def get(key:K):Cloneable {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " GET_STARTED here=" + here + " Tx.get("+key+") ");
-        val x = plh().getMasterStore().get(mapName, id, key);
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " GET_FINISHED here=" + here + " Tx.get("+key+") ");
-        return x;
+        return plh().getMasterStore().get(id, key);
     }
     
     /***************** PUT ********************/
     public def put(key:K, value:Cloneable):Cloneable {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " PUT_STARTED here=" + here + " Tx.put("+key+") ");
-        val x = plh().getMasterStore().put(mapName, id, key, value);
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " PUT_FINISHED here=" + here + " Tx.put("+key+") ");
-        return x;
+        return plh().getMasterStore().put(id, key, value);
     }
     
     /***************** Delete ********************/
     public def delete(key:K):Cloneable {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " DELETE_STARTED here=" + here + " Tx.delete("+key+") ");
-        val x = plh().getMasterStore().delete(mapName, id, key);
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " DELETE_FINISHED here=" + here + " Tx.delete("+key+") ");
-        return x;
+        return plh().getMasterStore().delete(id, key);
     }
     
     /***************** KeySet ********************/
     public def keySet():Set[K] {
-        return plh().getMasterStore().keySet(mapName, id); 
+        return plh().getMasterStore().keySet(id); 
     }
     
     public def asyncAt(virtualPlace:Long, closure:()=>void) {
         val pl = plh().getPlace(virtualPlace);
-        assert (pl.id >= 0 && pl.id < Place.numPlaces()) : "fatal bug, wrong place id " + pl.id;
         at (pl) async closure();
     }
     
     public def evalAt(virtualPlace:Long, closure:()=>Any) {
         val pl = plh().getPlace(virtualPlace);
-        assert (pl.id >= 0 && pl.id < Place.numPlaces()) : "fatal bug, wrong place id " + pl.id;
         return at (pl) closure();
     }
 }

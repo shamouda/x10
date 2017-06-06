@@ -21,13 +21,11 @@ public abstract class CommitHandler[K] {K haszero} {
     
     protected plh:PlaceLocalHandle[LocalStore[K]];
     protected id:Long;
-    protected mapName:String;
     protected members:TxMembers;
     
-    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, mapName:String, members:TxMembers) {
+    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, members:TxMembers) {
     	this.plh = plh;
     	this.id = id;
-    	this.mapName = mapName;
     	this.members = members;
     }
     
@@ -55,12 +53,11 @@ public abstract class CommitHandler[K] {K haszero} {
             if (childrenVirtual != null) {
                 val myVirtualPlaceId = plh().getVirtualPlaceId();
                 parents.add(myVirtualPlaceId);
-                childCount = childrenVirtual.size;
+                childCount = childrenVirtual.size();
                 val txMembers = plh().getTxMembers( childrenVirtual , true);
                 val virtual = txMembers.virtual;
                 val physical = txMembers.places;
                 for (var i:Long = 0; i < virtual.size ; i++) {
-                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursively virtual(" + i + "/"+childCount+")="+virtual(i)+" containedInParent="+parents.contains(virtual(i))+" ...");
                     if (!parents.contains(virtual(i))) {
                         val p = physical(i);
                         if (p.isDead())

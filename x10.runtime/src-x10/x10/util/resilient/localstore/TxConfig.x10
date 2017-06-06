@@ -16,8 +16,7 @@ import x10.util.resilient.localstore.tx.FatalTransactionException;
 
 public class TxConfig {
     public val TM:String; //baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB
-    public val TM_REP:String; //lazy|eager
-	public val TM_DEBUG:Boolean; //lazy|eager
+	public val TM_DEBUG:Boolean;
     public val VALIDATION_REQUIRED:Boolean;
     public val WRITE_BUFFERING:Boolean;
 
@@ -29,6 +28,7 @@ public class TxConfig {
 
     public val PREALLOC_READERS:Long;
     public val PREALLOC_TXKEYS:Long;
+    public val PREALLOC_MEMBERS:Long;
 
 
     //used for performance testing only
@@ -80,7 +80,6 @@ public class TxConfig {
         
         LOCK_FREE = BASELINE || (System.getenv("LOCK_FREE") == null || System.getenv("LOCK_FREE").equals("")) ? false : Long.parseLong(System.getenv("LOCK_FREE")) == 1;
         
-        TM_REP = System.getenv("TM_REP") == null ? "eager" : System.getenv("TM_REP");
         COMMIT = System.getenv("COMMIT") == null || System.getenv("COMMIT").equals("1");
         DISABLE_SLAVE = System.getenv("DISABLE_SLAVE") != null && System.getenv("DISABLE_SLAVE").equals("1");
     	TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
@@ -89,6 +88,7 @@ public class TxConfig {
         MAX_CONCURRENT_TXS = System.getenv("MAX_CONCURRENT_TXS") == null ? 100 : Long.parseLong(System.getenv("MAX_CONCURRENT_TXS"));
         PREALLOC_READERS = System.getenv("PREALLOC_READERS") == null ? 5 : Long.parseLong(System.getenv("PREALLOC_READERS"));
         PREALLOC_TXKEYS = System.getenv("PREALLOC_TXKEYS") == null ? 5 : Long.parseLong(System.getenv("PREALLOC_TXKEYS"));
+        PREALLOC_MEMBERS = System.getenv("PREALLOC_MEMBERS") == null ? 5 : Long.parseLong(System.getenv("PREALLOC_MEMBERS"));
     }
     
     public static def get() = instance;

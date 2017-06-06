@@ -218,7 +218,6 @@ public class SlaveStore[K] {K haszero} {
     
     
     public def waitUntilPaused() {
-        assert (!TxConfig.get().TM_REP.equals("lazy")) : "bug, SlaveStore.waitUntilPaused should not be called with lazy replication";
         try {
             slaveLock();
             Console.OUT.println("Recovering " + here + " - SlaveStore.waitUntilPaused started logsSize["+logs.size() +"] ...");
@@ -328,8 +327,7 @@ public class SlaveStore[K] {K haszero} {
     		lockTxDesc();
     		var desc:TxDesc = masterTxDesc.getOrElse(id, null);
     		if (desc == null) {
-    			val mapName = "";
-    			desc = new TxDesc(id, mapName, false); 
+    			desc = new TxDesc(id, false); 
     			masterTxDesc.put(id, desc);
     		}
     		desc.addVirtualMembers(vMembers);

@@ -60,11 +60,8 @@ public class DistributedRecoveryHelper[K] {K haszero} {
     private static def createMasterStoreAtSpare[K](plh:PlaceLocalHandle[LocalStore[K]], spare:Place, oldActivePlaces:PlaceGroup, deadPlace:Place) {K haszero} {
         Console.OUT.println("Recovering " + here + " Slave of the dead master ...");
     	actAsCoordinator(plh, deadPlace);
-        
-        if (TxConfig.get().TM_REP.equals("lazy"))
-        	updateSlaveData(plh, oldActivePlaces);
-        else
-        	plh().slaveStore.waitUntilPaused();
+    	
+        plh().slaveStore.waitUntilPaused();
         
         val map = plh().slaveStore.getSlaveMasterState();
         Console.OUT.println("Recovering " + here + " Slave prepared a consistent master replica to the spare master spare=["+spare+"] ...");
@@ -128,7 +125,7 @@ public class DistributedRecoveryHelper[K] {K haszero} {
         Console.OUT.println("Recovering " + here + " slave acting as master to complete dead master's transactions ...");
     	val txDescs = plh().slaveStore.getTransDescriptors(deadPlace);
     	for (txDesc in txDescs) {
-    	    val map = new ResilientNativeMap(txDesc.mapName, plh);
+    	    val map = new ResilientNativeMap(plh);
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Recovering " + here + " recovering txdesc " + txDesc);
             val tx = map.restartGlobalTransaction(txDesc);
             try {

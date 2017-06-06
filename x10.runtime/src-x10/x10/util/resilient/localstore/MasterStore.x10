@@ -44,19 +44,19 @@ public class MasterStore[K] {K haszero} {
         return txManager.getTxCommitLog(id);
     }
     
-    public def get(mapName:String, id:Long, key:K):Cloneable {
+    public def get(id:Long, key:K):Cloneable {
         return txManager.get(id, key);
     }
     
-    public def put(mapName:String, id:Long, key:K, value:Cloneable):Cloneable {
+    public def put(id:Long, key:K, value:Cloneable):Cloneable {
         return txManager.put(id, key, value);
     }
     
-    public def delete(mapName:String, id:Long, key:K):Cloneable {
+    public def delete(id:Long, key:K):Cloneable {
         return txManager.delete(id, key, false);
     }
     
-    public def deleteTxDesc(mapName:String, id:Long, key:K):Cloneable {
+    public def deleteTxDesc(id:Long, key:K):Cloneable {
         return txManager.delete(id, key, true);
     }
     
@@ -76,8 +76,8 @@ public class MasterStore[K] {K haszero} {
         txManager.abort(id);
     }
     
-    public def keySet(mapName:String, id:Long) {
-        return txManager.keySet(mapName, id);
+    public def keySet(id:Long) {
+        return txManager.keySet(id);
     }
     
     public def getState() = txManager.data;
@@ -98,15 +98,15 @@ public class MasterStore[K] {K haszero} {
         txManager.unlockAll(id, start, opPerPlace, keys, readFlags);
     }
     
-    public def getLocked(mapName:String, id:Long, key:K):Cloneable {
+    public def getLocked(id:Long, key:K):Cloneable {
         return txManager.get(id, key);
     }
     
-    public def deleteLocked(mapName:String, id:Long, key:K):Cloneable {
+    public def deleteLocked(id:Long, key:K):Cloneable {
         return txManager.delete(id, key, false);
     }
     
-    public def putLocked(mapName:String, id:Long, key:K, value:Cloneable):Cloneable {
+    public def putLocked(id:Long, key:K, value:Cloneable):Cloneable {
         return txManager.put(id, key, value);
     }
     
