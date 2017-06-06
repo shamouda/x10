@@ -122,6 +122,7 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
             success = commitHandler.commit(recovery);
         }catch (ex:Exception) {
             abortTime = Timer.milliTime();
+            plh().stat.addAbortedTxStats(abortTime - startTime, processingElapsedTime);
             throw ex;
         }
 

@@ -99,7 +99,7 @@ public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandle
                         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient PHASE with master "+rootPlace+" ...");
                     }
                     
-                    async at (rootPlace){
+                    at (rootPlace) async {
                         if (masterVal) {
                             master_closure(plh, id);
                             parents.add(plh().getVirtualPlaceId());
@@ -115,7 +115,7 @@ public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandle
                             for (var i:Long = 0; i < childrenVirtual.size; i++) {
                                 val p = physical(i);
                                 if (!parents.contains(childrenVirtual(i))) {
-                                    async at (p) {
+                                    at (p) async {
                                         executeRecursively(master_closure, parents, false);
                                     }
                                 }

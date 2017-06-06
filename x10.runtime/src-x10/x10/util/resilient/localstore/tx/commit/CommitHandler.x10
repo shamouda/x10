@@ -35,7 +35,7 @@ public abstract class CommitHandler[K] {K haszero} {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] executeFlat started ...");
                 
         for (p in members.pg()) {
-            async at (p) {
+            at (p) async {
                 closure(plh, id);
             }
         }
