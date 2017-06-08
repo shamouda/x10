@@ -561,20 +561,28 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         notifySubActivitySpawn(place, AT);
     }
     def notifySubActivitySpawn(place:Place, kind:Int):void {
-        val srcId = here.id;
         val dstId = place.id;
         val myId = this.id;
-        if (dstId == srcId) {
+        if (dstId == here.id) {
             val lc = localCount().incrementAndGet();
             if (verbose>=1) debug(">>>> notifySubActivitySpawn(id="+myId+") called locally, localCount now "+lc);
         } else {
-            if (!isGlobal) globalInit();
-            if (verbose>=1) debug(">>>> notifySubActivitySpawn(id="+myId+") called, srcId="+srcId + " dstId="+dstId+" kind="+kind);
+            if (verbose>=1) debug(">>>> notifySubActivitySpawn(id="+myId+") called, srcId="+here.id + " dstId="+dstId+" kind="+kind);
+            val gfs = this.ref;
+            val parentId:Id;
+            if (parent instanceof FinishResilientPlace0) {
+                val frParent = parent as FinishResilientPlace0;
+                if (!frParent.isGlobal) frParent.globalInit();
+                parentId = frParent.id;
+            } else {
+                parentId = UNASSIGNED;
+            }
 
             Runtime.runImmediateAt(place0, ()=>{ 
                 try {
                     lock.lock();
-                    val state = states(myId);
+                    val state = getOrCreateState(myId, parentId, gfs);
+                    val srcId = gfs.home.id;
                     if (Place(srcId).isDead()) {
                         if (verbose>=1) debug("==== notifySubActivitySpawn(id="+myId+") src "+srcId + "is dead; dropping async");
                     } else if (Place(dstId).isDead()) {
@@ -899,6 +907,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
      */
     def spawnRemoteActivity(place:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
         val start = prof != null ? System.nanoTime() : 0;
+        isGlobal = true; // we're about to globalize this activity as part of the message to Place 0
         val ser = new Serializer();
         ser.writeAny(body);
         if (prof != null) {
@@ -908,8 +917,15 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         }
         val bytes = ser.toRail();
 
-        if (!isGlobal) globalInit();
-        val srcId = here.id;
+        val gfs = this.ref;
+        val parentId:Id;
+            if (parent instanceof FinishResilientPlace0) {
+                val frParent = parent as FinishResilientPlace0;
+                if (!frParent.isGlobal) frParent.globalInit();
+                parentId = frParent.id;
+            } else {
+                parentId = UNASSIGNED;
+            }
         val dstId = place.id;
         val myId = this.id;
 
@@ -918,7 +934,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
 
         if (bytes.size >= ASYNC_SIZE_THRESHOLD) {
             if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") selecting indirect (size="+
-                                    bytes.size+") srcId="+srcId + " dstId="+dstId);
+                                    bytes.size+") srcId="+here.id + " dstId="+dstId);
             val wrappedBody = ()=> @AsyncClosure {
                 val deser = new Deserializer(bytes);
                 val bodyPrime = deser.readAny() as ()=>void;
@@ -930,7 +946,8 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 var markedInTransit:Boolean = false;
                 try {
                     lock.lock();
-                    val state = states(myId);
+                    val state = getOrCreateState(myId, parentId, gfs);
+                    val srcId = gfs.home.id;
                     if (Place(srcId).isDead()) {
                         if (verbose>=1) debug("==== spwanRemoteActivity(id="+myId+") src "+srcId + "is dead; dropping async");
                     } else if (Place(dstId).isDead()) {
@@ -964,12 +981,13 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
             }
         } else {
             if (verbose >= 1) debug(">>>>  spawnRemoteActivity(id="+myId+") selecting direct (size="+
-                                    bytes.size+") srcId="+srcId + " dstId="+dstId);
+                                    bytes.size+") srcId="+here.id + " dstId="+dstId);
 
             at (place0) @Immediate("spawnRemoteActivity_to_zero") async {
                 try {
                     lock.lock();
-                    val state = states(myId);
+                    val state = getOrCreateState(myId, parentId, gfs);
+                    val srcId = gfs.home.id;
                     if (Place(srcId).isDead()) {
                         if (verbose>=1) debug("==== spwanRemoteActivity(id="+myId+") src "+srcId + "is dead; dropping async");
                     } else if (Place(dstId).isDead()) {
@@ -991,7 +1009,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 }
                 try {
                     at (Place(dstId)) @Immediate("spawnRemoteActivity_dstPlace") async {
-                        if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") submitting activity from "+srcId+" at "+dstId);
+                        if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") submitting activity from "+here.id+" at "+dstId);
                         val wrappedBody = ()=> {
                             // defer deserialization to reduce work on immediate thread
                             val deser = new Deserializer(bytes);
@@ -1007,5 +1025,17 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
             }
             if (verbose>=1) debug("<<<< spawnRemoteActivity(id="+myId+") returning");
         }
+    }
+
+    private final def getOrCreateState(myId:Id, parentId:Id, gfs:GlobalRef[FinishResilientPlace0]):State {
+        var state:State = states(myId);
+        if (state == null) {
+            if (verbose>=1) debug(">>>> initializing state for id="+id);
+            state = new State(myId, parentId, gfs);
+            states.put(myId, state);
+            State.increment(state.live, Task(gfs.home.id, ASYNC)); // duplicated from my localCount
+            state.numActive = 1;
+        }
+        return state;
     }
 }
