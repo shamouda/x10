@@ -394,7 +394,6 @@ final class ResilientUTS implements Unserializable {
     if (wave >= 0) println(time0, "Wave " + wave + ": Workers init complete");
     if (bag != null) {
       if (bag.upper(0) > group.size()) {
-        println(time0, "bag.upper(0){"+bag.upper(0)+"} > group.size(){"+group.size()+"}");
         if (resilient) {
           map.set(0n.toString(), bag);
         } else {
@@ -402,9 +401,7 @@ final class ResilientUTS implements Unserializable {
           plh().workers(0).bag.merge(bag);
         }
       } else {
-        println(time0, "bag.upper(0){"+bag.upper(0)+"} <= group.size(){"+group.size()+"}  0n.."+(bag.upper(0)-1n));
         finish for (i in 0n..(bag.upper(0)-1n)) {
-          println(time0, " i = " + i);
           val b = new UTS(64n);
           b.merge(bag);
           b.lower(0) = i;
