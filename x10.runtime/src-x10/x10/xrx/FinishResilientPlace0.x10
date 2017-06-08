@@ -202,7 +202,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         }
 
         def releaseLatch() {
-	    if (isAdopted()) {
+        if (isAdopted()) {
                 if (verbose>=1) debug("releaseLatch(id="+id+") called on adopted finish; not releasing latch");
             } else {
                 val exceptions = (excs == null || excs.isEmpty()) ?  null : excs.toRail();
@@ -238,7 +238,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 return false;
             }
         
-	    if (numActive < 0) {
+        if (numActive < 0) {
                 debug("COUNTING ERROR: quiescent(id="+id+") negative numActive!!!");
                 dump();
                 return true; // TODO: This really should be converted to a fatal error....
@@ -637,7 +637,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 lock.lock();
                 if (Place(srcId).isDead() || Place(dstId).isDead()) {
                     // NOTE: no state updates or DPE processing here.
-		    //       Must happen exactly once and is done
+            //       Must happen exactly once and is done
                     //       when Place0 is notified of a dead place.
                     if (verbose>=1) debug("==== notifyActivityCreation(id="+myId+") suppressed: "+srcId + " ==> "+dstId+" kind="+kind);
                     shouldSubmit = false;
@@ -685,7 +685,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 lock.lock();
                 if (Place(srcId).isDead() || Place(dstId).isDead()) {
                     // NOTE: no state updates or DPE processing here.
-		    //       Must happen exactly once and is done
+            //       Must happen exactly once and is done
                     //       when Place0 is notified of a dead place.
                     if (verbose>=1) debug("==== notifyShiftedActivityCreation(id="+myId+") suppressed: "+srcId + " ==> "+dstId+" kind="+kind);
                     return false;
@@ -716,7 +716,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 lock.lock();
                 if (Place(srcId).isDead() || Place(dstId).isDead()) {
                     // NOTE: no state updates or DPE processing here.
-		    //       Must happen exactly once and is done
+            //       Must happen exactly once and is done
                     //       when Place0 is notified of a dead place.
                     if (verbose>=1) debug("==== notifyActivityCreationFailed(id="+myId+") suppressed: "+srcId + " ==> "+dstId+" kind="+kind);
                 } else {
@@ -752,7 +752,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                         lock.lock();
                         if (Place(srcId).isDead()) {
                             // NOTE: no state updates or DPE processing here.
-		            //       Must happen exactly once and is done
+                    //       Must happen exactly once and is done
                             //       when Place0 is notified of a dead place.
                             if (verbose>=1) debug("==== notifyActivityCreatedAndTerminated(id="+myId+") suppressed: "+srcId + " ==> "+srcId+" kind="+kind);
                         } else {
@@ -777,7 +777,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 lock.lock();
                 if (Place(srcId).isDead() || Place(dstId).isDead()) {
                     // NOTE: no state updates or DPE processing here.
-		    //       Must happen exactly once and is done
+            //       Must happen exactly once and is done
                     //       when Place0 is notified of a dead place.
                     if (verbose>=1) debug("==== notifyActivityCreatedAndTerminated(id="+myId+") suppressed: "+srcId + " ==> "+dstId+" kind="+kind);
                 } else {
@@ -824,7 +824,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 lock.lock();
                 if (Place(dstId).isDead()) {
                     // NOTE: no state updates or DPE processing here.
-		    //       Must happen exactly once and is done
+            //       Must happen exactly once and is done
                     //       when Place0 is notified of a dead place.
                     if (verbose>=1) debug("==== notifyActivityTermination(id="+myId+") suppressed: "+dstId+" kind="+kind);
                 } else {
@@ -929,7 +929,6 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         val dstId = place.id;
         val myId = this.id;
 
-        localCount().incrementAndGet();  // synthetic activity to keep finish locally live during async to Place0
         val fsgr = this.ref;
 
         if (bytes.size >= ASYNC_SIZE_THRESHOLD) {
@@ -972,7 +971,6 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                             if (verbose>=2) debug("caught and suppressed DPE from x10rtSendAsync from spawnRemoteActivity_big_back_to_spawner for "+id);
                         }
                         wbgr.forget();
-                        fs.notifyActivityTermination();
                     }
                 } catch (dpe:DeadPlaceException) {
                     // can ignore; if the src place just died there is nothing left to do.
@@ -999,14 +997,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 } finally {
                     lock.unlock();
                 }
-                try {
-                    at (fsgr) @Immediate("spawnRemoteActivity_dec_local_count") async {
-                        fsgr().notifyActivityTermination(); // end of synthetic local activity
-                    }
-                } catch (dpe:DeadPlaceException) {
-                    // can ignore; if the place just died here is no need to worry about updating local count
-                    if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dec_local_count for "+id);
-                }
+
                 try {
                     at (Place(dstId)) @Immediate("spawnRemoteActivity_dstPlace") async {
                         if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") submitting activity from "+here.id+" at "+dstId);
