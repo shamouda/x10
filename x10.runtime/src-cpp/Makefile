@@ -149,6 +149,7 @@ ALL_XRCPP_OBJECTS = \
 	x10aux/itables.o \
 	x10aux/lock.o \
 	x10aux/sem.o \
+	x10aux/sha1alg.o \
 	x10aux/network.o \
 	x10aux/network_dispatcher.o \
 	x10aux/pcond.o \
@@ -189,6 +190,7 @@ ALL_XRCPP_OBJECTS = \
 	x10/lang/String.o \
 	x10/lang/Lock__ReentrantLock.o \
 	x10/lang/Semaphore.o \
+	x10/lang/SHA.o \
 	x10/lang/PlaceLocalHandle_Impl.o \
 	x10/lang/UByte.o \
 	x10/lang/UInt.o \

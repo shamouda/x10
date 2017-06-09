@@ -9,9 +9,8 @@
  *  (C) Copyright IBM Corporation 2006-2015.
  */
 
-import java.security.DigestException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import x10.util.security.SHA;
+import x10.util.security.SHAException;
 
 import x10.interop.Java;
 import x10.util.resilient.localstore.Cloneable;
@@ -20,14 +19,8 @@ import x10.util.resilient.localstore.LocalStore;
 final class UTS implements Cloneable {
   static den = Math.log(4.0 / (1.0 + 4.0));
 
-  static def encoder():MessageDigest {
-    try {
-      return MessageDigest.getInstance("SHA-1");
-    } catch (val e:NoSuchAlgorithmException) {
-      Console.ERR.println("Could not initialize a MessageDigest for the \"SHA-1\" algorithm");
-      e.printStackTrace();
-    }
-    return null;
+  static def encoder():SHA {
+      return new SHA();
   }
 
   var hash:Rail[Byte];
@@ -46,13 +39,13 @@ final class UTS implements Cloneable {
     this.upper = new Rail[Int](n);
   }
 
-  private def digest(md:MessageDigest, d:Int) throws DigestException {
+  private def digest(md:SHA, d:Int) /*throws DigestException */{
     if (size >= depth.size) {
       grow();
     }
     ++count;
     val offset = size * 20n;
-    md.digest(Java.convert(hash), offset, 20n);
+    md.digest(hash, offset, 20n);
     val v = ((0x7fn & hash(offset + 16n)) << 24n)
     | ((0xffn & hash(offset + 17n)) << 16n)
     | ((0xffn & hash(offset + 18n)) << 8n) | (0xffn & hash(offset + 19n));
@@ -68,7 +61,7 @@ final class UTS implements Cloneable {
     }
   }
 
-  def seed(md:MessageDigest, s:Int, d:Int) {
+  def seed(md:SHA, s:Int, d:Int) {
     try {
       for (var i:Int = 0n; i < 16n; ++i) {
         hash(i) = 0 as Byte;
@@ -77,13 +70,13 @@ final class UTS implements Cloneable {
       hash(17n) = (s >> 16n) as Byte;
       hash(18n) = (s >> 8n) as Byte;
       hash(19n) = s as Byte;
-      md.update(Java.convert(hash), 0n, 20n);
+      md.update(hash, 0n, 20n);
       digest(md, d);
-    } catch (DigestException) {
+    } catch (SHAException) {
     }
   }
 
-  def expand(md:MessageDigest) throws DigestException {
+  def expand(md:SHA) /*throws DigestException */{
     val top = size - 1n;
     val d = depth(top);
     val l = lower(top);
@@ -98,17 +91,17 @@ final class UTS implements Cloneable {
     hash(offset + 21n) = (u >> 16n) as Byte;
     hash(offset + 22n) = (u >> 8n) as Byte;
     hash(offset + 23n) = u as Byte;
-    md.update(Java.convert(hash), offset, 24n);
+    md.update(hash, offset, 24n);
     digest(md, d);
   }
 
-  def run(md:MessageDigest) {
-    try {
+  def run(md:SHA) {
+/*    try {*/
       while (size > 0n) {
         expand(md);
       }
-    } catch (DigestException) {
-    }
+    /*} catch (DigestException) {
+    }*/
   }
 
   def trim():UTS {

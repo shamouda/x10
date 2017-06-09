@@ -245,8 +245,8 @@ final class ResilientUTS implements Unserializable {
         }
         distribute();
         lifelinesteal();
-      } catch (DigestException) {
-      } finally {
+      } /*catch (DigestException) {
+      }*/ finally {
         if (state == -3n) {
           val now = println(time0, "Aborting worker " + me); 
           if(now - failed > 2500) stack.printStackTrace();
