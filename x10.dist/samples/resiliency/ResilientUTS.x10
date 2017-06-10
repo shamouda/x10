@@ -132,7 +132,7 @@ final class ResilientUTS implements Unserializable {
   static def init(plh:PlaceLocalHandle[ResilientUTS], time0:Long, killTime:Long) {
     val me = plh();
     for (i in 0n..me.mask) me.workers(i) = me.new Worker(plh, i);
-    System.registerPlaceRemovedHandler((p:Place) => { me.unblock(p); });
+    //System.registerPlaceRemovedHandler((p:Place) => { me.unblock(p); });
     setAndStartKiller(time0, killTime);
   }
 
