@@ -39,7 +39,7 @@ final class UTS implements Cloneable {
     this.upper = new Rail[Int](n);
   }
 
-  private def digest(md:SHA, d:Int) /*throws DigestException */{
+  private def digest(md:SHA, d:Int) throws SHAException {
     if (size >= depth.size) {
       grow();
     }
@@ -76,7 +76,7 @@ final class UTS implements Cloneable {
     }
   }
 
-  def expand(md:SHA) /*throws DigestException */{
+  def expand(md:SHA) throws SHAException {
     val top = size - 1n;
     val d = depth(top);
     val l = lower(top);
@@ -96,12 +96,12 @@ final class UTS implements Cloneable {
   }
 
   def run(md:SHA) {
-/*    try {*/
+    try {
       while (size > 0n) {
         expand(md);
       }
-    /*} catch (DigestException) {
-    }*/
+    } catch (SHAException) {
+    }
   }
 
   def trim():UTS {

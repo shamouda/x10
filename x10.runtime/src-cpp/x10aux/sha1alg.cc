@@ -41,7 +41,6 @@ Uint32 ::x10aux::sha1alg::lrot( Uint32 x, int bits )
 // Save a 32-bit unsigned integer to memory, in big-endian order
 void ::x10aux::sha1alg::storeBigEndianUint32( unsigned char* byte, Uint32 num )
 {
-    assert( byte );
     byte[0] = (unsigned char)(num>>24);
     byte[1] = (unsigned char)(num>>16);
     byte[2] = (unsigned char)(num>>8);
@@ -51,10 +50,7 @@ void ::x10aux::sha1alg::storeBigEndianUint32( unsigned char* byte, Uint32 num )
 
 // Constructor *******************************************************
 ::x10aux::sha1alg::sha1alg()
-{
-    // make sure that the data type is the right size
-    assert( sizeof( Uint32 ) * 5 == 20 );
-    
+{   
     // initialize
     H0 = 0x67452301;
     H1 = 0xefcdab89;
@@ -77,8 +73,6 @@ void ::x10aux::sha1alg::storeBigEndianUint32( unsigned char* byte, Uint32 num )
 // process ***********************************************************
 void ::x10aux::sha1alg::process()
 {
-    assert( unprocessedBytes == 64 );
-    //printf( "process: " ); hexPrinter( bytes, 64 ); printf( "\n" );
     int t;
     Uint32 a, b, c, d, e, K, f, W[80];
     // starting values
@@ -133,8 +127,6 @@ void ::x10aux::sha1alg::process()
 // addBytes **********************************************************
 void ::x10aux::sha1alg::addBytes( const char* data, int num )
 {
-    assert( data );
-    assert( num > 0 );
     // add these bytes to the running total
     size += num;
     // repeat until all data is processed
@@ -142,7 +134,6 @@ void ::x10aux::sha1alg::addBytes( const char* data, int num )
     {
         // number of bytes required to complete block
         int needed = 64 - unprocessedBytes;
-        assert( needed > 0 );
         // number of bytes to copy (use smaller of two)
         int toCopy = (num < needed) ? num : needed;
         // Copy the bytes
@@ -158,7 +149,7 @@ void ::x10aux::sha1alg::addBytes( const char* data, int num )
 }
 
 // digest ************************************************************
-unsigned char* ::x10aux::sha1alg::getDigest()
+void ::x10aux::sha1alg::getDigest(unsigned char* digest)
 {
     // save the message size
     Uint32 totalBitsL = size << 3;
@@ -174,7 +165,7 @@ unsigned char* ::x10aux::sha1alg::getDigest()
     // block has no room for 8-byte filesize, so finish it
     if( unprocessedBytes > 56 )
         addBytes( (char*)footer, 64 - unprocessedBytes);
-    assert( unprocessedBytes <= 56 );
+
     // how many zeros do we need
     int neededZeros = 56 - unprocessedBytes;
     // store file size (in bits) in big-endian format
@@ -183,15 +174,23 @@ unsigned char* ::x10aux::sha1alg::getDigest()
     // finish the final block
     addBytes( (char*)footer, neededZeros + 8 );
     // allocate memory for the digest bytes
-    unsigned char* digest = (unsigned char*)malloc( 20 );
+
     // copy the digest bytes
     storeBigEndianUint32( digest, H0 );
     storeBigEndianUint32( digest + 4, H1 );
     storeBigEndianUint32( digest + 8, H2 );
     storeBigEndianUint32( digest + 12, H3 );
     storeBigEndianUint32( digest + 16, H4 );
-    // return the digest
-    return digest;
+    
+    // initialize
+    H0 = 0x67452301;
+    H1 = 0xefcdab89;
+    H2 = 0x98badcfe;
+    H3 = 0x10325476;
+    H4 = 0xc3d2e1f0;
+    unprocessedBytes = 0;
+    size = 0;
+    for( int c = 0; c < 64; c++ ) bytes[c] = 0;
 }
 
 // vim:tabstop=4:shiftwidth=4:expandtab

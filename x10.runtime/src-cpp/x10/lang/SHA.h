@@ -43,10 +43,7 @@ namespace x10 {
 
         public:
             void digest(x10::lang::Rail<signed char>* hash, x10_int offset, x10_int len) {
-                unsigned char* digest = sha1.getDigest();
-                for (x10_int index = offset ; index < len; index++) {
-                    hash->raw[index] = digest[index];
-                }
+                sha1.getDigest((unsigned char*)((hash->raw)+offset));
             }
 
             void update(x10::lang::Rail<signed char>* hash, x10_int offset, x10_int len) {

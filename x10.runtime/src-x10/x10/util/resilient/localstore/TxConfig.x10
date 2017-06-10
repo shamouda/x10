@@ -46,9 +46,10 @@ public class TxConfig {
     private static val WAIT_MS = System.getenv("WAIT_MS") == null ? 10 : Long.parseLong(System.getenv("WAIT_MS"));
        
     private def this(){
-        TM = System.getenv("TM");
-        if ( TM == null || TM.equals(""))
-            throw new FatalTransactionException ("you must specify the TM environment variable, allowed values = locking|RL_EA_UL|RL_EA_WB|...");
+        if ( System.getenv("TM") == null || System.getenv("TM").equals(""))
+            TM = "RL_EA_UL";
+        else
+            TM = System.getenv("TM");
 
         if (TM.equals("baseline") || TM.startsWith("locking") || TM.equals("RL_EA_UL") || TM.equals("RL_EA_WB")) {
             VALIDATION_REQUIRED = false;

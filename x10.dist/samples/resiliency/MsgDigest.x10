@@ -4,23 +4,17 @@ public class MsgDigest {
     
     public static def main(args:Rail[String]) {
         val md = new SHA();
-        val rail = new Rail[Byte](30);
-        rail(0) = 10 as Byte;
-        rail(1) = 20 as Byte;
-        rail(2) = 30 as Byte;
-        md.update(rail, 0n, 20n);
-        md.digest(rail, 5n, 20n);
-        for (var i:Long = 0; i < 30; i++)
-            Console.OUT.print(rail(i) + " ");
-        Console.OUT.println();
-        /*
-        Console.OUT.println("=======================");
-        md.update(rail, 60n, 20n);
-        md.digest(rail, 20n, 20n);
-        for (var i:Long = 0; i < 30; i++)
-            Console.OUT.print(rail(i) + " ");
-        */
+        val size = 20;
+        val rail = new Rail[Byte](60);
+        
+        for (var i:Long = 0; i < 3; i++) {
+            val st = i*size;
+            val end = (i+1)*size;
+            md.update(rail, st as Int, size as Int);
+            md.digest(rail, st as Int, size as Int);
+            for (var j:Long = 0; j < 60; j++)
+                Console.OUT.print(j + "- " + rail(j) + " \n");
+            Console.OUT.println("=======================");
+        }
     }
 }
-
-

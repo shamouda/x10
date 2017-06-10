@@ -9,11 +9,7 @@
  *  (C) Copyright IBM Corporation 2006-2015.
  */
 
-import java.security.DigestException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Random;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import x10.util.Random;
 
 import x10.compiler.Uncounted;
 import x10.interop.Java;
@@ -26,6 +22,7 @@ import x10.util.HashMap;
 import x10.util.Collection;
 import x10.util.Map.Entry;
 import x10.xrx.Runtime;
+import x10.compiler.Uncounted;
 
 final class ResilientUTS implements Unserializable {
   val time0:Long;
@@ -38,6 +35,8 @@ final class ResilientUTS implements Unserializable {
   val resilient:Boolean;
   var failureTime:Long;
   
+  private static killer:Killer = new Killer();
+
   static def println(time0:Long, message:String) {
     val time = System.currentTimeMillis();
     val s = "        " + (time - time0);
@@ -71,10 +70,12 @@ final class ResilientUTS implements Unserializable {
   }
   
   public static def startKiller() {
-	  killer.startKiller();
+      @Uncounted async {
+          killer.startKiller();
+      }
   }
   
-  private static class Killer implements java.lang.Runnable {
+  private static class Killer  {
 	  def this() {
 		  this.started = false;
 	  }
@@ -86,9 +87,7 @@ final class ResilientUTS implements Unserializable {
 	  public def startKiller() {
 		  if(killDelay > 0) {
 			  this.started = true;
-			  val t = new java.lang.Thread(this, "Suicide (delayed) thread");
-			  t.setDaemon(true);
-			  t.start();
+			  run();
 			  // we can lose the to reference, since there is no
 			  // way to cancel suicide :-
 		  }
@@ -110,29 +109,25 @@ final class ResilientUTS implements Unserializable {
 		  if(killDelay <= 0) {
 			  return;
 		  }
-		  val startTime = java.lang.System.nanoTime();
+		  val startTime = System.nanoTime();
 
 		  val endTime = startTime + killDelay;
 		  var curTime : Long;
 		  
-		  while ((curTime = java.lang.System.nanoTime()) < endTime) {
+		  while ((curTime = System.nanoTime()) < endTime) {
 			  val timeLeftNs = endTime - curTime;
 			  val timeLeftMspart = timeLeftNs / 1000;
 			  val timeLeftNspart = timeLeftNs % 1000;
-			  try {
-				  java.lang.Thread.sleep(timeLeftMspart, timeLeftNspart as Int);
-			  } catch (iex:java.lang.InterruptedException) {}
+			  System.threadSleep(timeLeftMspart);
 		  }
 		  // time ran out.  time to commit suicide
 		  // NB: do not use -1, since this will be
 		  // interpreted by the X10Launcher as ssh failing to start the process
 		  println(time0, "Suicide at " + here);
-		  java.lang.Runtime.getRuntime().halt(1n);
+		  //java.lang.Runtime.getRuntime().halt(1n);
+		  System.killHere();
 	  }
   };
-  
-  private static killer:Killer = new Killer();
-  
   
   static def init(plh:PlaceLocalHandle[ResilientUTS], time0:Long, killTime:Long) {
     val me = plh();
@@ -169,10 +164,10 @@ final class ResilientUTS implements Unserializable {
     val random:Random;
     val md = UTS.encoder();
     val bag = new UTS(64n);
-    val thieves:ConcurrentLinkedQueue = new ConcurrentLinkedQueue();
+    val thieves = new ConcurrentQueue[Request]();
     val lifeline:AtomicLong;
     var state:Int;
-    var thread:java.lang.Thread;
+    //var thread:java.lang.Thread;
     var failed:Long;
     val stack = new CheckedThrowable();
     val lock = new Lock();
@@ -204,7 +199,7 @@ final class ResilientUTS implements Unserializable {
     }
 
     def run() {
-      thread = java.lang.Thread.currentThread();
+      //thread = java.lang.Thread.currentThread();
       try {
         try {
           lock.lock();
@@ -291,7 +286,8 @@ final class ResilientUTS implements Unserializable {
         } finally {
           lock.unlock();
         }
-        java.util.concurrent.locks.LockSupport.park();
+        //////java.util.concurrent.locks.LockSupport.park();
+        //////Runtime.worker().park();
       }
     }
 
@@ -324,7 +320,8 @@ final class ResilientUTS implements Unserializable {
           bag.merge(loot);
         }
         state = -1n;
-        java.util.concurrent.locks.LockSupport.unpark(thread);
+        //////java.util.concurrent.locks.LockSupport.unpark(thread);
+        /////Runtime.worker().unpark();
 //      notifyAll();
       } finally {
         lock.unlock();
@@ -333,11 +330,12 @@ final class ResilientUTS implements Unserializable {
 
     def unblock(p:Place) {
       failed = println(time0, "Unblocking " + me);
-      @x10.compiler.Native("java", "if (stack != null && thread != null) stack.setStackTrace(thread.getStackTrace());") {}
+      //@x10.compiler.Native("java", "if (stack != null && thread != null) stack.setStackTrace(thread.getStackTrace());") {}
       try {
         lock.lock();
         state = -3n;
-        java.util.concurrent.locks.LockSupport.unpark(thread);
+        //////java.util.concurrent.locks.LockSupport.unpark(thread);
+        /////Runtime.worker().unpark();
 //      notifyAll();
       } finally {
         lock.unlock();

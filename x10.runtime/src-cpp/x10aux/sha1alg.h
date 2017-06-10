@@ -34,7 +34,7 @@ namespace x10aux {
         sha1alg();
         ~sha1alg();
         void addBytes( const char* data, int num );
-        unsigned char* getDigest();
+        void getDigest(unsigned char* bytes);
         // utility methods
         static Uint32 lrot( Uint32 x, int bits );
         static void storeBigEndianUint32( unsigned char* byte, Uint32 num );
