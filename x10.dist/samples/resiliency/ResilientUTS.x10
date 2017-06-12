@@ -470,7 +470,8 @@ final class ResilientUTS implements Unserializable {
         + ", Workers/P: " + (1n << opt.power) + ", Res mode: " + Runtime.RESILIENT_MODE
         + ", Spare places: " + opt.spares);
 
-    val resilient = Runtime.RESILIENT_MODE != 0n;
+    val enableCheckpointing = System.getenv("DISABLE_UTS_CHECKPOINTING") == null || System.getenv("DISABLE_UTS_CHECKPOINTING").equals("0");
+    val resilient = Runtime.RESILIENT_MODE != 0n && enableCheckpointing;
     val power = opt.power;
 
     val md = UTS.encoder();
