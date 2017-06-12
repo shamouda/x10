@@ -90,8 +90,9 @@ public class MapData[K] {K haszero} {
         }
     }
     
-    public def initLog(key:K, active:Boolean, log:TxLog[K], keyLog:TxKeyChange[K], lockRead:Boolean):MemoryUnit[K] {
+    public def initLog(key:K, active:Boolean, log:TxLog[K], keyLog:TxKeyChange[K], lockRead:Boolean):MemoryUnit[K] {        
         val txId = log.id;
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " MapData.initLog(" + key + ")");
         var memory:MemoryUnit[K] = null;
         var added:Boolean  = false;
         try {

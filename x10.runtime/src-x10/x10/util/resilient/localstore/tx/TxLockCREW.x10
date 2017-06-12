@@ -43,6 +43,8 @@ public class TxLockCREW extends TxLock {
         val rdRail = new GrowableRail[Long](TxConfig.get().PREALLOC_READERS);
         
         public def add(id:Long) {
+            if (id < 0) 
+                throw new FatalTransactionException("fatal error, adding reader with id = -1");
             rdRail.add(id);
         }
         
@@ -86,11 +88,13 @@ public class TxLockCREW extends TxLock {
             if (writer == -1 && waitingWriter == -1) {
                 if(readers.contains(txId)) 
                     throw new FatalTransactionException ("lockRead bug, locking an already locked Tx[" + txId + "] writer[" + writer + "] readers ["+readers.toString() + "] ");
+                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " ADDREADER1 " + txId);
                 readers.add(txId);
                 conflict = false;
             }
             else if (waitingWriter == -1 && stronger(txId, writer)) {
                 if (waitReaderWriterLocked(txId)) {
+                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " ADDREADER2 " + txId);
                     readers.add(txId);
                     conflict = false;
                 }
@@ -257,11 +261,11 @@ public class TxLockCREW extends TxLock {
                 
                 count++;
                 if (count%1000 == 0) {
-                    Console.OUT.println(here + " - waitWriterReadersLocked  Tx["+txId+"]  writer["+writer+", {"+TxManager.txIdToString(writer)+"} ]  waitingWriter["+waitingWriter+", {"+TxManager.txIdToString(waitingWriter)+"} ] readers["+readers.toString()+"] ...");
+                    Console.OUT.println(here + " - waitWriterReadersLocked upgrade["+(minLimit == 1)+"] Tx["+txId+"]  writer["+writer+", {"+TxManager.txIdToString(writer)+"} ]  waitingWriter["+waitingWriter+", {"+TxManager.txIdToString(waitingWriter)+"} ] readers["+readers.toString()+"] ...");
                 }
             }
             if (count >= 1000) {
-                Console.OUT.println(here + " - waitWriterReadersLocked  Tx["+txId+"]  finished wait ...");
+                Console.OUT.println(here + " - waitWriterReadersLocked upgrade["+(minLimit == 1)+"] Tx["+txId+"]  finished wait ...");
             }
         }finally {
             Runtime.decreaseParallelism(1n, "waitWriterReadersLocked");
