@@ -3,18 +3,26 @@ import x10.util.security.SHA;
 public class MsgDigest {
     
     public static def main(args:Rail[String]) {
+        val n = 100000;
         val md = new SHA();
         val size = 20;
-        val rail = new Rail[Byte](60);
+        val rail = new Rail[Byte](n * 20n + 4n);
         
-        for (var i:Long = 0; i < 3; i++) {
+        Console.OUT.println("Iterations: " + n);
+        var startedNS:Long = System.nanoTime();
+        for (var i:Long = 0; i < n; i++) {
             val st = i*size;
             val end = (i+1)*size;
-            md.update(rail, st as Int, size as Int);
             md.digest(rail, st as Int, size as Int);
-            for (var j:Long = 0; j < 60; j++)
-                Console.OUT.print(j + "- " + rail(j) + " \n");
-            Console.OUT.println("=======================");
         }
+        Console.OUT.println("Update Time:" + (System.nanoTime() - startedNS)/1e9 + " seconds ");
+        
+        startedNS = System.nanoTime();
+        for (var i:Long = 0; i < n; i++) {
+            val st = i*size;
+            val end = (i+1)*size;
+            md.digest(rail, st as Int, size as Int);
+        }
+        Console.OUT.println("Digest Time:" + (System.nanoTime() - startedNS)/1e9 + " seconds ");
     }
 }
