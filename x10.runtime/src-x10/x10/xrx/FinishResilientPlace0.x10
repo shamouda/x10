@@ -998,14 +998,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 } finally {
                     lock.unlock();
                 }
-                try {
-                    at (gfs) @Immediate("spawnRemoteActivity_dec_local_count") async {
-                        gfs().notifyActivityTermination(); // end of synthetic local activity
-                    }
-                } catch (dpe:DeadPlaceException) {
-                    // can ignore; if the place just died here is no need to worry about updating local count
-                    if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dec_local_count for "+myId);
-                }
+                
                 try {
                     at (Place(dstId)) @Immediate("spawnRemoteActivity_dstPlace") async {
                         if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") submitting activity from "+here.id+" at "+dstId);
@@ -1020,6 +1013,15 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 } catch (dpe:DeadPlaceException) {
                     // can ignore; if the place just died there is no need to worry about submitting the activity
                     if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dstPlace for "+myId);
+                }
+                
+                try {
+                    at (gfs) @Immediate("spawnRemoteActivity_dec_local_count") async {
+                        gfs().notifyActivityTermination(); // end of synthetic local activity
+                    }
+                } catch (dpe:DeadPlaceException) {
+                    // can ignore; if the place just died here is no need to worry about updating local count
+                    if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dec_local_count for "+myId);
                 }
             }
             if (verbose>=1) debug("<<<< spawnRemoteActivity(id="+myId+") returning");
