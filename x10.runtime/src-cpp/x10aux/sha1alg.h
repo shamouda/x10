@@ -18,17 +18,15 @@ accompanying LICENSE file.
 #ifndef X10_AUX_SHAALGL_H
 #define X10_AUX_SHAALGL_H
 
-typedef unsigned int Uint32;
-
 namespace x10aux {
 
     class sha1alg {
     private:
         // fields
-        Uint32 H0, H1, H2, H3, H4;
+        unsigned int H0, H1, H2, H3, H4;
         unsigned char bytes[64];
         int unprocessedBytes;
-        Uint32 size;
+        unsigned int size;
         void process();
     public:
         sha1alg();
@@ -36,8 +34,8 @@ namespace x10aux {
         void addBytes( const char* data, int num );
         void getDigest(unsigned char* bytes);
         // utility methods
-        static Uint32 lrot( Uint32 x, int bits );
-        static void storeBigEndianUint32( unsigned char* byte, Uint32 num );
+        static unsigned int lrot( unsigned int x, int bits );
+        static void storeBigEndianUint( unsigned char* byte, unsigned int num );
         static void hexPrinter( unsigned char* c, int l );
     };
 }

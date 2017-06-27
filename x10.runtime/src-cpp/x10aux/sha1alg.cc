@@ -33,13 +33,13 @@ void ::x10aux::sha1alg::hexPrinter( unsigned char* c, int l )
 }
 
 // circular left bit rotation.  MSB wraps around to LSB
-Uint32 ::x10aux::sha1alg::lrot( Uint32 x, int bits )
+unsigned int ::x10aux::sha1alg::lrot( unsigned int x, int bits )
 {
     return (x<<bits) | (x>>(32 - bits));
 };
 
 // Save a 32-bit unsigned integer to memory, in big-endian order
-void ::x10aux::sha1alg::storeBigEndianUint32( unsigned char* byte, Uint32 num )
+void ::x10aux::sha1alg::storeBigEndianUint( unsigned char* byte, unsigned int num )
 {
     byte[0] = (unsigned char)(num>>24);
     byte[1] = (unsigned char)(num>>16);
@@ -74,7 +74,7 @@ void ::x10aux::sha1alg::storeBigEndianUint32( unsigned char* byte, Uint32 num )
 void ::x10aux::sha1alg::process()
 {
     int t;
-    Uint32 a, b, c, d, e, K, f, W[80];
+    unsigned int a, b, c, d, e, K, f, W[80];
     // starting values
     a = H0;
     b = H1;
@@ -89,7 +89,7 @@ void ::x10aux::sha1alg::process()
     for(; t< 80; t++ ) W[t] = lrot( W[t-3]^W[t-8]^W[t-14]^W[t-16], 1 );
     
     /* main loop */
-    Uint32 temp;
+    unsigned int temp;
     for( t = 0; t < 80; t++ )
     {
         if( t < 20 ) {
@@ -152,8 +152,8 @@ void ::x10aux::sha1alg::addBytes( const char* data, int num )
 void ::x10aux::sha1alg::getDigest(unsigned char* digest)
 {
     // save the message size
-    Uint32 totalBitsL = size << 3;
-    Uint32 totalBitsH = size >> 29;
+    unsigned int totalBitsL = size << 3;
+    unsigned int totalBitsH = size >> 29;
     // add 0x80 to the message
     addBytes( "\x80", 1 );
     
@@ -169,18 +169,18 @@ void ::x10aux::sha1alg::getDigest(unsigned char* digest)
     // how many zeros do we need
     int neededZeros = 56 - unprocessedBytes;
     // store file size (in bits) in big-endian format
-    storeBigEndianUint32( footer + neededZeros    , totalBitsH );
-    storeBigEndianUint32( footer + neededZeros + 4, totalBitsL );
+    storeBigEndianUint( footer + neededZeros    , totalBitsH );
+    storeBigEndianUint( footer + neededZeros + 4, totalBitsL );
     // finish the final block
     addBytes( (char*)footer, neededZeros + 8 );
     // allocate memory for the digest bytes
 
     // copy the digest bytes
-    storeBigEndianUint32( digest, H0 );
-    storeBigEndianUint32( digest + 4, H1 );
-    storeBigEndianUint32( digest + 8, H2 );
-    storeBigEndianUint32( digest + 12, H3 );
-    storeBigEndianUint32( digest + 16, H4 );
+    storeBigEndianUint( digest, H0 );
+    storeBigEndianUint( digest + 4, H1 );
+    storeBigEndianUint( digest + 8, H2 );
+    storeBigEndianUint( digest + 12, H3 );
+    storeBigEndianUint( digest + 16, H4 );
     
     // initialize
     H0 = 0x67452301;
