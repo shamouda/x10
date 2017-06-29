@@ -78,7 +78,6 @@ public class TxLockCREW extends TxLock {
             }
             return str;
         }
-        
     }
     
     public def lockRead(txId:Long) {
@@ -214,8 +213,12 @@ public class TxLockCREW extends TxLock {
             while (waitingWriter == -1 && writer != -1 && stronger(txId, writer)) {  //waiting writers get access first
                 if (resilient)
                     checkDeadLockers();
+                
+                if (count == TxConfig.get().MAX_WAIT_ITER)
+                	throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId) + " waitReaderWriterLocked MAX_WAIT_EXCEEDED ...", here);
+                
                 lock.unlock();
-                TxConfig.waitSleep();                   
+                TxConfig.waitSleep(); 
                 lock.lock();
                 count++;
                 if (count%1000 == 0) {
@@ -255,10 +258,13 @@ public class TxLockCREW extends TxLock {
             while (readers.size() > minLimit && waitingWriter == txId) {
                 if (resilient)
                     checkDeadLockers();
-                lock.unlock();
-                TxConfig.waitSleep();                     
-                lock.lock();
                 
+                if (count == TxConfig.get().MAX_WAIT_ITER)
+                	throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId) + " waitReaderWriterLocked MAX_WAIT_EXCEEDED ...", here);
+
+                lock.unlock();
+                TxConfig.waitSleep();
+                lock.lock();
                 count++;
                 if (count%1000 == 0) {
                     Console.OUT.println(here + " - waitWriterReadersLocked upgrade["+(minLimit == 1)+"] Tx["+txId+"]  writer["+writer+", {"+TxManager.txIdToString(writer)+"} ]  waitingWriter["+waitingWriter+", {"+TxManager.txIdToString(waitingWriter)+"} ] readers["+readers.toString()+"] ...");
@@ -294,10 +300,13 @@ public class TxLockCREW extends TxLock {
             while (writer != -1 && waitingWriter == txId) {
                 if (resilient)
                     checkDeadLockers();
+                
+                if (count == TxConfig.get().MAX_WAIT_ITER)
+                	throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId) + " waitReaderWriterLocked MAX_WAIT_EXCEEDED ...", here);
+
                 lock.unlock();
                 TxConfig.waitSleep();   
                 lock.lock();
-                
                 count++;
                 if (count%1000 == 0) {
                     Console.OUT.println(here + " - waitWriterWriterLocked  Tx["+txId+"]  writer["+writer+"]  waitingWriter["+waitingWriter+"] readers["+readers.toString()+"] ...");
@@ -332,7 +341,7 @@ public class TxLockCREW extends TxLock {
     	}
     	else
     		res = (me as Int) < (other as Int);
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + me + "] isStronger(other:" + other + ")? [" + res + "]  meSEQ["+ (me as Int) +"] otherSEQ["+ (other as Int) +"] ");
+        //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + me + "] isStronger(other:" + other + ")? [" + res + "]  meSEQ["+ (me as Int) +"] otherSEQ["+ (other as Int) +"] ");
         return res;
     }
     
@@ -356,4 +365,16 @@ public class TxLockCREW extends TxLock {
         if (writer != -1)
             TxManager.checkDeadCoordinator(writer);
     }
+    
+    /*
+    private def threadPark() {
+    	Worker.park();
+    }
+    
+    private def threadNotifyAll() {
+    	for (worker in waitingWorkers)
+    		worker.unpark();
+    	
+        waitingWorkers.clear();
+    }*/
 }

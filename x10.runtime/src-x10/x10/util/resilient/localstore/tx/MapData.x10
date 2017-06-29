@@ -91,8 +91,12 @@ public class MapData[K] {K haszero} {
     }
     
     public def initLog(key:K, active:Boolean, log:TxLog[K], keyLog:TxKeyChange[K], lockRead:Boolean):MemoryUnit[K] {        
-        val txId = log.id;
+        val txId = log.id();
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " MapData.initLog(" + key + ")");
+        
+        if (txId < 0) 
+            throw new FatalTransactionException(here + " fatal error, MapData.initLog txId = -1");
+        
         var memory:MemoryUnit[K] = null;
         var added:Boolean  = false;
         try {
@@ -118,10 +122,10 @@ public class MapData[K] {K haszero} {
         
         memory.ensureNotDeleted();
         if (lockRead) {
-            memory.lockRead(log.id);
+            memory.lockRead(log.id());
         }
         
-        memory.initializeTxKeyLog(key, log.id, lockRead, added, keyLog);
+        memory.initializeTxKeyLog(key, log.id(), lockRead, added, keyLog);
         
         return memory;
     }

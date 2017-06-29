@@ -114,7 +114,7 @@ public class ResilientNativeMap[K] {K haszero} {
                     tx.processingElapsedTime = Timer.milliTime() - start;
                     //no need to call abort, abort occurs automatically in local tx all the time
                 }
-                throwIfFatalSleepIfRequired(ex, tx.plh().immediateRecovery);
+                throwIfFatalSleepIfRequired(tx.id, ex, tx.plh().immediateRecovery);
             }
         }
 
@@ -142,7 +142,7 @@ public class ResilientNativeMap[K] {K haszero} {
                         tx.processingElapsedTime = Timer.milliTime() - start;
                         //no need to call abort, abort occurs automatically in local tx all the time
                     }
-                    throwIfFatalSleepIfRequired(ex, tx.plh().immediateRecovery);
+                    throwIfFatalSleepIfRequired(tx.id, ex, tx.plh().immediateRecovery);
                 }
             }
             new TxResult(commitStatus, out)
@@ -152,23 +152,21 @@ public class ResilientNativeMap[K] {K haszero} {
     
     /***********************   Global Transactions ****************************/
     private def startGlobalTransaction():Tx[K] {
-        return startGlobalTransaction(null);
+        return startGlobalTransaction(-1, null);
     }
     
-    private def startGlobalTransaction(members:TxMembers):Tx[K] {
+    private def startGlobalTransaction(prevTx:Long, members:TxMembers):Tx[K] {
         val id = plh().getMasterStore().getNextTransactionId();
         val tx = new Tx(plh, id, members);
-        try {
-            var predefinedMembers:Rail[Long] = null;
-            if (members != null)
-                predefinedMembers = members.virtual;
+        
+        var predefinedMembers:Rail[Long] = null;
+        if (members != null)
+            predefinedMembers = members.virtual;
 
-            if ((members == null || resilient) && TxConfig.get().COMMIT)
-                plh().txDescManager.add(id, predefinedMembers, false);
-            
-        }catch(ex:NullPointerException) {
-            ex.printStackTrace();
-        }
+        if ((members == null || resilient) && TxConfig.get().COMMIT)
+            plh().txDescManager.add(id, predefinedMembers, false);
+        
+        if (TxConfig.get().TM_DEBUG && prevTx != -1) Console.OUT.println("Tx["+prevTx+"] starting new transaction Tx["+id+"] ");
         return tx;
     }
     
@@ -188,19 +186,22 @@ public class ResilientNativeMap[K] {K haszero} {
         var members:TxMembers = null;
         if (virtualMembers != null) 
             members = plh().getTxMembers(virtualMembers, true);
-        
+        var prevTx:Long = -1;
         var retryCount:Long = 0;
         while(true) {
             if (retryCount > 0 && retryCount % 1000 == 0)
                 Console.OUT.println(here + " executeTransaction retryCount reached " + retryCount);
-            if (retryCount == maxRetries || (maxTimeNS != -1 && System.nanoTime() - beginning >= maxTimeNS))
+            if (retryCount == maxRetries || (maxTimeNS != -1 && System.nanoTime() - beginning >= maxTimeNS)) {
+            	if (TxConfig.get().TM_DEBUG && prevTx != -1) Console.OUT.println("Tx["+prevTx+"] max limit["+maxRetries+"] reached ");
                 throw new FatalTransactionException("Reached maximum limit for retrying a transaction");
+            }
             retryCount++;
             
             var tx:Tx[K] = null; 
             var commitCalled:Boolean = false;
             try {
-                tx = startGlobalTransaction(members);
+                tx = startGlobalTransaction(prevTx, members);
+                prevTx = tx.id;
                 val out:Any;
                 finish {
                     out = closure(tx);
@@ -219,7 +220,7 @@ public class ResilientNativeMap[K] {K haszero} {
                     Console.OUT.println("Tx[" + txId + "] executeTransaction  {finish closure();} failed with Error ["+ex.getMessage()+"] commitCalled["+commitCalled+"] ");
                     ex.printStackTrace();
                 }
-                val dpe = throwIfFatalSleepIfRequired(ex, plh().immediateRecovery);
+                val dpe = throwIfFatalSleepIfRequired(tx.id, ex, plh().immediateRecovery);
                 if (dpe && virtualMembers != null)
                     members = plh().getTxMembers(virtualMembers, true);
             }
@@ -259,9 +260,11 @@ public class ResilientNativeMap[K] {K haszero} {
     }
     /**************End of Baseline Operations*****************/
     
-    private static def throwIfFatalSleepIfRequired(ex:Exception, immediateRecovery:Boolean) {
+    private static def throwIfFatalSleepIfRequired(txId:Long, ex:Exception, immediateRecovery:Boolean) {
+    	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired started ...");
         var dpe:Boolean = false;
         if (ex instanceof MultipleExceptions) {
+        	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired MulEX ...");
             val deadExList = (ex as MultipleExceptions).getExceptionsOfType[DeadPlaceException]();
             val confExList = (ex as MultipleExceptions).getExceptionsOfType[ConflictException]();
             val pauseExList = (ex as MultipleExceptions).getExceptionsOfType[StorePausedException]();
@@ -284,6 +287,7 @@ public class ResilientNativeMap[K] {K haszero} {
                 }
             }
         } else if (ex instanceof DeadPlaceException) {
+        	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired DPE ...");
             if (!immediateRecovery) {
                 throw ex;
             } else {
@@ -291,12 +295,16 @@ public class ResilientNativeMap[K] {K haszero} {
                 dpe = true;
             }
         } else if (ex instanceof StorePausedException) {
+        	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired SPE ...");
             System.threadSleep(TxConfig.get().DPE_SLEEP_MS);
         } else if (ex instanceof ConcurrentTransactionsLimitExceeded) {
+        	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired CTLE ...");
             System.threadSleep(TxConfig.get().DPE_SLEEP_MS);
         } else if (!(ex instanceof ConflictException || ex instanceof AbortedTransactionException  )) {
+        	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired SomethingElse ...");
             throw ex;
         }
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired completed dpe="+dpe+" ...");
         return dpe;
     }
     

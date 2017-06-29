@@ -64,7 +64,7 @@ public abstract class TxManager[K] {K haszero} {
 
     public def isReadOnlyTransaction(id:Long) {
         val log = txLogManager.searchTxLog(id);
-        if (log == null /**SS_CHECK|| log.aborted**/)
+        if (log == null || log.id() == -1) /*SS_CHECK  txLogManager.isAborted(log.id()) */
             return true;
         
         try {
@@ -82,7 +82,7 @@ public abstract class TxManager[K] {K haszero} {
      */
     public def getTxCommitLog(id:Long):HashMap[K,Cloneable] {
         val log = txLogManager.searchTxLog(id);
-        if (log == null /**SS_CHECK|| log.aborted**/)
+        if (log == null || log.id() == -1) /*SS_CHECK  txLogManager.isAborted(log.id()) */
             return null;
         
         try {
@@ -224,8 +224,9 @@ public abstract class TxManager[K] {K haszero} {
     
     public def abort(id:Long) {
         /*Abort may reach before normal Tx operations, wait until we have a txLog to abort*/
-        val log = txLogManager.searchTxLog(id);
+        val log = txLogManager.searchTxLog(id); //searchTxLogForAbort
         if (log == null) {
+        	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] abortwarning log == null ...");
             return;
         }
 
@@ -244,15 +245,15 @@ public abstract class TxManager[K] {K haszero} {
     /********************** Utils ***************************/
     /*throws an exception if a conflict was found*/
     protected def logInitialIfNotLogged(id:Long, key:K, lockRead:Boolean) {
+    	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] logInitialIfNotLogged key["+key+"] ...");
         val log = txLogManager.getOrAddTxLog(id);
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] logInitialIfNotLogged found log with id["+log.id()+"] ...");
         log.lock();
         try {
-            //SS_CHECK uncomment if going to record aborted tx
-            /*
-            if (log.aborted) {
+            if ( log.id() == -1 /*|| txLogManager.isAborted(log.id()) */) {
                 throw new AbortedTransactionException("AbortedTransactionException");
             }
-            */
+            
             val keyLog = log.getOrAddKeyLog(key);
             var memory:MemoryUnit[K] = keyLog.getMemoryUnit();
             if (memory == null) {
@@ -276,7 +277,7 @@ public abstract class TxManager[K] {K haszero} {
     
     protected def abortAndThrowException(log:TxLog[K], ex:Exception) {
         if (log != null) {
-            val id = log.id;
+            val id = log.id();
             abort(log);
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " " + here + "   TxManager.abortAndThrowException   throwing exception["+ex.getMessage()+"] ");
         }
@@ -596,7 +597,7 @@ public abstract class TxManager[K] {K haszero} {
     /********************* End of get operations  *********************/
         
     protected def validate_RL_LA_WB(log:TxLog[K]) {
-        val id = log.id;
+        val id = log.id();
         var writeTx:Boolean = false;
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RL_LA_WB started");
         try {
@@ -626,7 +627,7 @@ public abstract class TxManager[K] {K haszero} {
     }
     
     protected def validate_RV_LA_WB(log:TxLog[K]) {
-        val id = log.id;
+        val id = log.id();
         var writeTx:Boolean = false;
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RV_LA_WB started");
         try {
@@ -683,7 +684,7 @@ public abstract class TxManager[K] {K haszero} {
     }
     
     protected def validate_RV_EA(log:TxLog[K]) {
-        val id = log.id;
+        val id = log.id();
         var writeTx:Boolean = false;
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] validate_RV_EA_UL started");
         try {
@@ -730,7 +731,7 @@ public abstract class TxManager[K] {K haszero} {
     /********************* End of validate operations  *********************/
     
     protected def commit_WB(log:TxLog[K]) {
-        val id = log.id;
+        val id = log.id();
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_WB started");
         
         val readList = log.getReadKeys();
@@ -738,7 +739,7 @@ public abstract class TxManager[K] {K haszero} {
             val kLog = readList(i);
             val key = kLog.key();
             val memory = kLog.getMemoryUnit();
-            memory.unlockRead(log.id);
+            memory.unlockRead(log.id());
         }
         
         val writeList = log.getWriteKeys();
@@ -747,26 +748,26 @@ public abstract class TxManager[K] {K haszero} {
             val key = kLog.key();
             val memory = kLog.getMemoryUnit();
             val deleted = kLog.getDeleted();
-            memory.setValueLocked(kLog.getValue(), key, log.id, deleted);
+            memory.setValueLocked(kLog.getValue(), key, log.id(), deleted);
             if (deleted) {
                 memory.deleteLocked();
                 data.deleteMemoryUnit(id, key);
                 if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_WB key["+key+"] deleted");
             }
-            memory.unlockWrite(log.id);
+            memory.unlockWrite(log.id());
         }
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_WB completed");
     }
     
     protected def commit_UL(log:TxLog[K]) {
-        val id = log.id;
+        val id = log.id();
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_UL started");
         val readList = log.getReadKeys();
         for (var i:Int = 0n; i < readList.size(); i++){
             val kLog = readList(i);
             val key = kLog.key();
             val memory = kLog.getMemoryUnit();
-            memory.unlockRead(log.id);
+            memory.unlockRead(log.id());
         }
         
         val writeList = log.getWriteKeys();
@@ -781,14 +782,14 @@ public abstract class TxManager[K] {K haszero} {
                 data.deleteMemoryUnit(id, key);
                 if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_UL key["+key+"] deleted");
             }
-            memory.unlockWrite(log.id);
+            memory.unlockWrite(log.id());
         }
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] commit_UL completed");
     }
     
     /********************* End of commit operations  *********************/
     protected def abort_UL(log:TxLog[K]) {
-        val id = log.id;
+        val id = log.id();
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_UL started");
         if (log.aborted) {
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " WARNING: an attempt to abort an already aborted transaction");
@@ -806,7 +807,7 @@ public abstract class TxManager[K] {K haszero} {
                     data.deleteMemoryUnit(id, key);
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_UL key["+key+"] deleted ");
                 }
-                memory.unlockRead(log.id);
+                memory.unlockRead(log.id());
             }
         }
         val writeList = log.getWriteKeys();
@@ -821,9 +822,9 @@ public abstract class TxManager[K] {K haszero} {
                     data.deleteMemoryUnit(id, key);
                 }
                 else { 
-                    memory.rollbackValueLocked(kLog.getValue(), kLog.getInitVersion(), key, log.id);    
+                    memory.rollbackValueLocked(kLog.getValue(), kLog.getInitVersion(), key, log.id());    
                 }
-                memory.unlockWrite(log.id);
+                memory.unlockWrite(log.id());
             }
         }
         
@@ -833,7 +834,7 @@ public abstract class TxManager[K] {K haszero} {
     
     /** With write buffering: memory is not impacted, just unlock the locked keys*/
     protected def abort_WB(log:TxLog[K]) {
-        val id = log.id;
+        val id = log.id();
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_WB started");
         if (log.aborted) {
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " WARNING: an attempt to abort an already aborted transaction");
@@ -847,7 +848,7 @@ public abstract class TxManager[K] {K haszero} {
             val memory = kLog.getMemoryUnit();
             
             if (kLog.getLockedRead())
-                memory.unlockRead(log.id);
+                memory.unlockRead(log.id());
         }
         
         val writeList = log.getWriteKeys();
@@ -861,7 +862,7 @@ public abstract class TxManager[K] {K haszero} {
                     data.deleteMemoryUnit(id, key);
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abort_WB key["+key+"] deleted ");
                 }
-                memory.unlockWrite(log.id);
+                memory.unlockWrite(log.id());
             }
         }
         

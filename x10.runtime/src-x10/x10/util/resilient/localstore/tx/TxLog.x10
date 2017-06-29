@@ -175,9 +175,16 @@ public class TxLog[K] {K haszero} {
     private val keysList:TxLogKeysList[K];
     public var aborted:Boolean = false;
     public var writeValidated:Boolean = false;
-    public var id:Long = -1;
+    private var id:Long = -1;
     private var lock:Lock;
     
+    public def id() = id;
+    public def setId(i:Long) {
+    	if (i < 0)
+    		throw new FatalTransactionException(here + " fatal error, TxLog.setId(-1)");
+    	
+    	id = i;
+    }
     //used to reduce searching for memory units after calling TxManager.logInitialIfNotLogged
     private var lastUsedMemoryUnit:MemoryUnit[K];
     private var lastUsedKeyLog:TxKeyChange[K];

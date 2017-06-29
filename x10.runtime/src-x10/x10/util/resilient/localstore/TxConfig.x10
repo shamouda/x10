@@ -31,6 +31,8 @@ public class TxConfig {
     public val PREALLOC_MEMBERS:Long;
 
 
+    public val MAX_WAIT_ITER:Long;
+
     //used for performance testing only
     public val COMMIT:Boolean;
 	public val DISABLE_SLAVE:Boolean; 
@@ -90,6 +92,7 @@ public class TxConfig {
         PREALLOC_READERS = System.getenv("PREALLOC_READERS") == null ? 5 : Long.parseLong(System.getenv("PREALLOC_READERS"));
         PREALLOC_TXKEYS = System.getenv("PREALLOC_TXKEYS") == null ? 5 : Long.parseLong(System.getenv("PREALLOC_TXKEYS"));
         PREALLOC_MEMBERS = System.getenv("PREALLOC_MEMBERS") == null ? 5 : Long.parseLong(System.getenv("PREALLOC_MEMBERS"));
+        MAX_WAIT_ITER = System.getenv("MAX_WAIT_ITER") == null ? -1 : Long.parseLong(System.getenv("MAX_WAIT_ITER"));
     }
     
     public static def get() = instance;
