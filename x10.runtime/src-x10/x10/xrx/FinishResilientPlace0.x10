@@ -209,11 +209,10 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 if (verbose>=2) debug("releasing latch id="+id+(exceptions == null ? " no exceptions" : " with exceptions"));
 
                 val mygfs = gfs;
-                val tmpId = id;
                 try {
                     at (mygfs.home) @Immediate("releaseLatch_gfs_home") async {
-                        if (verbose>=2) debug("performing releae for "+tmpId+" at "+here);
                         val fs = mygfs();
+                        if (verbose>=2) debug("performing release for "+fs.id+" at "+here);
                         if (exceptions != null) {
                             fs.latch.lock();
                             if (fs.excs == null) fs.excs = new GrowableRail[CheckedThrowable](exceptions.size);
