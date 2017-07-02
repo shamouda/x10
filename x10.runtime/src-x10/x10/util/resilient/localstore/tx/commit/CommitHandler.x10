@@ -45,8 +45,9 @@ public abstract class CommitHandler[K] {K haszero} {
     }
     
     protected def executeRecursively(closure:(PlaceLocalHandle[LocalStore[K]],Long)=>void, parents:HashSet[Long], deleteTxDesc:Boolean) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] executeRecursively started ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] executeRecursively started , calling closure(); ...");
         closure(plh, id);
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] executeRecursively started , calling closure(); completed ...");
         var childCount:Long = 0;
         val childrenVirtual = plh().txDescManager.getVirtualMembers(id, TxDescManager.FROM_MASTER);
         try {

@@ -326,15 +326,19 @@ public class TxLog[K] {K haszero} {
         return map;
     }
     
-    public def lock() {
+    public def lock(i:Long) {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] <<LOCK>> "+i+"...");
         if (!TxConfig.get().LOCK_FREE)
             lock.lock();
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] <<LOCK_DONE>> "+i+"...");
     }
     
-    public def unlock() {
+    public def unlock(i:Long) {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] <<UNLOCK>> "+i+"...");
         if (!TxConfig.get().LOCK_FREE)
             lock.unlock();
         lastUsedMemoryUnit = null;
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] <<UNLOCK_DONE>> "+i+"...");
     }
     
     public def getWriteKeys() {

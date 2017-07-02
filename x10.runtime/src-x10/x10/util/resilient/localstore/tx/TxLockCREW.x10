@@ -87,13 +87,11 @@ public class TxLockCREW extends TxLock {
             if (writer == -1 && waitingWriter == -1) {
                 if(readers.contains(txId)) 
                     throw new FatalTransactionException ("lockRead bug, locking an already locked Tx[" + txId + "] writer[" + writer + "] readers ["+readers.toString() + "] ");
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " ADDREADER1 " + txId);
                 readers.add(txId);
                 conflict = false;
             }
             else if (waitingWriter == -1 && stronger(txId, writer)) {
                 if (waitReaderWriterLocked(txId)) {
-                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " ADDREADER2 " + txId);
                     readers.add(txId);
                     conflict = false;
                 }

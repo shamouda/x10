@@ -68,10 +68,10 @@ public abstract class TxManager[K] {K haszero} {
             return true;
         
         try {
-            log.lock();
+            log.lock(1);
             return log.isReadOnlyTransaction();
         }finally {
-            log.unlock();
+            log.unlock(1);
         }
     }
     
@@ -86,10 +86,10 @@ public abstract class TxManager[K] {K haszero} {
             return null;
         
         try {
-            log.lock();
+            log.lock(2);
             return log.prepareCommitLog();
         }finally {
-            log.unlock();
+            log.unlock(2);
         }
     }
     
@@ -200,10 +200,10 @@ public abstract class TxManager[K] {K haszero} {
             return;
         
         try {
-            log.lock();
+            log.lock(3);
             validate(log);
         } finally {
-            log.unlock();
+            log.unlock(3);
         }
     }
     
@@ -213,10 +213,10 @@ public abstract class TxManager[K] {K haszero} {
             return;
         
         try {
-            log.lock();
+            log.lock(4);
             commit(log);
         } finally {
-            log.unlock();
+            log.unlock(4);
         }
         
         txLogManager.deleteTxLog(log);
@@ -224,17 +224,28 @@ public abstract class TxManager[K] {K haszero} {
     
     public def abort(id:Long) {
         /*Abort may reach before normal Tx operations, wait until we have a txLog to abort*/
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] TxManager.abort("+id+") 1 ...");
         val log = txLogManager.searchTxLog(id); //searchTxLogForAbort
         if (log == null) {
-        	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] abortwarning log == null ...");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] TxManager.abort("+id+") 2 abortwarning log == null ...");
             return;
         }
-
+        
         try {
-            log.lock();
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] TxManager.abort("+id+") 3 ...");
+            log.lock(5);
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] TxManager.abort("+id+") 4 ...");
             abort(log);
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] TxManager.abort("+id+") 5 ...");
+        } catch (e:Exception) {
+            if (TxConfig.get().TM_DEBUG) {
+                Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] TxManager.abort("+id+") 6 ...");
+                e.printStackTrace();
+            }
+            throw e;
         } finally {
-            log.unlock();
+            log.unlock(5);
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] <<UNLOCK_DONE>> "+5+"...");
         }
     }
     
@@ -245,15 +256,13 @@ public abstract class TxManager[K] {K haszero} {
     /********************** Utils ***************************/
     /*throws an exception if a conflict was found*/
     protected def logInitialIfNotLogged(id:Long, key:K, lockRead:Boolean) {
-    	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] logInitialIfNotLogged key["+key+"] ...");
+    	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] logInitialIfNotLogged key["+key+"] ...");
         val log = txLogManager.getOrAddTxLog(id);
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] logInitialIfNotLogged found log with id["+log.id()+"] ...");
-        log.lock();
+        log.lock(6);
         try {
             if ( log.id() == -1 /*|| txLogManager.isAborted(log.id()) */) {
                 throw new AbortedTransactionException("AbortedTransactionException");
             }
-            
             val keyLog = log.getOrAddKeyLog(key);
             var memory:MemoryUnit[K] = keyLog.getMemoryUnit();
             if (memory == null) {
@@ -266,15 +275,25 @@ public abstract class TxManager[K] {K haszero} {
             throw ex;
         } catch(ex:Exception) {
             try {
-                abortAndThrowException(log, ex);
+                abortAndThrowException(log, ex, key);
             }
             finally {
-                log.unlock();
+                log.unlock(6);
             }
             throw ex;
         }
     }
     
+    protected def abortAndThrowException(log:TxLog[K], ex:Exception, key:K) {
+        if (log != null) {
+            val id = log.id();
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] abortAndThrowException started, key["+key+"] ");
+            abort(log);
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " " + here + "   TxManager.abortAndThrowException   throwing exception["+ex.getMessage()+"] ");
+        }
+        throw ex;
+    }
+
     protected def abortAndThrowException(log:TxLog[K], ex:Exception) {
         if (log != null) {
             val id = log.id();
@@ -283,6 +302,7 @@ public abstract class TxManager[K] {K haszero} {
         }
         throw ex;
     }
+    
     
     /************  Common Implementations for Get/Put/Delete/Commit/Abort/Validate ****************/
     private def lockWriteRV(id:Long, key:K, memory:MemoryUnit[K], log:TxLog[K], keyLog:TxKeyChange[K], delete:Boolean) {
@@ -339,11 +359,11 @@ public abstract class TxManager[K] {K haszero} {
         } catch(ex:ConcurrentTransactionsLimitExceeded) {
             throw ex;
         } catch(ex:Exception) {
-            abortAndThrowException(log, ex);
+            abortAndThrowException(log, ex, key);
             return null;
         } finally {
             if (log != null)
-                log.unlock();
+                log.unlock(6);
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RV_EA_WB completed");
         }
     }
@@ -374,11 +394,11 @@ public abstract class TxManager[K] {K haszero} {
         } catch(ex:ConcurrentTransactionsLimitExceeded) {
             throw ex;
         } catch(ex:Exception) {
-            abortAndThrowException(log, ex);
+            abortAndThrowException(log, ex, key);
             return null;
         } finally {
             if (log != null)
-                log.unlock();
+                log.unlock(6);
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RL_EA_WB completed");
         }
     }
@@ -408,12 +428,12 @@ public abstract class TxManager[K] {K haszero} {
         } catch(ex:ConcurrentTransactionsLimitExceeded) {
             throw ex;
         } catch(ex:Exception) {
-            abortAndThrowException(log, ex);
+            abortAndThrowException(log, ex, key);
             return null;
         } finally {
             if (log != null)
-                log.unlock();
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RL_EA_UL completed");
+                log.unlock(6);
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RL_EA_UL completed, key["+key+"] ");
         }
     }
     
@@ -444,11 +464,11 @@ public abstract class TxManager[K] {K haszero} {
         } catch(ex:ConcurrentTransactionsLimitExceeded) {
             throw ex;
         } catch(ex:Exception) {
-            abortAndThrowException(log, ex);
+            abortAndThrowException(log, ex, key);
             return null;
         } finally {
             if (log != null)
-                log.unlock();
+                log.unlock(6);
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RV_EA_UL completed");
         }
     }
@@ -480,11 +500,11 @@ public abstract class TxManager[K] {K haszero} {
         } catch(ex:ConcurrentTransactionsLimitExceeded) {
             throw ex;
         } catch(ex:Exception) {
-            abortAndThrowException(log, ex);
+            abortAndThrowException(log, ex, key);
             return null;
         } finally {
             if (log != null)
-                log.unlock();
+                log.unlock(6);
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_LA_WB completed");
         }
     }
@@ -492,7 +512,7 @@ public abstract class TxManager[K] {K haszero} {
     /********************* End of put operations  *********************/
     
     protected def get_RL_UL(id:Long, key:K):Cloneable {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RL_UL started");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RL_UL started, key["+key+"] ");
         var log:TxLog[K] = null;
         try {
             /*** Read Locking ***/
@@ -509,12 +529,12 @@ public abstract class TxManager[K] {K haszero} {
         } catch(ex:ConcurrentTransactionsLimitExceeded) {
             throw ex;
         } catch(ex:Exception) {
-            abortAndThrowException(log, ex);
+            abortAndThrowException(log, ex, key);
             return null;
         } finally {
             if (log != null)
-                log.unlock();
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RL_UL completed");
+                log.unlock(6);
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RL_UL completed, key["+key+"] ");
         }
     }
     
@@ -534,11 +554,11 @@ public abstract class TxManager[K] {K haszero} {
         } catch(ex:ConcurrentTransactionsLimitExceeded) {
             throw ex;
         } catch(ex:Exception) {
-            abortAndThrowException(log, ex);
+            abortAndThrowException(log, ex, key);
             return null;
         } finally {
             if (log != null)
-                log.unlock();
+                log.unlock(6);
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RL_WB completed");
         }
     }
@@ -560,11 +580,11 @@ public abstract class TxManager[K] {K haszero} {
         } catch(ex:ConcurrentTransactionsLimitExceeded) {
             throw ex;
         } catch(ex:Exception) {
-            abortAndThrowException(log, ex);
+            abortAndThrowException(log, ex, key);
             return null;
         } finally {
             if (log != null)
-                log.unlock();
+                log.unlock(6);
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RV_WB completed");
         }
     }
@@ -585,11 +605,11 @@ public abstract class TxManager[K] {K haszero} {
         } catch(ex:ConcurrentTransactionsLimitExceeded) {
             throw ex;
         } catch(ex:Exception) {
-            abortAndThrowException(log, ex);
+            abortAndThrowException(log, ex, key);
             return null;
         } finally {
             if (log != null)
-                log.unlock();
+                log.unlock(6);
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RV_UL completed");
         }
     }
