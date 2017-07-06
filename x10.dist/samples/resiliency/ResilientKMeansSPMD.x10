@@ -18,7 +18,6 @@ import x10.util.Team;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.iterative.*;
 import x10.util.resilient.localstore.Cloneable;
-import x10.util.resilient.localstore.LocalStore;
 
 /**
  * A resilient distributed implementation of KMeans clustering

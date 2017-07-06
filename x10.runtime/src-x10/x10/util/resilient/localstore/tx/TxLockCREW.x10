@@ -206,7 +206,7 @@ public class TxLockCREW extends TxLock {
     private def waitReaderWriterLocked(txId:Long) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK waitReaderWriterLocked started");
         try {
-            Runtime.increaseParallelism("waitReaderWriterLocked");
+            Runtime.increaseParallelism();
             var count:Long = 0;
             while (waitingWriter == -1 && writer != -1 && stronger(txId, writer)) {  //waiting writers get access first
                 if (resilient)
@@ -227,7 +227,7 @@ public class TxLockCREW extends TxLock {
                 Console.OUT.println(here + " - waitReaderWriterLocked  Tx["+txId+"]  finished wait ...");
             }
         } finally {
-            Runtime.decreaseParallelism(1n, "waitReaderWriterLocked");    
+            Runtime.decreaseParallelism(1n);    
         }
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK waitReaderWriterLocked completed"); 
         
@@ -251,7 +251,7 @@ public class TxLockCREW extends TxLock {
             return false;
         
         try {
-            Runtime.increaseParallelism("waitWriterReadersLocked");
+            Runtime.increaseParallelism();
             var count:Long = 0;
             while (readers.size() > minLimit && waitingWriter == txId) {
                 if (resilient)
@@ -272,7 +272,7 @@ public class TxLockCREW extends TxLock {
                 Console.OUT.println(here + " - waitWriterReadersLocked upgrade["+(minLimit == 1)+"] Tx["+txId+"]  finished wait ...");
             }
         }finally {
-            Runtime.decreaseParallelism(1n, "waitWriterReadersLocked");
+            Runtime.decreaseParallelism(1n);
         }
         
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " waitWriterReadersLocked completed");
@@ -293,7 +293,7 @@ public class TxLockCREW extends TxLock {
             return false;
         
         try {
-            Runtime.increaseParallelism("waitWriterWriterLocked");
+            Runtime.increaseParallelism();
             var count:Long = 0;
             while (writer != -1 && waitingWriter == txId) {
                 if (resilient)
@@ -314,7 +314,7 @@ public class TxLockCREW extends TxLock {
                 Console.OUT.println(here + " - waitWriterWriterLocked  Tx["+txId+"]  finished wait ...");
             }
         } finally {
-            Runtime.decreaseParallelism(1n, "waitWriterWriterLocked");
+            Runtime.decreaseParallelism(1n);
         }
         
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK waitWriterWriterLocked completed"); 

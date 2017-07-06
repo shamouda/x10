@@ -28,7 +28,6 @@ import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.Snapshottable;
 import x10.util.resilient.iterative.*;
-import x10.util.resilient.localstore.LocalStore;
 
 /*
  * Multinomial Logistic Regression 
@@ -130,7 +129,7 @@ public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implem
     }
     
     public def isFinished_local() {
-        return plh().iter > maxiter; //plh().converge || plh().iter > maxiter;
+        return plh().converge;// || plh().iter > maxiter;
     }
     
     public def train(startTime:Long):Vector(D) {

@@ -221,7 +221,7 @@ public class SlaveStore[K] {K haszero} {
         try {
             slaveLock();
             Console.OUT.println("Recovering " + here + " - SlaveStore.waitUntilPaused started logsSize["+logs.size() +"] ...");
-            Runtime.increaseParallelism("Slave.waitUntilPaused");
+            Runtime.increaseParallelism();
             var count:Long = 0;
             while (logs.size() != 0) {
                 slaveUnlock();
@@ -238,7 +238,7 @@ public class SlaveStore[K] {K haszero} {
         
         } finally {
             Console.OUT.println("Recovering " + here + " - SlaveStore.waitUntilPaused completed ...");
-            Runtime.decreaseParallelism(1n, "Slave.waitUntilPaused");
+            Runtime.decreaseParallelism(1n);
             slaveUnlock();
         }
     }

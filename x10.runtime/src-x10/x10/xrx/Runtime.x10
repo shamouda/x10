@@ -88,9 +88,6 @@ public final class Runtime {
     public static native def x10rtSendMessageInternal(id:Long, msgBody:()=>void, prof:Profile, preSendAction:()=>void):void;
 
     public static def x10rtSendMessage(id:Long, msgBody:()=>void, prof:Profile, preSendAction:()=>void):void {
-        if (id >= Place.numPlaces() || id < 0)
-            throw new Exception(here+ " FATAL exception invalid place id " + id );
-        
         var body:()=>void = msgBody;
         if (CANCELLABLE) {
             val epoch = epoch();
@@ -124,9 +121,6 @@ public final class Runtime {
 
     public static def x10rtSendAsync(id:Long, body:()=>void, finishState:FinishState, 
                                      prof:Profile, preSendAction:()=>void):void {
-        if (id >= Place.numPlaces() || id < 0)
-            throw new Exception(here+ " FATAL exception invalid place id " + id );
-                                         
         val epoch = epoch();
         if (CANCELLABLE) {
             if (activity() != null && activity().epoch < epoch) throw new CancellationException();
@@ -1385,9 +1379,6 @@ public final class Runtime {
         }
     }
 
-    @Native("java", "x10.runtime.impl.java.GetRegistry.notifyPlaceDeath()")
-    private static def getRegistryNotifyPlaceDeath():void { }
-
     static def notifyPlaceDeath() : void {
         if (CANCELLABLE) {
             if (pool.cancelWatcher != null) {
@@ -1403,7 +1394,7 @@ public final class Runtime {
             // Nothing to do at the XRX level in this mode.
         } else {
             FinishResilient.notifyPlaceDeath();
-            getRegistryNotifyPlaceDeath();
+            GetRegistry.notifyPlaceDeath();
         }
     }
 
@@ -1525,11 +1516,6 @@ public final class Runtime {
     }
 
     // notify the pool a worker is about to execute a blocking operation
-    public static def increaseParallelism(tag:String):void {
-        //Console.OUT.println(here + " - increaseParallelism  - Tag[" + tag + "] " );
-        increaseParallelism();
-    }
-    
     public static def increaseParallelism():void {
         if (!STATIC_THREADS && !STABLE_POOL_SIZE) {
             pool.increase();
@@ -1537,11 +1523,6 @@ public final class Runtime {
     }
 
     // notify the pool a worker resumed execution after a blocking operation
-    public static def decreaseParallelism(n:Int, tag:String) {
-        //Console.OUT.println(here + " - decreaseParallelism("+n+")  - Tag[" + tag + "] " );
-        decreaseParallelism(n);
-    }
-    
     public static def decreaseParallelism(n:Int) {
         if (!STATIC_THREADS && !STABLE_POOL_SIZE)  {
             pool.decrease(n);

@@ -98,7 +98,7 @@ public abstract class TxManager[K] {K haszero} {
         Console.OUT.println("Recovering " + here + " MasterStore.waitUntilPaused started ...");
         val buckets = TxConfig.get().BUCKETS_COUNT;
         try {
-            Runtime.increaseParallelism("Master.waitUntilPaused");
+            Runtime.increaseParallelism();
             
             while (true) {
                 if (!txLogManager.activeTransactionsExist()) {
@@ -108,7 +108,7 @@ public abstract class TxManager[K] {K haszero} {
             }
         
         }finally {
-            Runtime.decreaseParallelism(1n, "Master.waitUntilPaused");
+            Runtime.decreaseParallelism(1n);
         }
         paused();
         Console.OUT.println("Recovering " + here + " MasterStore.waitUntilPaused completed ...");

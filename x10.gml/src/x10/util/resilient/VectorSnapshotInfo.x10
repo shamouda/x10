@@ -14,10 +14,8 @@ package x10.util.resilient;
 import x10.util.HashMap;
 import x10.matrix.ElemType;
 import x10.util.resilient.localstore.Cloneable;
-import x10.util.resilient.localstore.LocalStore;
 
-public class VectorSnapshotInfo(placeIndex:Long, data:Rail[ElemType]{self!=null}) implements Cloneable {
-    
+public class VectorSnapshotInfo(placeIndex:Long, data:Rail[ElemType]{self!=null}) implements Cloneable {    
     public def clone():Cloneable {  
         return new VectorSnapshotInfo(placeIndex, new Rail[ElemType](data));
     }

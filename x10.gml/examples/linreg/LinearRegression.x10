@@ -25,7 +25,6 @@ import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.Snapshottable;
 import x10.util.resilient.iterative.*;
-import x10.util.resilient.localstore.LocalStore;
 
 
 /**
@@ -98,8 +97,8 @@ public class LinearRegression implements SPMDResilientIterativeApp {
     }
     
     public def isFinished_local() {
-        return appTempDataPLH().iter >= maxIterations;
-       //     || appTempDataPLH().norm_r2 <= appTempDataPLH().norm_r2_target;
+        return appTempDataPLH().iter >= maxIterations
+            || appTempDataPLH().norm_r2 <= appTempDataPLH().norm_r2_target;
     }
     
     //startTime parameter added to account for the time taken by RunLinReg to initialize the input data

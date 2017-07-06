@@ -32,7 +32,6 @@ import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.Snapshottable;
 import x10.util.resilient.iterative.*;
-import x10.util.resilient.localstore.LocalStore;
 
 /**
  * Parallel PageRank algorithm based on GML distributed sparse block matrix.
@@ -250,11 +249,10 @@ public class PageRank implements SPMDResilientIterativeApp {
     }
     
     public def isFinished_local():Boolean {
-        return /* (iterations <= 0 && appTempDataPLH().maxDelta < tolerance) || */ (iterations > 0 && appTempDataPLH().iter >= iterations);
+        return (iterations <= 0 && appTempDataPLH().maxDelta < tolerance) || (iterations > 0 && appTempDataPLH().iter >= iterations);
     }
 
     public def step_local():void {
-        if (here.id == 0) Console.OUT.println("progress: " + appTempDataPLH().iter);
         GP.mult_local(G, P);
         GP.scale_local(alpha);
     
@@ -279,8 +277,9 @@ public class PageRank implements SPMDResilientIterativeApp {
 
     public def getCheckpointData_local():HashMap[String,Cloneable] {
     	val map = new HashMap[String,Cloneable]();
-    	if (appTempDataPLH().iter == 0)
+    	if (appTempDataPLH().iter == 0) {
     		map.put("G", G.makeSnapshot_local());
+    	}
     	//map.put("U", U.makeSnapshot_local());
     	map.put("P", P.makeSnapshot_local());
     	map.put("app", appTempDataPLH().makeSnapshot_local());
@@ -289,7 +288,7 @@ public class PageRank implements SPMDResilientIterativeApp {
     }
     
     public def restore_local(restoreDataMap:HashMap[String,Cloneable], lastCheckpointIter:Long) {
-        G.restoreSnapshot_local(restoreDataMap.getOrThrow("G"));
+    	G.restoreSnapshot_local(restoreDataMap.getOrThrow("G"));
     	//U.restore_local(restoreDataMap.getOrThrow("U"));
     	P.restoreSnapshot_local(restoreDataMap.getOrThrow("P"));
     	appTempDataPLH().restoreSnapshot_local(restoreDataMap.getOrThrow("app"));

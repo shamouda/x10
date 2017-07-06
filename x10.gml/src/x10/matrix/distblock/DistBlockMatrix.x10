@@ -1054,9 +1054,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     public def makeSnapshot_local():Cloneable {
     	val data = handleBS();
         val i = handleBS().placeIndex;
-        val isSparse = data.blocklist.get(0).isSparse();
-        
-        val blockSetInfo = new BlockSetSnapshotInfo(i, data, isSparse);
+        val blockSetInfo = new BlockSetSnapshotInfo(i, data);
         return blockSetInfo;
     }
     

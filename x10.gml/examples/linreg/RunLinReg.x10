@@ -25,7 +25,7 @@ import x10.matrix.regression.RegressionInputData;
 import x10.matrix.util.Debug;
 import x10.matrix.util.MathTool;
 import x10.util.Team;
-import x10.util.resilient.iterative.*;
+import x10.util.resilient.iterative.SPMDResilientIterativeExecutor;
 
 /**
  * Test harness for Linear Regression using GML
@@ -84,7 +84,13 @@ public class RunLinReg {
         }
 
         if (sparePlaces > 0) {
-            Console.OUT.println("Using  "+sparePlaces+" spare places.");
+            if (Runtime.RESILIENT_MODE <= 0) {
+                Console.ERR.println("Error: attempt to skip places when not in resilient mode.  Aborting.");
+                System.setExitCode(1n);
+                return;
+            } else {
+                Console.OUT.println("Skipping "+sparePlaces+" places to reserve for failure.");
+            }
         }
         
         val startTime = Timer.milliTime();

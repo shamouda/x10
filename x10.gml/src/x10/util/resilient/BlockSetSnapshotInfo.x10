@@ -15,11 +15,10 @@ import x10.util.HashMap;
 import x10.matrix.distblock.BlockSet;
 import x10.matrix.ElemType;
 import x10.util.resilient.localstore.Cloneable;
-import x10.util.resilient.localstore.LocalStore;
 
-public class BlockSetSnapshotInfo(placeIndex:Long, blockSet:BlockSet, isSparse:Boolean) implements Cloneable {
+public class BlockSetSnapshotInfo(placeIndex:Long, blockSet:BlockSet) implements Cloneable {
     
     public def clone():Cloneable {
-        return new BlockSetSnapshotInfo(placeIndex, blockSet.clone(), isSparse);
+        return new BlockSetSnapshotInfo(placeIndex, blockSet.clone());
     }
 }
