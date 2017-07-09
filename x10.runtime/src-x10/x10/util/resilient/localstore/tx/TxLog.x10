@@ -208,12 +208,12 @@ public class TxLog[K] {K haszero} {
     
     public def reset() {
         val tmp = id;
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] TxLog.reset ");
+        //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] TxLog.reset ");
         id = -1;
         keysList.clear();
         aborted = false;
         writeValidated = false;
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tmp+"] " + TxManager.txIdToString(tmp) + " here["+here+"] TxLog.reset done ");
+        //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tmp+"] " + TxManager.txIdToString(tmp) + " here["+here+"] TxLog.reset done ");
     }
 
     public def getValue(copy:Boolean, key:K) {
@@ -232,12 +232,6 @@ public class TxLog[K] {K haszero} {
             v = value == null?null:value.clone();
         }
         return v;
-    }
-    
-    
-    public def getLastUsedMemoryUnit() = lastUsedMemoryUnit;
-    public def setLastUsedMemoryUnit(memU:MemoryUnit[K]) {
-        lastUsedMemoryUnit = memU;
     }
     
     public def getLastUsedKeyLog() = lastUsedKeyLog;
@@ -327,18 +321,26 @@ public class TxLog[K] {K haszero} {
     }
     
     public def lock(i:Long) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] <<LOCK>> "+i+"...");
+        //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] ["+lock+"] <<LOCK>> "+i+"...");
         if (!TxConfig.get().LOCK_FREE)
             lock.lock();
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] <<LOCK_DONE>> "+i+"...");
+        //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] ["+lock+"] <<LOCK_DONE>> "+i+"...");
     }
     
     public def unlock(i:Long) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] <<UNLOCK>> "+i+"...");
+        //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] ["+lock+"] <<UNLOCK>> "+i+"...");
         if (!TxConfig.get().LOCK_FREE)
             lock.unlock();
         lastUsedMemoryUnit = null;
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] <<UNLOCK_DONE>> "+i+"...");
+        //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] ["+lock+"] <<UNLOCK_DONE>> "+i+"...");
+    }
+    
+    public def unlock(i:Long, tmpId:Long) {
+        //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tmpId+"] " + TxManager.txIdToString(tmpId) + " here["+here+"] ["+lock+"] <<UNLOCK>> "+i+"...");
+        if (!TxConfig.get().LOCK_FREE)
+            lock.unlock();
+        lastUsedMemoryUnit = null;
+        //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tmpId+"] " + TxManager.txIdToString(tmpId) + " here["+here+"] ["+lock+"] <<UNLOCK_DONE>> "+i+"...");
     }
     
     public def getWriteKeys() {
@@ -349,4 +351,18 @@ public class TxLog[K] {K haszero} {
         return keysList.getReadKeys();
     }
 
+    public def keysToString() {
+    	var rd:String = "";
+        val rList = keysList.getReadKeys();
+    	for (var indx:Long = 0 ; indx < rList.size(); indx++) {
+    		rd += rList(indx).key() + ", " ;
+    	}
+        
+        var wt:String = "";
+        val wList = keysList.getWriteKeys();
+    	for (var indx:Long = 0 ; indx < wList.size(); indx++) {
+    		wt += wList(indx).key() + ", " ;
+    	}
+        return " Read{"+rd+"} Write{"+wt+"}";
+    }
 }

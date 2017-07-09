@@ -71,20 +71,20 @@ public class NonResilientCommitHandler[K] {K haszero} extends CommitHandler[K] {
     }
     
     private def validate_local(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] validate_local started ...");
+        //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] validate_local started ...");
         plh().getMasterStore().validate(id);
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] validate_local completed ...");
+        //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] validate_local completed ...");
     }
     
     private def commit_local(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commit_local started ...");
+        //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commit_local started ...");
         plh().getMasterStore().commit(id);
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commit_local completed ...");
+        //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] commit_local completed ...");
     }
     
     private def abort_local(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] abort_local started ...");
+        //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] abort_local started ...");
         plh().getMasterStore().abort(id);
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] abort_local completed ...");
+        //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] here["+here+"] abort_local completed ...");
     }
 }

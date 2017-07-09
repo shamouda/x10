@@ -43,7 +43,7 @@ public class TxLogManager[K] {K haszero} {
     
     
     public def markAborted(id:Long) {
-    	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] markAborted started ...");
+    	//if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] markAborted started ...");
     	try {
     		abortLock.lock();
     		if (abortEnd < ABORTED_SIZE -1 )
@@ -53,12 +53,11 @@ public class TxLogManager[K] {K haszero} {
     	} finally {
     		abortLock.unlock();
     	}
-    	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] markAborted completed, end="+abortEnd+" ...");
-    	
+    	//if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] markAborted completed, end="+abortEnd+" ...");
     }
     
     public def isAborted(id:Long) {
-    	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] isAborted started ...");
+    	//if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] isAborted started ...");
     	var result:Boolean = false;
     	try {
     		abortLock.lock();
@@ -71,7 +70,7 @@ public class TxLogManager[K] {K haszero} {
     	} finally {
     		abortLock.unlock();
     	}
-    	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] isAborted result="+result+" ...");
+    	//if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] isAborted result="+result+" ...");
     	return result;
     }
     

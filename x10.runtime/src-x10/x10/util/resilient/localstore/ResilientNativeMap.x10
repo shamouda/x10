@@ -27,21 +27,21 @@ public class ResilientNativeMap[K] {K haszero} {
      * Get the value of key k in the resilient map.
      */
     public def get(key:K) {
-        return executeLocalTransaction((tx:LocalTx[K]) => tx.get(key) ).output as Cloneable;
+        return executeLocalTransaction((tx:LocalTx[K]) => tx.get(key), -1, -1 ).output as Cloneable;
     }
 
     /**
      * Associate value v with key k in the resilient map.
      */
     public def set(key:K, v:Cloneable) {
-        return executeLocalTransaction((tx:LocalTx[K]) => tx.put(key,v) ).output as Cloneable;
+        return executeLocalTransaction((tx:LocalTx[K]) => tx.put(key,v), -1, -1).output as Cloneable;
     }
 
     /**
      * Remove any value associated with key k from the resilient map.
      */
     public def delete(key:K) {
-        return executeLocalTransaction((tx:LocalTx[K]) => tx.delete(key) ).output as Cloneable;
+        return executeLocalTransaction((tx:LocalTx[K]) => tx.delete(key), -1, -1).output as Cloneable;
     }
 
     public def keySet():Set[K] {
@@ -76,7 +76,7 @@ public class ResilientNativeMap[K] {K haszero} {
     }
     
     public def set2(key:K, value:Cloneable, key2:K, value2:Cloneable) {        
-        return executeLocalTransaction((tx:LocalTx[K]) => { tx.put(key, value); tx.put(key2, value2) });
+        return executeLocalTransaction((tx:LocalTx[K]) => { tx.put(key, value); tx.put(key2, value2) }, -1, -1);
     }
     
     /***********************  Places functions ****************************/
@@ -96,11 +96,17 @@ public class ResilientNativeMap[K] {K haszero} {
         return new LocalTx[K](plh, id);
     }
     
-    public def executeLocalTransaction(closure:(LocalTx[K])=>Any) {
+    public def executeLocalTransaction(closure:(LocalTx[K])=>Any, maxRetries:Long, maxTimeNS:Long) {
         var out:Any;
         var commitStatus:Int = -1n;
-
+    	var retryCount:Long = 0;
+    	val beginning = System.nanoTime();
         while(true) {
+        	if (retryCount == maxRetries || (maxTimeNS != -1 && System.nanoTime() - beginning >= maxTimeNS)) {
+                throw new FatalTransactionException("Reached maximum limit for retrying a transaction");
+            }
+            retryCount++;
+            
             val tx = startLocalTransaction();
             var commitCalled:Boolean = false;
             val start = Timer.milliTime();
@@ -261,10 +267,10 @@ public class ResilientNativeMap[K] {K haszero} {
     /**************End of Baseline Operations*****************/
     
     private static def throwIfFatalSleepIfRequired(txId:Long, ex:Exception, immediateRecovery:Boolean) {
-    	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired started ...");
+    	//if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired started ...");
         var dpe:Boolean = false;
         if (ex instanceof MultipleExceptions) {
-        	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired MulEX ...");
+        	//if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired MulEX ...");
             val deadExList = (ex as MultipleExceptions).getExceptionsOfType[DeadPlaceException]();
             val confExList = (ex as MultipleExceptions).getExceptionsOfType[ConflictException]();
             val pauseExList = (ex as MultipleExceptions).getExceptionsOfType[StorePausedException]();
@@ -287,7 +293,7 @@ public class ResilientNativeMap[K] {K haszero} {
                 }
             }
         } else if (ex instanceof DeadPlaceException) {
-        	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired DPE ...");
+        	//if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired DPE ...");
             if (!immediateRecovery) {
                 throw ex;
             } else {
@@ -295,16 +301,16 @@ public class ResilientNativeMap[K] {K haszero} {
                 dpe = true;
             }
         } else if (ex instanceof StorePausedException) {
-        	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired SPE ...");
+        	//if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired SPE ...");
             System.threadSleep(TxConfig.get().DPE_SLEEP_MS);
         } else if (ex instanceof ConcurrentTransactionsLimitExceeded) {
-        	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired CTLE ...");
+        	//if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired CTLE ...");
             System.threadSleep(TxConfig.get().DPE_SLEEP_MS);
         } else if (!(ex instanceof ConflictException || ex instanceof AbortedTransactionException  )) {
-        	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired SomethingElse ...");
+        	//if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired SomethingElse ...");
             throw ex;
         }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired completed dpe="+dpe+" ...");
+        //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx[" + txId + "] throwIfFatalSleepIfRequired completed dpe="+dpe+" ...");
         return dpe;
     }
     
