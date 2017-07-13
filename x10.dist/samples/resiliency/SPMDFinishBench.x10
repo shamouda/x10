@@ -111,6 +111,68 @@ public class SPMDFinishBench {
 	        } while (time1-time0 < minTime);
 	        if (print) Console.OUT.println(prefix+"flat fan out - with SPMD optimization: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
         }
+        
+        
+        iterCount = 0;
+        time0 = System.nanoTime();
+        do {
+            finish {
+                for (p in Place.places()) {
+                    at (p) async {
+                        finish {
+                            for (q in Place.places()) at (q) async {
+                                think(t);
+                            }
+                        }
+                    }
+                }
+            }
+            time1 = System.nanoTime();
+            iterCount++;
+        } while (time1-time0 < minTime);
+        if (print) Console.OUT.println(prefix+"fan out - nested finish broadcast: "+(time1-time0)/1E9/iterCount+" seconds");
+        
+        if (RESILIENT) {
+	        iterCount = 0;
+	        time0 = System.nanoTime();
+	        do {
+	            finish {
+	                for (p in Place.places()) {
+	                    at (p) async {
+	                        finish {
+	                            Runtime.runAsyncSPMD(Place.places(), ()=>{
+	    	                    	think(t);
+	    	                	}, null);
+	                        }
+	                    }
+	                }
+	            }
+	            time1 = System.nanoTime();
+	            iterCount++;
+	        } while (time1-time0 < minTime);
+	        if (print) Console.OUT.println(prefix+"fan out - nested finish broadcast - with SPMD optimization: "+(time1-time0)/1E9/iterCount+" seconds");
+        }
+        else {
+	        iterCount = 0;
+	        time0 = System.nanoTime();
+	        do {
+	            finish {
+	                for (p in Place.places()) {
+	                    at (p) async {
+	                    	@Pragma(Pragma.FINISH_SPMD) finish {
+	                            for (q in Place.places()) at (q) async {
+	                                think(t);
+	                            }
+	                        }
+	                    }
+	                }
+	            }
+	            time1 = System.nanoTime();
+	            iterCount++;
+	        } while (time1-time0 < minTime);
+	        if (print) Console.OUT.println(prefix+"fan out - nested finish broadcast - with SPMD optimization: "+(time1-time0)/1E9/iterCount+" seconds");
+
+        }
     }
 
 
