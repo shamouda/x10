@@ -202,7 +202,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         }
 
         def releaseLatch() {
-	    if (isAdopted()) {
+	        if (isAdopted()) {
                 if (verbose>=1) debug("releaseLatch(id="+id+") called on adopted finish; not releasing latch");
             } else {
                 val exceptions = (excs == null || excs.isEmpty()) ?  null : excs.toRail();
@@ -1007,5 +1007,88 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
             }
             if (verbose>=1) debug("<<<< spawnRemoteActivity(id="+myId+") returning");
         }
+    }
+    
+    def spawnMultipleRemoteActivities(destPlaces:PlaceGroup, ignoreDest:Long, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
+        val start = prof != null ? System.nanoTime() : 0;
+        val ser = new Serializer();
+        ser.writeAny(body);
+        if (prof != null) {
+            val end = System.nanoTime();
+            prof.serializationNanos += (end-start);
+            prof.bytes += ser.dataBytesWritten();
+        }
+        val bytes = ser.toRail();
+
+        if (!isGlobal) globalInit();
+        val srcId = here.id;
+        val myId = this.id;
+
+        localCount().incrementAndGet();  // synthetic activity to keep finish locally live during async to Place0
+        val fsgr = this.ref;
+
+        if (verbose >= 1) debug(">>>>  spawnMultipleRemoteActivities(id="+myId+") selecting direct (size="+
+                                bytes.size+") srcId="+srcId + " dstPlaces="+destPlaces.size());
+
+        if (bytes.size >= ASYNC_SIZE_THRESHOLD)  {
+        	debug(">>>>  WARNING spawnMultipleRemoteActivities(id="+myId+") body size("+bytes.size+") greater than limit("+ASYNC_SIZE_THRESHOLD+")");
+        }
+        
+        at (place0) @Immediate("spawnMultipleRemoteActivities_to_zero") async {
+            try {
+                lock.lock();
+                val state = states(myId);
+                if (Place(srcId).isDead()) {
+                    if (verbose>=1) debug("==== spwanRemoteSPMDActivity(id="+myId+") src "+srcId + "is dead; dropping async");
+                } 
+                else {
+                	for (dest in destPlaces) {
+                    	val dstId = dest.id;
+                    	if (ignoreDest == dstId)
+                    		continue;
+                    	if (dest.isDead()) {
+                    		if (verbose>=1) debug("==== spawnMultipleRemoteActivities(id="+myId+") destination "+dstId + "is dead; pushed DPE");
+                    		state.addDeadPlaceException(dstId);
+                		} else {
+                    		state.addLive(srcId, dstId, ASYNC, "spawnMultipleRemoteActivities");
+                		}
+                	}
+                }
+            } finally {
+                lock.unlock();
+            }
+            try {
+                at (fsgr) @Immediate("spawnMultipleRemoteActivities_dec_local_count") async {
+                    fsgr().notifyActivityTermination(); // end of synthetic local activity
+                }
+            } catch (dpe:DeadPlaceException) {
+                // can ignore; if the place just died here is no need to worry about updating local count
+                if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dec_local_count for "+id);
+            }
+            
+            for (dest in destPlaces) {
+            	val dstId = dest.id;
+            	if (ignoreDest == dstId)
+            		continue;
+            	if (!dest.isDead()) {
+		            try {
+		                at (dest) @Immediate("spawnMultipleRemoteActivities_dstPlace") async {
+		                    if (verbose >= 1) debug("==== spawnMultipleRemoteActivities(id="+myId+") submitting activity from "+srcId+" at "+dstId);
+		                    val wrappedBody = ()=> {
+		                        // defer deserialization to reduce work on immediate thread
+		                        val deser = new Deserializer(bytes);
+		                        val bodyPrime = deser.readAny() as ()=>void;
+		                        bodyPrime();
+		                    };
+		                    Runtime.worker().push(new Activity(42, wrappedBody, this));
+		                }
+		            } catch (dpe:DeadPlaceException) {
+		                // can ignore; if the place just died there is no need to worry about submitting the activity
+		                if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dstPlace for "+id);
+		            }
+            	}
+            }
+        }
+        if (verbose>=1) debug("<<<< spawnMultipleRemoteActivities(id="+myId+") returning");
     }
 }

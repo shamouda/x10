@@ -668,6 +668,40 @@ public final class Runtime {
         Unsafe.dealloc(body);
     }
     
+    public static def runAsyncSPMD(destPlaces:PlaceGroup, body:()=>void, prof:Profile):void {
+        // Do this before anything else
+        val a = activity();
+        a.ensureNotInAtomic();
+        
+        val epoch = a.epoch;
+        val state = a.finishState();
+        var ignoreDest:Long = -1;
+        
+        if (destPlaces.contains(hereLong())) {
+        	ignoreDest = hereLong();
+            // Synchronous serialization
+	        val start = prof != null ? System.nanoTime() : 0;
+            val ser = new Serializer();
+            ser.writeAny(body);
+            if (prof != null) {
+                val end = System.nanoTime();
+                prof.serializationNanos += (end-start);
+                prof.bytes += ser.dataBytesWritten();
+            }
+
+            // Spawn asynchronous activity
+            state.notifySubActivitySpawn(here);
+            val asyncBody = ()=>{
+                val deser = new Deserializer(ser);
+                val bodyCopy = deser.readAny() as ()=>void;
+                bodyCopy();
+            };
+            submitLocalActivity(new Activity(epoch, asyncBody, state));
+        } 
+        state.spawnMultipleRemoteActivities(destPlaces, ignoreDest, body, prof);
+        Unsafe.dealloc(body);
+    }
+    
     /**
      * Run async
      */

@@ -157,6 +157,10 @@ abstract class FinishState {
         val preSendAction = ()=>{ fs.notifySubActivitySpawn(place); };
         x10.xrx.Runtime.x10rtSendAsync(place.id, body, fs, prof, preSendAction);
     }
+    
+    def spawnMultipleRemoteActivities(places:PlaceGroup, ignoreDest:Long, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
+    	throw new IllegalOperationException("spawnMultipleRemoteActivities not supported in " + this + " use PRAGMA.FINISH_SPMD");
+    }
 
     static def deref[T](root:GlobalRef[FinishState]) = (root as GlobalRef[FinishState]{home==here})() as T;
 
@@ -661,6 +665,8 @@ abstract class FinishState {
             }
             latch.await(); // sit here, waiting for all child activities to complete
 
+            ////////Console.OUT.println(here + "Sara -RemAct-> " + printRemoteActivites());
+            
             // if there were remote activities spawned, clean up the RemoteFinish objects which tracked them
             if (remoteActivities != null && remoteActivities.size() != 0) {
                 val root = ref();
@@ -742,6 +748,26 @@ abstract class FinishState {
             process(excs);
             process(remoteEntry);
             latch.unlock();
+        }
+        
+        def printRemoteActivites() {
+        	try {
+        		latch.lock();
+        		if (remoteActivities == null)
+        			return null;
+        		
+	        	val iter = remoteActivities.keySet().iterator();
+	        	var str:String = "";
+	        	while (iter.hasNext()) {
+	        		val key = iter.next();
+	        		val value = remoteActivities.getOrThrow(key);
+	        		str += "["+key+":"+value+"] ";
+	        	}
+	        	return str;
+        	}
+        	finally {
+        		latch.unlock();
+        	}
         }
     }
 
