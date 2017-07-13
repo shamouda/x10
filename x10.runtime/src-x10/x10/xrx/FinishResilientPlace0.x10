@@ -209,10 +209,11 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 if (verbose>=2) debug("releasing latch id="+id+(exceptions == null ? " no exceptions" : " with exceptions"));
 
                 val mygfs = gfs;
+                val tmpId = id;
                 try {
                     at (mygfs.home) @Immediate("releaseLatch_gfs_home") async {
+                        if (verbose>=2) debug("performing releae for "+tmpId+" at "+here);
                         val fs = mygfs();
-                        if (verbose>=2) debug("performing release for "+fs.id+" at "+here);
                         if (exceptions != null) {
                             fs.latch.lock();
                             if (fs.excs == null) fs.excs = new GrowableRail[CheckedThrowable](exceptions.size);
@@ -560,28 +561,20 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         notifySubActivitySpawn(place, AT);
     }
     def notifySubActivitySpawn(place:Place, kind:Int):void {
+        val srcId = here.id;
         val dstId = place.id;
         val myId = this.id;
-        if (dstId == here.id) {
+        if (dstId == srcId) {
             val lc = localCount().incrementAndGet();
             if (verbose>=1) debug(">>>> notifySubActivitySpawn(id="+myId+") called locally, localCount now "+lc);
         } else {
-            if (verbose>=1) debug(">>>> notifySubActivitySpawn(id="+myId+") called, srcId="+here.id + " dstId="+dstId+" kind="+kind);
-            val gfs = this.ref;
-            val parentId:Id;
-            if (parent instanceof FinishResilientPlace0) {
-                val frParent = parent as FinishResilientPlace0;
-                if (!frParent.isGlobal) frParent.globalInit();
-                parentId = frParent.id;
-            } else {
-                parentId = UNASSIGNED;
-            }
+            if (!isGlobal) globalInit();
+            if (verbose>=1) debug(">>>> notifySubActivitySpawn(id="+myId+") called, srcId="+srcId + " dstId="+dstId+" kind="+kind);
 
             Runtime.runImmediateAt(place0, ()=>{ 
                 try {
                     lock.lock();
-                    val state = getOrCreateState(myId, parentId, gfs);
-                    val srcId = gfs.home.id;
+                    val state = states(myId);
                     if (Place(srcId).isDead()) {
                         if (verbose>=1) debug("==== notifySubActivitySpawn(id="+myId+") src "+srcId + "is dead; dropping async");
                     } else if (Place(dstId).isDead()) {
@@ -664,7 +657,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 }
             } catch (dpe:DeadPlaceException) {
                 // can ignore; if the place is dead there is no need to worry about the pending activity
-                if (verbose>=2) debug("caught and suppressed DPE when attempting submit pending activity for "+myId);
+                if (verbose>=2) debug("caught and suppressed DPE when attempting submit pending activity for "+id);
             }
         }
 
@@ -906,7 +899,6 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
      */
     def spawnRemoteActivity(place:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
         val start = prof != null ? System.nanoTime() : 0;
-        isGlobal = true; // we're about to globalize this activity as part of the message to Place 0
         val ser = new Serializer();
         ser.writeAny(body);
         if (prof != null) {
@@ -916,23 +908,17 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         }
         val bytes = ser.toRail();
 
-        val gfs = this.ref;
-        val parentId:Id;
-            if (parent instanceof FinishResilientPlace0) {
-                val frParent = parent as FinishResilientPlace0;
-                if (!frParent.isGlobal) frParent.globalInit();
-                parentId = frParent.id;
-            } else {
-                parentId = UNASSIGNED;
-            }
+        if (!isGlobal) globalInit();
+        val srcId = here.id;
         val dstId = place.id;
         val myId = this.id;
 
         localCount().incrementAndGet();  // synthetic activity to keep finish locally live during async to Place0
+        val fsgr = this.ref;
 
         if (bytes.size >= ASYNC_SIZE_THRESHOLD) {
             if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") selecting indirect (size="+
-                                    bytes.size+") srcId="+here.id + " dstId="+dstId);
+                                    bytes.size+") srcId="+srcId + " dstId="+dstId);
             val wrappedBody = ()=> @AsyncClosure {
                 val deser = new Deserializer(bytes);
                 val bodyPrime = deser.readAny() as ()=>void;
@@ -944,8 +930,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 var markedInTransit:Boolean = false;
                 try {
                     lock.lock();
-                    val state = getOrCreateState(myId, parentId, gfs);
-                    val srcId = gfs.home.id;
+                    val state = states(myId);
                     if (Place(srcId).isDead()) {
                         if (verbose>=1) debug("==== spwanRemoteActivity(id="+myId+") src "+srcId + "is dead; dropping async");
                     } else if (Place(dstId).isDead()) {
@@ -962,30 +947,29 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 try {
                     val mt = markedInTransit;
                     at (wbgr) @Immediate("spawnRemoteActivity_big_back_to_spawner") async {
-                        val fs = (gfs as GlobalRef[FinishResilientPlace0]{self.home == here})();
+                        val fs = (fsgr as GlobalRef[FinishResilientPlace0]{self.home == here})();
                         try {
                             if (mt) x10.xrx.Runtime.x10rtSendAsync(dstId, wbgr(), fs, null, null);
                         } catch (dpe:DeadPlaceException) {
                             // not relevant to immediate thread; DPE raised in convertDeadActivities
-                            if (verbose>=2) debug("caught and suppressed DPE from x10rtSendAsync from spawnRemoteActivity_big_back_to_spawner for "+myId);
+                            if (verbose>=2) debug("caught and suppressed DPE from x10rtSendAsync from spawnRemoteActivity_big_back_to_spawner for "+id);
                         }
                         wbgr.forget();
                         fs.notifyActivityTermination();
                     }
                 } catch (dpe:DeadPlaceException) {
                     // can ignore; if the src place just died there is nothing left to do.
-                    if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_big_back_to_spawner for "+myId);
+                    if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_big_back_to_spawner for "+id);
                 }
             }
         } else {
             if (verbose >= 1) debug(">>>>  spawnRemoteActivity(id="+myId+") selecting direct (size="+
-                                    bytes.size+") srcId="+here.id + " dstId="+dstId);
+                                    bytes.size+") srcId="+srcId + " dstId="+dstId);
 
             at (place0) @Immediate("spawnRemoteActivity_to_zero") async {
                 try {
                     lock.lock();
-                    val state = getOrCreateState(myId, parentId, gfs);
-                    val srcId = gfs.home.id;
+                    val state = states(myId);
                     if (Place(srcId).isDead()) {
                         if (verbose>=1) debug("==== spwanRemoteActivity(id="+myId+") src "+srcId + "is dead; dropping async");
                     } else if (Place(dstId).isDead()) {
@@ -997,10 +981,17 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 } finally {
                     lock.unlock();
                 }
-                
+                try {
+                    at (fsgr) @Immediate("spawnRemoteActivity_dec_local_count") async {
+                        fsgr().notifyActivityTermination(); // end of synthetic local activity
+                    }
+                } catch (dpe:DeadPlaceException) {
+                    // can ignore; if the place just died here is no need to worry about updating local count
+                    if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dec_local_count for "+id);
+                }
                 try {
                     at (Place(dstId)) @Immediate("spawnRemoteActivity_dstPlace") async {
-                        if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") submitting activity from "+here.id+" at "+dstId);
+                        if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") submitting activity from "+srcId+" at "+dstId);
                         val wrappedBody = ()=> {
                             // defer deserialization to reduce work on immediate thread
                             val deser = new Deserializer(bytes);
@@ -1011,31 +1002,10 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                     }
                 } catch (dpe:DeadPlaceException) {
                     // can ignore; if the place just died there is no need to worry about submitting the activity
-                    if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dstPlace for "+myId);
-                }
-                
-                try {
-                    at (gfs) @Immediate("spawnRemoteActivity_dec_local_count") async {
-                        gfs().notifyActivityTermination(); // end of synthetic local activity
-                    }
-                } catch (dpe:DeadPlaceException) {
-                    // can ignore; if the place just died here is no need to worry about updating local count
-                    if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dec_local_count for "+myId);
+                    if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dstPlace for "+id);
                 }
             }
             if (verbose>=1) debug("<<<< spawnRemoteActivity(id="+myId+") returning");
         }
-    }
-
-    private static final def getOrCreateState(myId:Id, parentId:Id, gfs:GlobalRef[FinishResilientPlace0]):State {
-        var state:State = states(myId);
-        if (state == null) {
-            if (verbose>=1) debug(">>>> initializing state for id="+myId);
-            state = new State(myId, parentId, gfs);
-            states.put(myId, state);
-            State.increment(state.live, Task(gfs.home.id, ASYNC)); // duplicated from my localCount
-            state.numActive = 1;
-        }
-        return state;
     }
 }
