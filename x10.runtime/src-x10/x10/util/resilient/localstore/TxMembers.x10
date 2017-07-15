@@ -16,7 +16,8 @@ public class TxMembers(size:Long) {
     public val virtual:Rail[Long];
     public val places:Rail[Place];
     private var count:Long = 0;
-    
+    private var pg:PlaceGroup;
+
     public def this(size:Long) {
         property(size);
         virtual = new Rail[Long](size);
@@ -78,6 +79,8 @@ public class TxMembers(size:Long) {
     
     public def pg() {
         assert (places != null && places.size != 0) : "bug in TxMembers.pg()";
-        return new SparsePlaceGroup(places);
+        if (pg == null)
+            pg = new SparsePlaceGroup(places);
+        return pg;
     }
 }

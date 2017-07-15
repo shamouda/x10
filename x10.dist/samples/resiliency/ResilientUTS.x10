@@ -353,7 +353,7 @@ final class ResilientUTS implements Unserializable {
         val loot = bag.split();
         if (loot != null && resilient) {
           loot.count = thief.count;
-          map.set2(me.toString(), bag.trim(), group(t >> power), t.toString(), loot);
+          map.set2(me.toString(), bag.trim(), t >> power, t.toString(), loot);
           commit = true;
         }
         val id = t & mask;
@@ -367,7 +367,7 @@ final class ResilientUTS implements Unserializable {
           loot.count = lifelineCount;
           val t = next;
           if (resilient) {
-            map.set2(me.toString(), bag.trim(), group(t >> power), t.toString(), loot);
+            map.set2(me.toString(), bag.trim(), t >> power, t.toString(), loot);
             commit = true;
           }
           lifeline.set(-1);

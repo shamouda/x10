@@ -100,6 +100,11 @@ public final class SparsePlaceGroup extends PlaceGroup {
     }
     return -1;
   }
+  
+  public def toLongRail() {
+	  return new Rail[Long](places.size, (i:Long)=> places(i).id);
+  }
+  
 }
  
 

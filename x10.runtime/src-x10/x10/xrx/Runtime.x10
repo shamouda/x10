@@ -668,7 +668,7 @@ public final class Runtime {
         Unsafe.dealloc(body);
     }
     
-    public static def runAsyncSPMD(destPlaces:PlaceGroup, body:()=>void, prof:Profile):void {
+    public static def runAsync(destPlaces:PlaceGroup, body:()=>void, prof:Profile):void {
         // Do this before anything else
         val a = activity();
         a.ensureNotInAtomic();
@@ -698,7 +698,7 @@ public final class Runtime {
             };
             submitLocalActivity(new Activity(epoch, asyncBody, state));
         } 
-        state.spawnMultipleRemoteActivities(destPlaces, ignoreDest, body, prof);
+        state.spawnRemoteActivities(destPlaces, ignoreDest, body, prof);
         Unsafe.dealloc(body);
     }
     

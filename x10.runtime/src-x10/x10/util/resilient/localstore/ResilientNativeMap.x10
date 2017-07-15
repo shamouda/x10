@@ -72,7 +72,21 @@ public class ResilientNativeMap[K] {K haszero} {
             });
             return null;
         };
-        executeTransaction(null, distClosure, -1, -1);
+        executeFlatTransaction(null, distClosure, -1, -1);
+    }
+    
+    public def set2(key:K, value:Cloneable, placeIdx:Long, key2:K, value2:Cloneable) {
+        val distClosure = (tx:AbstractTx[K]) => {
+            tx.put(key, value);
+            tx.asyncAt(placeIdx, () => {
+                tx.put(key2, value2);
+            });
+            return null;
+        };
+        val rail = new Rail[Long](2);
+        rail(0) = plh().virtualPlaceId;
+        rail(1) = placeIdx;
+        executeFlatTransaction(rail, distClosure, -1, -1);
     }
     
     public def set2(key:K, value:Cloneable, key2:K, value2:Cloneable) {        
@@ -157,13 +171,9 @@ public class ResilientNativeMap[K] {K haszero} {
     }
     
     /***********************   Global Transactions ****************************/
-    private def startGlobalTransaction():Tx[K] {
-        return startGlobalTransaction(-1, null);
-    }
-    
-    private def startGlobalTransaction(prevTx:Long, members:TxMembers):Tx[K] {
+    private def startGlobalTransaction(prevTx:Long, members:TxMembers, flat:Boolean):Tx[K] {
         val id = plh().getMasterStore().getNextTransactionId();
-        val tx = new Tx(plh, id, members);
+        val tx = new Tx(plh, id, members, flat);
         
         var predefinedMembers:Rail[Long] = null;
         if (members != null)
@@ -180,7 +190,7 @@ public class ResilientNativeMap[K] {K haszero} {
         assert(plh().virtualPlaceId != -1);
         val includeDead = true; // The commitHandler will take the correct actions regarding the dead master
         val members = txDesc.staticMembers? plh().getTxMembers(txDesc.virtualMembers.toRail(), includeDead):null;
-        return new Tx(plh, txDesc.id, members);
+        return new Tx(plh, txDesc.id, members, false);
     }
     
     public def executeTransaction(closure:(Tx[K])=>Any, maxRetries:Long):TxResult {
@@ -188,6 +198,14 @@ public class ResilientNativeMap[K] {K haszero} {
     }
     
     public def executeTransaction(virtualMembers:Rail[Long], closure:(Tx[K])=>Any, maxRetries:Long, maxTimeNS:Long):TxResult {
+    	return executeTransaction(virtualMembers, closure, maxRetries, maxTimeNS, false);
+    }
+    
+    public def executeFlatTransaction(virtualMembers:Rail[Long], closure:(Tx[K])=>Any, maxRetries:Long, maxTimeNS:Long):TxResult {
+    	return executeTransaction(virtualMembers, closure, maxRetries, maxTimeNS, true);
+    }
+    
+    public def executeTransaction(virtualMembers:Rail[Long], closure:(Tx[K])=>Any, maxRetries:Long, maxTimeNS:Long, flat:Boolean):TxResult {
         val beginning = System.nanoTime();
         var members:TxMembers = null;
         if (virtualMembers != null) 
@@ -206,7 +224,7 @@ public class ResilientNativeMap[K] {K haszero} {
             var tx:Tx[K] = null; 
             var commitCalled:Boolean = false;
             try {
-                tx = startGlobalTransaction(prevTx, members);
+                tx = startGlobalTransaction(prevTx, members, flat);
                 prevTx = tx.id;
                 val out:Any;
                 finish {

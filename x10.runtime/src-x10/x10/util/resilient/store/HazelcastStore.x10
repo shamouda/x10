@@ -43,6 +43,8 @@ public class HazelcastStore[V]{V haszero, V <: Cloneable} extends Store[V] {
 
   private def k(place:Place, key:String) = (group.indexOf(place) << 32) + "_" + key;
 
+  private def k(placeIndx:Long, key:String) = (placeIndx << 32) + "_" + key;
+
   public def get(key:String) = getRemote(here, key);
 
   public def set(key:String, value:V) {
@@ -72,6 +74,15 @@ public class HazelcastStore[V]{V haszero, V <: Cloneable} extends Store[V] {
     map.set(k1, value);
     log.delete(k1);
   }
+  
+  public def set2(key:String, value:V, placeIndx:Long, key2:String, value2:V) {
+	    val k1 = k(here, key);
+	    val k2 = k(placeIndx, key2);
+	    log.set(k1, new LogEntry(k1, value, k2, value2));
+	    map.set(k2, value2);
+	    map.set(k1, value);
+	    log.delete(k1);
+	  }
 
   public def getActivePlaces() = group;
 

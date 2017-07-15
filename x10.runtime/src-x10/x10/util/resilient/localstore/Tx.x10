@@ -34,7 +34,7 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
     public transient var txLoggingElapsedTime:Long = 0;
     private val members:TxMembers;
     
-    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, members:TxMembers) {
+    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, members:TxMembers, flat:Boolean) {
         super(plh, id);
         this.members = members;
         
@@ -45,16 +45,18 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
             Console.OUT.println("TX["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] started members["+memStr+"]");
         }
         	
-        if (resilient) {
-            if (TxConfig.get().DISABLE_SLAVE) {
-                commitHandler = new NonResilientCommitHandler[K](plh, id, members);
-            }
-            else {
-                commitHandler = new EagerReplicationCommitHandler[K](plh, id, members);
-            }
+        if (resilient && !TxConfig.get().DISABLE_SLAVE) {
+             if (members == null && !flat)
+         	    commitHandler = new ResilientTreeCommitHandler[K](plh, id);
+         	else
+         		commitHandler = new ResilientFlatCommitHandler[K](plh, id, members);
         }
-        else
-        	commitHandler = new NonResilientCommitHandler[K](plh, id, members);
+        else {
+        	if (members == null && !flat)
+        	    commitHandler = new NonResilientTreeCommitHandler[K](plh, id);
+        	else
+        		commitHandler = new NonResilientFlatCommitHandler[K](plh, id, members);
+        }
     }
 
     /*********************** Abort ************************/  
@@ -119,7 +121,6 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here=" + here + " committed");
         return success;
     }
-    
     
     public def asyncAt(virtualPlace:Long, closure:()=>void) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here=" + here + " asyncAt(dest="+virtualPlace+") ...");

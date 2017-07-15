@@ -49,6 +49,10 @@ public class NativeStore[V]{V haszero, V <: Cloneable} extends Store[V] {
       public def set2(key:String, value:V, place:Place, key2:String, value2:V) {
           map.set2(key, value, place, key2, value2);
       }
+      
+      public def set2(key:String, value:V, place:Long, key2:String, value2:V) {
+          map.set2(key, value, place, key2, value2);
+      }
 
       public def getActivePlaces() = store.getActivePlaces();
 

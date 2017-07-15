@@ -85,7 +85,7 @@ public class SPMDFinishBench {
 	        do {
 	            for (i in 1..OUTER_ITERS) {
 	            	finish {
-	                    Runtime.runAsyncSPMD(Place.places(), ()=>{
+	                    Runtime.runAsync(Place.places(), ()=>{
 	                    	think(t);
 	                	}, null);
 	                }
@@ -140,7 +140,7 @@ public class SPMDFinishBench {
 	                for (p in Place.places()) {
 	                    at (p) async {
 	                        finish {
-	                            Runtime.runAsyncSPMD(Place.places(), ()=>{
+	                            Runtime.runAsync(Place.places(), ()=>{
 	    	                    	think(t);
 	    	                	}, null);
 	                        }

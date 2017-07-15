@@ -1009,7 +1009,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         }
     }
     
-    def spawnMultipleRemoteActivities(destPlaces:PlaceGroup, ignoreDest:Long, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
+    def spawnRemoteActivities(destPlaces:PlaceGroup, ignoreDest:Long, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
         val start = prof != null ? System.nanoTime() : 0;
         val ser = new Serializer();
         ser.writeAny(body);
@@ -1027,14 +1027,10 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         localCount().incrementAndGet();  // synthetic activity to keep finish locally live during async to Place0
         val fsgr = this.ref;
 
-        if (verbose >= 1) debug(">>>>  spawnMultipleRemoteActivities(id="+myId+") selecting direct (size="+
+        if (verbose >= 1) debug(">>>>  spawnRemoteActivities(id="+myId+") direct (size="+
                                 bytes.size+") srcId="+srcId + " dstPlaces="+destPlaces.size());
-
-        if (bytes.size >= ASYNC_SIZE_THRESHOLD)  {
-        	debug(">>>>  WARNING spawnMultipleRemoteActivities(id="+myId+") body size("+bytes.size+") greater than limit("+ASYNC_SIZE_THRESHOLD+")");
-        }
         
-        at (place0) @Immediate("spawnMultipleRemoteActivities_to_zero") async {
+        at (place0) @Immediate("spawnRemoteActivities_to_zero") async {
             try {
                 lock.lock();
                 val state = states(myId);
@@ -1047,10 +1043,10 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                     	if (ignoreDest == dstId)
                     		continue;
                     	if (dest.isDead()) {
-                    		if (verbose>=1) debug("==== spawnMultipleRemoteActivities(id="+myId+") destination "+dstId + "is dead; pushed DPE");
+                    		if (verbose>=1) debug("==== spawnRemoteActivities(id="+myId+") destination "+dstId + "is dead; pushed DPE");
                     		state.addDeadPlaceException(dstId);
                 		} else {
-                    		state.addLive(srcId, dstId, ASYNC, "spawnMultipleRemoteActivities");
+                    		state.addLive(srcId, dstId, ASYNC, "spawnRemoteActivities");
                 		}
                 	}
                 }
@@ -1058,7 +1054,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 lock.unlock();
             }
             try {
-                at (fsgr) @Immediate("spawnMultipleRemoteActivities_dec_local_count") async {
+                at (fsgr) @Immediate("spawnRemoteActivities_dec_local_count") async {
                     fsgr().notifyActivityTermination(); // end of synthetic local activity
                 }
             } catch (dpe:DeadPlaceException) {
@@ -1072,8 +1068,8 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
             		continue;
             	if (!dest.isDead()) {
 		            try {
-		                at (dest) @Immediate("spawnMultipleRemoteActivities_dstPlace") async {
-		                    if (verbose >= 1) debug("==== spawnMultipleRemoteActivities(id="+myId+") submitting activity from "+srcId+" at "+dstId);
+		                at (dest) @Immediate("spawnRemoteActivities_dstPlace") async {
+		                    if (verbose >= 1) debug("==== spawnRemoteActivities(id="+myId+") submitting activity from "+srcId+" at "+dstId);
 		                    val wrappedBody = ()=> {
 		                        // defer deserialization to reduce work on immediate thread
 		                        val deser = new Deserializer(bytes);
@@ -1089,6 +1085,6 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
             	}
             }
         }
-        if (verbose>=1) debug("<<<< spawnMultipleRemoteActivities(id="+myId+") returning");
+        if (verbose>=1) debug("<<<< spawnRemoteActivities(id="+myId+") returning");
     }
 }

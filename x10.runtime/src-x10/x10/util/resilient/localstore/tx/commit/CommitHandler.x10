@@ -10,6 +10,8 @@ import x10.util.resilient.localstore.TxMembers;
 import x10.util.HashSet;
 import x10.compiler.Pinned;
 import x10.util.resilient.localstore.tx.logging.TxDescManager;
+import x10.compiler.Pragma;
+import x10.xrx.Runtime;
 
 public abstract class CommitHandler[K] {K haszero} {
 	public transient var phase1ElapsedTime:Long = 0;
@@ -21,7 +23,7 @@ public abstract class CommitHandler[K] {K haszero} {
     
     protected plh:PlaceLocalHandle[LocalStore[K]];
     protected id:Long;
-    protected members:TxMembers;
+    protected var members:TxMembers;
     
     public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, members:TxMembers) {
     	this.plh = plh;
@@ -29,13 +31,31 @@ public abstract class CommitHandler[K] {K haszero} {
     	this.members = members;
     }
     
-    protected def executeFlat(closure:(PlaceLocalHandle[LocalStore[K]],Long)=>void, deleteTxDesc:Boolean) {
+    public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {
+    	this.plh = plh;
+    	this.id = id;
+    	this.members = null;
+    }
+    
+    protected def finishFlat(closure:(PlaceLocalHandle[LocalStore[K]],Long)=>void, deleteTxDesc:Boolean) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] executeFlat started ...");
-                
-        for (p in members.pg()) {
-            at (p) async {
-                closure(plh, id);
-            }
+        
+        val places:PlaceGroup;
+        if (members != null){
+        	places = members.pg();
+        }
+        else {
+        	val childrenVirtual = plh().txDescManager.getVirtualMembers(id, TxDescManager.FROM_MASTER);
+        	members = plh().getTxMembers( childrenVirtual , true);
+        	places = members.pg();
+        }
+        
+        if (x10.xrx.Runtime.RESILIENT_MODE == 0n){
+        	@Pragma(Pragma.FINISH_SPMD) finish for (p in places) at (p) async {
+	            closure(plh, id);
+	        }
+        } else {
+        	finish Runtime.runAsync(places, ()=>{  closure(plh, id); }, null);
         }
         
         if (deleteTxDesc) {
@@ -72,12 +92,24 @@ public abstract class CommitHandler[K] {K haszero} {
                     }
                 }
             }
-        }finally {
+        } finally {
             if (deleteTxDesc && childrenVirtual != null) {
                 plh().txDescManager.delete(id, true);
             }
         }
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] executeRecursively ended children ["+childCount+"] ...");
+    }
+    
+    protected def validate_local(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {
+        plh().getMasterStore().validate(id);
+    }
+    
+    protected def commit_local(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {
+        plh().getMasterStore().commit(id);
+    }
+    
+    protected def abort_local(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {
+        plh().getMasterStore().abort(id);
     }
     
 }

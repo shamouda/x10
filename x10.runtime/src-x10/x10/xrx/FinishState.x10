@@ -158,8 +158,8 @@ abstract class FinishState {
         x10.xrx.Runtime.x10rtSendAsync(place.id, body, fs, prof, preSendAction);
     }
     
-    def spawnMultipleRemoteActivities(places:PlaceGroup, ignoreDest:Long, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
-    	throw new IllegalOperationException("spawnMultipleRemoteActivities not supported in " + this + " use PRAGMA.FINISH_SPMD");
+    def spawnRemoteActivities(places:PlaceGroup, ignoreDest:Long, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
+    	throw new IllegalOperationException("spawnRemoteActivities not supported in " + this + " use PRAGMA.FINISH_SPMD");
     }
 
     static def deref[T](root:GlobalRef[FinishState]) = (root as GlobalRef[FinishState]{home==here})() as T;
