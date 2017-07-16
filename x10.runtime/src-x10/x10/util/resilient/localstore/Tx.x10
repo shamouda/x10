@@ -33,6 +33,7 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
     public transient var processingElapsedTime:Long = 0; ////including waitTime
     public transient var txLoggingElapsedTime:Long = 0;
     private val members:TxMembers;
+    private var txDescCreated:Boolean = false;
     
     public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, members:TxMembers, flat:Boolean) {
         super(plh, id);
@@ -69,8 +70,6 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
     }
     
     private def abort(recovery:Boolean) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here="+ here + " abort started ");
-        
         if (processingElapsedTime == 0)
             processingElapsedTime = Timer.milliTime() - startTime;
         
@@ -81,9 +80,7 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
         }
         plh().stat.addAbortedTxStats(Timer.milliTime() - startTime, 
                 processingElapsedTime);
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here="+ here + " aborted ");
     }
-
     
     /***********************   Two Phase Commit Protocol ************************/
     public def commitRecovery() {
@@ -97,7 +94,6 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
     }
     
     public def commit(recovery:Boolean) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here=" + here + " commit started");
         if (!TxConfig.get().COMMIT)
             return AbstractTx.SUCCESS;
         
@@ -118,20 +114,14 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
                 commitHandler.phase2ElapsedTime,
                 commitHandler.txLoggingElapsedTime);
         
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here=" + here + " committed");
         return success;
     }
     
     public def asyncAt(virtualPlace:Long, closure:()=>void) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here=" + here + " asyncAt(dest="+virtualPlace+") ...");
         if (members == null){
-            val vMembers = new Rail[Long](1);
-            vMembers(0) = virtualPlace;
-            plh().txDescManager.addVirtualMembers(id, vMembers, false) ;
+            plh().txDescManager.addVirtualMember(id, virtualPlace, false) ;
         }
-        
         val pl = plh().getPlace(virtualPlace);
-        assert (pl.id >= 0 && pl.id < Place.numPlaces()) : "fatal bug, wrong place id " + pl.id;
         at (pl) async closure();
     }
         

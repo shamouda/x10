@@ -73,7 +73,6 @@ public class SlaveStore[K] {K haszero} {
     /******* Prepare/Commit/Abort functions *******/
     /*Used by LocalTx to commit a transaction. TransLog is applied immediately and not saved in the logs map*/
     public def commit(id:Long, transLog:HashMap[K,Cloneable], ownerPlaceIndex:Long) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.commitLocalTx() started ...");
         try {
             slaveLock();
             commitLockAcquired(new TxSlaveLog[K](id, ownerPlaceIndex, transLog));
@@ -81,12 +80,10 @@ public class SlaveStore[K] {K haszero} {
         finally {
             slaveUnlock();
         }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.commitLocalTx() committed ...");
     }
     
     /*Used by Tx to commit a transaction that was previously prepared. TransLog is removed from the logs map after commit*/
     public def commit(id:Long) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.commitGlobalTx() started ...");
         try {
             slaveLock();
             val txLog = getLog(id);
@@ -97,11 +94,9 @@ public class SlaveStore[K] {K haszero} {
         } finally {
             slaveUnlock();
         }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.commitGlobalTx() committed ...");
     }
     
     private def commitLockAcquired(txLog:TxSlaveLog[K]) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] " + TxManager.txIdToString(txLog.id) + " here["+here+"] SlaveStore.commitLockAcquired() started ...");
         try {
             val data = masterState;
             val iter = txLog.transLog.keySet().iterator();
@@ -113,15 +108,12 @@ public class SlaveStore[K] {K haszero} {
                 else
                     data.put(key, value);
             }
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] " + TxManager.txIdToString(txLog.id) + " here["+here+"] SlaveStore.commitLockAcquired() completed ...");
         }catch(ex:Exception){
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] " + TxManager.txIdToString(txLog.id) + " here["+here+"] SlaveStore.commitLockAcquired() exception["+ex.getMessage()+"] ...");
             throw ex;
         }
     }
     
     public def prepare(id:Long, entries:HashMap[K,Cloneable], ownerPlaceIndex:Long) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.prepare() started ...");
         try {
             slaveLock();
             var txSlaveLog:TxSlaveLog[K] = getLog(id);
@@ -130,16 +122,13 @@ public class SlaveStore[K] {K haszero} {
                 logs.add(txSlaveLog);
             }
             txSlaveLog.transLog = entries;
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.prepare() logs.put(id="+id+") ...");
         }
         finally {
             slaveUnlock();
         }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.prepare() completed ...");
     }
     
     public def abort(id:Long) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.abort() started ...");
         try {
             slaveLock();
             val log = getLog(id);
@@ -148,7 +137,6 @@ public class SlaveStore[K] {K haszero} {
         finally {
             slaveUnlock();
         }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] SlaveStore.abort() completed ...");
     }
     
     public def clusterTransactions() {
@@ -289,7 +277,7 @@ public class SlaveStore[K] {K haszero} {
 	        val list = new ArrayList[Long]();
 	        for (txId in txList) {
 	            val obj = masterTxDesc.getOrElse(txId, null);
-	            if (obj != null && (obj.status == TxDesc.COMMITTED || obj.status == TxDesc.COMMITTING)) {
+	            if (obj != null && obj.status == TxDesc.COMMITTING) {
 	                list.add(txId);
 	            }
 	        }
@@ -331,6 +319,20 @@ public class SlaveStore[K] {K haszero} {
     			masterTxDesc.put(id, desc);
     		}
     		desc.addVirtualMembers(vMembers);
+    	} finally {
+    		unlockTxDesc();
+    	}
+    }
+    
+    public def addTxDescMember(id:Long, memId:Long) {
+    	try {
+    		lockTxDesc();
+    		var desc:TxDesc = masterTxDesc.getOrElse(id, null);
+    		if (desc == null) {
+    			desc = new TxDesc(id, false); 
+    			masterTxDesc.put(id, desc);
+    		}
+    		desc.addVirtualMember(memId);
     	} finally {
     		unlockTxDesc();
     	}

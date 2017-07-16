@@ -118,7 +118,7 @@ public class MasterStore[K] {K haszero} {
         
         for (txId in txList) {
         	val obj = txManager.data.getTxDesc(txId);
-            if (obj != null && ( (obj as TxDesc).status == TxDesc.COMMITTED || (obj as TxDesc).status == TxDesc.COMMITTING) ) {
+            if (obj != null && (obj as TxDesc).status == TxDesc.COMMITTING ) {
                 list.add(txId);
             }
         }

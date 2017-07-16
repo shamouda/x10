@@ -1035,7 +1035,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 lock.lock();
                 val state = states(myId);
                 if (Place(srcId).isDead()) {
-                    if (verbose>=1) debug("==== spwanRemoteSPMDActivity(id="+myId+") src "+srcId + "is dead; dropping async");
+                    if (verbose>=1) debug("==== spawnRemoteActivities(id="+myId+") src "+srcId + "is dead; dropping async");
                 } 
                 else {
                 	for (dest in destPlaces) {

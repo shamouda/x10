@@ -25,7 +25,6 @@ public class TxDesc(id:Long) {
     public val staticMembers:Boolean;
     public static val STARTED=1;
     public static val COMMITTING=2;
-    public static val COMMITTED=3;
 
     public def this(id:Long, staticMembers:Boolean) {
         property (id);
@@ -50,6 +49,18 @@ public class TxDesc(id:Long) {
         }
     }
     
+    public def addVirtualMember(id:Long) {
+        var found:Boolean = false;
+        for (var i:Long = 0; i < virtualMembers.size(); i++) {
+            if (virtualMembers(i) == id) {
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            virtualMembers.add(id);
+    }
+    
     public def getVirtualMembers() {            
         return virtualMembers;
     }
@@ -59,8 +70,6 @@ public class TxDesc(id:Long) {
             return "STARTED";
         else if (status == COMMITTING)
             return "COMMITTING";
-        else if (status == COMMITTED)
-            return "COMMITTED";
         return "";
     }
     

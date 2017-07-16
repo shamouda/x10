@@ -17,6 +17,7 @@ import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.tx.StorePausedException;
 import x10.util.resilient.localstore.LocalStore;
+import x10.compiler.Uncounted;
 
 public class TxDescManager[K] {K haszero} {
 	public val plh:PlaceLocalHandle[LocalStore[K]];
@@ -28,13 +29,14 @@ public class TxDescManager[K] {K haszero} {
     	this.plh =  plh;
     }
     
+    /*Static members only*/
     public def add(id:Long, members:Rail[Long], ignoreDeadSlave:Boolean) {
-        val staticMembers = members != null && members.size > 0;
+        val staticMembers = true;
         val desc = new TxDesc(id, staticMembers);
         desc.addVirtualMembers(members);
         if (resilient && !TxConfig.get().DISABLE_SLAVE) {
             try {
-                finish at (plh().slave) async {
+                at (plh().slave) {
                     plh().slaveStore.putTransDescriptor(id, desc);
                 }
             } catch(exSl:Exception) {
@@ -47,10 +49,16 @@ public class TxDescManager[K] {K haszero} {
         
     }
     
+    /**
+     * We use an uncounted async to delete the slave's TxDesc
+     * that won't harm while recovery. The side effect is that we
+     * may need to recommit/reabort an already committed/aborted transaction.
+     * The master already discards such duplication.
+     * */
     public def delete(id:Long, ignoreDeadSlave:Boolean) {
         if (resilient && !TxConfig.get().DISABLE_SLAVE) {
             try {
-                finish at (plh().slave) async {
+                at (plh().slave) @Uncounted async {
                     plh().slaveStore.deleteTransDescriptor(id);
                 }
             } catch(exSl:Exception) {
@@ -65,7 +73,7 @@ public class TxDescManager[K] {K haszero} {
     public def updateStatus(id:Long, newStatus:Long, ignoreDeadSlave:Boolean) {
         if (resilient && !TxConfig.get().DISABLE_SLAVE) {
             try {
-                finish at (plh().slave) async {
+                at (plh().slave) {
                     plh().slaveStore.updateTxDescStatus(id, newStatus);
                 }
             } catch(exSl:Exception) {
@@ -80,7 +88,7 @@ public class TxDescManager[K] {K haszero} {
     public def addVirtualMembers(id:Long, vMembers:Rail[Long], ignoreDeadSlave:Boolean) {
         if (resilient && !TxConfig.get().DISABLE_SLAVE) {
             try {
-                finish at (plh().slave) async {
+                at (plh().slave) {
                     plh().slaveStore.addTxDescMembers(id, vMembers);
                 }
             } catch(exSl:Exception) {
@@ -91,6 +99,22 @@ public class TxDescManager[K] {K haszero} {
         }
     	plh().getMasterStore().getState().addTxDescMembers(id, vMembers);
     }
+    
+    public def addVirtualMember(id:Long, memId:Long, ignoreDeadSlave:Boolean) {
+        if (resilient && !TxConfig.get().DISABLE_SLAVE) {
+            try {
+                at (plh().slave) {
+                    plh().slaveStore.addTxDescMember(id, memId);
+                }
+            } catch(exSl:Exception) {
+                plh().asyncSlaveRecovery();
+            	if (!ignoreDeadSlave)
+            		throw exSl;
+            }
+        }
+    	plh().getMasterStore().getState().addTxDescMember(id, memId);
+    }
+    
     
     public def getVirtualMembers(id:Long, masterType:Boolean) {
         try {

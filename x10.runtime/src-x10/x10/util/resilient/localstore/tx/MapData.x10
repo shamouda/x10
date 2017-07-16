@@ -206,12 +206,24 @@ public class MapData[K] {K haszero} {
     		lockTxDesc();
     		var desc:TxDesc = masterTxDesc.getOrElse(id, null);
     		if (desc == null) {
-    			val mapName = "";
     			desc = new TxDesc(id, false); 
     			masterTxDesc.put(id, desc);
     		}
     		desc.addVirtualMembers(vMembers);
-    		if (TxConfig.get().TM_DEBUG) Console.OUT.println("TxDesc["+id+"] " + " here["+here+"] MapData.addTxDescMembers() => {"+desc+"} ...");
+    	} finally {
+    		unlockTxDesc();
+    	}
+    }
+    
+    public def addTxDescMember(id:Long, memId:Long) {
+    	try {
+    		lockTxDesc();
+    		var desc:TxDesc = masterTxDesc.getOrElse(id, null);
+    		if (desc == null) {
+    			desc = new TxDesc(id, false); 
+    			masterTxDesc.put(id, desc);
+    		}
+    		desc.addVirtualMember(memId);
     	} finally {
     		unlockTxDesc();
     	}
@@ -220,8 +232,7 @@ public class MapData[K] {K haszero} {
     public def removeTxDesc(id:Long) {
     	try {
     		lockTxDesc();
-    		masterTxDesc.remove(id);
-    		if (TxConfig.get().TM_DEBUG) Console.OUT.println("TxDesc["+id+"] " + " here["+here+"] MapData.removeTxDesc() ...");
+    		return masterTxDesc.remove(id);
     	} finally {
     		unlockTxDesc();
     	}
