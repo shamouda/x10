@@ -126,11 +126,7 @@ public class ResilientTreeCommitHandler[K] {K haszero} extends ResilientCommitHa
     
     protected def executeRecursivelyResilient(master_closure:(PlaceLocalHandle[LocalStore[K]],Long)=>void,
             slave_closure:(PlaceLocalHandle[LocalStore[K]],Long)=>void, places:ArrayList[Place]) {
-        var str:String = "";
-        for (x in places) {
-            str += x + " , " ;
-        }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient started, places are ["+str+"]  ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient started ...");
         var completed:Boolean = false;
         var masterType:Boolean = true; 
         val parents = new HashSet[Long]();
@@ -169,13 +165,7 @@ public class ResilientTreeCommitHandler[K] {K haszero} extends ResilientCommitHa
                                         executeRecursively(master_closure, parents, false);
                                     }
                                 }
-                                else
-                                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient ignoring ["+p+"] already a parent ...");
-                                
                             }
-                        }
-                        else {
-                            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " NO_CHILDREN ...");
                         }
                     }
                 }

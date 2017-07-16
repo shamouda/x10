@@ -201,20 +201,6 @@ public class MapData[K] {K haszero} {
     	}
     }
     
-    public def addTxDescMembers(id:Long, vMembers:Rail[Long]) {
-    	try {
-    		lockTxDesc();
-    		var desc:TxDesc = masterTxDesc.getOrElse(id, null);
-    		if (desc == null) {
-    			desc = new TxDesc(id, false); 
-    			masterTxDesc.put(id, desc);
-    		}
-    		desc.addVirtualMembers(vMembers);
-    	} finally {
-    		unlockTxDesc();
-    	}
-    }
-    
     public def addTxDescMember(id:Long, memId:Long) {
     	try {
     		lockTxDesc();

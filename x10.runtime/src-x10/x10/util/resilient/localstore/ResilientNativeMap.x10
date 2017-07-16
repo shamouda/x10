@@ -170,15 +170,12 @@ public class ResilientNativeMap[K] {K haszero} {
     }
     
     /***********************   Global Transactions ****************************/
-    private def startGlobalTransaction(prevTx:Long, members:TxMembers, flat:Boolean):Tx[K] {
+    private def startGlobalTransaction(members:TxMembers, flat:Boolean):Tx[K] {
         val id = plh().getMasterStore().getNextTransactionId();
         val tx = new Tx(plh, id, members, flat);
-        
         if (members != null && resilient) {
             plh().txDescManager.add(id, members.virtual, false);
         }
-        
-        if (TxConfig.get().TM_DEBUG && prevTx != -1) Console.OUT.println("Tx["+prevTx+"] starting new transaction Tx["+id+"] ");
         return tx;
     }
     
@@ -206,24 +203,21 @@ public class ResilientNativeMap[K] {K haszero} {
         var members:TxMembers = null;
         if (virtualMembers != null) 
             members = plh().getTxMembers(virtualMembers, true);
-        var prevTx:Long = -1;
         var retryCount:Long = 0;
         while(true) {
             if (retryCount == maxRetries || (maxTimeNS != -1 && System.nanoTime() - beginning >= maxTimeNS)) {
-            	if (TxConfig.get().TM_DEBUG && prevTx != -1) Console.OUT.println("Tx["+prevTx+"] max limit["+maxRetries+"] reached ");
-                throw new FatalTransactionException("Reached maximum limit for retrying a transaction");
+                throw new FatalTransactionException("Maximum limit for retrying a transaction reached!!");
             }
             retryCount++;
             
             var tx:Tx[K] = null; 
             var commitCalled:Boolean = false;
             try {
-                tx = startGlobalTransaction(prevTx, members, flat);
-                prevTx = tx.id;
+                tx = startGlobalTransaction(members, flat);
                 val out:Any;
                 finish {
-                    out = closure(tx);
-                }
+        			out = closure(tx);
+        		}
                 commitCalled = true;
                 return new TxResult(tx.commit(), out);
             } catch(ex:Exception) {

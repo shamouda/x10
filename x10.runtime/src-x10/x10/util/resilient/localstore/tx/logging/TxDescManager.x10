@@ -85,21 +85,6 @@ public class TxDescManager[K] {K haszero} {
     	plh().getMasterStore().getState().updateTxDescStatus(id, newStatus);
     }
     
-    public def addVirtualMembers(id:Long, vMembers:Rail[Long], ignoreDeadSlave:Boolean) {
-        if (resilient && !TxConfig.get().DISABLE_SLAVE) {
-            try {
-                at (plh().slave) {
-                    plh().slaveStore.addTxDescMembers(id, vMembers);
-                }
-            } catch(exSl:Exception) {
-                plh().asyncSlaveRecovery();
-            	if (!ignoreDeadSlave)
-            		throw exSl;
-            }
-        }
-    	plh().getMasterStore().getState().addTxDescMembers(id, vMembers);
-    }
-    
     public def addVirtualMember(id:Long, memId:Long, ignoreDeadSlave:Boolean) {
         if (resilient && !TxConfig.get().DISABLE_SLAVE) {
             try {
