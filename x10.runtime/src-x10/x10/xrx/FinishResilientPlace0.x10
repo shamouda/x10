@@ -744,6 +744,15 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
             if (verbose>=1) debug(">>>> notifyActivityCreatedAndTerminated(id="+myId+") called locally, localCount now "+lc);
             if (lc > 0) return;
             if (isGlobal) {
+                val gfs = this.ref;
+                val parentId:Id;
+                if (parent instanceof FinishResilientPlace0) {
+                    val frParent = parent as FinishResilientPlace0;
+                    if (!frParent.isGlobal) frParent.globalInit();
+                    parentId = frParent.id;
+                } else {
+                    parentId = UNASSIGNED;
+                }
                 // if srcId == dstId, then notifySubActivitySpawn goes directly to live (not transit)
                 // so we need to decrement accordingly here and then check for quiescence.
                 at (place0) @Immediate("notifyActivityCreatedAndTerminated_quiescence_check_to_zero") async {
@@ -755,7 +764,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                             //       when Place0 is notified of a dead place.
                             if (verbose>=1) debug("==== notifyActivityCreatedAndTerminated(id="+myId+") suppressed: "+srcId + " ==> "+srcId+" kind="+kind);
                         } else {
-                            val state = states(myId);
+                            val state = getOrCreateState(myId, parentId, gfs);
                             state.liveToCompleted(srcId, kind);
                         }
                     } finally {
@@ -943,6 +952,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         if (bytes.size >= ASYNC_SIZE_THRESHOLD) {
             if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") selecting indirect (size="+
                                     bytes.size+") srcId="+here.id + " dstId="+dstId);
+
             val wrappedBody = ()=> @AsyncClosure {
                 val deser = new Deserializer(bytes);
                 val bodyPrime = deser.readAny() as ()=>void;
@@ -1015,8 +1025,8 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 } catch (dpe:DeadPlaceException) {
                     // can ignore; if the place just died here is no need to worry about updating local count
                     if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dec_local_count for "+myId);
-                }
-                
+                }     
+                           
                 try {
                     at (Place(dstId)) @Immediate("spawnRemoteActivity_dstPlace") async {
                         if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") submitting activity from "+here.id+" at "+dstId);
@@ -1060,7 +1070,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         }
         
         val myId = this.id;
-
+        
         localCount().incrementAndGet();  // synthetic activity to keep finish locally live during async to Place0
 
         if (verbose >= 1) debug(">>>>  spawnRemoteActivities(id="+myId+") direct (size="+
