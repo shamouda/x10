@@ -839,6 +839,16 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
 
     def pushException(t:CheckedThrowable):void {
         val myId = this.id;
+        val gfs = this.ref;
+        val parentId:Id;
+        if (parent instanceof FinishResilientPlace0) {
+            val frParent = parent as FinishResilientPlace0;
+            if (!frParent.isGlobal) frParent.globalInit();
+            parentId = frParent.id;
+        } else {
+            parentId = UNASSIGNED;
+        }
+        
         if (!isGlobal) {
             latch.lock();
             if (verbose>=1) debug(">>>> pushException(id="+myId+") locally pushing exception "+t);
@@ -850,7 +860,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
             Runtime.runImmediateAt(place0, ()=>{ 
                 try {
                     lock.lock();
-                    val state = states(myId);
+                    val state = getOrCreateState(myId, parentId, gfs);
                     if (!state.isAdopted()) { // If adopted, the language semantics are to suppress exception.
                         state.addException(t);
                     }
