@@ -202,7 +202,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         }
 
         def releaseLatch() {
-	    if (isAdopted()) {
+	        if (isAdopted()) {
                 if (verbose>=1) debug("releaseLatch(id="+id+") called on adopted finish; not releasing latch");
             } else {
                 val exceptions = (excs == null || excs.isEmpty()) ?  null : excs.toRail();
@@ -636,12 +636,13 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 lock.lock();
                 if (Place(srcId).isDead() || Place(dstId).isDead()) {
                     // NOTE: no state updates or DPE processing here.
-		    //       Must happen exactly once and is done
+		            //       Must happen exactly once and is done
                     //       when Place0 is notified of a dead place.
                     if (verbose>=1) debug("==== notifyActivityCreation(id="+myId+") suppressed: "+srcId + " ==> "+dstId+" kind="+kind);
                     shouldSubmit = false;
                 } else {
                     val state = states(myId);
+                    if (state == null) debug("==== notifyActivityCreation(id="+myId+"), FATAL null state ");
                     state.transitToLive(srcId, dstId, kind, "notifyActivityCreation");
                 }
             } finally {
@@ -690,6 +691,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                     return false;
                 }
                 val state = states(myId);
+                if (state == null) debug("==== notifyShiftedActivityCreation(id="+myId+"), FATAL null state");
                 state.transitToLive(srcId, dstId, kind, "notifyShiftedActivityCreation");
             } finally {
                 lock.unlock();
@@ -707,20 +709,28 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         val myId = this.id;
 
         if (verbose>=1) debug(">>>> notifyActivityCreationFailed(id="+myId+") called, srcId="+srcId + " dstId="+dstId+" kind="+kind);
-
-        if (!isGlobal) globalInit();
-
+        isGlobal = true; // we're about to globalize this activity as part of the message to Place 0
+        val gfs = this.ref;
+        val parentId:Id;
+        if (parent instanceof FinishResilientPlace0) {
+            val frParent = parent as FinishResilientPlace0;
+            if (!frParent.isGlobal) frParent.globalInit();
+            parentId = frParent.id;
+        } else {
+            parentId = UNASSIGNED;
+        }
+        
         at (place0) @Immediate("notifyActivityCreationFailed_to_zero") async {
             try {
                 lock.lock();
                 if (Place(srcId).isDead() || Place(dstId).isDead()) {
                     // NOTE: no state updates or DPE processing here.
-		    //       Must happen exactly once and is done
+		            //       Must happen exactly once and is done
                     //       when Place0 is notified of a dead place.
                     if (verbose>=1) debug("==== notifyActivityCreationFailed(id="+myId+") suppressed: "+srcId + " ==> "+dstId+" kind="+kind);
                 } else {
                     if (verbose>=1) debug(">>>> notifyActivityCreatedFailed(id="+myId+") message running at place0");
-                    val state = states(myId);
+                    val state = getOrCreateState(myId, parentId, gfs);
                     state.transitToCompleted(srcId, dstId, kind, t);
                 }
             } finally {
@@ -780,6 +790,15 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         }
 
         if (verbose>=1) debug(">>>> notifyActivityCreatedAndTerminated(id="+myId+") called, srcId="+srcId + " dstId="+dstId+" kind="+kind);
+        val gfs = this.ref;
+        val parentId:Id;
+        if (parent instanceof FinishResilientPlace0) {
+            val frParent = parent as FinishResilientPlace0;
+            if (!frParent.isGlobal) frParent.globalInit();
+            parentId = frParent.id;
+        } else {
+            parentId = UNASSIGNED;
+        }
         at (place0) @Immediate("notifyActivityCreatedAndTerminated_to_zero") async {
             try {
                 lock.lock();
@@ -790,7 +809,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                     if (verbose>=1) debug("==== notifyActivityCreatedAndTerminated(id="+myId+") suppressed: "+srcId + " ==> "+dstId+" kind="+kind);
                 } else {
                     if (verbose>=1) debug(">>>> notifyActivityCreatedAndTerminated(id="+myId+") message running at place0");
-                    val state = states(myId);
+                    val state = getOrCreateState(myId, parentId, gfs);
                     state.transitToCompleted(srcId, dstId, kind, null);
                 }
             } finally {
@@ -832,12 +851,13 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 lock.lock();
                 if (Place(dstId).isDead()) {
                     // NOTE: no state updates or DPE processing here.
-		    //       Must happen exactly once and is done
+		            //       Must happen exactly once and is done
                     //       when Place0 is notified of a dead place.
                     if (verbose>=1) debug("==== notifyActivityTermination(id="+myId+") suppressed: "+dstId+" kind="+kind);
                 } else {
                     if (verbose>=1) debug("<<<< notifyActivityTermination(id="+myId+") message running at place0");
                     val state = states(myId);
+                    if (state == null)  debug("<<<< notifyActivityTermination(id="+myId+"), FATAL null state ");
                     state.liveToCompleted(dstId, kind);
                 }
             } finally {
