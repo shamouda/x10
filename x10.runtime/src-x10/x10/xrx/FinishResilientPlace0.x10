@@ -845,6 +845,16 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         } 
 
         val dstId = here.id;
+        val gfs = this.ref;
+        val parentId:Id;
+        if (parent instanceof FinishResilientPlace0) {
+            val frParent = parent as FinishResilientPlace0;
+            if (!frParent.isGlobal) frParent.globalInit();
+            parentId = frParent.id;
+        } else {
+            parentId = UNASSIGNED;
+        }
+        
         if (verbose>=1) debug(">>>> notifyActivityTermination(id="+myId+") called, dstId="+dstId+" kind="+kind);
         at (place0) @Immediate("notifyActivityTermination_to_zero") async {
             try {
@@ -856,8 +866,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                     if (verbose>=1) debug("==== notifyActivityTermination(id="+myId+") suppressed: "+dstId+" kind="+kind);
                 } else {
                     if (verbose>=1) debug("<<<< notifyActivityTermination(id="+myId+") message running at place0");
-                    val state = states(myId);
-                    if (state == null)  debug("<<<< notifyActivityTermination(id="+myId+"), FATAL null state ");
+                    val state = getOrCreateState(myId, parentId, gfs);
                     state.liveToCompleted(dstId, kind);
                 }
             } finally {
