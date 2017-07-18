@@ -301,33 +301,33 @@ public class LocalStore[K] {K haszero} {
         }
     }
     
-    public def getTxMembers(virtualMembers:Rail[Long], includeDead:Boolean):TxMembers {
+    public def getTxMembersIncludingDead(virtualMembers:Rail[Long]):TxMembers {
         try {
             lock();
-            val members = new TxMembers(virtualMembers.size);
-            for (var i:Long = 0; i < virtualMembers.size; i++) {
-                val pl = activePlaces(virtualMembers(i));
-                if (includeDead || !pl.isDead()){
-                    members.addPlace(virtualMembers(i), pl);
-                }
+            val size = virtualMembers.size;
+            val virtual = new Rail[Long](size);
+            val places = new Rail[Long](size);
+            for (var i:Long = 0; i < size; i++) {
+            	virtual(i) = virtualMembers(i);
+            	places(i) = activePlaces(virtualMembers(i)).id;
             }
-            return members;
+            return new TxMembers(virtual, places);
         } finally {
             unlock();
         }
     }
     
-    public def getTxMembers(virtualMembers:GrowableRail[Long], includeDead:Boolean):TxMembers {
+    public def getTxMembersIncludingDead(virtualMembers:GrowableRail[Long]):TxMembers {
         try {
             lock();
-            val members = new TxMembers(virtualMembers.size());
-            for (var i:Long = 0; i < virtualMembers.size(); i++) {
-                val pl = activePlaces(virtualMembers(i));
-                if (includeDead || !pl.isDead()){
-                    members.addPlace(virtualMembers(i), pl);
-                }
+            val size = virtualMembers.size();
+            val virtual = new Rail[Long](size);
+            val places = new Rail[Long](size);
+            for (var i:Long = 0; i < size; i++) {
+            	virtual(i) = virtualMembers(i);
+            	places(i) = activePlaces(virtualMembers(i)).id;
             }
-            return members;
+            return new TxMembers(virtual, places);
         } finally {
             unlock();
         }

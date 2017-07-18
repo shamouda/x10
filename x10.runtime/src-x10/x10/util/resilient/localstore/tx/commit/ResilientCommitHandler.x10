@@ -51,17 +51,24 @@ public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandle
     }
     
     protected def getDeadPlaces(mulExp:MultipleExceptions) {
-        
         val list = new ArrayList[Place]();
-        var str:String = "";
         val deadExList = mulExp.getExceptionsOfType[DeadPlaceException]();
         if (deadExList != null) {
             for (dpe in deadExList) {
                 list.add(dpe.place);
-                str += " " + dpe.place;
             }
         }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " getDeadPlaces result {"+str+"} ...");
+        return list;
+    }
+    
+    protected def getDeadPlaces2(mulExp:MultipleExceptions) {
+        val list = new ArrayList[Long]();
+        val deadExList = mulExp.getExceptionsOfType[DeadPlaceException]();
+        if (deadExList != null) {
+            for (dpe in deadExList) {
+                list.add(dpe.place.id);
+            }
+        }
         return list;
     }
     

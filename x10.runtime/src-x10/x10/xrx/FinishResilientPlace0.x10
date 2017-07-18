@@ -1076,7 +1076,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         }
     }
     
-    def spawnRemoteActivities(destPlaces:PlaceGroup, ignoreDest:Long, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
+    def spawnRemoteActivities(destPlaces:Rail[Long], ignoreDest:Long, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
         val start = prof != null ? System.nanoTime() : 0;
         isGlobal = true; // we're about to globalize this activity as part of the message to Place 0
         val ser = new Serializer();
@@ -1103,7 +1103,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         localCount().incrementAndGet();  // synthetic activity to keep finish locally live during async to Place0
 
         if (verbose >= 1) debug(">>>>  spawnRemoteActivities(id="+myId+") direct (size="+
-                                bytes.size+") srcId="+here.id + " dstPlaces="+destPlaces.size());
+                                bytes.size+") srcId="+here.id + " dstPlaces="+destPlaces.size);
         
         at (place0) @Immediate("spawnRemoteActivities_to_zero") async {
             try {
@@ -1114,11 +1114,10 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                     if (verbose>=1) debug("==== spawnRemoteActivities(id="+myId+") src "+srcId + "is dead; dropping async");
                 } 
                 else {
-                	for (dest in destPlaces) {
-                    	val dstId = dest.id;
+                	for (dstId in destPlaces) {
                     	if (ignoreDest == dstId)
                     		continue;
-                    	if (dest.isDead()) {
+                    	if (Place(dstId).isDead()) {
                     		if (verbose>=1) debug("==== spawnRemoteActivities(id="+myId+") destination "+dstId + "is dead; pushed DPE");
                     		state.addDeadPlaceException(dstId);
                 		} else {
@@ -1138,13 +1137,12 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dec_local_count for "+id);
             }
             
-            for (dest in destPlaces) {
-            	val dstId = dest.id;
+            for (dstId in destPlaces) {
             	if (ignoreDest == dstId)
             		continue;
-            	if (!dest.isDead()) {
+            	if (!Place(dstId).isDead()) {
 		            try {
-		                at (dest) @Immediate("spawnRemoteActivities_dstPlace") async {
+		                at (Place(dstId)) @Immediate("spawnRemoteActivities_dstPlace") async {
 		                    if (verbose >= 1) debug("==== spawnRemoteActivities(id="+myId+") submitting activity from "+here.id+" on behalf of "+gfs.home.id+"  at "+dstId);
 		                    val wrappedBody = ()=> {
 		                        // defer deserialization to reduce work on immediate thread

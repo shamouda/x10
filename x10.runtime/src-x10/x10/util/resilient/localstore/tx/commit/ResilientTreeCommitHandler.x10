@@ -40,15 +40,15 @@ public class ResilientTreeCommitHandler[K] {K haszero} extends ResilientCommitHa
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " abort_resilient started ...");
         val abort_master = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { abort_local_resilient(plh, id); } ;
         val abort_slave = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { plh().slaveStore.abort(id); } ;
-        val masters = new ArrayList[Place]();
+        val masters = new ArrayList[Long]();
         if (!recovery) {
-            masters.add(here);
+            masters.add(here.id);
         }
         else {
             abort_slave(plh, id);
             val childrenVirtual = plh().txDescManager.getVirtualMembers(id, TxDescManager.FROM_SLAVE);
             if (childrenVirtual != null) {
-                val places = plh().getTxMembers( childrenVirtual , true).places;
+                val places = plh().getTxMembersIncludingDead( childrenVirtual).places;
                                     
                 for (var i:Long = 0; i<childrenVirtual.size(); i++) {
                     if (plh().getSlave(childrenVirtual(i)).id != here.id) {
@@ -80,15 +80,14 @@ public class ResilientTreeCommitHandler[K] {K haszero} extends ResilientCommitHa
         val validate_slave = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => {  };
         val startP1 = Timer.milliTime();
         try {
-            val masters = new ArrayList[Place]();
-            masters.add(here);
+            val masters = new ArrayList[Long]();
+            masters.add(here.id);
             executeRecursivelyResilient(validate_master, validate_slave, masters);  
             plh().txDescManager.updateStatus(id, TxDesc.COMMITTING, true);
         } catch(ex:Exception) {
             abort(false);
             throw ex;
-        }
-        finally {
+        } finally {
             phase1ElapsedTime = Timer.milliTime() - startP1;
         }
     }
@@ -97,15 +96,15 @@ public class ResilientTreeCommitHandler[K] {K haszero} extends ResilientCommitHa
         val commit_master = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { commit_local_resilient(plh, id); } ;
         val commit_slave = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { plh().slaveStore.commit(id); } ;
         val startP2 = Timer.milliTime();
-        val masters = new ArrayList[Place]();
+        val masters = new ArrayList[Long]();
         if (!recovery) {
-            masters.add(here);
+            masters.add(here.id);
         }
         else {
             commit_slave(plh, id);
             val childrenVirtual = plh().txDescManager.getVirtualMembers(id, TxDescManager.FROM_SLAVE);
             if (childrenVirtual != null) {
-                val places = plh().getTxMembers( childrenVirtual , true).places;
+                val places = plh().getTxMembersIncludingDead( childrenVirtual ).places;
                                     
                 for (var i:Long = 0; i<childrenVirtual.size(); i++) {
                     if (plh().getSlave(childrenVirtual(i)).id != here.id) {
@@ -125,7 +124,7 @@ public class ResilientTreeCommitHandler[K] {K haszero} extends ResilientCommitHa
     }
     
     protected def executeRecursivelyResilient(master_closure:(PlaceLocalHandle[LocalStore[K]],Long)=>void,
-            slave_closure:(PlaceLocalHandle[LocalStore[K]],Long)=>void, places:ArrayList[Place]) {
+            slave_closure:(PlaceLocalHandle[LocalStore[K]],Long)=>void, places:ArrayList[Long]) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient started ...");
         var completed:Boolean = false;
         var masterType:Boolean = true; 
@@ -137,11 +136,11 @@ public class ResilientTreeCommitHandler[K] {K haszero} extends ResilientCommitHa
                 finish for (master in places) {
                     val rootPlace:Place;
                     if (!masterVal) {
-                        rootPlace = plh().getSlave(master);
+                        rootPlace = plh().getSlave(Place(master));
                         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient NEW PHASE with slave "+rootPlace+" ...");
                     }
                     else {
-                        rootPlace = master;
+                        rootPlace = Place(master);
                         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient PHASE with master "+rootPlace+" ...");
                     }
                     
@@ -157,9 +156,9 @@ public class ResilientTreeCommitHandler[K] {K haszero} extends ResilientCommitHa
                         
                         val childrenVirtual = plh().txDescManager.getVirtualMembers(id, masterVal);
                         if (childrenVirtual != null) {
-                            val physical = plh().getTxMembers( childrenVirtual , true).places;
+                            val physical = plh().getTxMembersIncludingDead( childrenVirtual ).places;
                             for (var i:Long = 0; i < childrenVirtual.size(); i++) {
-                                val p = physical(i);
+                                val p = Place(physical(i));
                                 if (!parents.contains(childrenVirtual(i))) {
                                     at (p) async {
                                         executeRecursively(master_closure, parents, false);
@@ -176,7 +175,7 @@ public class ResilientTreeCommitHandler[K] {K haszero} extends ResilientCommitHa
                     dpe.printStackTrace();
                 }
                 places.clear();
-                places.add(dpe.place);
+                places.add(dpe.place.id);
                 masterType = false;
                 ex = dpe;
             } catch(mulExp:MultipleExceptions) {
@@ -185,7 +184,7 @@ public class ResilientTreeCommitHandler[K] {K haszero} extends ResilientCommitHa
                     mulExp.printStackTrace();
                 }
                 places.clear();
-                places.addAll(getDeadPlaces(mulExp));
+                places.addAll(getDeadPlaces2(mulExp));
                 masterType = false;
                 ex = mulExp;
             }
@@ -195,7 +194,7 @@ public class ResilientTreeCommitHandler[K] {K haszero} extends ResilientCommitHa
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient ended ...");
     }
 
-    private def asyncDeleteDescriptors(recovery:Boolean, masters:ArrayList[Place]) {
+    private def asyncDeleteDescriptors(recovery:Boolean, masters:ArrayList[Long]) {
         val deleteDesc_master = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { plh().txDescManager.delete(id, true); } ;
         val deleteDesc_slave = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { plh().txDescManager.deleteTxDescFromSlaveStore(id); } ;
     

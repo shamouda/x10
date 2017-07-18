@@ -40,18 +40,18 @@ public abstract class CommitHandler[K] {K haszero} {
     protected def finishFlat(closure:(PlaceLocalHandle[LocalStore[K]],Long)=>void, deleteTxDesc:Boolean) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] executeFlat started ...");
         
-        val places:PlaceGroup;
+        val places:Rail[Long];
         if (members != null){
-        	places = members.pg();
+        	places = members.places;
         }
         else {
         	val childrenVirtual = plh().txDescManager.getVirtualMembers(id, TxDescManager.FROM_MASTER);
-        	members = plh().getTxMembers( childrenVirtual , true);
-        	places = members.pg();
+        	members = plh().getTxMembersIncludingDead(childrenVirtual);
+        	places = members.places;
         }
         
         if (x10.xrx.Runtime.RESILIENT_MODE == 0n){
-        	@Pragma(Pragma.FINISH_SPMD) finish for (p in places) at (p) async {
+        	@Pragma(Pragma.FINISH_SPMD) finish for (p in places) at (Place(p)) async {
 	            closure(plh, id);
 	        }
         } else {
@@ -61,7 +61,7 @@ public abstract class CommitHandler[K] {K haszero} {
         if (deleteTxDesc) {
             plh().txDescManager.delete(id, true);
         }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] executeFlat ended children ["+members.pg().size()+"] ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here[" + here + "] executeFlat ended ...");
     }
     
     protected def executeRecursively(closure:(PlaceLocalHandle[LocalStore[K]],Long)=>void, parents:HashSet[Long], deleteTxDesc:Boolean) {
@@ -75,12 +75,12 @@ public abstract class CommitHandler[K] {K haszero} {
                 val myVirtualPlaceId = plh().getVirtualPlaceId();
                 parents.add(myVirtualPlaceId);
                 childCount = childrenVirtual.size();
-                val txMembers = plh().getTxMembers( childrenVirtual , true);
+                val txMembers = plh().getTxMembersIncludingDead( childrenVirtual );
                 val virtual = txMembers.virtual;
                 val physical = txMembers.places;
                 for (var i:Long = 0; i < virtual.size ; i++) {
                     if (!parents.contains(virtual(i))) {
-                        val p = physical(i);
+                        val p = Place(physical(i));
                         if (p.isDead())
                             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursively target="+p+" DEAD ...");
                         

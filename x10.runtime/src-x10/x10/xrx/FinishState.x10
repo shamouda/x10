@@ -158,7 +158,7 @@ abstract class FinishState {
         x10.xrx.Runtime.x10rtSendAsync(place.id, body, fs, prof, preSendAction);
     }
     
-    def spawnRemoteActivities(places:PlaceGroup, ignoreDest:Long, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
+    def spawnRemoteActivities(places:Rail[Long], ignoreDest:Long, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
     	throw new IllegalOperationException("spawnRemoteActivities not supported in " + this + " use PRAGMA.FINISH_SPMD");
     }
 

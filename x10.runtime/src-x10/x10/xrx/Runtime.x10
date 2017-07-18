@@ -668,7 +668,7 @@ public final class Runtime {
         Unsafe.dealloc(body);
     }
     
-    public static def runAsync(destPlaces:PlaceGroup, body:()=>void, prof:Profile):void {
+    public static def runAsync(destPlaces:Rail[Long], body:()=>void, prof:Profile):void {
         // Do this before anything else
         val a = activity();
         a.ensureNotInAtomic();
@@ -677,7 +677,15 @@ public final class Runtime {
         val state = a.finishState();
         var ignoreDest:Long = -1;
         
-        if (destPlaces.contains(hereLong())) {
+        var localActivity:Boolean = false;
+        for (id in destPlaces) {
+        	if (id == hereLong()) {
+        		localActivity = true;
+        		break;
+        	}
+        }
+        
+        if (localActivity) {
         	ignoreDest = hereLong();
             // Synchronous serialization
 	        val start = prof != null ? System.nanoTime() : 0;

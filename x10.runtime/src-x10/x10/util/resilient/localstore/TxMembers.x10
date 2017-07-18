@@ -12,26 +12,17 @@
 
 package x10.util.resilient.localstore;
 
-public class TxMembers(size:Long) {
+public class TxMembers {
     public val virtual:Rail[Long];
-    public val places:Rail[Place];
-    private var count:Long = 0;
-    private var pg:PlaceGroup;
+    public val places:Rail[Long];
 
-    public def this(size:Long) {
-        property(size);
-        virtual = new Rail[Long](size);
-        places = new Rail[Place](size);
-    }
-    
-    public def this(size:Long, v:Rail[Long], p:Rail[Place]) {
-        property(size);
+    public def this(v:Rail[Long], p:Rail[Long]) {
         virtual = v;
         places = p;
     }
     
     public def getPlace(indx:Long) {
-        for (var i :Long = 0; i < size; i++) {
+        for (var i :Long = 0; i < virtual.size; i++) {
             if ( virtual(i) == indx)
                 return places(i);
         }
@@ -39,48 +30,35 @@ public class TxMembers(size:Long) {
     }
     
     public def getVirtualPlaceId(p:Place) {
-        for (var i :Long = 0; i < size; i++) {
-            if ( places(i).id == p.id)
+        for (var i :Long = 0; i < places.size; i++) {
+            if ( places(i) == p.id)
                 return virtual(i);
         }
         throw new Exception("illegal transaction configurations place("+p+") given("+toString()+")");
     }
     
     
-    public def contains(indx:Long) {
-        for (var i :Long = 0; i < size; i++) {
+    public def containsV(indx:Long) {
+        for (var i :Long = 0; i < virtual.size; i++) {
             if ( virtual(i) == indx)
                 return true;
         }
         return false;
     }
     
-    public def contains(place:Place) {
-        for (var i :Long = 0; i < size; i++) {
-            if ( places(i).id == place.id)
+    public def containsP(placeId:Long) {
+        for (var i :Long = 0; i < places.size; i++) {
+            if ( places(i) == placeId)
                 return true;
         }
         return false;
     }
     
-    public def addPlace(indx:Long, place:Place) {
-        virtual(count) = indx;
-        places(count) = place;
-        count++;
-    }
-    
     public def toString() {
         var str:String = "members=";
-        for (var i :Long = 0; i < size; i++) {
+        for (var i :Long = 0; i < virtual.size; i++) {
             str += "("+virtual(i)+","+places(i)+")";
         }
         return str;
-    }
-    
-    public def pg() {
-        assert (places != null && places.size != 0) : "bug in TxMembers.pg()";
-        if (pg == null)
-            pg = new SparsePlaceGroup(places);
-        return pg;
     }
 }

@@ -181,8 +181,7 @@ public class ResilientNativeMap[K] {K haszero} {
     
     public def restartGlobalTransaction(txDesc:TxDesc):Tx[K] {
         assert(plh().virtualPlaceId != -1);
-        val includeDead = true; // The commitHandler will take the correct actions regarding the dead master
-        val members = txDesc.staticMembers? plh().getTxMembers(txDesc.virtualMembers.toRail(), includeDead):null;
+        val members = txDesc.staticMembers? plh().getTxMembersIncludingDead(txDesc.virtualMembers.toRail()):null;
         return new Tx(plh, txDesc.id, members, false);
     }
     
@@ -202,7 +201,7 @@ public class ResilientNativeMap[K] {K haszero} {
         val beginning = System.nanoTime();
         var members:TxMembers = null;
         if (virtualMembers != null) 
-            members = plh().getTxMembers(virtualMembers, true);
+            members = plh().getTxMembersIncludingDead(virtualMembers);
         var retryCount:Long = 0;
         while(true) {
             if (retryCount == maxRetries || (maxTimeNS != -1 && System.nanoTime() - beginning >= maxTimeNS)) {
@@ -226,7 +225,7 @@ public class ResilientNativeMap[K] {K haszero} {
                 }
                 val dpe = throwIfFatalSleepIfRequired(tx.id, ex, plh().immediateRecovery);
                 if (dpe && virtualMembers != null)
-                    members = plh().getTxMembers(virtualMembers, true);
+                    members = plh().getTxMembersIncludingDead(virtualMembers);
             }
         }
     }
