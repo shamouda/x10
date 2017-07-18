@@ -55,13 +55,14 @@ public final class SparsePlaceGroup extends PlaceGroup {
             }
         }
         if (!sorted) {
-            val seen:HashSet[Place] = new HashSet[Place]();
+            val seen = new HashSet[Place]();
             for (p in places) {
                 if (seen.contains(p)) {
-                    throw new IllegalArgumentException("Argument rail was not sorted, or repeated places found " + p);
+                    throw new IllegalArgumentException("Argument rail has a repeated place " + p + " places(size="+places.size+")");
                 }
                 seen.add(p);
             }
+            throw new IllegalArgumentException("Argument rail was not sorted");
         }
     }
   }
