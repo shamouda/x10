@@ -30,7 +30,7 @@ public class BankAsyncResilient {
         val transfersPerPlace = Math.ceil(Math.pow(2, expTransfers)) as Long;
         val sparePlaces = Long.parseLong(args(3));
         val optimized = Long.parseLong(args(4)) == 1;
-        STMAppUtils.printBenchmarkStartingMessage("BankAsyncResilient", accountsPerPlace, transfersPerPlace, debugProgress, sparePlaces, -1F);
+        STMAppUtils.printBenchmarkStartingMessage("BankAsyncResilient", accountsPerPlace, transfersPerPlace, debugProgress, sparePlaces, -1F, optimized);
         val start = System.nanoTime();
         
         
@@ -42,7 +42,7 @@ public class BankAsyncResilient {
         }
         val mgr = new PlaceManager(sparePlaces, supportShrinking);
         val immediateRecovery = false;
-        val store = ResilientStore.make(mgr.activePlaces(), immediateRecovery);
+        val store = ResilientStore.make[String](mgr.activePlaces(), immediateRecovery);
         val map = store.makeMap();
         try {
             val startTransfer = System.nanoTime();
@@ -95,7 +95,7 @@ public class BankAsyncResilient {
         }
     }
     
-    public static def randomTransfer(map:ResilientNativeMap, activePG:PlaceGroup, accountsPerPlace:Long, transfersPerPlace:Long, debugProgress:Long, recovered:Boolean, optimized:Boolean){
+    public static def randomTransfer(map:ResilientNativeMap[String], activePG:PlaceGroup, accountsPerPlace:Long, transfersPerPlace:Long, debugProgress:Long, recovered:Boolean, optimized:Boolean){
         val accountsMAX = accountsPerPlace * activePG.size();
         finish for (p in activePG) at (p) async {
             val placeIndex = activePG.indexOf(p);
@@ -151,7 +151,7 @@ public class BankAsyncResilient {
                 val acc2Key = "acc"+randomAccounts(1);
                 val acc3Key = "acc"+randomAccounts(2);
                 
-                val bankClosure = (tx:Tx) => {
+                val bankClosure = (tx:Tx[String]) => {
                     if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tx.id+"] here["+here+"] TXSTART"+ (recovered?"RECOVER":"")+" accounts["+acc1Key+","+acc2Key+","+acc3Key+"] places["+p1+","+p2+","+p3+"]");
                     val txId = tx.id;
                     val placeId =  ((txId >> 32) as Int);
@@ -202,9 +202,9 @@ public class BankAsyncResilient {
                 };
                 var res:TxResult = null;
                 if (optimized)
-                    res = map.executeTransaction( members, bankClosure );
+                    res = map.executeTransaction( members, bankClosure , -1, -1);
                 else
-                    res = map.executeTransaction( bankClosure, -1, -1 );    
+                    res = map.executeTransaction( bankClosure, -1);    
                 
                 if (res.commitStatus == Tx.SUCCESS_RECOVER_STORE)
                     throw new RecoverDataStoreException("RecoverDataStoreException", here);
