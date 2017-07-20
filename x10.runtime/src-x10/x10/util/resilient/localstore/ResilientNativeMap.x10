@@ -72,7 +72,7 @@ public class ResilientNativeMap[K] {K haszero} {
             });
             return null;
         };
-        executeFlatTransaction(null, distClosure, -1, -1);
+        executeTransaction(null, distClosure, -1, -1);
     }
     
     public def set2(key:K, value:Cloneable, placeIdx:Long, key2:K, value2:Cloneable) {
