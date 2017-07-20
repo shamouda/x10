@@ -24,6 +24,8 @@ import x10.compiler.Uncounted;
 import x10.util.resilient.localstore.recovery.DistributedRecoveryHelper;
 import x10.util.resilient.localstore.tx.logging.TxDescManager;
 import x10.util.resilient.localstore.tx.StorePausedException;
+import x10.util.concurrent.Condition;
+import x10.compiler.Immediate;
 
 public class LocalStore[K] {K haszero} {
 	public val immediateRecovery:Boolean;
@@ -57,6 +59,7 @@ public class LocalStore[K] {K haszero} {
                 slaveStore = new SlaveStore[K]();
                 this.slave = active.next(here);
                 this.oldSlave = this.slave;
+                ConditionsList.get().setSlave(this.slave.id);
             }
         } //else, I am a spare place, initialize me using joinAsMaster(...)
     }
@@ -75,6 +78,7 @@ public class LocalStore[K] {K haszero} {
         masterStore = new MasterStore(data, immediateRecovery);
         slaveStore = new SlaveStore[K]();
         this.slave = active.next(here);
+        ConditionsList.get().setSlave(this.slave.id);
         this.oldSlave = this.slave;
         plh().unlock();
     }
@@ -242,6 +246,7 @@ public class LocalStore[K] {K haszero} {
                 Console.OUT.println(here + " Slave of ("+p+") computed as -1,  replacementHist = " + replacementHistory.getOrElse(p.id, -1));
                 val newP = Place(replacementHistory.getOrThrow(p.id));
                 slave = activePlaces.next(newP);
+                ConditionsList.get().setSlave(slave.id);
                 Console.OUT.println(here + " Slave of (" + p + ") corrected to " + slave );
             }
             return slave;
@@ -395,6 +400,65 @@ public class LocalStore[K] {K haszero} {
     
     public def setMasterStore(m:MasterStore[K]) {
         this.masterStore = m;
+    }
+    /*
+    public def releaseAllConditions() {
+        try {
+            lock();
+            Console.OUT.println(here + " releaseAllConditions CONDSIZE= " + slaveCondList.size());
+            if (virtualPlaceId != -1 && slave.isDead()) {
+                for (cond in slaveCondList){
+                    cond.release();
+                }
+                slaveCondList.clear();
+            }
+        } finally {
+            unlock();
+        }
+    }*/
+    
+    public def runImmediateAtSlave(cl:()=>void):void {
+        if (slave.isDead())
+            throw new DeadPlaceException(slave);
+        
+        val h = here;
+        val cond = new Condition();
+        val condGR = GlobalRef[Condition](cond); 
+        val exc = GlobalRef(new Cell[CheckedThrowable](null));
+        at (slave) @Immediate("finish_resilient_low_level_at_out") async {
+            try {
+                cl();
+                at (condGR) @Immediate("finish_resilient_low_level_at_back") async {
+                    condGR().release();
+                }
+            } catch (t:Exception) {
+                at (condGR) @Immediate("finish_resilient_low_level_at_back_exc") async {
+                    exc()(t);
+                    condGR().release();
+                };
+            }
+        };
+        ConditionsList.get().add(cond);
+        try {
+            if (Runtime.NUM_IMMEDIATE_THREADS == 0n) Runtime.increaseParallelism();
+            cond.await();
+        }finally {
+            if (Runtime.NUM_IMMEDIATE_THREADS == 0n) Runtime.decreaseParallelism(1n);
+        }
+        // Unglobalize objects
+        condGR.forget();
+        exc.forget();
+        ConditionsList.get().remove(cond);
+        val t = exc()();
+        if (t != null) {
+            Runtime.throwCheckedWithoutThrows(t);
+        }
+        if (slave.isDead())
+            throw new DeadPlaceException(slave);
+    }
+    
+    private def debug (pl:Place, msg:String) {
+        Console.OUT.println(pl + " - " + msg);
     }
     
 }

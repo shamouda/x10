@@ -39,7 +39,7 @@ public class TxDescManager[K] {K haszero} {
         if (resilient && !TxConfig.DISABLE_SLAVE) {
             try {
                 if (TxConfig.IMM_AT) {
-                    Runtime.runImmediateAt(plh().slave, ()=>{
+                    plh().runImmediateAtSlave(()=>{
                         plh().slaveStore.putTransDescriptor(id, desc);
                     });
                 }
@@ -61,7 +61,7 @@ public class TxDescManager[K] {K haszero} {
         if (resilient && !TxConfig.DISABLE_SLAVE) {
             try {
                 if (TxConfig.IMM_AT) {
-                    Runtime.runImmediateAt(plh().slave, ()=>{
+                    plh().runImmediateAtSlave(()=>{
                         plh().slaveStore.addTxDescMember(id, memId);
                     });
                 }
@@ -104,7 +104,7 @@ public class TxDescManager[K] {K haszero} {
         if (resilient && !TxConfig.DISABLE_SLAVE) {
             try {
                 if (TxConfig.IMM_AT) {
-                    Runtime.runImmediateAt(plh().slave, ()=>{
+                    plh().runImmediateAtSlave(()=>{
                         plh().slaveStore.updateTxDescStatus(id, newStatus);
                     });
                 }

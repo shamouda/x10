@@ -72,6 +72,7 @@ public class DistributedRecoveryHelper[K] {K haszero} {
         	plh().getMasterStore().pausing();
         	plh().getMasterStore().paused();
         	plh().slave = me;
+        	ConditionsList.get().setSlave(me.id);
         	plh().oldSlave = me;
         }
     }
@@ -89,6 +90,7 @@ public class DistributedRecoveryHelper[K] {K haszero} {
         //the application layer can now recognize a change in the places configurations
         plh().replace(deadPlaceVirtualId, spare);
         plh().slave = spare;
+        ConditionsList.get().setSlave(spare.id);
         plh().getMasterStore().reactivate();
     }
     

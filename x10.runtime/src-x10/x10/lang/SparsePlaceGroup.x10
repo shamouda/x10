@@ -62,7 +62,6 @@ public final class SparsePlaceGroup extends PlaceGroup {
                 }
                 seen.add(p);
             }
-            throw new IllegalArgumentException("Argument rail was not sorted");
         }
     }
   }

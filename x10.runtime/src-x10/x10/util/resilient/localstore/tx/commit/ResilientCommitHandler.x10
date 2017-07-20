@@ -78,7 +78,7 @@ public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandle
         if (!plh().getMasterStore().isReadOnlyTransaction(id)) {
             try {
                 if (TxConfig.IMM_AT) {
-                    Runtime.runImmediateAt(plh().slave, ()=>{
+                    plh().runImmediateAtSlave(()=>{
                         plh().slaveStore.abort(id);
                     });
                 }
@@ -94,12 +94,12 @@ public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandle
             
         plh().getMasterStore().abort(id);
         
+        /*
         if (ex != null) {
-            /*at (root) async {
+            at (root) async {
                 root().nonFatalDeadPlace = true;
             }
-            */
-        }
+        }*/
     }
     
     protected def commit_local_resilient(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {
@@ -107,7 +107,7 @@ public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandle
         if (!plh().getMasterStore().isReadOnlyTransaction(id)) {
             try {
                 if (TxConfig.IMM_AT) {
-                    Runtime.runImmediateAt(plh().slave, ()=>{
+                    plh().runImmediateAtSlave(()=>{
                         plh().slaveStore.commit(id);
                     });
                 }
@@ -122,12 +122,12 @@ public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandle
         }
         
         plh().getMasterStore().commit(id);
-        
+        /*
         if (ex != null) {
-            /*at (root) async {
+            at (root) async {
                 root().nonFatalDeadPlace = true;
-            }*/
-        }
+            }
+        }*/
     }
     
     protected def validate_local_resilient(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {
@@ -139,7 +139,7 @@ public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandle
         if (log != null && log.size() > 0) {
             try {
                 if (TxConfig.IMM_AT) {
-                    Runtime.runImmediateAt(plh().slave, ()=>{
+                    plh().runImmediateAtSlave(()=>{
                         plh().slaveStore.prepare(id, log, ownerPlaceIndex);
                     });
                 }
@@ -151,12 +151,12 @@ public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandle
             }catch(e:Exception) {
                 ex = e;
             }
-            
+            /*
             if (ex != null) {
-                /*at (root) async {
+                at (root) async {
                     root().nonFatalDeadPlace = true;
-                }*/
-            }
+                }
+            }*/
         }
     }
 }
