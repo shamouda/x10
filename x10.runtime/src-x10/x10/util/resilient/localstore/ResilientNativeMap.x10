@@ -27,21 +27,21 @@ public class ResilientNativeMap[K] {K haszero} {
      * Get the value of key k in the resilient map.
      */
     public def get(key:K) {
-        return executeLocalTransaction((tx:LocalTx[K]) => tx.get(key), -1, -1 ).output as Cloneable;
+        return executeLocalTransaction((tx:LocalTx[K]) => tx.get(key) ).output as Cloneable;
     }
 
     /**
      * Associate value v with key k in the resilient map.
      */
     public def set(key:K, v:Cloneable) {
-        return executeLocalTransaction((tx:LocalTx[K]) => tx.put(key,v), -1, -1).output as Cloneable;
+        return executeLocalTransaction((tx:LocalTx[K]) => tx.put(key,v)).output as Cloneable;
     }
 
     /**
      * Remove any value associated with key k from the resilient map.
      */
     public def delete(key:K) {
-        return executeLocalTransaction((tx:LocalTx[K]) => tx.delete(key), -1, -1).output as Cloneable;
+        return executeLocalTransaction((tx:LocalTx[K]) => tx.delete(key)).output as Cloneable;
     }
 
     public def keySet():Set[K] {
@@ -108,6 +108,31 @@ public class ResilientNativeMap[K] {K haszero} {
         assert(plh().virtualPlaceId != -1) : here + " LocalTx assertion error  virtual place id = -1";
         val id = plh().getMasterStore().getNextTransactionId();
         return new LocalTx[K](plh, id);
+    }
+    
+    public def executeLocalTransaction(closure:(LocalTx[K])=>Any) {
+        var out:Any;
+        var commitStatus:Int = -1n;
+
+        while(true) {
+            val tx = startLocalTransaction();
+            var commitCalled:Boolean = false;
+            val start = Timer.milliTime();
+            try {
+                out = closure(tx);
+                commitCalled = true;
+                commitStatus = tx.commit();
+                break;
+            } catch(ex:Exception) {
+                if (!commitCalled) {
+                    tx.processingElapsedTime = Timer.milliTime() - start;
+                    //no need to call abort, abort occurs automatically in local tx all the time
+                }
+                throwIfFatalSleepIfRequired(tx.id, ex, tx.plh().immediateRecovery);
+            }
+        }
+
+        return new TxResult(commitStatus, out);
     }
     
     public def executeLocalTransaction(closure:(LocalTx[K])=>Any, maxRetries:Long, maxTimeNS:Long) {

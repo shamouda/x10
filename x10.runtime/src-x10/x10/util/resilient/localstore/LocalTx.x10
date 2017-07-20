@@ -112,9 +112,18 @@ public class LocalTx[K] {K haszero} extends AbstractTx[K] {
             val log = plh().getMasterStore().getTxCommitLog(id);
             if (resilient && log != null && log.size() > 0 && !TxConfig.DISABLE_SLAVE) {
                 try {
-                    finish at (plh().slave) async {
-                        plh().slaveStore.commit(id, log, ownerPlaceIndex);
+                    
+                    if (TxConfig.IMM_AT) {
+                        plh().runImmediateAtSlave(()=>{
+                            plh().slaveStore.commit(id, log, ownerPlaceIndex);
+                        });
                     }
+                    else {
+                        at (plh().slave) {
+                            plh().slaveStore.commit(id, log, ownerPlaceIndex);
+                        }    
+                    }
+                    
                 } catch(exSl:Exception) {
                 	if (!ignoreDeadSlave)
                 		throw exSl;
