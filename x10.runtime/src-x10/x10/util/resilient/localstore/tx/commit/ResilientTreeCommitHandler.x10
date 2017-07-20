@@ -71,7 +71,8 @@ public class ResilientTreeCommitHandler[K] {K haszero} extends ResilientCommitHa
     public def commit_resilient(commitRecovery:Boolean) {
         if (!commitRecovery) 
             commitPhaseOne();
-        
+        if (TxConfig.EXPR_LVL == 3)
+            return;
         commitPhaseTwo(commitRecovery);
     }
    
@@ -134,16 +135,7 @@ public class ResilientTreeCommitHandler[K] {K haszero} extends ResilientCommitHa
             try {
                 val masterVal = masterType;
                 finish for (master in places) {
-                    val rootPlace:Place;
-                    if (!masterVal) {
-                        rootPlace = plh().getSlave(Place(master));
-                        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient NEW PHASE with slave "+rootPlace+" ...");
-                    }
-                    else {
-                        rootPlace = Place(master);
-                        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " executeRecursivelyResilient PHASE with master "+rootPlace+" ...");
-                    }
-                    
+                    val rootPlace = masterVal? Place(master) : plh().getSlave(Place(master));
                     at (rootPlace) async {
                         if (masterVal) {
                             master_closure(plh, id);

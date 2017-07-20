@@ -30,7 +30,7 @@ public class TxDesc(id:Long) {
         property (id);
         this.status = STARTED;
         this.staticMembers = staticMembers;
-        this.virtualMembers = new GrowableRail[Long](TxConfig.get().PREALLOC_MEMBERS);
+        this.virtualMembers = new GrowableRail[Long](TxConfig.PREALLOC_MEMBERS);
     }
     
     public def addVirtualMembers(ids:Rail[Long]) {

@@ -85,18 +85,13 @@ public abstract class TxManager[K] {K haszero} {
         if (log == null || log.id() == -1) /*SS_CHECK  txLogManager.isAborted(log.id()) */
             return null;
         
-        try {
-            log.lock(2);
-            return log.prepareCommitLog();
-        }finally {
-            log.unlock(2);
-        }
+        //locking the TxLog is not required here, only one place calls this method
+        return log.prepareCommitLog();
     }
     
     /**************   Pausing for Recovery    ****************/
     public def waitUntilPaused() {
         Console.OUT.println("Recovering " + here + " MasterStore.waitUntilPaused started ...");
-        val buckets = TxConfig.get().BUCKETS_COUNT;
         try {
             Runtime.increaseParallelism();
             
@@ -962,4 +957,5 @@ public abstract class TxManager[K] {K haszero} {
         if (!TxConfig.get().LOCK_FREE)
         	resilientStatusLock.unlock();
     }
+    
 }

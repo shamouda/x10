@@ -36,7 +36,7 @@ public class LocalStore[K] {K haszero} {
     public transient var activePlaces:PlaceGroup;
     private var plh:PlaceLocalHandle[LocalStore[K]];
     private transient var lock:Lock;
-    public transient val stat:TxPlaceStatistics = new TxPlaceStatistics();
+    public transient val stat:TxPlaceStatistics;
     public transient var txDescManager:TxDescManager[K];
     
     private val replacementHistory = new HashMap[Long, Long] ();
@@ -44,12 +44,16 @@ public class LocalStore[K] {K haszero} {
     public def this(active:PlaceGroup, immediateRecovery:Boolean) {
         this.immediateRecovery = immediateRecovery;
         lock = new Lock();
+        if (TxConfig.ENABLE_STAT)
+            stat = new TxPlaceStatistics();
+        else
+            stat = null;
         
         if (active.contains(here)) {
             this.activePlaces = active;
             this.virtualPlaceId = active.indexOf(here);
             masterStore = new MasterStore[K](new HashMap[K,Cloneable](), immediateRecovery);
-            if (resilient && !TxConfig.get().DISABLE_SLAVE) {
+            if (resilient && !TxConfig.DISABLE_SLAVE) {
                 slaveStore = new SlaveStore[K]();
                 this.slave = active.next(here);
                 this.oldSlave = this.slave;

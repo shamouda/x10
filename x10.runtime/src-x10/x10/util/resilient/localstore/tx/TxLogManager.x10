@@ -16,17 +16,18 @@ public class TxLogManager[K] {K haszero} {
 	private var abortEnd:Long;
     private static val ABORTED_SIZE = 100;
     
+    private var lastTaken:Long = -1;
     public def this() {
         //pre-allocate transaction logs
         if (TxConfig.get().STM) {
-            txLogs = new Rail[TxLog[K]](TxConfig.get().MAX_CONCURRENT_TXS);
-            for (var i:Long = 0 ; i < TxConfig.get().MAX_CONCURRENT_TXS; i++) {
+            txLogs = new Rail[TxLog[K]](TxConfig.MAX_CONCURRENT_TXS);
+            for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
                 txLogs(i) = new TxLog[K]();
             }
             lockingTxLogs = null;
         } else {
-            lockingTxLogs = new Rail[LockingTxLog[K]](TxConfig.get().MAX_CONCURRENT_TXS);
-            for (var i:Long = 0 ; i < TxConfig.get().MAX_CONCURRENT_TXS; i++) {
+            lockingTxLogs = new Rail[LockingTxLog[K]](TxConfig.MAX_CONCURRENT_TXS);
+            for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
                 lockingTxLogs(i) = new LockingTxLog[K]();
             }
             txLogs = null;
@@ -77,7 +78,7 @@ public class TxLogManager[K] {K haszero} {
     public def searchTxLog(id:Long) {
         try {
             lock();
-            for (var i:Long = 0 ; i < TxConfig.get().MAX_CONCURRENT_TXS; i++) {
+            for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
                 if (txLogs(i).id() == id)
                     return txLogs(i);
             }
@@ -91,7 +92,7 @@ public class TxLogManager[K] {K haszero} {
     public def searchTxLogForAbort(id:Long) {
         try {
             lock();
-            for (var i:Long = 0 ; i < TxConfig.get().MAX_CONCURRENT_TXS; i++) {
+            for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
                 if (txLogs(i).id() == id)
                     return txLogs(i);
             }
@@ -108,19 +109,27 @@ public class TxLogManager[K] {K haszero} {
     public def getOrAddTxLog(id:Long) {
         try {
             lock();
-            for (var i:Long = 0 ; i < TxConfig.get().MAX_CONCURRENT_TXS; i++) {
+            for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
                 if (txLogs(i).id() == id)
                     return txLogs(i);
             }
             var obj:TxLog[K] = null;
-            for (var i:Long = 0 ; i < TxConfig.get().MAX_CONCURRENT_TXS; i++) {
+            for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
                 if (txLogs(i).id() == -1) {
                     obj = txLogs(i);                  
                     break;
                 }
             }
             if (obj == null) {
-                throw new ConcurrentTransactionsLimitExceeded(here + " ConcurrentTransactionsLimitExceeded");
+                if (TxConfig.EXPR_LVL == 2 || TxConfig.EXPR_LVL == 3) {
+                    lastTaken++;
+                    if (lastTaken == TxConfig.MAX_CONCURRENT_TXS)
+                        lastTaken = 0;
+                    obj = txLogs(lastTaken);
+                    obj.reset();
+                }
+                else
+                    throw new ConcurrentTransactionsLimitExceeded(here + " ConcurrentTransactionsLimitExceeded");
             }
             obj.setId(id); //allocate it
             return obj;
@@ -159,13 +168,13 @@ public class TxLogManager[K] {K haszero} {
     public def getOrAddLockingLog(id:Long) {
         try {
             lock();
-            for (var i:Long = 0 ; i < TxConfig.get().MAX_CONCURRENT_TXS; i++) {
+            for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
                 if (lockingTxLogs(i).id == id)
                     return lockingTxLogs(i);
             }
             var s:String = "";
             var obj:LockingTxLog[K] = null;
-            for (var i:Long = 0 ; i < TxConfig.get().MAX_CONCURRENT_TXS; i++) {
+            for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
                 s += lockingTxLogs(i).id + " , ";
                 if (lockingTxLogs(i).id == -1) {
                     obj = lockingTxLogs(i);                  
@@ -186,7 +195,7 @@ public class TxLogManager[K] {K haszero} {
     public def activeTransactionsExist() {
         try {
             lock();
-            for (var i:Long = 0 ; i < TxConfig.get().MAX_CONCURRENT_TXS; i++) {
+            for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
                 if (txLogs(i).id() != -1 && txLogs(i).writeValidated) {
                     Console.OUT.println("Recovering " + here + " MasterStore.waitUntilPaused  found a non-aborted transaction Tx["+txLogs(i).id()+"] " + TxManager.txIdToString (txLogs(i).id()));
                     return true;

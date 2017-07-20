@@ -213,10 +213,16 @@ public class ResilientNativeMap[K] {K haszero} {
             var commitCalled:Boolean = false;
             try {
                 tx = startGlobalTransaction(members, flat);
+                if (TxConfig.EXPR_LVL == 1)
+                    return new TxResult(AbstractTx.SUCCESS, 1);
+                
                 val out:Any;
                 finish {
         			out = closure(tx);
         		}
+                if (TxConfig.EXPR_LVL == 2) {
+                    return new TxResult(AbstractTx.SUCCESS, 1);
+                }
                 commitCalled = true;
                 return new TxResult(tx.commit(), out);
             } catch(ex:Exception) {
@@ -282,7 +288,7 @@ public class ResilientNativeMap[K] {K haszero} {
                 if (!immediateRecovery) {
                     throw ex;
                 } else {
-                    System.threadSleep(TxConfig.get().DPE_SLEEP_MS);
+                    System.threadSleep(TxConfig.DPE_SLEEP_MS);
                     dpe = true;
                 }
             }
@@ -290,13 +296,13 @@ public class ResilientNativeMap[K] {K haszero} {
             if (!immediateRecovery) {
                 throw ex;
             } else {
-                System.threadSleep(TxConfig.get().DPE_SLEEP_MS);
+                System.threadSleep(TxConfig.DPE_SLEEP_MS);
                 dpe = true;
             }
         } else if (ex instanceof StorePausedException) {
-            System.threadSleep(TxConfig.get().DPE_SLEEP_MS);
+            System.threadSleep(TxConfig.DPE_SLEEP_MS);
         } else if (ex instanceof ConcurrentTransactionsLimitExceeded) {
-            System.threadSleep(TxConfig.get().DPE_SLEEP_MS);
+            System.threadSleep(TxConfig.DPE_SLEEP_MS);
         } else if (!(ex instanceof ConflictException || ex instanceof AbortedTransactionException  )) {
             throw ex;
         }
@@ -304,6 +310,11 @@ public class ResilientNativeMap[K] {K haszero} {
     }
     
     public def printTxStatistics() {
+        if (plh().stat == null) {
+            Console.OUT.println("Tx statistics disabled ...");
+            return;
+        }
+
         Console.OUT.println("Calculating execution statistics ...");
         val pl_stat = new ArrayList[TxPlaceStatistics]();
         for (p in plh().getActivePlaces()) {
@@ -457,6 +468,8 @@ public class ResilientNativeMap[K] {K haszero} {
     }
     
     public def resetTxStatistics() {
+        if (plh().stat == null)
+            return;
         finish for (p in plh().getActivePlaces()) at (p) async {
             plh().stat.clear();
         }

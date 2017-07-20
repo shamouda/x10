@@ -72,6 +72,9 @@ public class LocalTx[K] {K haszero} extends AbstractTx[K] {
     /***********************   Abort ************************/  
     
     private def updateAbortStat() {
+        if (plh().stat == null)
+            return;
+        
         if (processingElapsedTime == 0)
             processingElapsedTime = Timer.milliTime() - startTime;
         plh().stat.addAbortedLocalTxStats(Timer.milliTime() - startTime, 
@@ -79,12 +82,13 @@ public class LocalTx[K] {K haszero} extends AbstractTx[K] {
     }
     
     public def abort() {
-        if (processingElapsedTime == 0)
+        if (plh().stat != null && processingElapsedTime == 0)
             processingElapsedTime = Timer.milliTime() - startTime;
         
         plh().getMasterStore().abort(id);
         
-        plh().stat.addAbortedLocalTxStats(Timer.milliTime() - startTime, 
+        if (plh().stat != null)
+            plh().stat.addAbortedLocalTxStats(Timer.milliTime() - startTime, 
                 processingElapsedTime);
     }
     
@@ -106,7 +110,7 @@ public class LocalTx[K] {K haszero} extends AbstractTx[K] {
                 plh().getMasterStore().validate(id);
             
             val log = plh().getMasterStore().getTxCommitLog(id);
-            if (resilient && log != null && log.size() > 0 && !TxConfig.get().DISABLE_SLAVE) {
+            if (resilient && log != null && log.size() > 0 && !TxConfig.DISABLE_SLAVE) {
                 try {
                     finish at (plh().slave) async {
                         plh().slaveStore.commit(id, log, ownerPlaceIndex);
@@ -123,7 +127,8 @@ public class LocalTx[K] {K haszero} extends AbstractTx[K] {
                 plh().getMasterStore().commit(id);
             }
             
-            plh().stat.addCommittedLocalTxStats(Timer.milliTime() - startTime, 
+            if (plh().stat != null)
+                plh().stat.addCommittedLocalTxStats(Timer.milliTime() - startTime, 
                     processingElapsedTime);
             
             return success;

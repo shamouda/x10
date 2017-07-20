@@ -46,7 +46,7 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
             Console.OUT.println("TX["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] started members["+memStr+"]");
         }
         	
-        if (resilient && !TxConfig.get().DISABLE_SLAVE) {
+        if (resilient && !TxConfig.DISABLE_SLAVE) {
              if (members == null && !flat)
          	    commitHandler = new ResilientTreeCommitHandler[K](plh, id);
          	else
@@ -78,7 +78,8 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
         } catch (ex:Exception) {
             if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here="+ here + " ignoring exception during abort ");    
         }
-        plh().stat.addAbortedTxStats(Timer.milliTime() - startTime, 
+        if (plh().stat != null)
+            plh().stat.addAbortedTxStats(Timer.milliTime() - startTime, 
                 processingElapsedTime);
     }
     
@@ -88,27 +89,24 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
     }
     
     public def commit():Int {
-        if (!TxConfig.get().COMMIT)
-            return AbstractTx.SUCCESS;
         return commit(false);
     }
     
     public def commit(recovery:Boolean) {
-        if (!TxConfig.get().COMMIT)
-            return AbstractTx.SUCCESS;
-        
-        if (processingElapsedTime == 0)
+        if (plh().stat != null && processingElapsedTime == 0)
             processingElapsedTime = Timer.milliTime() - startTime;
         
         val success:Int;
         try {
             success = commitHandler.commit(recovery);
         }catch (ex:Exception) {
-            plh().stat.addAbortedTxStats(Timer.milliTime() - startTime, processingElapsedTime);
+            if (plh().stat != null)
+                plh().stat.addAbortedTxStats(Timer.milliTime() - startTime, processingElapsedTime);
             throw ex;
         }
 
-        plh().stat.addCommittedTxStats(Timer.milliTime() - startTime, 
+        if (plh().stat != null)
+            plh().stat.addCommittedTxStats(Timer.milliTime() - startTime, 
                 processingElapsedTime,
                 commitHandler.phase1ElapsedTime,
                 commitHandler.phase2ElapsedTime,

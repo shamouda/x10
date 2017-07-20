@@ -54,6 +54,8 @@ public class ResilientFlatCommitHandler[K] {K haszero} extends ResilientCommitHa
         if (!commitRecovery) 
             commitPhaseOne();
         
+        if (TxConfig.EXPR_LVL == 3)
+            return;
         commitPhaseTwo(commitRecovery);
     }
    

@@ -63,12 +63,12 @@ public class LockingTx[K] {K haszero} extends AbstractTx[K] {
             val dest = members(i);
             val start = opPerPlace*i;
             at (Place(dest)) { //locking must be done sequentially
-                if (!TxConfig.get().DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
+                if (!TxConfig.DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
                     Runtime.increaseParallelism();
                 
                 plh().getMasterStore().lockAll(id, start, opPerPlace, keys, readFlags);
                 
-                if (!TxConfig.get().DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
+                if (!TxConfig.DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
                     Runtime.decreaseParallelism(1n);
             }
         }
@@ -96,7 +96,8 @@ public class LockingTx[K] {K haszero} extends AbstractTx[K] {
         unlockingElapsedTime = Timer.milliTime() - startUnlock;
         totalElapsedTime = Timer.milliTime() - startTime;
         
-        plh().stat.addLockingTxStats(totalElapsedTime, lockingElapsedTime, processingElapsedTime, unlockingElapsedTime);
+        if (plh().stat != null)
+            plh().stat.addLockingTxStats(totalElapsedTime, lockingElapsedTime, processingElapsedTime, unlockingElapsedTime);
     }
 
 }

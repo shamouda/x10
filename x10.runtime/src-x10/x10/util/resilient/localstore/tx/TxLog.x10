@@ -34,8 +34,8 @@ public class TxLog[K] {K haszero} {
         private val wtKeys:GrowableRail[TxKeyChange[K]];
     
         public def this() {
-            rdKeys = new GrowableRail[TxKeyChange[K]](TxConfig.get().PREALLOC_TXKEYS);
-            wtKeys = new GrowableRail[TxKeyChange[K]](TxConfig.get().PREALLOC_TXKEYS);
+            rdKeys = new GrowableRail[TxKeyChange[K]](TxConfig.PREALLOC_TXKEYS);
+            wtKeys = new GrowableRail[TxKeyChange[K]](TxConfig.PREALLOC_TXKEYS);
         }
     
         public def clear() {
@@ -288,10 +288,11 @@ public class TxLog[K] {K haszero} {
     }
     
     public def prepareCommitLog():HashMap[K,Cloneable] {
-        //Console.OUT.println("prepareCommitLog readKeys {" + keysList.readKeysAsString() + "}  writeKeys {" + keysList.writeKeysAsString() + "} ");
-        
-        val map = new HashMap[K,Cloneable]();
         val wtKeys = keysList.getWriteKeys();
+        if (wtKeys.size() == 0)
+            return null;
+        //Console.OUT.println("prepareCommitLog readKeys {" + keysList.readKeysAsString() + "}  writeKeys {" + keysList.writeKeysAsString() + "} ");
+        val map = new HashMap[K,Cloneable]();
         if (TxConfig.get().WRITE_BUFFERING) {
             for (var i:Long = 0 ; i < wtKeys.size(); i++) {
                 val log = wtKeys(i);

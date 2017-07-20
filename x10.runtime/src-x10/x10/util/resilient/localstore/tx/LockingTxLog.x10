@@ -42,7 +42,7 @@ public class LockingTxLog[K] {K haszero} {
         }
     }
     
-    private val rail = new GrowableRail[KeyMemory[K]](TxConfig.get().PREALLOC_TXKEYS);
+    private val rail = new GrowableRail[KeyMemory[K]](TxConfig.PREALLOC_TXKEYS);
     
     public def searchMemoryUnit(key:K):MemoryUnit[K] {
         for (var i:Long = 0; i < rail.size(); i++) {

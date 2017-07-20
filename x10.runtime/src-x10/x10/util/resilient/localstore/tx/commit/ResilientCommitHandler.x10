@@ -10,10 +10,11 @@ import x10.util.resilient.localstore.TxMembers;
 import x10.util.HashSet;
 import x10.compiler.Pinned;
 import x10.util.resilient.localstore.AbstractTx;
+import x10.xrx.Runtime;
 
 public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandler[K] {
    
-    private val root = GlobalRef[ResilientCommitHandler[K]](this);
+    //private val root = GlobalRef[ResilientCommitHandler[K]](this);
     protected var nonFatalDeadPlace:Boolean = false;
     
     public def this(plh:PlaceLocalHandle[LocalStore[K]], id:Long, members:TxMembers) {
@@ -32,7 +33,7 @@ public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandle
             abort_resilient(recovery);
         }
         finally {
-            (root as GlobalRef[ResilientCommitHandler[K]]{self.home == here}).forget();
+            //(root as GlobalRef[ResilientCommitHandler[K]]{self.home == here}).forget();
         }
     }
     
@@ -46,7 +47,7 @@ public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandle
                 return AbstractTx.SUCCESS;
         }
         finally {
-            (root as GlobalRef[ResilientCommitHandler[K]]{self.home == here}).forget();
+            //(root as GlobalRef[ResilientCommitHandler[K]]{self.home == here}).forget();
         }
     }
     
@@ -76,8 +77,15 @@ public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandle
         var ex:Exception = null;
         if (!plh().getMasterStore().isReadOnlyTransaction(id)) {
             try {
-                at (plh().slave) {
-                    plh().slaveStore.abort(id);
+                if (TxConfig.IMM_AT) {
+                    Runtime.runImmediateAt(plh().slave, ()=>{
+                        plh().slaveStore.abort(id);
+                    });
+                }
+                else {
+                    at (plh().slave) {
+                        plh().slaveStore.abort(id);
+                    }
                 }
             }catch (e:Exception) {
                 ex = e; //dead slave not fatal
@@ -87,9 +95,10 @@ public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandle
         plh().getMasterStore().abort(id);
         
         if (ex != null) {
-            at (root) async {
+            /*at (root) async {
                 root().nonFatalDeadPlace = true;
             }
+            */
         }
     }
     
@@ -97,8 +106,15 @@ public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandle
         var ex:Exception = null;
         if (!plh().getMasterStore().isReadOnlyTransaction(id)) {
             try {
-                at (plh().slave)  {
-                    plh().slaveStore.commit(id);
+                if (TxConfig.IMM_AT) {
+                    Runtime.runImmediateAt(plh().slave, ()=>{
+                        plh().slaveStore.commit(id);
+                    });
+                }
+                else {
+                    at (plh().slave)  {
+                        plh().slaveStore.commit(id);
+                    }
                 }
             }catch (e:Exception) {
                 ex = e; //dead slave not fatal
@@ -108,32 +124,38 @@ public abstract class ResilientCommitHandler[K] {K haszero} extends CommitHandle
         plh().getMasterStore().commit(id);
         
         if (ex != null) {
-            at (root) async {
+            /*at (root) async {
                 root().nonFatalDeadPlace = true;
-            }
+            }*/
         }
     }
     
     protected def validate_local_resilient(plh:PlaceLocalHandle[LocalStore[K]], id:Long) {
         if (TxConfig.get().VALIDATION_REQUIRED)
-            plh().getMasterStore().validate(id);
-        
+            plh().getMasterStore().validate(id);        
         var ex:Exception = null;
         val ownerPlaceIndex = plh().virtualPlaceId;
         val log = plh().getMasterStore().getTxCommitLog(id);
         if (log != null && log.size() > 0) {
             try {
-                at (plh().slave) {
-                    plh().slaveStore.prepare(id, log, ownerPlaceIndex);
+                if (TxConfig.IMM_AT) {
+                    Runtime.runImmediateAt(plh().slave, ()=>{
+                        plh().slaveStore.prepare(id, log, ownerPlaceIndex);
+                    });
+                }
+                else {
+                    at (plh().slave) {
+                        plh().slaveStore.prepare(id, log, ownerPlaceIndex);
+                    }
                 }
             }catch(e:Exception) {
                 ex = e;
             }
             
             if (ex != null) {
-                at (root) async {
+                /*at (root) async {
                     root().nonFatalDeadPlace = true;
-                }
+                }*/
             }
         }
     }
