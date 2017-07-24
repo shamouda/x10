@@ -57,7 +57,7 @@ public class SPMDResilientIterativeExecutor (home:Place) {
         isResilient = itersPerCheckpoint > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0;
         this.itersPerCheckpoint = itersPerCheckpoint;
         this.implicitStepSynchronization = implicitStepSynchronization;
-        val mgr = new PlaceManager(sparePlaces, supportShrinking);
+        val mgr = new PlaceManager(sparePlaces, supportShrinking, false);
         this.manager = GlobalRef[PlaceManager](mgr);
         team = new Team(mgr.activePlaces());
         if (isResilient) {

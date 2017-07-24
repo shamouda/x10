@@ -62,7 +62,7 @@ public class PlaceManager implements x10.io.Unserializable {
      * (decreasing the number of places in activePlaces) is not allowed.
      */
     public def this() {
-        this(0, false);
+        this(0, false, false);
     }
 
     /**
@@ -72,21 +72,23 @@ public class PlaceManager implements x10.io.Unserializable {
      * @param numSpares the number of Places to reserve as spares
      * @param allowShrinking should shrinking recovery be allowed.
      */
-    public def this(numSpares:Long, allowShrinking:Boolean) {
-        this.numSpares = numSpares;
+    public def this(numSpares:Long, allowShrinking:Boolean, ignorePlace0:Boolean) {
+        if (numSpares == 0 && ignorePlace0) {
+            throw new IllegalArgumentException("At least one spare place needed to ignore place0");
+        }
+        
+        this.numSpares = ignorePlace0? numSpares - 1: numSpares;
         this.allowShrinking = allowShrinking;
         if (numSpares >= Place.numPlaces()) {
             throw new IllegalArgumentException("Requested more spares than available places");
         }
         val world = Place.places();
         val numActive = world.numPlaces() - numSpares;
-        if (world instanceof PlaceGroup.SimplePlaceGroup) {
-            activePlaces = PlaceGroup.make(numActive);
-        } else {
-            activePlaces = new SparsePlaceGroup(new Rail[Place](numActive, (i:Long) => world(i)));
-        }
+        
+        activePlaces = new SparsePlaceGroup(new Rail[Place](numActive, (i:Long) => ignorePlace0? world(i+1):world(i) ));
+        
         for (p in world) {
-            if (!activePlaces.contains(p)) {
+            if (!activePlaces.contains(p) && p.id != 0) {
                 sparePlaces.add(p);
             }
         }

@@ -189,7 +189,9 @@ final class ResilientUTS implements Unserializable {
 
     def resume() {
       if (resilient) {
+          //Console.OUT.println(here + " get  start key:" + me.toString());
         val b = map.get(me.toString());
+        //Console.OUT.println(here + " get  end");
         if (b != null) {
           if (b.size > 0n) bag.merge(b);
           bag.count = b.count;
@@ -223,11 +225,15 @@ final class ResilientUTS implements Unserializable {
             if (distribute()) i = 0n;
             if (resilient && (i = (i+1n) % 20000n) == 0n) {
                 println(time0, "Committing worker " + me);
+                //Console.OUT.println(here + " set-A  start  key:" + me.toString());
                 map.set(me.toString(), bag.trim());
+                //Console.OUT.println(here + " set-A  end");
             }
           }
           if (resilient) {
+            //Console.OUT.println(here + " set-B  start  key:" + me.toString());
             map.set(me.toString(), bag.trim());
+            //Console.OUT.println(here + " set-B  end");
           }
           steal();
         }
@@ -353,7 +359,9 @@ final class ResilientUTS implements Unserializable {
         val loot = bag.split();
         if (loot != null && resilient) {
           loot.count = thief.count;
+          //Console.OUT.println(here + " set2-a  start  keys:" + me.toString() + ","+t.toString());
           map.set2(me.toString(), bag.trim(), group(t >> power), t.toString(), loot);
+          //Console.OUT.println(here + " set2-a  end");
           commit = true;
         }
         val id = t & mask;
@@ -367,7 +375,9 @@ final class ResilientUTS implements Unserializable {
           loot.count = lifelineCount;
           val t = next;
           if (resilient) {
+            //Console.OUT.println(here + " set2-b  start  keys:" + me.toString() + ","+t.toString());
             map.set2(me.toString(), bag.trim(), group(t >> power), t.toString(), loot);
+            //Console.OUT.println(here + " set2-b  end");
             commit = true;
           }
           lifeline.set(-1);
@@ -382,14 +392,14 @@ final class ResilientUTS implements Unserializable {
   
   static def step(group:PlaceGroup, bag: UTS, wave:Int, power:Int, resilient:Boolean, map:Store[UTS], time0:Long, killTimes:HashMap[Long,Long]) {
     val max = group.size() as Int << power;
-    if (wave >= 0) println(time0, "Wave " + wave + ": PLH init beginning");
+    /*if (wave >= 0)*/ println(time0, "Wave " + wave + ": PLH init beginning");
     val plh = PlaceLocalHandle.make[ResilientUTS](group, () => new ResilientUTS(wave, group, power, resilient, time0, map));
-    if (wave >= 0) println(time0, "Wave " + wave + ": PLH init complete");
+    /*if (wave >= 0)*/ println(time0, "Wave " + wave + ": PLH init complete");
     finish for (p in group) {
         val kt:Long = killTimes == null ? 0 : killTimes.getOrElse(p.id, 0);
         at (p) async init(plh, time0, kt);
     }
-    if (wave >= 0) println(time0, "Wave " + wave + ": Workers init complete");
+    /*if (wave >= 0)*/ println(time0, "Wave " + wave + ": Workers init complete");
     if (bag != null) {
       if (bag.upper(0) > group.size()) {
         if (resilient) {
@@ -425,16 +435,18 @@ final class ResilientUTS implements Unserializable {
         }
       }
     }
-    if (wave >= 0) println(time0, "Wave " + wave + ": Setup complete"); 
+    /*if (wave >= 0)*/ println(time0, "Wave " + wave + ": Setup complete"); 
     finish {
       for (i in 0n..(max-1n)) {
         val id = i & plh().mask;
         at (group(i >> power)) async {
+          println(time0, "Wave " + wave + ": i["+i+"] started");
           plh().workers(id).resume();
+          println(time0, "Wave " + wave + ": i["+i+"] ended ");
         }
       }
     }
-    if (wave >= 0) println(time0, "Wave " + wave + ": Compute complete");
+    /*if (wave >= 0)*/ println(time0, "Wave " + wave + ": Compute complete");
     val ref = new GlobalRef[Cell[Long]](new Cell[Long](0));
     finish for (p in group) {
       at (p) async {
@@ -445,7 +457,7 @@ final class ResilientUTS implements Unserializable {
       }
     }
     ref.forget();
-    if (wave >= 0) println(time0, "Wave " + wave + ": Collection complete"); 
+    /*if (wave >= 0)*/ println(time0, "Wave " + wave + ": Collection complete"); 
     return ref()();
   }
 

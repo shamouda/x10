@@ -58,7 +58,7 @@ public class GlobalResilientIterativeExecutor (home:Place) {
 
         isResilient = itersPerCheckpoint > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0;
     	this.itersPerCheckpoint = itersPerCheckpoint;
-        val mgr = new PlaceManager(sparePlaces, supportShrinking);
+        val mgr = new PlaceManager(sparePlaces, supportShrinking, false);
         this.manager = GlobalRef[PlaceManager](mgr);
         if (isResilient) {
             this.resilientMap = Store.make[Cloneable]("_map_", mgr.activePlaces());

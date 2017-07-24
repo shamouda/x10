@@ -50,15 +50,14 @@ public class LocalStore[K] {K haszero} {
             stat = new TxPlaceStatistics();
         else
             stat = null;
-        
+        this.activePlaces = active;
         if (active.contains(here)) {
-            this.activePlaces = active;
-            this.virtualPlaceId = active.indexOf(here);
+            virtualPlaceId = active.indexOf(here);
             masterStore = new MasterStore[K](new HashMap[K,Cloneable](), immediateRecovery);
             if (resilient && !TxConfig.DISABLE_SLAVE) {
                 slaveStore = new SlaveStore[K]();
-                this.slave = active.next(here);
-                this.oldSlave = this.slave;
+                slave = active.next(here);
+                oldSlave = this.slave;
                 ConditionsList.get().setSlave(this.slave.id);
             }
         } //else, I am a spare place, initialize me using joinAsMaster(...)
