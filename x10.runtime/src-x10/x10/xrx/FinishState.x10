@@ -120,6 +120,11 @@ abstract class FinishState {
      *                  this method is allowed to block/pause.
      */
     abstract def notifyActivityTermination():void;
+    
+    def notifyActivityTermination(srcId:Int):void {
+        notifyActivityTermination();
+    }
+    
 
     /**
      * Called to indicate that the currently executing shifted activity 
@@ -131,6 +136,10 @@ abstract class FinishState {
      */
     abstract def notifyShiftedActivityCompletion():void;
 
+    def notifyShiftedActivityCompletion(srcId:Int):void {
+        notifyShiftedActivityCompletion();
+    }
+    
     /**
      * Called to record the CheckedThrowable which caused the currently executing 
      * activity to terminate abnormally.

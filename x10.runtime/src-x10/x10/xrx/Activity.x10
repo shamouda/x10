@@ -58,6 +58,11 @@ public class Activity {
     private var atomicDepth:Int = 0n;
 
     /**
+     * Used by resilient finish to track the intransit messages
+     **/
+    private var srcId:Int = -1n;
+    
+    /**
      * Create activity.
      */
     def this(epoch:Long, body:()=>void, finishState:FinishState) {
@@ -129,6 +134,10 @@ public class Activity {
             throw new IllegalOperationException();
     }
 
+    def setSource(src:Int) {
+        srcId = src;
+    }
+    
     /**
      * Run activity.
      */
@@ -142,7 +151,7 @@ public class Activity {
         }
         if (null != clockPhases) clockPhases.drop();
         try {
-            finishState.notifyActivityTermination();
+            finishState.notifyActivityTermination(srcId);
         } catch (DeadPlaceException) {}
         if (DEALLOC_BODY) Unsafe.dealloc(body);
     }
