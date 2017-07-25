@@ -202,7 +202,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         }
 
         def releaseLatch() {
-	        if (isAdopted()) {
+            if (isAdopted()) {
                 if (verbose>=1) debug("releaseLatch(id="+id+") called on adopted finish; not releasing latch");
             } else {
                 val exceptions = (excs == null || excs.isEmpty()) ?  null : excs.toRail();
@@ -237,7 +237,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 return false;
             }
         
-	    if (numActive < 0) {
+            if (numActive < 0) {
                 debug("COUNTING ERROR: quiescent(id="+id+") negative numActive!!!");
                 dump();
                 return true; // TODO: This really should be converted to a fatal error....
@@ -687,7 +687,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 lock.lock();
                 if (Place(srcId).isDead() || Place(dstId).isDead()) {
                     // NOTE: no state updates or DPE processing here.
-		    //       Must happen exactly once and is done
+            //       Must happen exactly once and is done
                     //       when Place0 is notified of a dead place.
                     if (verbose>=1) debug("==== notifyShiftedActivityCreation(id="+myId+") suppressed: "+srcId + " ==> "+dstId+" kind="+kind);
                     return false;
@@ -1111,41 +1111,41 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 try {
                     lock.lock();
                     val state = getOrCreateState(myId, parentId, gfs);    
-              	    for (dstId in destPlaces) {
-               	        if (ignoreDest == dstId)
+                      for (dstId in destPlaces) {
+                           if (ignoreDest == dstId)
                             continue;
                         if (Place(dstId).isDead()) {
                             if (verbose>=1) debug("==== spawnRemoteActivities(id="+myId+") destination "+dstId + "is dead; pushed DPE");
                             state.addDeadPlaceException(dstId);
                         } else {
-                    		    state.addLive(srcId, dstId, ASYNC, "spawnRemoteActivities");
-                		}
-                	}
+                                state.addLive(srcId, dstId, ASYNC, "spawnRemoteActivities");
+                        }
+                    }
                 } finally {
                     lock.unlock();
                 }
             }
             
             for (dstId in destPlaces) {
-            	if (ignoreDest == dstId)
-            		continue;
-            	if (!Place(dstId).isDead()) {
-		            try {
-		                at (Place(dstId)) @Immediate("spawnRemoteActivities_dstPlace") async {
-		                    if (verbose >= 1) debug("==== spawnRemoteActivities(id="+myId+") submitting activity from "+here.id+" on behalf of "+gfs.home.id+"  at "+dstId);
-		                    val wrappedBody = ()=> {
-		                        // defer deserialization to reduce work on immediate thread
-		                        val deser = new Deserializer(bytes);
-		                        val bodyPrime = deser.readAny() as ()=>void;
-		                        bodyPrime();
-		                    };
-		                    Runtime.worker().push(new Activity(42, wrappedBody, this));
-		                }
-		            } catch (dpe:DeadPlaceException) {
-		                // can ignore; if the place just died there is no need to worry about submitting the activity
-		                if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dstPlace for "+id);
-		            }
-            	}
+                if (ignoreDest == dstId)
+                    continue;
+                if (!Place(dstId).isDead()) {
+                    try {
+                        at (Place(dstId)) @Immediate("spawnRemoteActivities_dstPlace") async {
+                            if (verbose >= 1) debug("==== spawnRemoteActivities(id="+myId+") submitting activity from "+here.id+" on behalf of "+gfs.home.id+"  at "+dstId);
+                            val wrappedBody = ()=> {
+                                // defer deserialization to reduce work on immediate thread
+                                val deser = new Deserializer(bytes);
+                                val bodyPrime = deser.readAny() as ()=>void;
+                                bodyPrime();
+                            };
+                            Runtime.worker().push(new Activity(42, wrappedBody, this));
+                        }
+                    } catch (dpe:DeadPlaceException) {
+                        // can ignore; if the place just died there is no need to worry about submitting the activity
+                        if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dstPlace for "+id);
+                    }
+                }
             }
         }
         if (verbose>=1) debug("<<<< spawnRemoteActivities(id="+myId+") returning");
