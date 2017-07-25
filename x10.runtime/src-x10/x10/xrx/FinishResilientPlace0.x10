@@ -980,12 +980,12 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         val dstId = place.id;
         val myId = this.id;
         
+        localCount().incrementAndGet();  // synthetic activity to keep finish locally live during async to Place0
+
         if (bytes.size >= ASYNC_SIZE_THRESHOLD) {
             if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") selecting indirect (size="+
                                     bytes.size+") srcId="+here.id + " dstId="+dstId);
-
-            localCount().incrementAndGet();  // synthetic activity to keep finish locally live during async to Place0
-            
+           
             val wrappedBody = ()=> @AsyncClosure {
                 val deser = new Deserializer(bytes);
                 val bodyPrime = deser.readAny() as ()=>void;
@@ -1054,7 +1054,16 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                         lock.unlock();
                     }
                 }
-                                
+                
+                try {
+                    at (gfs) @Immediate("spawnRemoteActivity_dec_local_count") async {
+                        gfs().notifyActivityTermination(); // end of synthetic local activity
+                    }
+                } catch (dpe:DeadPlaceException) {
+                    // can ignore; if the place just died here is no need to worry about updating local count
+                    if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dec_local_count for "+myId);
+                }
+                         
                 try {
                     at (Place(dstId)) @Immediate("spawnRemoteActivity_dstPlace") async {
                         if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") submitting activity from "+here.id+" at "+dstId);
@@ -1099,6 +1108,8 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         
         val myId = this.id;
         
+        localCount().incrementAndGet();  // synthetic activity to keep finish locally live during async to Place0
+
         if (verbose >= 1) debug(">>>>  spawnRemoteActivities(id="+myId+") direct (size="+
                                 bytes.size+") srcId="+here.id + " dstPlaces="+destPlaces.size);
         
@@ -1124,6 +1135,15 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 } finally {
                     lock.unlock();
                 }
+            }
+            
+            try {
+                at (gfs) @Immediate("spawnRemoteActivities_dec_local_count") async {
+                    gfs().notifyActivityTermination(); // end of synthetic local activity
+                }
+            } catch (dpe:DeadPlaceException) {
+                // can ignore; if the place just died here is no need to worry about updating local count
+                if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dec_local_count for "+id);
             }
             
             for (dstId in destPlaces) {
