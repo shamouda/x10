@@ -22,6 +22,7 @@ import x10.util.RailUtils;
 import x10.util.HashSet;
 import x10.compiler.Uncounted;
 import x10.util.Team;
+import x10.util.concurrent.Lock;
 
 public class STMBench {
     private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
@@ -46,6 +47,7 @@ public class STMBench {
             Option("opt","optimized","optimized runs use fixed pre-defined members list (default 0 (not optimized))"),
             Option("s","spare","Spare places (default 0)"),
             Option("flat","flat","Flat transaction (default 0)"),
+            Option("p0","p0","Include Place0 (default 1)"),
             Option("f","f","Transaction coordinator is also a participant (default 1) ")
         ]);
         
@@ -64,12 +66,13 @@ public class STMBench {
         val optimized = opts("opt", 0) == 1;
         val flat = opts("flat", 0) == 1;
         val f = opts("f", 1) == 1;
+        val includeP0 = opts("p0", 1) == 1;
         val victimsList = new VictimsList(vp, vt);
         
         val mgr = new PlaceManager(s, false);
         val activePlaces = mgr.activePlaces();
         val p = opts("p", activePlaces.size());
-        printRunConfigurations (r, u, n, p, t, w, d, h, o, g, s, f, optimized, flat);
+        printRunConfigurations (r, u, n, p, t, w, d, h, o, g, s, f, optimized, flat, includeP0);
         
         assert (h <= activePlaces.size()) : "invalid value for parameter h, h should not exceed the number of active places" ;
 
@@ -242,7 +245,7 @@ public class STMBench {
                     if (optimized)
                         map.executeTransaction(virtualMembers, distClosure, -1, remainingTime);
                     else if (flat)
-                    	 map.executeFlatTransaction(null, distClosure, -1, remainingTime);
+                         map.executeFlatTransaction(null, distClosure, -1, remainingTime);
                     else
                         map.executeTransaction(null, distClosure, -1, remainingTime);
                 }catch(expf:FatalTransactionException) {
@@ -296,7 +299,8 @@ public class STMBench {
         //Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
     }
 
-    public static def printThroughput(map:ResilientNativeMap[Long], producersCount:Long, iteration:Long, plh:PlaceLocalHandle[PlaceThroughput], d:Long, t:Long, h:Long, o:Long ) {
+    public static def printThroughput(map:ResilientNativeMap[Long], producersCount:Long, iteration:Long, plh:PlaceLocalHandle[PlaceThroughput], 
+            d:Long, t:Long, h:Long, o:Long) {
         map.printTxStatistics();
         
         Console.OUT.println("========================================================================");
@@ -305,31 +309,31 @@ public class STMBench {
         
         val activePlcs = map.getActivePlaces();
         val startReduce = System.nanoTime();
+        val lc = GlobalRef (new Lock());
+        val timeCountRail = GlobalRef(new Rail[Long](2));
+        
         if (producersCount > 1) {
-            val team = new Team(activePlcs);
             finish for (p in activePlcs) async at (p) {
                 val plcTh = plh();
-                val times = plcTh.mergeTimes();
-                val counts = plcTh.mergeCounts();
-                
-                plh().reducedTime = team.allreduce(times, Team.ADD);
-                plh().reducedTxCount = team.allreduce(counts, Team.ADD);
-                
                 if (!plcTh.started)
                     throw new STMBenchFailed(here + " never started ...");
-                /*val localThroughput = (counts as Double ) * h * o / (times/1e6) * t;
-                Console.OUT.println("iteration:" + iteration +":"+here+":t="+t+":localthroughput(op/MS):"+localThroughput);*/
+                
+                at (lc) async {
+                    lc().lock();
+                    timeCountRail()(0) += plcTh.mergeTimes();
+                    timeCountRail()(1) += plcTh.mergeCounts();
+                    lc().unlock();
+                }
             }
         }
         else {
-            plh().reducedTime = plh().mergeTimes();
-            plh().reducedTxCount = plh().mergeCounts();
+            timeCountRail()(0) = plh().mergeTimes();
+            timeCountRail()(1) = plh().mergeCounts();
         }
         val elapsedReduceNS = System.nanoTime() - startReduce;
         
-        
-        val allOperations = plh().reducedTxCount * h * o;
-        val allTimeNS = plh().reducedTime;
+        val allOperations = timeCountRail()(1) * h * o;
+        val allTimeNS = timeCountRail()(0);
         val producers = producersCount * t;
         val throughput = (allOperations as Double) / (allTimeNS/1e6) * producers;
         Console.OUT.println("Reduction completed in "+((elapsedReduceNS)/1e9)+" seconds   txCount["+plh().reducedTxCount+"] OpCount["+allOperations+"]  timeNS["+plh().reducedTime+"]");
@@ -491,7 +495,7 @@ public class STMBench {
     
     /***********************   Utils  *****************************/
     public static def printRunConfigurations(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, 
-            d:Long, h:Long, o:Long, g:Long, s:Long, f:Boolean, opt:Boolean, flat:Boolean) {
+            d:Long, h:Long, o:Long, g:Long, s:Long, f:Boolean, opt:Boolean, flat:Boolean, includeP0:Boolean) {
         Console.OUT.println("STMBench starting with the following parameters:");        
         Console.OUT.println("X10_NPLACES="  + Place.numPlaces());
         Console.OUT.println("X10_NTHREADS=" + Runtime.NTHREADS);
@@ -519,6 +523,7 @@ public class STMBench {
         Console.OUT.println("f=" + f  + (f ? " !!! At least one place is local !!!! ": "h random places") );
         Console.OUT.println("opt(static members)=" + opt);
         Console.OUT.println("flat=" + flat);
+        Console.OUT.println("includeP0=" + includeP0);
     }
 }
 
