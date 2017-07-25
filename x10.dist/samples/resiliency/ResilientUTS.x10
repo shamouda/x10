@@ -495,7 +495,7 @@ final class ResilientUTS implements Unserializable {
     tmp.seed(md, 19n, opt.warmupDepth);
     finish step(Place.places(), tmp, -1n, opt.power, resilient, map0, time0, null);
 
-    val manager = new PlaceManager(opt.spares, false);
+    val manager = new PlaceManager(opt.spares, false, false);
     val map = resilient ? Store.make[UTS]("map", manager.activePlaces()): null;
 
     println(time0, "Begin");
