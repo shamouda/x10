@@ -47,7 +47,6 @@ public class STMBench {
             Option("opt","optimized","optimized runs use fixed pre-defined members list (default 0 (not optimized))"),
             Option("s","spare","Spare places (default 0)"),
             Option("flat","flat","Flat transaction (default 0)"),
-            Option("p0","p0","Include Place0 (default 1)"),
             Option("f","f","Transaction coordinator is also a participant (default 1) ")
         ]);
         
@@ -66,13 +65,12 @@ public class STMBench {
         val optimized = opts("opt", 0) == 1;
         val flat = opts("flat", 0) == 1;
         val f = opts("f", 1) == 1;
-        val includeP0 = opts("p0", 1) == 1;
         val victimsList = new VictimsList(vp, vt);
         
         val mgr = new PlaceManager(s, false);
         val activePlaces = mgr.activePlaces();
         val p = opts("p", activePlaces.size());
-        printRunConfigurations (r, u, n, p, t, w, d, h, o, g, s, f, optimized, flat, includeP0);
+        printRunConfigurations (r, u, n, p, t, w, d, h, o, g, s, f, optimized, flat);
         
         assert (h <= activePlaces.size()) : "invalid value for parameter h, h should not exceed the number of active places" ;
 
@@ -245,7 +243,7 @@ public class STMBench {
                     if (optimized)
                         map.executeTransaction(virtualMembers, distClosure, -1, remainingTime);
                     else if (flat)
-                         map.executeFlatTransaction(null, distClosure, -1, remainingTime);
+                    	 map.executeFlatTransaction(null, distClosure, -1, remainingTime);
                     else
                         map.executeTransaction(null, distClosure, -1, remainingTime);
                 }catch(expf:FatalTransactionException) {
@@ -299,8 +297,7 @@ public class STMBench {
         //Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
     }
 
-    public static def printThroughput(map:ResilientNativeMap[Long], producersCount:Long, iteration:Long, plh:PlaceLocalHandle[PlaceThroughput], 
-            d:Long, t:Long, h:Long, o:Long) {
+    public static def printThroughput(map:ResilientNativeMap[Long], producersCount:Long, iteration:Long, plh:PlaceLocalHandle[PlaceThroughput], d:Long, t:Long, h:Long, o:Long ) {
         map.printTxStatistics();
         
         Console.OUT.println("========================================================================");
@@ -495,7 +492,7 @@ public class STMBench {
     
     /***********************   Utils  *****************************/
     public static def printRunConfigurations(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, 
-            d:Long, h:Long, o:Long, g:Long, s:Long, f:Boolean, opt:Boolean, flat:Boolean, includeP0:Boolean) {
+            d:Long, h:Long, o:Long, g:Long, s:Long, f:Boolean, opt:Boolean, flat:Boolean) {
         Console.OUT.println("STMBench starting with the following parameters:");        
         Console.OUT.println("X10_NPLACES="  + Place.numPlaces());
         Console.OUT.println("X10_NTHREADS=" + Runtime.NTHREADS);
@@ -523,7 +520,6 @@ public class STMBench {
         Console.OUT.println("f=" + f  + (f ? " !!! At least one place is local !!!! ": "h random places") );
         Console.OUT.println("opt(static members)=" + opt);
         Console.OUT.println("flat=" + flat);
-        Console.OUT.println("includeP0=" + includeP0);
     }
 }
 
