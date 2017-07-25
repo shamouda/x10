@@ -131,10 +131,8 @@ public class LocalTx[K] {K haszero} extends AbstractTx[K] {
                 }
             }
             
-            if (log != null) {
-                //master commit
-                plh().getMasterStore().commit(id);
-            }
+            //master commit (even if log==null), read transactions must be committed
+            plh().getMasterStore().commit(id);
             
             if (plh().stat != null)
                 plh().stat.addCommittedLocalTxStats(Timer.milliTime() - startTime, 
