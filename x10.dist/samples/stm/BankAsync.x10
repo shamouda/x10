@@ -28,7 +28,7 @@ public class BankAsync {
         val start = System.nanoTime();
         
         val supportShrinking = false;
-        val mgr = new PlaceManager(sparePlaces, supportShrinking);
+        val mgr = new PlaceManager(sparePlaces, supportShrinking, false);
         val store = ResilientStore.make[String](mgr.activePlaces(), false);
         val map = store.makeMap();
         try {

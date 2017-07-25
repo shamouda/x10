@@ -40,7 +40,7 @@ public class BankAsyncResilient {
             val hammer = new SimplePlaceHammer();
             hammer.scheduleTimers();
         }
-        val mgr = new PlaceManager(sparePlaces, supportShrinking);
+        val mgr = new PlaceManager(sparePlaces, supportShrinking, false);
         val immediateRecovery = false;
         val store = ResilientStore.make[String](mgr.activePlaces(), immediateRecovery);
         val map = store.makeMap();

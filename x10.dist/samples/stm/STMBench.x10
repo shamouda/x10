@@ -22,7 +22,6 @@ import x10.util.RailUtils;
 import x10.util.HashSet;
 import x10.compiler.Uncounted;
 import x10.util.Team;
-import x10.util.concurrent.Lock;
 
 public class STMBench {
     private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
@@ -309,31 +308,30 @@ public class STMBench {
         
         val activePlcs = map.getActivePlaces();
         val startReduce = System.nanoTime();
-        val lc = GlobalRef (new Lock());
-        val timeCountRail = GlobalRef(new Rail[Long](2));
-        
         if (producersCount > 1) {
+            val team = new Team(activePlcs);
             finish for (p in activePlcs) async at (p) {
                 val plcTh = plh();
+                val times = plcTh.mergeTimes();
+                val counts = plcTh.mergeCounts();
+                
+                plh().reducedTime = team.allreduce(times, Team.ADD);
+                plh().reducedTxCount = team.allreduce(counts, Team.ADD);
+                
                 if (!plcTh.started)
                     throw new STMBenchFailed(here + " never started ...");
-                
-                at (lc) async {
-                    lc().lock();
-                    timeCountRail()(0) += plcTh.mergeTimes();
-                    timeCountRail()(1) += plcTh.mergeCounts();
-                    lc().unlock();
-                }
+                /*val localThroughput = (counts as Double ) * h * o / (times/1e6) * t;
+                Console.OUT.println("iteration:" + iteration +":"+here+":t="+t+":localthroughput(op/MS):"+localThroughput);*/
             }
         }
         else {
-            timeCountRail()(0) = plh().mergeTimes();
-            timeCountRail()(1) = plh().mergeCounts();
+            plh().reducedTime = plh().mergeTimes();
+            plh().reducedTxCount = plh().mergeCounts();
         }
         val elapsedReduceNS = System.nanoTime() - startReduce;
         
-        val allOperations = timeCountRail()(1) * h * o;
-        val allTimeNS = timeCountRail()(0);
+        val allOperations = at (activePlcs(0)) plh().reducedTxCount * h * o;
+        val allTimeNS = at (activePlcs(0)) plh().reducedTime;
         val producers = producersCount * t;
         val throughput = (allOperations as Double) / (allTimeNS/1e6) * producers;
         Console.OUT.println("Reduction completed in "+((elapsedReduceNS)/1e9)+" seconds   txCount["+plh().reducedTxCount+"] OpCount["+allOperations+"]  timeNS["+plh().reducedTime+"]");
