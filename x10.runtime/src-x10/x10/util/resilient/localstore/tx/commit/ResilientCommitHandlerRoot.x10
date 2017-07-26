@@ -28,12 +28,16 @@ public abstract class ResilientCommitHandlerRoot[K] {K haszero} extends CommitHa
     protected abstract def abort_resilient(recovery:Boolean):void;
     protected abstract def commit_resilient(commitRecovery:Boolean):void;
     
+    public def clean() {
+        (root as GlobalRef[ResilientCommitHandlerRoot[K]]{self.home == here}).forget();
+    }
+    
     public def abort(recovery:Boolean){
         try {
             abort_resilient(recovery);
         }
         finally {
-            //(root as GlobalRef[ResilientCommitHandler[K]]{self.home == here}).forget();
+            (root as GlobalRef[ResilientCommitHandlerRoot[K]]{self.home == here}).forget();
         }
     }
     
@@ -47,7 +51,7 @@ public abstract class ResilientCommitHandlerRoot[K] {K haszero} extends CommitHa
                 return AbstractTx.SUCCESS;
         }
         finally {
-            //(root as GlobalRef[ResilientCommitHandler[K]]{self.home == here}).forget();
+            (root as GlobalRef[ResilientCommitHandlerRoot[K]]{self.home == here}).forget();
         }
     }
     

@@ -112,4 +112,7 @@ public abstract class CommitHandler[K] {K haszero} {
         plh().getMasterStore().abort(id);
     }
     
+    public def clean() {
+        
+    }
 }

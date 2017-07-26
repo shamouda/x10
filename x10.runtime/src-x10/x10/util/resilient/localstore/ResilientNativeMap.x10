@@ -238,8 +238,10 @@ public class ResilientNativeMap[K] {K haszero} {
             var commitCalled:Boolean = false;
             try {
                 tx = startGlobalTransaction(members, flat);
-                if (TxConfig.EXPR_LVL == 1)
+                if (TxConfig.EXPR_LVL == 1) {
+                    tx.clean();
                     return new TxResult(AbstractTx.SUCCESS, 1);
+                }
                 
                 val out:Any;
                 finish {

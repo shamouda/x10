@@ -130,5 +130,9 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
         val pl = plh().getPlace(virtualPlace);
         at (pl) async closure();
     }
+    
+    public def clean() {
+        commitHandler.clean();
+    }
         
 }
