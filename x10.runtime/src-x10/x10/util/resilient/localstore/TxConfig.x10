@@ -16,7 +16,6 @@ import x10.util.resilient.localstore.tx.FatalTransactionException;
 
 public class TxConfig {
     public val TM:String; //baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB
-	public static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     public val VALIDATION_REQUIRED:Boolean;
     public val WRITE_BUFFERING:Boolean;
     public val BASELINE:Boolean;
@@ -24,6 +23,7 @@ public class TxConfig {
     public val LOCKING:Boolean;
     public val LOCK_FREE:Boolean;
 	
+    public static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     public static val DISABLE_INCR_PARALLELISM = (System.getenv("DISABLE_INCR_PARALLELISM") == null || System.getenv("DISABLE_INCR_PARALLELISM").equals("")) ? false : Long.parseLong(System.getenv("DISABLE_INCR_PARALLELISM")) == 1;
     public static val DPE_SLEEP_MS = System.getenv("DPE_SLEEP_MS") == null ? 10 : Long.parseLong(System.getenv("DPE_SLEEP_MS"));
     public static val MAX_CONCURRENT_TXS = System.getenv("MAX_CONCURRENT_TXS") == null ? 100 : Long.parseLong(System.getenv("MAX_CONCURRENT_TXS"));
@@ -33,17 +33,16 @@ public class TxConfig {
     //used for performance testing only
 	public static val DISABLE_SLAVE = System.getenv("DISABLE_SLAVE") != null && System.getenv("DISABLE_SLAVE").equals("1");
     public static val ENABLE_STAT = System.getenv("ENABLE_STAT") != null && System.getenv("ENABLE_STAT").equals("1");
-
-
     public static val IMM_AT = System.getenv("IMM_AT") == null || System.getenv("IMM_AT").equals("1");
     public static val EXPR_LVL = System.getenv("EXPR_LVL") == null ? 4 : Long.parseLong(System.getenv("EXPR_LVL"));
-//1 : start 
+    
+    public static val TM_ROOT = System.getenv("TM_ROOT") != null && System.getenv("TM_ROOT").equals("1");
+    
+// 1 : start 
 // 2 : start + submit
 // 3 : start + submit + valid  
 // 4 : start + submit + valid + commit  (default)
-
     private static val instance = new TxConfig();
-    
     private static val WAIT_MS = System.getenv("WAIT_MS") == null ? 10 : Long.parseLong(System.getenv("WAIT_MS"));
        
     private def this(){

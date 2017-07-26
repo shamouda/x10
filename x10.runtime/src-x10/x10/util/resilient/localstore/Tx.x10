@@ -47,10 +47,18 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
         }
         	
         if (resilient && !TxConfig.DISABLE_SLAVE) {
-             if (members == null && !flat)
-         	    commitHandler = new ResilientTreeCommitHandler[K](plh, id);
-         	else
-         		commitHandler = new ResilientFlatCommitHandler[K](plh, id, members);
+            if (TxConfig.TM_ROOT) {
+                if (members == null && !flat)
+                    commitHandler = new ResilientTreeCommitHandlerRoot[K](plh, id);
+                else
+                    commitHandler = new ResilientFlatCommitHandlerRoot[K](plh, id, members);
+            }
+            else {
+                if (members == null && !flat)
+                    commitHandler = new ResilientTreeCommitHandler[K](plh, id);
+                else
+                    commitHandler = new ResilientFlatCommitHandler[K](plh, id, members);
+            }
         }
         else {
         	if (members == null && !flat)
