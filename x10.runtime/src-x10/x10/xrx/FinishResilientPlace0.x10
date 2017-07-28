@@ -924,13 +924,13 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
 
         val gfs = this.ref;
         val parentId:Id;
-            if (parent instanceof FinishResilientPlace0) {
-                val frParent = parent as FinishResilientPlace0;
-                if (!frParent.isGlobal) frParent.globalInit();
-                parentId = frParent.id;
-            } else {
-                parentId = UNASSIGNED;
-            }
+        if (parent instanceof FinishResilientPlace0) {
+            val frParent = parent as FinishResilientPlace0;
+            if (!frParent.isGlobal) frParent.globalInit();
+            parentId = frParent.id;
+        } else {
+            parentId = UNASSIGNED;
+        }
         val dstId = place.id;
         val myId = this.id;
         
