@@ -574,11 +574,11 @@ abstract class FinishState {
             super(ds.readAny() as GlobalRef[FinishState]);
             if (ref.home.id == Runtime.hereLong()) {
                 me = (ref as GlobalRef[FinishState]{home==here})();
-                Console.OUT.println(here + " me = self " + me);
+                //Console.OUT.println(here + " me = self " + me);
             } else {
                 val _ref = ref;
                 me = Runtime.finishStates(ref, ()=>new RemoteFinish(_ref));
-                Console.OUT.println(here + " me = new RemoteFinish() home=" + ref.home);
+                //Console.OUT.println(here + " me = new RemoteFinish() home=" + ref.home);
             }
         }
     }
@@ -602,7 +602,7 @@ abstract class FinishState {
             }
         }
         public def notifySubActivitySpawn(place:Place):void {
-            Console.OUT.println(here + " " + this + " RootFinish.notifySubActivitySpawn("+place+")");
+            //Console.OUT.println(here + " " + this + " RootFinish.notifySubActivitySpawn("+place+")");
             val p = place.parent(); // CUDA
             latch.lock();
             if (p == ref().home) {
@@ -612,25 +612,26 @@ abstract class FinishState {
             }
             ensureRemoteActivities();
             remoteActivities.put(p.id, remoteActivities.getOrElse(p.id, 0n)+1n);
+            //Console.OUT.println(here + " " + this + " RootFinish.notifySubActivitySpawn("+place+")=>remoteActivities.put("+p.id+",..)");
             latch.unlock();
         }
         public def notifyShiftedActivitySpawn(place:Place):void {
-            Console.OUT.println(here + " " + this + " RootFinish.notifyShiftedActivitySpawn("+place+")");
+            //Console.OUT.println(here + " " + this + " RootFinish.notifyShiftedActivitySpawn("+place+")");
             notifySubActivitySpawn(place);
         }
         public def notifyRemoteContinuationCreated():void {
-            Console.OUT.println(here + " " + this + " RootFinish.notifyRemoteContinuationCreated()");
+            //Console.OUT.println(here + " " + this + " RootFinish.notifyRemoteContinuationCreated()");
             latch.lock();
             ensureRemoteActivities();
             latch.unlock();
         }
         public def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void {
-            Console.OUT.println(here + " " + this + " RootFinish.notifyActivityCreationFailed("+srcPlace+","+t+")");
+            //Console.OUT.println(here + " " + this + " RootFinish.notifyActivityCreationFailed("+srcPlace+","+t+")");
             pushException(t);
             notifyActivityTermination();
         }
         public def notifyActivityTermination():void {
-            Console.OUT.println(here + " " + this + " RootFinish.notifyActivityTermination()");
+            //Console.OUT.println(here + " " + this + " RootFinish.notifyActivityTermination()");
             latch.lock();
             if (--count != 0n) {
                 latch.unlock();
@@ -648,43 +649,43 @@ abstract class FinishState {
             latch.release();
         }
         public def notifyShiftedActivityCompletion() {
-            Console.OUT.println(here + " " + this + " RootFinish.notifyShiftedActivityCompletion()");
+            //Console.OUT.println(here + " " + this + " RootFinish.notifyShiftedActivityCompletion()");
             notifyActivityTermination();
         }
 
         protected def process(t:CheckedThrowable):void {
-            Console.OUT.println(here + " " + this + " RootFinish.process1()");
+            //Console.OUT.println(here + " " + this + " RootFinish.process1()");
             if (null == exceptions) exceptions = new GrowableRail[CheckedThrowable]();
             exceptions.add(t);
         }
         protected def process(excs:Rail[CheckedThrowable]):void {
-            Console.OUT.println(here + " " + this + " RootFinish.process2()");
+            //Console.OUT.println(here + " " + this + " RootFinish.process2()");
             for (e in excs) {
                 process(e);
             }
         }
         public def pushException(t:CheckedThrowable):void {
-            Console.OUT.println(here + " " + this + " RootFinish.pushException()");
+            //Console.OUT.println(here + " " + this + " RootFinish.pushException()");
             latch.lock();
             process(t);
             latch.unlock();
         }
         public def waitForFinish():void {
-            Console.OUT.println(here + " " + this + " RootFinish.waitForFinish()");
+            //Console.OUT.println(here + " " + this + " RootFinish.waitForFinish()");
             notifyActivityTermination(); // remove our own activity from count
             if ((!Runtime.STRICT_FINISH) && (Runtime.STATIC_THREADS || remoteActivities == null)) {
                 Runtime.worker().join(latch);
             }
             latch.await(); // sit here, waiting for all child activities to complete
 
-            ////////Console.OUT.println(here + "Sara -RemAct-> " + printRemoteActivites());
+            //Console.OUT.println(here + " " + this + " RootFinish.waitForFinish()=>"+printRemoteActivites());
             
             // if there were remote activities spawned, clean up the RemoteFinish objects which tracked them
             if (remoteActivities != null && remoteActivities.size() != 0) {
                 val root = ref();
                 remoteActivities.remove(here.id);
                 for (placeId in remoteActivities.keySet()) {
-                    Console.OUT.println(here + " " + this + " RootFinish.waitForFinish() - going to " + Place(placeId));
+                    //Console.OUT.println(here + " " + this + " RootFinish.waitForFinish() - going to " + Place(placeId));
                     at(Place(placeId)) @Immediate("remoteFinishCleanup") async Runtime.finishStates.remove(root);
                 }
             }
@@ -696,17 +697,17 @@ abstract class FinishState {
         }
 
         protected def process(remoteMap:HashMap[Long, Int]):void {
-            Console.OUT.println(here + " " + this + " RootFinish.process3()");
+            //Console.OUT.println(here + " " + this + " RootFinish.process3()");
             ensureRemoteActivities();
             // add the remote set of records to the local set
             for (remoteEntry in remoteMap.entries()) {
                 remoteActivities.put(remoteEntry.getKey(), remoteActivities.getOrElse(remoteEntry.getKey(), 0n)+remoteEntry.getValue());
             }
-        
+            //Console.OUT.println(here + " " + this + " RootFinish.process3()=>1-"+printRemoteActivites());
             // add anything in the remote set which ran here to my local count, and remove from the remote set
             count += remoteActivities.getOrElse(ref().home.id, 0n);
             remoteActivities.remove(ref().home.id);
-            
+            //Console.OUT.println(here + " " + this + " RootFinish.process3()=>2-"+printRemoteActivites());
             // check if anything is pending locally
             if (count != 0n) return;
             
@@ -720,7 +721,7 @@ abstract class FinishState {
         }
 
         def notify(remoteMapBytes:Rail[Byte]):void {
-            Console.OUT.println(here + " " + this + " RootFinish.notify1()");
+            //Console.OUT.println(here + " " + this + " RootFinish.notify1()");
             remoteMap:HashMap[Long, Int] = new x10.io.Deserializer(remoteMapBytes).readAny() as HashMap[Long, Int]; 
             latch.lock();
             process(remoteMap);
@@ -728,7 +729,7 @@ abstract class FinishState {
         }
 
         def notify(remoteMapBytes:Rail[Byte], excs:Rail[CheckedThrowable]):void {
-            Console.OUT.println(here + " " + this + " RootFinish.notify2()");
+            //Console.OUT.println(here + " " + this + " RootFinish.notify2()");
             remoteMap:HashMap[Long, Int] = new x10.io.Deserializer(remoteMapBytes).readAny() as HashMap[Long, Int];
             latch.lock();
             process(excs);
@@ -737,11 +738,12 @@ abstract class FinishState {
         }
         
         protected def process(remoteEntry:Pair[Long, Int]):void {
-            Console.OUT.println(here + " " + this + " RootFinish.process4()");
+            //Console.OUT.println(here + " " + this + " RootFinish.process4()");
             ensureRemoteActivities();
             // add the remote record to the local set
             remoteActivities.put(remoteEntry.first, remoteActivities.getOrElse(remoteEntry.first, 0n)+remoteEntry.second);
         
+            //Console.OUT.println(here + " " + this + " RootFinish.process4()=>"+printRemoteActivites());
             // check if anything is pending locally
             if (count != 0n) return;
         
@@ -755,14 +757,14 @@ abstract class FinishState {
         }
 
         def notify(remoteEntry:Pair[Long, Int]):void {
-            Console.OUT.println(here + " " + this + " RootFinish.notify3()");
+            //Console.OUT.println(here + " " + this + " RootFinish.notify3()");
             latch.lock();
             process(remoteEntry);
             latch.unlock();
         }
 
         def notify(remoteEntry:Pair[Long, Int], excs:Rail[CheckedThrowable]):void {
-            Console.OUT.println(here + " " + this + " RootFinish.notify4()");
+            //Console.OUT.println(here + " " + this + " RootFinish.notify4()");
             latch.lock();
             process(excs);
             process(remoteEntry);
@@ -770,7 +772,6 @@ abstract class FinishState {
         }
         
         def printRemoteActivites() {
-            Console.OUT.println(here + " " + this + " RootFinish.printRemoteActivites()");
         	try {
         		latch.lock();
         		if (remoteActivities == null)
@@ -807,27 +808,27 @@ abstract class FinishState {
             }
         }
         public def notifyActivityCreation(srcPlace:Place, activity:Activity):Boolean {
-            Console.OUT.println(here + " " + this + " RemoteFinish.notifyActivityCreation("+srcPlace+",activity)");
+            //Console.OUT.println(here + " " + this + " RemoteFinish.notifyActivityCreation("+srcPlace+",activity)");
             local.getAndIncrement();
             return true;
         }
         public def notifyShiftedActivityCreation(srcPlace:Place):Boolean {
-            Console.OUT.println(here + " " + this + " RemoteFinish.notifyShiftedActivityCreation("+srcPlace+")");
+            //Console.OUT.println(here + " " + this + " RemoteFinish.notifyShiftedActivityCreation("+srcPlace+")");
             return notifyActivityCreation(srcPlace, null);
         }
         public def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void {
-            Console.OUT.println(here + " " + this + " RemoteFinish.notifyActivityCreationFailed("+srcPlace+", "+t+")");
+            //Console.OUT.println(here + " " + this + " RemoteFinish.notifyActivityCreationFailed("+srcPlace+", "+t+")");
             notifyActivityCreation(srcPlace, null);
             pushException(t);
             notifyActivityTermination();
         }
         public def notifyActivityCreatedAndTerminated(srcPlace:Place) {
-            Console.OUT.println(here + " " + this + " RemoteFinish.notifyActivityCreatedAndTerminated("+srcPlace+")");
+            //Console.OUT.println(here + " " + this + " RemoteFinish.notifyActivityCreatedAndTerminated("+srcPlace+")");
             notifyActivityCreation(srcPlace, null);
             notifyActivityTermination();
         }
         public def notifySubActivitySpawn(place:Place):void {
-            Console.OUT.println(here + " " + this + " RemoteFinish.notifySubActivitySpawn("+place+")");
+            //Console.OUT.println(here + " " + this + " RemoteFinish.notifySubActivitySpawn("+place+")");
             val id = Runtime.hereLong();
             lock.lock();
             if (place.id == id) {
@@ -838,21 +839,22 @@ abstract class FinishState {
             ensureRemoteActivities();
             val old = remoteActivities.getOrElse(place.id, 0n);
             remoteActivities.put(place.id, old+1n);
+            //Console.OUT.println(here + " " + this + " RemoteFinish.notifySubActivitySpawn("+place+")=>remoteActivities.put("+place.id+",..)");
             lock.unlock();
         }
         public def notifyShiftedActivitySpawn(place:Place):void {
-            Console.OUT.println(here + " " + this + " RemoteFinish.notifyShiftedActivitySpawn("+place+")");
+            //Console.OUT.println(here + " " + this + " RemoteFinish.notifyShiftedActivitySpawn("+place+")");
             notifySubActivitySpawn(place);
         }
         public def pushException(t:CheckedThrowable):void {
-            Console.OUT.println(here + " " + this + " RemoteFinish.pushException()");
+            //Console.OUT.println(here + " " + this + " RemoteFinish.pushException()");
             lock.lock();
             if (null == exceptions) exceptions = new GrowableRail[CheckedThrowable]();
             exceptions.add(t);
             lock.unlock();
         }
         public def notifyActivityTermination():void {
-            Console.OUT.println(here + " " + this + " RemoteFinish.notifyActivityTermination()");
+            //Console.OUT.println(here + " " + this + " RemoteFinish.notifyActivityTermination()");
             lock.lock();
             count--;
             if (local.decrementAndGet() > 0) {
@@ -871,7 +873,7 @@ abstract class FinishState {
                 remoteActivities.clear();
                 count = 0n;
                 lock.unlock();
-                Console.OUT.println(here + " " + this + " RemoteFinish.notifyActivityTermination() --- 1");
+                //Console.OUT.println(here + " " + this + " RemoteFinish.notifyActivityTermination() --- 1=>"+ printRemoteActivites());
                 if (null != excs) {
                     at(ref.home) @Immediate("notifyActivityTermination_1") async deref[RootFinish](ref).notify(serializedTable, excs);
                 } else {
@@ -881,7 +883,7 @@ abstract class FinishState {
                 val message = new Pair[Long, Int](here.id, count);
                 count = 0n;
                 lock.unlock();
-                Console.OUT.println(here + " " + this + " RemoteFinish.notifyActivityTermination() --- 2");
+                //Console.OUT.println(here + " " + this + " RemoteFinish.notifyActivityTermination() --- 2");
                 if (null != excs) {
                     at(ref.home) @Immediate("notifyActivityTermination_3") async deref[RootFinish](ref).notify(message, excs);
                 } else {
@@ -890,8 +892,28 @@ abstract class FinishState {
             }
         }
         public def notifyShiftedActivityCompletion() {
-            Console.OUT.println(here + " " + this + " RemoteFinish.notifyShiftedActivityCompletion()");
+            //Console.OUT.println(here + " " + this + " RemoteFinish.notifyShiftedActivityCompletion()");
             notifyActivityTermination();
+        }
+        
+        def printRemoteActivites() {
+            try {
+                lock.lock();
+                if (remoteActivities == null)
+                    return null;
+                
+                val iter = remoteActivities.keySet().iterator();
+                var str:String = "";
+                while (iter.hasNext()) {
+                    val key = iter.next();
+                    val value = remoteActivities.getOrThrow(key);
+                    str += "["+key+":"+value+"] ";
+                }
+                return str;
+            }
+            finally {
+                lock.unlock();
+            }
         }
     }
 

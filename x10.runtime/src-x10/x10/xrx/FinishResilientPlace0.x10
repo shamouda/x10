@@ -19,6 +19,7 @@ import x10.io.Deserializer;
 import x10.io.Serializer;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.concurrent.SimpleLatch;
+import x10.util.concurrent.Lock;
 import x10.util.GrowableRail;
 import x10.util.HashMap;
 import x10.util.HashSet;
@@ -442,7 +443,10 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
     private val id:Id;
 
     // Initialized by custom deserializer
-    private val grlc:GlobalRef[AtomicInteger];
+    //private val grlc:GlobalRef[AtomicInteger];
+    private var lc:Int=1n;
+    private transient val lcLock:Lock;
+    
     private transient val ref:GlobalRef[FinishResilientPlace0] = GlobalRef[FinishResilientPlace0](this);
     private transient var isGlobal:Boolean = false;
     private transient var strictFinish:Boolean = false;
@@ -452,13 +456,44 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
     private transient var parent:FinishState;
     private transient var excs:GrowableRail[CheckedThrowable]; 
 
-    private def localCount():AtomicInteger = (grlc as GlobalRef[AtomicInteger]{self.home == here})();
+    //private def localCount():AtomicInteger = (grlc as GlobalRef[AtomicInteger]{self.home == here})();
 
-    public def toString():String = "FinishResilientPlace0(id="+id+", localCount="+localCount().get()+")";
+    public def toString():String = "FinishResilientPlace0(id="+id+", localCount="+getLocalCount()+")";
 
+    private def incrLocalCount() {
+        try{
+            lcLock.lock();
+            return ++lc;
+        }
+        finally{
+            lcLock.unlock();
+        }
+    }
+    private def getLocalCount() {
+        try{
+            lcLock.lock();
+            return lc;
+        }
+        finally{
+            lcLock.unlock();
+        }
+    }
+    
+    private def decrLocalCount() {
+        try{
+            lcLock.lock();
+            return --lc;
+        }
+        finally{
+            lcLock.unlock();
+        }
+    }
+    
     private def this(p:FinishState) { 
         latch = new SimpleLatch();
-        grlc = GlobalRef[AtomicInteger](new AtomicInteger(1n)); // for myself.  Will be decremented in waitForFinish
+        //grlc = GlobalRef[AtomicInteger](new AtomicInteger(1n)); // for myself.  Will be decremented in waitForFinish
+        lc = 1n;// for myself.  Will be decremented in waitForFinish
+        lcLock = new Lock();
         parent = p;
         isGlobal = false;
         strictFinish = false;
@@ -467,8 +502,12 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
 
     private def this(deser:Deserializer) {
         id = deser.readAny() as Id;
-        val lc = deser.readAny() as GlobalRef[AtomicInteger];
-        grlc = (lc.home == here) ? lc : GlobalRef[AtomicInteger](new AtomicInteger(1n));
+        //val lc = deser.readAny() as GlobalRef[AtomicInteger];
+        //grlc = (lc.home == here) ? lc : GlobalRef[AtomicInteger](new AtomicInteger(1n));
+        lc = deser.readAny() as Int;
+        if (id.home != here.id as Int)
+            lc = 1n;
+        lcLock = new Lock();
         isGlobal = true;
         strictFinish = true;
     }
@@ -477,7 +516,8 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         strictFinish = true;
         if (!isGlobal) globalInit(); // Once we have more than 1 copy of the finish state, we must go global
         ser.writeAny(id);
-        ser.writeAny(grlc);
+        //ser.writeAny(grlc);
+        ser.writeAny(lc);
     }
 
     private def globalInit() {
@@ -550,7 +590,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
 
     private def forgetGlobalRefs():void {
         (ref as GlobalRef[FinishResilientPlace0]{self.home == here}).forget();
-        (grlc as GlobalRef[AtomicInteger]{self.home==here}).forget();
+        //(grlc as GlobalRef[AtomicInteger]{self.home==here}).forget();
     }
 
     def notifySubActivitySpawn(place:Place):void {
@@ -563,7 +603,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         val dstId = place.id;
         val myId = this.id;
         if (dstId == here.id) {
-            val lc = localCount().incrementAndGet();
+            val lc = incrLocalCount();
             if (verbose>=1) debug(">>>> notifySubActivitySpawn(id="+myId+") called locally, localCount now "+lc);
         } else {
             if (verbose>=1) debug(">>>> notifySubActivitySpawn(id="+myId+") called, srcId="+here.id + " dstId="+dstId+" kind="+kind);
@@ -741,7 +781,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         val myId = this.id;
 
         if (dstId == srcId) {
-            val lc = localCount().decrementAndGet();
+            val lc = decrLocalCount();
             if (verbose>=1) debug(">>>> notifyActivityCreatedAndTerminated(id="+myId+") called locally, localCount now "+lc);
             if (lc > 0) return;
             if (isGlobal) {
@@ -795,7 +835,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         notifyActivityTermination(AT);
     }
     def notifyActivityTermination(kind:Int):void {
-        val lc = localCount().decrementAndGet();
+        val lc = decrLocalCount();
         val myId = this.id;
 
         if (lc > 0) {
@@ -934,7 +974,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         val dstId = place.id;
         val myId = this.id;
         
-        localCount().incrementAndGet();  // synthetic activity to keep finish locally live during async to Place0
+        incrLocalCount();  // synthetic activity to keep finish locally live during async to Place0
 
         if (bytes.size >= ASYNC_SIZE_THRESHOLD) {
             if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") selecting indirect (size="+
@@ -1062,7 +1102,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         
         val myId = this.id;
         
-        localCount().incrementAndGet();  // synthetic activity to keep finish locally live during async to Place0
+        incrLocalCount();  // synthetic activity to keep finish locally live during async to Place0
 
         if (verbose >= 1) debug(">>>>  spawnRemoteActivities(id="+myId+") direct (size="+
                                 bytes.size+") srcId="+here.id + " dstPlaces="+destPlaces.size);
