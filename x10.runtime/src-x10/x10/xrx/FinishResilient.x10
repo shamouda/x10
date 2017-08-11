@@ -44,10 +44,6 @@ abstract class FinishResilient extends FinishState {
     //       for a large number of test cases to shake out mixed-mode problems.
     protected static val ASYNC_SIZE_THRESHOLD = Long.parse(Runtime.env.getOrElse("X10_RESILIENT_FINISH_SMALL_ASYNC_SIZE", "100"));
     
-    //Used for aggregating communication to place0 in FinishResilientPlace0
-    protected static val MAX_DELAYED_UPDATES = Long.parse(Runtime.env.getOrElse("X10_MAX_DELAYED_UPDATES", "10"));
-    protected static val MAX_DELAY_NANOS = Long.parse(Runtime.env.getOrElse("X10_MAX_MSG_DELAY", "0"));
-    
     /*
      * Static methods to be implemented in subclasses
      */
