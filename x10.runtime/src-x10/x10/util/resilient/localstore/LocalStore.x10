@@ -416,6 +416,10 @@ public class LocalStore[K] {K haszero} {
         }
     }*/
     
+    static class ExceptionContainer {
+        public var excp:CheckedThrowable;
+    }
+
     public def runImmediateAtSlave(cl:()=>void):void {
         if (slave.isDead())
             throw new DeadPlaceException(slave);
@@ -423,7 +427,7 @@ public class LocalStore[K] {K haszero} {
         val h = here;
         val cond = new Condition();
         val condGR = GlobalRef[Condition](cond); 
-        val exc = GlobalRef(new Cell[CheckedThrowable](null));
+        val exc = GlobalRef[ExceptionContainer](new ExceptionContainer());
         at (slave) @Immediate("finish_resilient_low_level_at_out") async {
             try {
                 cl();
@@ -432,7 +436,7 @@ public class LocalStore[K] {K haszero} {
                 }
             } catch (t:Exception) {
                 at (condGR) @Immediate("finish_resilient_low_level_at_back_exc") async {
-                    exc()(t);
+                    exc().excp = t;
                     condGR().release();
                 };
             }
@@ -448,7 +452,7 @@ public class LocalStore[K] {K haszero} {
         condGR.forget();
         exc.forget();
         ConditionsList.get().remove(cond);
-        val t = exc()();
+        val t = exc().excp;
         if (t != null) {
             Runtime.throwCheckedWithoutThrows(t);
         }
