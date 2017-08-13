@@ -132,22 +132,6 @@ public class BenchMicro {
         do {
             for (i in 1..OUTER_ITERS) {
                 finish {
-                    at (next) async {
-                        at (home) async { think(t); }
-                    }
-                }
-            }
-            time1 = System.nanoTime();
-            iterCount++;
-        } while (time1-time0 < minTime);
-        if (print) Console.OUT.println(prefix+"message back: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
-
-        
-        iterCount = 0;
-        time0 = System.nanoTime();
-        do {
-            for (i in 1..OUTER_ITERS) {
-                finish {
                     for (p in Place.places()) {
                         at (p) async {
                             at (home) async { think(t); }
