@@ -20,6 +20,7 @@ public class BenchmarkAllreduce extends x10Test {
     private static MAX_SIZE = 2<<19;
 
 	public def run(): Boolean {
+		Console.OUT.println("Running with "+Place.numPlaces()+" places.");
         finish for (place in Place.places()) at (place) async {
             Team.WORLD.allreduce(1.0, Team.ADD); // warm up comms layer
             for (var s:Long= 1; s <= MAX_SIZE; s *= 2) {
