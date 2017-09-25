@@ -24,6 +24,12 @@ import x10.util.Map.Entry;
 import x10.xrx.Runtime;
 import x10.compiler.Uncounted;
 
+/*
+ * Testing command:
+ * X10_RESILIENT_MODE=1 X10_LAUNCHER_TTY=false X10_NPLACES=23 X10_NTHREADS=1 X10RT_DATASTORE=native ResilientUTS.sock -d 17 -workers 3 -spares 3 -kill 5:20s -kill 10:40s -kill 15:60s
+ * 
+ * X10_RESILIENT_MODE=1 X10_LAUNCHER_TTY=false X10_NPLACES=6 X10_NTHREADS=1 X10RT_DATASTORE=native ResilientUTS.sock -d 10 -workers 1 -spares 1 -kill 5:20s
+ * */
 final class ResilientUTS implements Unserializable {
   val time0:Long;
   val map:Store[UTS];
@@ -35,8 +41,6 @@ final class ResilientUTS implements Unserializable {
   val resilient:Boolean;
   var failureTime:Long;
   
-  private static killer:Killer = new Killer();
-
   static def println(time0:Long, message:String) {
     val time = System.currentTimeMillis();
     val s = "        " + (time - time0);
@@ -71,7 +75,7 @@ final class ResilientUTS implements Unserializable {
   
   public static def startKiller() {
       @Uncounted async {
-          killer.startKiller();
+          killer.run();
       }
   }
   
@@ -82,15 +86,6 @@ final class ResilientUTS implements Unserializable {
 	  
 	  public def setTime0(time0:Long) {
 		  this.time0 = time0;
-	  }
-	  
-	  public def startKiller() {
-		  if(killDelay > 0) {
-			  this.started = true;
-			  run();
-			  // we can lose the to reference, since there is no
-			  // way to cancel suicide :-
-		  }
 	  }
 	  
 	  def setKillTime(newTime:Long) {
@@ -109,6 +104,7 @@ final class ResilientUTS implements Unserializable {
 		  if(killDelay <= 0) {
 			  return;
 		  }
+		  this.started = true;
 		  val startTime = System.nanoTime();
 
 		  val endTime = startTime + killDelay;
@@ -129,10 +125,12 @@ final class ResilientUTS implements Unserializable {
 	  }
   };
   
+  private static killer:Killer = new Killer();
+  
   static def init(plh:PlaceLocalHandle[ResilientUTS], time0:Long, killTime:Long) {
     val me = plh();
     for (i in 0n..me.mask) me.workers(i) = me.new Worker(plh, i);
-    //System.registerPlaceRemovedHandler((p:Place) => { me.unblock(p); });
+    System.registerPlaceRemovedHandler((p:Place) => { me.unblock(p); });
     setAndStartKiller(time0, killTime);
   }
 

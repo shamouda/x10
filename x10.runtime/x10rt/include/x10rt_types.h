@@ -49,6 +49,10 @@ typedef void x10rt_completion_handler (void *arg);
  */
 typedef void x10rt_completion_handler2 (x10rt_team, void *arg);
 
+/** User callback to signal that a place has died.
+ */
+typedef void x10rt_place_removed_callback(unsigned int pl);
+
 /** An integer type capable of representing any message type id.
  */
 #if defined(X10RT_32BIT_MSG_IDS) 
@@ -90,6 +94,15 @@ struct x10rt_msg_params {
      * X10RT and the client code take on alternate roles depending on whether the call is
      * x10rt_send_*() or whether the call is a user callback triggered by #x10rt_probe().
      */
+    void *msg;
+
+    /** The length of the message in bytes.  If #msg is NULL then #len shall be 0. */
+    uint32_t len;
+};
+
+struct x10rt_place_removed_handler {
+
+    /** the serialized function to be called **/
     void *msg;
 
     /** The length of the message in bytes.  If #msg is NULL then #len shall be 0. */
