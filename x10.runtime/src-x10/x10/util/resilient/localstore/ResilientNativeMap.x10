@@ -69,14 +69,7 @@ public class ResilientNativeMap[K] {K haszero} {
     }
     
     public def set2(key:K, value:Cloneable, place:Place, key2:K, value2:Cloneable) {
-        var destId:Long = plh().getPlaceIndex(place);
-        while (destId == -1) {
-            Console.OUT.println(here + " - set2  to place: " + place + "   " + plh().activePlacesAsString());
-            plh().replaceDeadPlace(place);
-            System.threadSleep(TxConfig.DPE_SLEEP_MS);
-            destId = plh().getPlaceIndex(place);
-        }
-        val dest = destId;
+    	val dest = plh().getPlaceIndex(place);
         val distClosure = (tx:AbstractTx[K]) => {
             tx.put(key, value);
             tx.asyncAt(dest, () => {

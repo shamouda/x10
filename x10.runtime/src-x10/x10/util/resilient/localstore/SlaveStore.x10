@@ -208,7 +208,7 @@ public class SlaveStore[K] {K haszero} {
     public def waitUntilPaused() {
         try {
             slaveLock();
-            Console.OUT.println("Recovering " + here + " - SlaveStore.waitUntilPaused started logsSize["+logs.size() +"] ...");
+            if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " - SlaveStore.waitUntilPaused started logsSize["+logs.size() +"] ...");
             Runtime.increaseParallelism();
             var count:Long = 0;
             while (logs.size() != 0) {
@@ -225,12 +225,11 @@ public class SlaveStore[K] {K haszero} {
             }
         
         } finally {
-            Console.OUT.println("Recovering " + here + " - SlaveStore.waitUntilPaused completed ...");
+        	if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " - SlaveStore.waitUntilPaused completed ...");
             Runtime.decreaseParallelism(1n);
             slaveUnlock();
         }
     }
-    
     
     public def getTransDescriptors(place:Place):ArrayList[TxDesc] {
         val result = new ArrayList[TxDesc]();

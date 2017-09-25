@@ -10,7 +10,7 @@ public class CentralizedRecoveryHelper {
     
     /*******************  Centralized Recovery starting at Place(0)  ****************************/
     public static def recover[K](plh:PlaceLocalHandle[LocalStore[K]], changes:ChangeDescription) {K haszero} {
-        Console.OUT.println("CentralizedRecoveryHelper.recover started ...");
+    	val recoveryStart = System.nanoTime();
         var i:Long = 0;
         finish for (deadPlace in changes.removedPlaces) {
             val masterOfDeadSlave = changes.oldActivePlaces.prev(deadPlace);
@@ -20,7 +20,12 @@ public class CentralizedRecoveryHelper {
                 plh().recoverSlave(deadPlace, spare);
             }
         }
-        plh().activePlaces = changes.newActivePlaces;
+        val newActivePlaces = changes.newActivePlaces;
+        Place.places().broadcastFlat(()=> {
+        	plh().activePlaces = newActivePlaces;
+        });
+        val recoveryEnd = System.nanoTime();
+        Console.OUT.printf("CentralizedRecoveryHelper.recover completed, recoveryTime %f seconds\n", (recoveryEnd-recoveryStart)/1e9);
     }
     
 }

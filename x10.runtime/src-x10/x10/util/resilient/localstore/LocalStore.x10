@@ -261,7 +261,10 @@ public class LocalStore[K] {K haszero} {
     
     public def getPlaceIndex(p:Place) {
         val idx = activePlaces.indexOf(p);
+        return idx;
+        /*
         if (idx == -1) {
+        	Console.OUT.println(here + " - getPlaceIndex("+p+") = -1,  " + plh().activePlacesAsString());
             val gr = GlobalRef(new Replacement());
             finish async at (p) {
                 val iter = plh().replacementHistory.keySet().iterator();
@@ -271,14 +274,16 @@ public class LocalStore[K] {K haszero} {
                     if (value == here.id) {
                         async at (gr) {
                             gr().oldPlace = Place(key);
-                            gr().newPlace = here;
+                            gr().newPlace = Place(value);
                         }
                     }
                 }
             }
+            Console.OUT.println(here + " - getPlaceIndex("+p+") = -1,  replacement old="+gr().oldPlace+"  new=" + gr().newPlace);
             replace(gr().oldPlace, gr().newPlace);
         }
         return activePlaces.indexOf(p);
+        */
     }
         
     /*******************************************/
@@ -309,18 +314,18 @@ public class LocalStore[K] {K haszero} {
 
     //synchronized version of asyncSlaveRecovery
     public def recoverSlave(deadPlace:Place, spare:Place) {
-        Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+")");
+    	if (TxConfig.get().TMREC_DEBUG) Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+")");
         if (immediateRecovery || !slave.isDead())
             return;
         
         assert (virtualPlaceId != -1) : "bug in LocalStore, virtualPlaceId ("+virtualPlaceId+") = -1";
         
         if ( slave.isDead() && masterStore.isActive() ) {
-             Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+") master is active");
+        	 if (TxConfig.get().TMREC_DEBUG) Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+") master is active");
              masterStore.pausing();
-             DistributedRecoveryHelper.recoverSlave(plh, deadPlace, spare, -1);
+             DistributedRecoveryHelper.recoverSlave(true, plh, deadPlace, spare, -1);
         }
-        else
+        else if (TxConfig.get().TMREC_DEBUG) 
             Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+") master is not active");
     }
     

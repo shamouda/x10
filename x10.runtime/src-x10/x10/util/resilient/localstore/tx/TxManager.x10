@@ -60,7 +60,6 @@ public abstract class TxManager[K] {K haszero} {
         else
             throw new Exception("Wrong Tx Manager Configuration (undo logging can not be selected with late acquire");
     }
-    
 
     public def isReadOnlyTransaction(id:Long) {
         val log = txLogManager.searchTxLog(id);
@@ -91,7 +90,7 @@ public abstract class TxManager[K] {K haszero} {
     
     /**************   Pausing for Recovery    ****************/
     public def waitUntilPaused() {
-        Console.OUT.println("Recovering " + here + " MasterStore.waitUntilPaused started ...");
+    	if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " MasterStore.waitUntilPaused started ...");
         try {
             Runtime.increaseParallelism();
             
@@ -106,7 +105,7 @@ public abstract class TxManager[K] {K haszero} {
             Runtime.decreaseParallelism(1n);
         }
         paused();
-        Console.OUT.println("Recovering " + here + " MasterStore.waitUntilPaused completed ...");
+        if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " MasterStore.waitUntilPaused completed ...");
     }
     
     private def ensureActiveStatus() {
@@ -125,7 +124,7 @@ public abstract class TxManager[K] {K haszero} {
     		statusLock();
     		assert(status == STATUS_ACTIVE);
     		status = STATUS_PAUSING;
-    		Console.OUT.println("Recovering " + here + " TxManager changed status from STATUS_ACTIVE to STATUS_PAUSING");
+    		if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxManager changed status from STATUS_ACTIVE to STATUS_PAUSING");
     	}
     	finally {
     		statusUnlock();
@@ -137,7 +136,7 @@ public abstract class TxManager[K] {K haszero} {
     		statusLock();
     		assert(status == STATUS_PAUSING);
     		status = STATUS_PAUSED;
-    		Console.OUT.println("Recovering " + here + " TxManager changed status from STATUS_PAUSING to STATUS_PAUSED");
+    		if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxManager changed status from STATUS_PAUSING to STATUS_PAUSED");
     	}
     	finally {
     		statusUnlock();
@@ -149,7 +148,7 @@ public abstract class TxManager[K] {K haszero} {
     		statusLock();
     		assert(status == STATUS_PAUSED);
     		status = STATUS_ACTIVE;
-    		Console.OUT.println("Recovering " + here + " TxManager changed status from STATUS_PAUSED to STATUS_ACTIVE");
+    		if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxManager changed status from STATUS_PAUSED to STATUS_ACTIVE");
     	}
     	finally {
     		statusUnlock();
