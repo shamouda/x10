@@ -3938,7 +3938,7 @@ void mpiErrorHandler(MPI_Comm * comm, int *errorCode, ...){
     }
     //signal the application that places have died.
     if (placeRemovedCB != NULL && newDeadCount > oldDeadCount) {
-    	for (int i = newDeadCount; i < oldDeadCount; ++i) {
+    	for (int i = oldDeadCount; i < newDeadCount; ++i) {
     		placeRemovedCB(global_state.deadPlaces[i]);
     	}
     }
