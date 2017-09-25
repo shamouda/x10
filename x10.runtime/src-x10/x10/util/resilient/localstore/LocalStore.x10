@@ -30,18 +30,39 @@ import x10.compiler.Immediate;
 public class LocalStore[K] {K haszero} {
 	public val immediateRecovery:Boolean;
     private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
-    private transient var masterStore:MasterStore[K] = null;
-    public transient var virtualPlaceId:Long = -1; //-1 means a spare place
-    public transient var slave:Place;
-    public transient var oldSlave:Place;
+    private transient var masterStore:MasterStore[K] = null;   
     public transient var slaveStore:SlaveStore[K] = null;
-    public transient var activePlaces:PlaceGroup;
     private var plh:PlaceLocalHandle[LocalStore[K]];
     private transient var lock:Lock;
     public transient val stat:TxPlaceStatistics;
     public transient var txDescManager:TxDescManager[K];
+
     
+    public transient var virtualPlaceId:Long = -1; //-1 means a spare place
+    public transient var slave:Place;
+    public transient var oldSlave:Place;
+    public transient var activePlaces:PlaceGroup;
     private val replacementHistory = new HashMap[Long, Long] ();
+    
+    public static struct PlaceChange {
+        public val oldPlace:Place;
+        public val newPlace:Place;
+        
+        def this(oldPlace:Place, newPlace:Place) {
+            this.oldPlace = oldPlace;
+            this.newPlace = newPlace;
+        }
+    };
+    
+    public static struct SlaveChange {
+        public val changed:Boolean;
+        public val newSlave:Place;
+        
+        def this(changed:Boolean, newSlave:Place) {
+            this.changed = changed;
+            this.newSlave = newSlave;
+        }
+    };
     
     public def this(active:PlaceGroup, immediateRecovery:Boolean) {
         this.immediateRecovery = immediateRecovery;
@@ -60,30 +81,14 @@ public class LocalStore[K] {K haszero} {
                 oldSlave = this.slave;
                 ConditionsList.get().setSlave(this.slave.id);
             }
-        } //else, I am a spare place, initialize me using joinAsMaster(...)
+        } //else, I am a spare place
     }
     
     public def setPLH(plh:PlaceLocalHandle[LocalStore[K]]) {
         this.plh = plh;
         this.txDescManager = new TxDescManager[K]( plh );
     }
-    
-    /*CentralizedRecovery: used when a spare place joins*/
-    public def joinAsMaster (active:PlaceGroup, data:HashMap[K,Cloneable]) {
-        plh().lock();
-        assert(resilient && virtualPlaceId == -1) : "virtualPlaceId  is not -1 (="+virtualPlaceId+") ";
-        this.activePlaces = active;
-        this.virtualPlaceId = active.indexOf(here);
-        masterStore = new MasterStore(data, immediateRecovery);
-        slaveStore = new SlaveStore[K]();
-        this.slave = active.next(here);
-        ConditionsList.get().setSlave(this.slave.id);
-        this.oldSlave = this.slave;
-        plh().unlock();
-    }
-    
     /************************Distributed Recovery Methods****************************************/
-    
     public def allocate(vPlace:Long) {
         try {
             plh().lock();
@@ -100,83 +105,31 @@ public class LocalStore[K] {K haszero} {
         }
     }
     
-    public static struct PlaceChange {
-        public val virtualPlaceId:Long;
-        public val newPlace:Place;
-        
-        def this(virtualPlaceId:Long, newPlace:Place) {
-            this.virtualPlaceId = virtualPlaceId;
-            this.newPlace = newPlace;
-        }
-    };
-    
-    public static struct SlaveChange {
-        public val changed:Boolean;
-        public val newSlave:Place;
-        
-        def this(changed:Boolean, newSlave:Place) {
-            this.changed = changed;
-            this.newSlave = newSlave;
-        }
-    };
-    
-    
-    public def handshake (oldActivePlaces:PlaceGroup, vId:Long, deadPlace:Place) {
+    public def initSpare (newActivePlaces:PlaceGroup, vId:Long, deadPlace:Place) {
         try {
             plh().lock();
             this.replacementHistory.put(deadPlace.id, here.id);
-            
             this.virtualPlaceId = vId;
-            //update other places according to the version of active places that my master is aware of
-            val newAddedPlaces = new GlobalRef[ArrayList[PlaceChange]](new ArrayList[PlaceChange]());
-            val me = here;
-            val activeSize = oldActivePlaces.size();
-            try {
-                 finish for (p in oldActivePlaces) {
-                     val expectedSlave = oldActivePlaces.next(p);
-                     if (p.isDead() || expectedSlave.id == me.id /*p is my master*/ || p.id == me.id /* p is me*/)
-                         continue;
-                     at (p) async {
-                         //at handshare receiver
-                         plh().replace(vId, me);
-                         if (plh().slave.id != expectedSlave.id){
-                             val slaveVId = (plh().virtualPlaceId + 1)%activeSize;
-                             val newSlave = plh().slave;
-                             at (newAddedPlaces) {
-                                 atomic newAddedPlaces().add(new PlaceChange(slaveVId, newSlave));
-                             }
-                         }
-                     }
-                 }
-            }catch(e:Exception) {/*ignore dead places at this point*/}
-        
-            this.activePlaces = oldActivePlaces;
-            if (newAddedPlaces().size() > 0) {
-                Console.OUT.println("Recovering " + here + " My master gave me outdated information");
-                //my master was not aware of some place changes
-                for (change in newAddedPlaces()) {
-                    plh().replace(change.virtualPlaceId, change.newPlace);
-                }
-            }
+            this.activePlaces = newActivePlaces;
         } finally {
             plh().unlock();
         }
     }
     
     /**************     ActivePlaces utility methods     ****************/
-    public def getVirtualPlaceId() {
+    public def getMasterVirtualId() {
         try {
             lock();
-            return virtualPlaceId;
+            return (virtualPlaceId -1 + activePlaces.size());
         }finally {
             unlock();
         }
     }
     
-    public def getPreviousVirtualPlaceId() {
+    public def getVirtualPlaceId() {
         try {
             lock();
-            return (virtualPlaceId -1 + activePlaces.size());
+            return virtualPlaceId;
         }finally {
             unlock();
         }
@@ -192,30 +145,16 @@ public class LocalStore[K] {K haszero} {
         }
     }
     
-
-    public def replace(virtualId:Long, spare:Place) {
+    public def activePlacesAsString() {
         try {
             lock();
-            val size = activePlaces.size();
-            val rail = new Rail[Place](size);
-            val oldPlace = activePlaces(virtualId);
-            replacementHistory.put(oldPlace.id, spare.id);
-            for (var i:Long = 0; i< size; i++) {
-                if (virtualId == i)
-                    rail(i) = spare;
-                else
-                    rail(i) = activePlaces(i);
-            }
-            activePlaces = new SparsePlaceGroup(rail);
-            
-            if (TxConfig.get().TM_DEBUG) {
-                var str:String = "";
+            var str:String = " activePlaces{";
+            if (activePlaces != null) {
                 for (p in activePlaces)
-                    str += p + ",  " ;
-                Console.OUT.println("Recovering " + here + " - updated activePlaces to be: " + str);
-                Console.OUT.println("Recovering " + here + " - Handshake with new place ["+spare+"]  at virtualId ["+virtualId+"] ..." );
+                    str += p + " : ";
             }
-            return activePlaces;
+            str += " }";
+            return str;
         }finally {
             unlock();
         }
@@ -265,16 +204,6 @@ public class LocalStore[K] {K haszero} {
         }
     }
     
-    
-    public def getNextPlace() {
-        try {
-            lock();
-            return activePlaces.next(here);
-        }finally {
-            unlock();
-        }
-    }
-    
     public def nextPlaceChange() {
         try {
             lock();
@@ -284,17 +213,6 @@ public class LocalStore[K] {K haszero} {
             }
             else
                 return new SlaveChange(false, slave);
-        }finally {
-            unlock();
-        }
-    }
-    
-    public def sameActivePlaces(active:PlaceGroup) {
-        try {
-            lock();
-            val result = activePlaces == active;
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " - sameActivePlaces returned " + result);
-            return result;
         }finally {
             unlock();
         }
@@ -341,8 +259,25 @@ public class LocalStore[K] {K haszero} {
         }
     }
     
-    
     public def getPlaceIndex(p:Place) {
+        val idx = activePlaces.indexOf(p);
+        if (idx == -1) {
+            val gr = GlobalRef(new Replacement());
+            finish async at (p) {
+                val iter = plh().replacementHistory.keySet().iterator();
+                while (iter.hasNext()) {
+                    val key = iter.next();
+                    val value = plh().replacementHistory.getOrThrow(key);
+                    if (value == here.id) {
+                        async at (gr) {
+                            gr().oldPlace = Place(key);
+                            gr().newPlace = here;
+                        }
+                    }
+                }
+            }
+            replace(gr().oldPlace, gr().newPlace);
+        }
         return activePlaces.indexOf(p);
     }
         
@@ -373,7 +308,7 @@ public class LocalStore[K] {K haszero} {
     }
 
     //synchronized version of asyncSlaveRecovery
-    public def recoverSlave(spare:Place) {
+    public def recoverSlave(deadPlace:Place, spare:Place) {
         Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+")");
         if (immediateRecovery || !slave.isDead())
             return;
@@ -383,7 +318,7 @@ public class LocalStore[K] {K haszero} {
         if ( slave.isDead() && masterStore.isActive() ) {
              Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+") master is active");
              masterStore.pausing();
-             DistributedRecoveryHelper.recoverSlave(plh, spare, -1);
+             DistributedRecoveryHelper.recoverSlave(plh, deadPlace, spare, -1);
         }
         else
             Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+") master is not active");
@@ -400,21 +335,74 @@ public class LocalStore[K] {K haszero} {
     public def setMasterStore(m:MasterStore[K]) {
         this.masterStore = m;
     }
-    /*
-    public def releaseAllConditions() {
+    
+    public def replace(oldP:Place, newP:Place) {
         try {
             lock();
-            Console.OUT.println(here + " releaseAllConditions CONDSIZE= " + slaveCondList.size());
-            if (virtualPlaceId != -1 && slave.isDead()) {
-                for (cond in slaveCondList){
-                    cond.release();
-                }
-                slaveCondList.clear();
+            val size = activePlaces.size();
+            val rail = new Rail[Place](size);
+            replacementHistory.put(oldP.id, newP.id);
+            for (var i:Long = 0; i< size; i++) {
+                if (activePlaces(i).id == oldP.id)
+                    rail(i) = newP;
+                else
+                    rail(i) = activePlaces(i);
             }
-        } finally {
+            activePlaces = new SparsePlaceGroup(rail);
+            
+            if (TxConfig.get().TM_DEBUG) {
+                var str:String = "";
+                for (p in activePlaces)
+                    str += p + ",  " ;
+                Console.OUT.println("Recovering " + here + " - updated activePlaces to be: " + str);
+                Console.OUT.println("Recovering " + here + " - Handshake with new place ["+newP+"] ..." );
+            }
+            return activePlaces;
+        }finally {
             unlock();
         }
-    }*/
+    }
+    
+    static class Replacement {
+        public var oldPlace:Place = Place(-1);
+        public var newPlace:Place = Place(-1);
+    }
+    
+    public def replaceDeadPlace(dead:Place) {
+        val gr = GlobalRef(new Replacement());
+        if (dead.isDead()) {
+            val knownRep = replacementHistory.getOrElse(dead.id, -1); 
+            if ( knownRep == -1) {
+                //@Uncounted async 
+                {
+                    val master = activePlaces.prev(dead);
+                    finish async at (master) {
+                        val rep = plh().replacementHistory.getOrElse(dead.id, -1);
+                        if (rep != -1) {
+                            async at (gr) {
+                                gr().newPlace = Place(rep);
+                            }
+                        }
+                    }
+                    
+                    if (gr().newPlace.id == -1) {
+                        val slave = activePlaces.next(dead);
+                        finish async at (slave) {
+                            val rep = plh().replacementHistory.getOrElse(dead.id, -1);
+                            if (rep != -1) {
+                                async at (gr) {
+                                    gr().newPlace = Place(rep);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else {
+                replace(dead, Place(knownRep));
+            }
+        }
+    }
     
     static class ExceptionContainer {
         public var excp:CheckedThrowable;
@@ -464,4 +452,47 @@ public class LocalStore[K] {K haszero} {
         Console.OUT.println(pl + " - " + msg);
     }
     
+    
+    /***********************don't change************************************/
+    public def handshake (oldActivePlaces:PlaceGroup, vId:Long, deadPlace:Place) {
+        try {
+            plh().lock();
+            this.replacementHistory.put(deadPlace.id, here.id);
+            
+            this.virtualPlaceId = vId;
+            //update other places according to the version of active places that my master is aware of
+            val newAddedPlaces = new GlobalRef[ArrayList[PlaceChange]](new ArrayList[PlaceChange]());
+            val me = here;
+            val activeSize = oldActivePlaces.size();
+            try {
+                 finish for (p in oldActivePlaces) {
+                     val expectedSlave = oldActivePlaces.next(p);
+                     if (p.isDead() || expectedSlave.id == me.id /*p is my master*/ || p.id == me.id /* p is me*/)
+                         continue;
+                     at (p) async {
+                         //at handshare receiver
+                         plh().replace(deadPlace, me);
+                         if (plh().slave.id != expectedSlave.id){
+                             val oldSlave = expectedSlave;
+                             val newSlave = plh().slave;
+                             at (newAddedPlaces) {
+                                 atomic newAddedPlaces().add(new PlaceChange(oldSlave, newSlave));
+                             }
+                         }
+                     }
+                 }
+            }catch(e:Exception) {/*ignore dead places at this point*/}
+        
+            this.activePlaces = oldActivePlaces;
+            if (newAddedPlaces().size() > 0) {
+                Console.OUT.println("Recovering " + here + " My master gave me outdated information");
+                //my master was not aware of some place changes
+                for (change in newAddedPlaces()) {
+                    plh().replace(change.oldPlace, change.newPlace);
+                }
+            }
+        } finally {
+            plh().unlock();
+        }
+    }
 }

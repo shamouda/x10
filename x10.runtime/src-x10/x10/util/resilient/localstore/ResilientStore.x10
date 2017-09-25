@@ -52,6 +52,7 @@ public class ResilientStore[K] {K haszero} {
         Place.places().broadcastFlat(()=> { 
         	plh().setPLH(plh); 
         });
+        
         stores.add(store);
         Console.OUT.println("store created successfully ...");
         return store;
@@ -59,23 +60,5 @@ public class ResilientStore[K] {K haszero} {
     
     public def makeMap():ResilientNativeMap[K] {
     	return new ResilientNativeMap[K](plh);
-    }
-    
-    public def getVirtualPlaceId() = plh().getVirtualPlaceId();
-    
-    public def getActivePlaces() = plh().getActivePlaces();
-    
-    private def getMaster(p:Place) = plh().getMaster(p);
-
-    private def getSlave(p:Place) = plh().getSlave(p);
-    
-    public def getNextPlace() = plh().getNextPlace();
-    
-    public def sameActivePlaces(active:PlaceGroup) = plh().sameActivePlaces(active);
-
-    public def updateForChangedPlaces(changes:ChangeDescription):void {
-        CentralizedRecoveryHelper.recover(plh, changes);
-        plh().activePlaces = changes.newActivePlaces;
-    }
-    
+    }    
 }

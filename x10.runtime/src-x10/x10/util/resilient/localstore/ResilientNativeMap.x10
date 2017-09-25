@@ -11,18 +11,25 @@ import x10.util.concurrent.Lock;
 import x10.xrx.Runtime;
 import x10.util.Timer;
 import x10.util.resilient.localstore.tx.logging.TxDesc;
+import x10.util.resilient.PlaceManager.ChangeDescription;
+import x10.util.resilient.localstore.recovery.CentralizedRecoveryHelper;
 
 public class ResilientNativeMap[K] {K haszero} {
     public val plh:PlaceLocalHandle[LocalStore[K]];
 
     private static val TM_STAT_ALL = System.getenv("TM_STAT_ALL") != null && System.getenv("TM_STAT_ALL").equals("1");
-
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     private var baselineTxId:Long = 0;
     
     public def this(plh:PlaceLocalHandle[LocalStore[K]]){
     	this.plh = plh;
     }
+    
+    private def ensurePositiveVirtualId() {
+        if (plh().virtualPlaceId < 0 )
+            throw new StorePausedException(here + " LocalStore not initialized yet, vId = -1");
+    }
+    
     /** 
      * Get the value of key k in the resilient map.
      */
@@ -45,26 +52,31 @@ public class ResilientNativeMap[K] {K haszero} {
     }
 
     public def keySet():Set[K] {
-        val trans = startLocalTransaction();
-        val set = trans.keySet();
-        trans.commit();
-        return set;
+        return executeLocalTransaction((tx:LocalTx[K]) => tx.keySet()).output as Set[K];
     }
     
     public def setAll(data:HashMap[K,Cloneable]) {
         if (data == null)
-            return;        
-        val trans = startLocalTransaction();
-        val iter = data.keySet().iterator();
-        while (iter.hasNext()) {
-            val k = iter.next();    
-            trans.put(k, data.getOrThrow(k));
-        }
-        trans.commit();
+            return;
+        executeLocalTransaction((tx:LocalTx[K]) => {
+            val iter = data.keySet().iterator();
+            while (iter.hasNext()) {
+                val k = iter.next();
+                tx.put(k, data.getOrThrow(k));
+            }
+            return null;
+        });
     }
     
     public def set2(key:K, value:Cloneable, place:Place, key2:K, value2:Cloneable) {
-        val dest = plh().getPlaceIndex(place);
+        var destId:Long = plh().getPlaceIndex(place);
+        while (destId == -1) {
+            Console.OUT.println(here + " - set2  to place: " + place + "   " + plh().activePlacesAsString());
+            plh().replaceDeadPlace(place);
+            System.threadSleep(TxConfig.DPE_SLEEP_MS);
+            destId = plh().getPlaceIndex(place);
+        }
+        val dest = destId;
         val distClosure = (tx:AbstractTx[K]) => {
             tx.put(key, value);
             tx.asyncAt(dest, () => {
@@ -75,37 +87,18 @@ public class ResilientNativeMap[K] {K haszero} {
         executeTransaction(null, distClosure, -1, -1);
     }
     
-    public def set2(key:K, value:Cloneable, placeIdx:Long, key2:K, value2:Cloneable) {
-        val distClosure = (tx:AbstractTx[K]) => {
-            tx.put(key, value);
-            tx.asyncAt(placeIdx, () => {
-                tx.put(key2, value2);
-            });
-            return null;
-        };
-        val rail = new Rail[Long](2);
-        rail(0) = plh().virtualPlaceId;
-        rail(1) = placeIdx;
-        executeFlatTransaction(rail, distClosure, -1, -1);
-    }
-    
-    public def set2(key:K, value:Cloneable, key2:K, value2:Cloneable) {        
-        return executeLocalTransaction((tx:LocalTx[K]) => { tx.put(key, value); tx.put(key2, value2) }, -1, -1);
-    }
-    
     /***********************  Places functions ****************************/
-    public def getVirtualPlaceId() = plh().getVirtualPlaceId();
-    
     public def getActivePlaces() = plh().getActivePlaces();
     
-    public def getPlace(virtualId:Long) = plh().getPlace(virtualId);
-
     public def nextPlaceChange() = plh().nextPlaceChange();
     
-    /***********************   Local Transactions ****************************/
+    public def updateForChangedPlaces(changes:ChangeDescription):void {
+        CentralizedRecoveryHelper.recover(plh, changes);
+    }
     
+    /***********************   Local Transactions ****************************/
     public def startLocalTransaction():LocalTx[K] {
-        assert(plh().virtualPlaceId != -1) : here + " LocalTx assertion error  virtual place id = -1";
+        ensurePositiveVirtualId();
         val id = plh().getMasterStore().getNextTransactionId();
         return new LocalTx[K](plh, id);
     }
@@ -113,22 +106,23 @@ public class ResilientNativeMap[K] {K haszero} {
     public def executeLocalTransaction(closure:(LocalTx[K])=>Any) {
         var out:Any;
         var commitStatus:Int = -1n;
-
+        var tx:LocalTx[K] = null;
+    
         while(true) {
-            val tx = startLocalTransaction();
             var commitCalled:Boolean = false;
             val start = Timer.milliTime();
             try {
+                tx = startLocalTransaction();
                 out = closure(tx);
                 commitCalled = true;
                 commitStatus = tx.commit();
                 break;
             } catch(ex:Exception) {
-                if (!commitCalled) {
+                if (!commitCalled && tx != null) {
                     tx.processingElapsedTime = Timer.milliTime() - start;
                     //no need to call abort, abort occurs automatically in local tx all the time
                 }
-                throwIfFatalSleepIfRequired(tx.id, ex, tx.plh().immediateRecovery);
+                throwIfFatalSleepIfRequired(tx.id, ex);
             }
         }
 
@@ -140,26 +134,27 @@ public class ResilientNativeMap[K] {K haszero} {
         var commitStatus:Int = -1n;
     	var retryCount:Long = 0;
     	val beginning = System.nanoTime();
+    	var tx:LocalTx[K] = null;
+    	
         while(true) {
         	if (retryCount == maxRetries || (maxTimeNS != -1 && System.nanoTime() - beginning >= maxTimeNS)) {
                 throw new FatalTransactionException("Reached maximum limit for retrying a transaction");
             }
             retryCount++;
-            
-            val tx = startLocalTransaction();
             var commitCalled:Boolean = false;
             val start = Timer.milliTime();
             try {
+                tx = startLocalTransaction();
                 out = closure(tx);
                 commitCalled = true;
                 commitStatus = tx.commit();
                 break;
             } catch(ex:Exception) {
-                if (!commitCalled) {
+                if (!commitCalled && tx != null) {
                     tx.processingElapsedTime = Timer.milliTime() - start;
                     //no need to call abort, abort occurs automatically in local tx all the time
                 }
-                throwIfFatalSleepIfRequired(tx.id, ex, tx.plh().immediateRecovery);
+                throwIfFatalSleepIfRequired(tx.id, ex);
             }
         }
         return new TxResult(commitStatus, out);
@@ -169,24 +164,22 @@ public class ResilientNativeMap[K] {K haszero} {
         val txResult = at (target) {
             var out:Any;
             var commitStatus:Int = -1n;
-
             while(true) {
-                val tx = startLocalTransaction();
                 var commitCalled:Boolean = false;
                 val start = Timer.milliTime();
+                var tx:LocalTx[K] = null;
                 try {
+                    tx = startLocalTransaction();
                     out = closure(tx);
-
                     commitCalled = true;
-                    
                     commitStatus = tx.commit();
                     break;
                 } catch(ex:Exception) {
-                    if (!commitCalled) {
+                    if (!commitCalled && tx != null) {
                         tx.processingElapsedTime = Timer.milliTime() - start;
                         //no need to call abort, abort occurs automatically in local tx all the time
                     }
-                    throwIfFatalSleepIfRequired(tx.id, ex, tx.plh().immediateRecovery);
+                    throwIfFatalSleepIfRequired(tx.id, ex);
                 }
             }
             new TxResult(commitStatus, out)
@@ -196,6 +189,7 @@ public class ResilientNativeMap[K] {K haszero} {
     
     /***********************   Global Transactions ****************************/
     private def startGlobalTransaction(members:TxMembers, flat:Boolean):Tx[K] {
+        ensurePositiveVirtualId();
         val id = plh().getMasterStore().getNextTransactionId();
         val tx = new Tx(plh, id, members, flat);
         if (members != null && resilient) {
@@ -205,7 +199,7 @@ public class ResilientNativeMap[K] {K haszero} {
     }
     
     public def restartGlobalTransaction(txDesc:TxDesc):Tx[K] {
-        assert(plh().virtualPlaceId != -1);
+        ensurePositiveVirtualId();
         val members = txDesc.staticMembers? plh().getTxMembersIncludingDead(txDesc.virtualMembers.toRail()):null;
         return new Tx(plh, txDesc.id, members, false);
     }
@@ -221,22 +215,22 @@ public class ResilientNativeMap[K] {K haszero} {
     public def executeFlatTransaction(virtualMembers:Rail[Long], closure:(Tx[K])=>Any, maxRetries:Long, maxTimeNS:Long):TxResult {
     	return executeTransaction(virtualMembers, closure, maxRetries, maxTimeNS, true);
     }
-    
+
     public def executeTransaction(virtualMembers:Rail[Long], closure:(Tx[K])=>Any, maxRetries:Long, maxTimeNS:Long, flat:Boolean):TxResult {
         val beginning = System.nanoTime();
         var members:TxMembers = null;
-        if (virtualMembers != null) 
-            members = plh().getTxMembersIncludingDead(virtualMembers);
         var retryCount:Long = 0;
+        var tx:Tx[K] = null;
+        
         while(true) {
             if (retryCount == maxRetries || (maxTimeNS != -1 && System.nanoTime() - beginning >= maxTimeNS)) {
                 throw new FatalTransactionException("Maximum limit for retrying a transaction reached!!");
             }
             retryCount++;
-            
-            var tx:Tx[K] = null; 
             var commitCalled:Boolean = false;
             try {
+                if (virtualMembers != null && members == null) 
+                    members = plh().getTxMembersIncludingDead(virtualMembers);
                 tx = startGlobalTransaction(members, flat);
                 if (TxConfig.EXPR_LVL == 1) {
                     tx.clean();
@@ -256,7 +250,7 @@ public class ResilientNativeMap[K] {K haszero} {
                 if (tx != null && !commitCalled) {
                     tx.abort(); // tx.commit() aborts automatically if needed
                 }
-                val dpe = throwIfFatalSleepIfRequired(tx.id, ex, plh().immediateRecovery);
+                val dpe = throwIfFatalSleepIfRequired(tx.id, ex);
                 if (dpe && virtualMembers != null)
                     members = plh().getTxMembersIncludingDead(virtualMembers);
             }
@@ -264,9 +258,8 @@ public class ResilientNativeMap[K] {K haszero} {
     }
     
     /***********************   Lock-based Transactions ****************************/
-    
     private def startLockingTransaction(members:Rail[Long], keys:Rail[K], readFlags:Rail[Boolean], o:Long):LockingTx[K] {
-        assert(plh().virtualPlaceId != -1);
+        ensurePositiveVirtualId();
         val id = plh().getMasterStore().getNextTransactionId();
         return new LockingTx(plh, id, members, keys, readFlags, o);
     }
@@ -275,15 +268,14 @@ public class ResilientNativeMap[K] {K haszero} {
         val tx = startLockingTransaction(members, keys, readFlags, o);
         tx.lock();
         val out:Any;
-        finish {out = closure(tx);}
+        finish { out = closure(tx); }
         tx.unlock();
         return new TxResult(Tx.SUCCESS, out);
     }
     
-    
     /**************Baseline Operations*****************/
     private def startBaselineTransaction():AbstractTx[K] {
-        assert(plh().virtualPlaceId != -1);
+        ensurePositiveVirtualId();
         val id = baselineTxId ++;
         val tx = new AbstractTx[K](plh, id);
         return tx;
@@ -296,7 +288,8 @@ public class ResilientNativeMap[K] {K haszero} {
     }
     /**************End of Baseline Operations*****************/
     
-    private static def throwIfFatalSleepIfRequired(txId:Long, ex:Exception, immediateRecovery:Boolean) {
+    private def throwIfFatalSleepIfRequired(txId:Long, ex:Exception) {
+        val immediateRecovery = plh().immediateRecovery;
         var dpe:Boolean = false;
         if (ex instanceof MultipleExceptions) {
             val deadExList = (ex as MultipleExceptions).getExceptionsOfType[DeadPlaceException]();
@@ -312,12 +305,11 @@ public class ResilientNativeMap[K] {K haszero} {
                 throw ex;
             }
             if (deadExList != null && deadExList.size != 0) {
-                if (!immediateRecovery) {
-                    throw ex;
-                } else {
-                    System.threadSleep(TxConfig.DPE_SLEEP_MS);
-                    dpe = true;
+                for (deadEx in deadExList) {
+                    plh().replaceDeadPlace(deadEx.place);
                 }
+                System.threadSleep(TxConfig.DPE_SLEEP_MS);
+                dpe = true;
             }
         } else if (ex instanceof DeadPlaceException) {
             if (!immediateRecovery) {

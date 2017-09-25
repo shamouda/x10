@@ -17,9 +17,10 @@ public class CentralizedRecoveryHelper {
             val spare = changes.addedPlaces.get(i++);
             Console.OUT.println("recovering " + deadPlace + "  through its master " + masterOfDeadSlave);
             at (masterOfDeadSlave) async {
-                plh().recoverSlave(spare);
+                plh().recoverSlave(deadPlace, spare);
             }
         }
+        plh().activePlaces = changes.newActivePlaces;
     }
     
 }

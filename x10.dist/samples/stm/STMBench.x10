@@ -147,7 +147,7 @@ public class STMBench {
             flat:Boolean, throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
         
         at (pl) async {
-            val myVirtualPlaceId = map.getVirtualPlaceId();
+            val myVirtualPlaceId = map.plh().getVirtualPlaceId();
             if (recoveryThroughput != null)
                 throughput().reinit(recoveryThroughput);
             

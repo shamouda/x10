@@ -143,7 +143,7 @@ public class ResilientTreeCommitHandler[K] {K haszero} extends ResilientCommitHa
                         }
                         else {
                             slave_closure(plh, id);
-                            parents.add(plh().getPreviousVirtualPlaceId());
+                            parents.add(plh().getMasterVirtualId());
                         }
                         
                         val childrenVirtual = plh().txDescManager.getVirtualMembers(id, masterVal);

@@ -36,9 +36,6 @@ public abstract class Store[V]{V haszero, V <: Cloneable} {
     // set the value of a local and a remote key
     public abstract def set2(key:String, value:V, place:Place, key2:String, value2:V):void;
 
-    // set the value of a local and a remote key (using place index)
-    public abstract def set2(key:String, value:V, placeIndx:Long, key2:String, value2:V):void;
-
     // update for changes in the active PlaceGroup
     public abstract def updateForChangedPlaces(changes:ChangeDescription):void;
 

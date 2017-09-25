@@ -28,7 +28,10 @@ import x10.compiler.Uncounted;
  * Testing command:
  * X10_RESILIENT_MODE=1 X10_LAUNCHER_TTY=false X10_NPLACES=23 X10_NTHREADS=1 X10RT_DATASTORE=native ResilientUTS.sock -d 17 -workers 3 -spares 3 -kill 5:20s -kill 10:40s -kill 15:60s
  * 
- * X10_RESILIENT_MODE=1 X10_LAUNCHER_TTY=false X10_NPLACES=6 X10_NTHREADS=1 X10RT_DATASTORE=native ResilientUTS.sock -d 10 -workers 1 -spares 1 -kill 5:20s
+ * #small socket test
+ * X10_RESILIENT_MODE=1 X10_LAUNCHER_TTY=false X10_NPLACES=7 X10RT_DATASTORE=native ./ResilientUTS.sock -d 13 -workers 1 -spares 2 -kill 2:6s -kill 4:12s
+ * #small mpi test
+ * X10_EXIT_BY_SIGKILL=1 X10_NUM_IMMEDIATE_THREADS=1 X10_RESILIENT_MODE=1 X10RT_DATASTORE=native mpirun -np 7 -am ft-enable-mpi ./ResilientUTS.mpi -d 15 -workers 1 -spares 2 -kill 2:6s -kill 4:12s
  * */
 final class ResilientUTS implements Unserializable {
   val time0:Long;
