@@ -77,6 +77,9 @@ public class TxConfig {
         
         LOCKING = ! ( STM || BASELINE);
         LOCK_FREE = BASELINE || (System.getenv("LOCK_FREE") == null || System.getenv("LOCK_FREE").equals("")) ? false : Long.parseLong(System.getenv("LOCK_FREE")) == 1;
+        
+        if (System.getenv("X10_NUM_IMMEDIATE_THREADS") == null && IMM_AT)
+            throw new FatalTransactionException ("When IMM_AT is enable, must set X10_NUM_IMMEDIATE_THREADS=1");
     }
     
     public static def get() = instance;

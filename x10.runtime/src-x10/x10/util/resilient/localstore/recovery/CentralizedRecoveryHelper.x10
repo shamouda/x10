@@ -17,7 +17,7 @@ public class CentralizedRecoveryHelper {
             val spare = changes.addedPlaces.get(i++);
             Console.OUT.println("recovering " + deadPlace + "  through its master " + masterOfDeadSlave);
             at (masterOfDeadSlave) async {
-                plh().recoverSlave(deadPlace, spare);
+                plh().recoverSlave(deadPlace, spare, recoveryStart);
             }
         }
         val newActivePlaces = changes.newActivePlaces;
@@ -25,7 +25,7 @@ public class CentralizedRecoveryHelper {
         	plh().activePlaces = newActivePlaces;
         });
         val recoveryEnd = System.nanoTime();
-        Console.OUT.printf("CentralizedRecoveryHelper.recover completed, recoveryTime %f seconds\n", (recoveryEnd-recoveryStart)/1e9);
+        Console.OUT.printf("CentralizedRecoveryHelper.recover completed successfully: recoveryTime %f seconds\n", (recoveryEnd-recoveryStart)/1e9);
     }
     
 }

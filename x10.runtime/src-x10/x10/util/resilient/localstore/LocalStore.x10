@@ -36,12 +36,13 @@ public class LocalStore[K] {K haszero} {
     private transient var lock:Lock;
     public transient val stat:TxPlaceStatistics;
     public transient var txDescManager:TxDescManager[K];
-
     
     public transient var virtualPlaceId:Long = -1; //-1 means a spare place
     public transient var slave:Place;
     public transient var oldSlave:Place;
     public transient var activePlaces:PlaceGroup;
+    
+    
     private val replacementHistory = new HashMap[Long, Long] ();
     
     public static struct PlaceChange {
@@ -105,15 +106,39 @@ public class LocalStore[K] {K haszero} {
         }
     }
     
-    public def initSpare (newActivePlaces:PlaceGroup, vId:Long, deadPlace:Place) {
+    public def initSpare (newActivePlaces:PlaceGroup, vId:Long, deadPlace:Place, deadPlaceSlave:Place) {
         try {
             plh().lock();
             this.replacementHistory.put(deadPlace.id, here.id);
             this.virtualPlaceId = vId;
             this.activePlaces = newActivePlaces;
+            
+            this.slave = deadPlaceSlave;
+            this.oldSlave = deadPlaceSlave;
+            ConditionsList.get().setSlave(deadPlaceSlave.id);
         } finally {
             plh().unlock();
         }
+    }
+    
+    public def slaveStoreExists() {
+        try {
+            lock();
+            return slaveStore != null;
+        }finally {
+            unlock();
+        }
+    }
+    
+    public def getMasterStore() {
+        if (masterStore == null) {
+            throw new StorePausedException(here + " MasterStore is not initialized yet");
+        }
+        return masterStore;
+    }
+    
+    public def setMasterStore(m:MasterStore[K]) {
+        this.masterStore = m;
     }
     
     /**************     ActivePlaces utility methods     ****************/
@@ -184,7 +209,6 @@ public class LocalStore[K] {K haszero} {
                 Console.OUT.println(here + " Slave of ("+p+") computed as -1,  replacementHist = " + replacementHistory.getOrElse(p.id, -1));
                 val newP = Place(replacementHistory.getOrThrow(p.id));
                 slave = activePlaces.next(newP);
-                ConditionsList.get().setSlave(slave.id);
                 Console.OUT.println(here + " Slave of (" + p + ") corrected to " + slave );
             }
             return slave;
@@ -262,28 +286,6 @@ public class LocalStore[K] {K haszero} {
     public def getPlaceIndex(p:Place) {
         val idx = activePlaces.indexOf(p);
         return idx;
-        /*
-        if (idx == -1) {
-        	Console.OUT.println(here + " - getPlaceIndex("+p+") = -1,  " + plh().activePlacesAsString());
-            val gr = GlobalRef(new Replacement());
-            finish async at (p) {
-                val iter = plh().replacementHistory.keySet().iterator();
-                while (iter.hasNext()) {
-                    val key = iter.next();
-                    val value = plh().replacementHistory.getOrThrow(key);
-                    if (value == here.id) {
-                        async at (gr) {
-                            gr().oldPlace = Place(key);
-                            gr().newPlace = Place(value);
-                        }
-                    }
-                }
-            }
-            Console.OUT.println(here + " - getPlaceIndex("+p+") = -1,  replacement old="+gr().oldPlace+"  new=" + gr().newPlace);
-            replace(gr().oldPlace, gr().newPlace);
-        }
-        return activePlaces.indexOf(p);
-        */
     }
         
     /*******************************************/
@@ -313,7 +315,7 @@ public class LocalStore[K] {K haszero} {
     }
 
     //synchronized version of asyncSlaveRecovery
-    public def recoverSlave(deadPlace:Place, spare:Place) {
+    public def recoverSlave(deadPlace:Place, spare:Place, recoveryStart:Long) {
     	if (TxConfig.get().TMREC_DEBUG) Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+")");
         if (immediateRecovery || !slave.isDead())
             return;
@@ -323,22 +325,10 @@ public class LocalStore[K] {K haszero} {
         if ( slave.isDead() && masterStore.isActive() ) {
         	 if (TxConfig.get().TMREC_DEBUG) Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+") master is active");
              masterStore.pausing();
-             DistributedRecoveryHelper.recoverSlave(true, plh, deadPlace, spare, -1);
+             DistributedRecoveryHelper.recoverSlave(plh, deadPlace, spare, recoveryStart);
         }
         else if (TxConfig.get().TMREC_DEBUG) 
             Console.OUT.println(here + " LocalStore.recoverSlave(spare="+spare+") master is not active");
-    }
-    
-    
-    public def getMasterStore() {
-        if (masterStore == null) {
-            throw new StorePausedException(here + " MasterStore is not initialized yet");
-        }
-        return masterStore;
-    }
-    
-    public def setMasterStore(m:MasterStore[K]) {
-        this.masterStore = m;
     }
     
     public def replace(oldP:Place, newP:Place) {
@@ -355,7 +345,7 @@ public class LocalStore[K] {K haszero} {
             }
             activePlaces = new SparsePlaceGroup(rail);
             
-            if (TxConfig.get().TM_DEBUG) {
+            if (TxConfig.get().TMREC_DEBUG) {
                 var str:String = "";
                 for (p in activePlaces)
                     str += p + ",  " ;
@@ -374,37 +364,76 @@ public class LocalStore[K] {K haszero} {
     }
     
     public def replaceDeadPlace(dead:Place) {
+        val plh = this.plh;
+        val me = here;
         val gr = GlobalRef(new Replacement());
         if (dead.isDead()) {
             val knownRep = replacementHistory.getOrElse(dead.id, -1); 
             if ( knownRep == -1) {
-                //@Uncounted async 
-                {
+                //@Uncounted async
+                if (here.id % 2 == 0) {
                     val master = activePlaces.prev(dead);
-                    finish async at (master) {
+                    if (master.id != -1) finish at (master) async {
                         val rep = plh().replacementHistory.getOrElse(dead.id, -1);
                         if (rep != -1) {
-                            async at (gr) {
+                            at (gr) async {
                                 gr().newPlace = Place(rep);
                             }
                         }
                     }
                     
                     if (gr().newPlace.id == -1) {
+                        System.threadSleep(TxConfig.DPE_SLEEP_MS);
                         val slave = activePlaces.next(dead);
-                        finish async at (slave) {
+                        if (slave.id != -1) finish at (slave) async {
                             val rep = plh().replacementHistory.getOrElse(dead.id, -1);
                             if (rep != -1) {
-                                async at (gr) {
+                                at (gr) async  {
                                     gr().newPlace = Place(rep);
                                 }
                             }
                         }
                     }
                 }
+                else {
+                    
+                    val slave = activePlaces.next(dead);
+                    if (slave.id != -1) finish at (slave) async {
+                        val rep = plh().replacementHistory.getOrElse(dead.id, -1);
+                        if (rep != -1) {
+                            at (gr) async  {
+                                gr().newPlace = Place(rep);
+                            }
+                        }
+                    }
+                    if (gr().newPlace.id == -1) {
+                        System.threadSleep(TxConfig.DPE_SLEEP_MS);
+                        val master = activePlaces.prev(dead);
+                        if (master.id != -1) finish at (master) async {
+                            val rep = plh().replacementHistory.getOrElse(dead.id, -1);
+                            if (rep != -1) {
+                                at (gr) async {
+                                    gr().newPlace = Place(rep);
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                if (gr().newPlace.id != -1) {
+                    replace(dead, gr().newPlace);
+                }
             }
             else {
                 replace(dead, Place(knownRep));
+            }
+        }
+    }
+    
+    public def replaceDeadPlaces() {
+        for (p in activePlaces) {
+            if (p.isDead()) {
+                replaceDeadPlace(p);
             }
         }
     }
@@ -455,49 +484,5 @@ public class LocalStore[K] {K haszero} {
     
     private def debug (pl:Place, msg:String) {
         Console.OUT.println(pl + " - " + msg);
-    }
-    
-    
-    /***********************don't change************************************/
-    public def handshake (oldActivePlaces:PlaceGroup, vId:Long, deadPlace:Place) {
-        try {
-            plh().lock();
-            this.replacementHistory.put(deadPlace.id, here.id);
-            
-            this.virtualPlaceId = vId;
-            //update other places according to the version of active places that my master is aware of
-            val newAddedPlaces = new GlobalRef[ArrayList[PlaceChange]](new ArrayList[PlaceChange]());
-            val me = here;
-            val activeSize = oldActivePlaces.size();
-            try {
-                 finish for (p in oldActivePlaces) {
-                     val expectedSlave = oldActivePlaces.next(p);
-                     if (p.isDead() || expectedSlave.id == me.id /*p is my master*/ || p.id == me.id /* p is me*/)
-                         continue;
-                     at (p) async {
-                         //at handshare receiver
-                         plh().replace(deadPlace, me);
-                         if (plh().slave.id != expectedSlave.id){
-                             val oldSlave = expectedSlave;
-                             val newSlave = plh().slave;
-                             at (newAddedPlaces) {
-                                 atomic newAddedPlaces().add(new PlaceChange(oldSlave, newSlave));
-                             }
-                         }
-                     }
-                 }
-            }catch(e:Exception) {/*ignore dead places at this point*/}
-        
-            this.activePlaces = oldActivePlaces;
-            if (newAddedPlaces().size() > 0) {
-                Console.OUT.println("Recovering " + here + " My master gave me outdated information");
-                //my master was not aware of some place changes
-                for (change in newAddedPlaces()) {
-                    plh().replace(change.oldPlace, change.newPlace);
-                }
-            }
-        } finally {
-            plh().unlock();
-        }
     }
 }

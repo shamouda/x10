@@ -70,6 +70,8 @@ public class ResilientNativeMap[K] {K haszero} {
     
     public def set2(key:K, value:Cloneable, place:Place, key2:K, value2:Cloneable) {
     	val dest = plh().getPlaceIndex(place);
+    	if (dest == -1)
+    	    throw new FatalTransactionException("starting a transaction at an unknown place ["+place+"] ");
         val distClosure = (tx:AbstractTx[K]) => {
             tx.put(key, value);
             tx.asyncAt(dest, () => {
@@ -82,6 +84,11 @@ public class ResilientNativeMap[K] {K haszero} {
     
     /***********************  Places functions ****************************/
     public def getActivePlaces() = plh().getActivePlaces();
+    
+    public def fixAndGetActivePlaces() {
+        plh().replaceDeadPlaces();
+        return plh().getActivePlaces();
+    }
     
     public def nextPlaceChange() = plh().nextPlaceChange();
     

@@ -121,10 +121,10 @@ public class STMBench {
     public static def runIteration(map:ResilientNativeMap[Long], producersCount:Long, 
             d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, f:Boolean, victims:VictimsList, optimized:Boolean,
             flat:Boolean, throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
-        val activePlaces = map.getActivePlaces();
+        val activePlaces = map.fixAndGetActivePlaces();
         try {
             
-            finish for (var i:Long = 0; i < producersCount; i++) {
+            finish for (var i:Long = 0; i < producersCount; i++) {               
                 startPlace(activePlaces(i), map, activePlaces.size(), producersCount, d, r, u, t, h, o, g, f, victims, optimized, flat, throughput, recoveryThroughput);
             }
             
@@ -294,7 +294,6 @@ public class STMBench {
                 startPlace(nextPlace, map, activePlacesCount, producersCount, d, r, u, t, h, o, g, f, victims, optimized, flat, throughput, oldThroughput);
             }
         }
-        
         //Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
     }
 
@@ -306,7 +305,7 @@ public class STMBench {
         Console.OUT.println("Collecting throughput information ..... .....");
         Console.OUT.println("========================================================================");
         
-        val activePlcs = map.getActivePlaces();
+        val activePlcs = map.fixAndGetActivePlaces();
         val startReduce = System.nanoTime();
         if (producersCount > 1) {
             val team = new Team(activePlcs);
@@ -522,6 +521,7 @@ public class STMBench {
         Console.OUT.println("opt(static members)=" + opt);
         Console.OUT.println("flat=" + flat);
         Console.OUT.println("includeP0=" + includeP0);
+        
     }
 }
 

@@ -20,7 +20,7 @@ public class ConditionsList {
     
     private transient val slaveCondList:ArrayList[Condition] = new ArrayList[Condition]();
     private transient val lock:Lock = new Lock();
-    private var slave:Long;
+    private var slave:Long = -1;
     private static val instance = new ConditionsList();
     
     public static def get() {
@@ -28,21 +28,18 @@ public class ConditionsList {
     }
     
     public def releaseAll() {
-        //if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " ConditionsList.releaseAll ...");
+        if (slave == -1) {
+            return;
+        }
+        
         try {
             lock.lock();
             if (Place(slave).isDead()) {
-                //if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " ConditionsList.releaseAll slave ["+Place(slave)+"] is dead...");
                 for (cond in slaveCondList){
-                    //if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " ConditionsList.release cond["+cond+"] ...");
                     cond.release();
                 }
                 slaveCondList.clear();
             }
-            /*
-            else {
-                if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " ConditionsList.releaseAll slave ["+Place(slave)+"] not dead...");        
-            }*/
         }finally {
             lock.unlock();
         }
