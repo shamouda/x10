@@ -56,11 +56,15 @@ public class BenchMicro {
         }
         
         Console.OUT.println("Test based from place 0");
+        var t0:Long = System.nanoTime();
         doTest("place 0 -- ", think, true, MIN_NANOS);
+        Console.OUT.printf("Test based from place 0 completed in %f seconds\n", (System.nanoTime()-t0)/1e9);
         Console.OUT.println();
 
         Console.OUT.println("Test based from place 1");
+        t0 = System.nanoTime();
         at (Place(1)) doTest("place 1 -- ", think, true, MIN_NANOS);
+        Console.OUT.printf("Test based from place 1 completed in %f seconds\n", (System.nanoTime()-t0)/1e9);
         Console.OUT.println();
     }
 
