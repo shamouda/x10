@@ -58,11 +58,10 @@ public class BenchMicro {
         Console.OUT.println("Test based from place 0");
         doTest("place 0 -- ", think, true, MIN_NANOS);
         Console.OUT.println();
-/*
+
         Console.OUT.println("Test based from place 1");
         at (Place(1)) doTest("place 1 -- ", think, true, MIN_NANOS);
         Console.OUT.println();
-*/
     }
 
     public static def doTest(prefix:String, t:Long, print:Boolean, minTime:Long) {
