@@ -17,6 +17,7 @@ import x10.compiler.Native;
 import x10.compiler.NoInline;
 import x10.compiler.NoReturn;
 import x10.compiler.Pragma;
+import x10.compiler.Immediate;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.concurrent.Lock;
 import x10.xrx.Runtime;
@@ -199,6 +200,15 @@ public struct Team {
     public def barrierIgnoreExceptions () : void {
         try{
             barrier();
+        }catch(ex:Exception){
+            if ( DEBUGINTERNALS) Console.OUT.println(here+" Ignoring barrier exception: " + ex.getMessage());
+        }
+    }
+    
+    public def slowBarrierIgnoreExceptions () : void {
+        try{
+            if (DEBUG) Runtime.println(here + " entering Team.x10 slowBarrier on team "+id);
+            state(id).slowBarrier[Int](state(id).places(0));
         }catch(ex:Exception){
             if ( DEBUGINTERNALS) Console.OUT.println(here+" Ignoring barrier exception: " + ex.getMessage());
         }
@@ -726,7 +736,8 @@ public struct Team {
             finish nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
         } else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             if (DEBUG) Runtime.println(here + " entering pre-allreduce barrier on team "+id);
-            barrierIgnoreExceptions();
+            //barrierIgnoreExceptions();
+            slowBarrierIgnoreExceptions();
             if (DEBUG) Runtime.println(here + " entering native allreduce on team "+id);
             val success = nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
             if (!success)
@@ -1012,22 +1023,7 @@ public struct Team {
         private static PHASE_INVALID:Int = -1n; // this team is invalid due to an earlier failure
         private val phase:AtomicInteger = new AtomicInteger(PHASE_READY); // which of the above phases we're in
         private val dstLock:Lock = new Lock();
-        
-        private def phaseToString() {
-            val p = phase.get();
-            switch (p) {
-            case PHASE_READY: return "PHASE_READY";
-            case PHASE_INIT: return "PHASE_INIT";
-            case PHASE_GATHER1: return "PHASE_GATHER1";
-            case PHASE_GATHER2: return "PHASE_GATHER2";
-            case PHASE_PARENT: return "PHASE_PARENT";
-            case PHASE_SCATTER1: return "PHASE_SCATTER1";
-            case PHASE_SCATTER2: return "PHASE_SCATTER2";
-            case PHASE_DONE: return "PHASE_DONE";
-            case PHASE_INVALID: return "PHASE_INVALID";
-            }
-            return "";
-        }
+
         private static COLL_BARRIER:Int = 0n; // no data moved
         private static COLL_BROADCAST:Int = 1n; // data out only, single value
         private static COLL_SCATTER:Int = 2n; // data out only, many values
@@ -1056,6 +1052,9 @@ public struct Team {
         private var local_child1Index:Long = -1;
         private var local_child2Index:Long = -1;
 
+        private val slowBarrierSet = new x10.util.HashSet[Long]();
+        private val slowBarrierLock = new Lock();
+        
         private static def getCollName(collType:Int):String {
             switch (collType) {
                 case COLL_BARRIER: return "Barrier";
@@ -1155,7 +1154,51 @@ public struct Team {
             collective_impl[Int](COLL_BARRIER, places(0), null, 0, null, 0, 0, 0n, null, null); // barrier
             if (DEBUGINTERNALS) Runtime.println(here + " leaving init phase");
         }
+
         
+        private def slowBarrier[T](root:Place):void {
+            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamid+" entered slowBarrier, root="+root);
+            val teamidcopy = this.teamid; // needed to prevent serializing "this" in at() statements
+            
+            if (here.id == root.id) {
+                Runtime.increaseParallelism();
+                
+                slowBarrierLock.lock();
+                for (p in places) {
+                    if (p.id == here.id)
+                        continue;
+                    Team.state(teamidcopy).slowBarrierSet.add(p.id);
+                }
+                slowBarrierLock.unlock();
+                var completed:Boolean = false;
+                while (!completed) {
+                    System.threadSleep(5);
+                    Team.state(teamidcopy).slowBarrierLock.lock();
+                    val set = Team.state(teamidcopy).slowBarrierSet;
+                    val iter = set.iterator();
+                    while (iter.hasNext()) {
+                        val id = iter.next();
+                        if (Place(id).isDead()) {
+                            set.remove(id);
+                        }
+                    }
+                    if (set.isEmpty())
+                        completed = true;
+                    Team.state(teamidcopy).slowBarrierLock.unlock();
+                }
+                Runtime.decreaseParallelism(1n);
+            }
+            else {
+                val me = here.id;
+                at (root) @Immediate("slowBarrier") async {
+                    slowBarrierLock.lock();
+                    Team.state(teamidcopy).slowBarrierSet.remove(me);
+                    if (DEBUGINTERNALS) Runtime.println(here+":team"+teamid+" received signal from "+Place(me));
+                    slowBarrierLock.unlock();
+                }
+            }
+            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamid+" finished slowBarrier");
+        }
         /*
          * This method contains the implementation for all collectives.  Some arguments are only valid
          * for specific collectives.
@@ -1171,9 +1214,7 @@ public struct Team {
              * locally on another worker thread.
              */
             val sleepUntil = (condition:() => Boolean, conditionStr:String) => @NoInline {
-                //var count:Long = 0;
                 if (!condition() && Team.state(teamidcopy).isValid()) {
-                    //count++;
                     if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" waiting for " + conditionStr);
                     Runtime.increaseParallelism();
                     while (!condition() && Team.state(teamidcopy).isValid()) {
@@ -1190,8 +1231,6 @@ public struct Team {
                         } else {
                             System.threadSleep(0); // release the CPU to more productive pursuits
                         }
-                    //    if (DEBUGINTERNALS && count%500 == 0)
-                    //        Runtime.println(here+":team"+teamidcopy+" still waiting for " + conditionStr + " phase=" + phaseToString());
                     }
                     Runtime.decreaseParallelism(1n);
                 }
@@ -1362,12 +1401,11 @@ public struct Team {
                     
                     if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" about to jump to parent " + places(myLinks.parentIndex));
                     try { // try/catch for DeadPlaceExceptions
-                        val child = here;
                         @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.parentIndex)) async {
                             sleepUntil(() => {
                                 val parentPhase = Team.state(teamidcopy).phase.get();
                                 (parentPhase >= PHASE_GATHER1 && parentPhase < PHASE_SCATTER1)
-                                }, "parent gather from " + child);
+                                }, "parent gather");
                             if (!Team.state(teamidcopy).isValid()) {
                                 throw new DeadPlaceException(here+" detected dead team member before parent gather");
                             }
@@ -1429,7 +1467,7 @@ public struct Team {
                                 sleepUntil(() => { 
                                     val parentPhase = Team.state(teamidcopy).phase.get();
                                     (parentPhase == PHASE_SCATTER1 || parentPhase == PHASE_SCATTER2)
-                                    }, "parent scatter for " + child);
+                                    }, "parent scatter");
                             } else {
                                 Runtime.println("ERROR moving to downward phase at the parent "+here+":team"+teamidcopy+" current phase "+Team.state(teamidcopy).phase.get());
                             }
@@ -1509,13 +1547,10 @@ public struct Team {
 
             if (local_child1Index == -1) {
                 Team.state(teamidcopy).phase.compareAndSet(PHASE_PARENT, PHASE_DONE);
-                Runtime.println(here+":team"+teamidcopy+" set PHASE_DONE ");
             } else if (local_child2Index == -1) {
                 Team.state(teamidcopy).phase.compareAndSet(PHASE_PARENT, PHASE_SCATTER2);
-                Runtime.println(here+":team"+teamidcopy+" set PHASE_SCATTER2 ");
             } else {
                Team.state(teamidcopy).phase.compareAndSet(PHASE_PARENT, PHASE_SCATTER1);
-               Runtime.println(here+":team"+teamidcopy+" set PHASE_SCATTER1 ");
             }
 
             sleepUntil(() => Team.state(teamidcopy).phase.get() == PHASE_DONE, "scatter complete");

@@ -3262,10 +3262,6 @@ bool x10rt_net_allreduce (x10rt_team team, x10rt_place role,
                           x10rt_completion_handler *errch,
                           x10rt_completion_handler *ch, void *arg)
 {
-#if !X10RT_NONBLOCKING_SUPPORTED
-	x10rt_net_probe_ex(false);
-#endif
-
 #define MPI_COLLECTIVE_NAME allreduce
     assert(global_state.init);
     assert(!global_state.finalized);
