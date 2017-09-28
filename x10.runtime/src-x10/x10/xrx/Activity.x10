@@ -143,7 +143,6 @@ public class Activity {
         if (null != clockPhases) clockPhases.drop();
         try {
             finishState.notifyActivityTermination();
-            Runtime.println(here+ " notifyActivityTermination()");
         } catch (DeadPlaceException) {}
         if (DEALLOC_BODY) Unsafe.dealloc(body);
     }
