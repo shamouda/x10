@@ -1012,7 +1012,22 @@ public struct Team {
         private static PHASE_INVALID:Int = -1n; // this team is invalid due to an earlier failure
         private val phase:AtomicInteger = new AtomicInteger(PHASE_READY); // which of the above phases we're in
         private val dstLock:Lock = new Lock();
-
+        
+        private def phaseToString() {
+            val p = phase.get();
+            switch (p) {
+            case PHASE_READY: return "PHASE_READY";
+            case PHASE_INIT: return "PHASE_INIT";
+            case PHASE_GATHER1: return "PHASE_GATHER1";
+            case PHASE_GATHER2: return "PHASE_GATHER2";
+            case PHASE_PARENT: return "PHASE_PARENT";
+            case PHASE_SCATTER1: return "PHASE_SCATTER1";
+            case PHASE_SCATTER2: return "PHASE_SCATTER2";
+            case PHASE_DONE: return "PHASE_DONE";
+            case PHASE_INVALID: return "PHASE_INVALID";
+            }
+            return "";
+        }
         private static COLL_BARRIER:Int = 0n; // no data moved
         private static COLL_BROADCAST:Int = 1n; // data out only, single value
         private static COLL_SCATTER:Int = 2n; // data out only, many values
@@ -1156,7 +1171,9 @@ public struct Team {
              * locally on another worker thread.
              */
             val sleepUntil = (condition:() => Boolean, conditionStr:String) => @NoInline {
+                var count:Long = 0;
                 if (!condition() && Team.state(teamidcopy).isValid()) {
+                    count++;
                     if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" waiting for " + conditionStr);
                     Runtime.increaseParallelism();
                     while (!condition() && Team.state(teamidcopy).isValid()) {
@@ -1173,6 +1190,8 @@ public struct Team {
                         } else {
                             System.threadSleep(0); // release the CPU to more productive pursuits
                         }
+                        if (DEBUGINTERNALS && count%500 == 0)
+                            Runtime.println(here+":team"+teamidcopy+" still waiting for " + conditionStr + " phase=" + phaseToString());
                     }
                     Runtime.decreaseParallelism(1n);
                 }
