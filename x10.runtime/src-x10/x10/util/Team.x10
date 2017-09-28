@@ -1161,19 +1161,20 @@ public struct Team {
             val teamidcopy = this.teamid; // needed to prevent serializing "this" in at() statements
             
             if (here.id == root.id) {
+                val lock = Team.state(teamidcopy).slowBarrierLock;
                 Runtime.increaseParallelism();
                 
-                slowBarrierLock.lock();
+                lock.lock();
                 for (p in places) {
                     if (p.id == here.id)
                         continue;
                     Team.state(teamidcopy).slowBarrierSet.add(p.id);
                 }
-                slowBarrierLock.unlock();
+                lock.unlock();
                 var completed:Boolean = false;
                 while (!completed) {
                     System.threadSleep(5);
-                    Team.state(teamidcopy).slowBarrierLock.lock();
+                    lock.lock();
                     val set = Team.state(teamidcopy).slowBarrierSet;
                     val iter = set.iterator();
                     while (iter.hasNext()) {
@@ -1184,17 +1185,18 @@ public struct Team {
                     }
                     if (set.isEmpty())
                         completed = true;
-                    Team.state(teamidcopy).slowBarrierLock.unlock();
+                    lock.unlock();
                 }
                 Runtime.decreaseParallelism(1n);
             }
             else {
                 val me = here.id;
                 at (root) @Immediate("slowBarrier") async {
-                    slowBarrierLock.lock();
+                    val lock = Team.state(teamidcopy).slowBarrierLock;
+                    lock.lock();
                     Team.state(teamidcopy).slowBarrierSet.remove(me);
                     if (DEBUGINTERNALS) Runtime.println(here+":team"+teamid+" received signal from "+Place(me));
-                    slowBarrierLock.unlock();
+                    lock.unlock();
                 }
             }
             if (DEBUGINTERNALS) Runtime.println(here+":team"+teamid+" finished slowBarrier");
