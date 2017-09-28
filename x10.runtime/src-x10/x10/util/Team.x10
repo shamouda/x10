@@ -1053,7 +1053,7 @@ public struct Team {
         private var local_child2Index:Long = -1;
 
         private val slowBarrierSet = new x10.util.HashSet[Long]();
-        private val slowBarrierLock = new Lock();
+        private val slowBarrierLock:Lock = new Lock();
         
         private static def getCollName(collType:Int):String {
             switch (collType) {
@@ -1175,12 +1175,11 @@ public struct Team {
                 while (!completed) {
                     System.threadSleep(5);
                     lock.lock();
-                    val set = Team.state(teamidcopy).slowBarrierSet;
-                    val iter = set.iterator();
+                    val iter = Team.state(teamidcopy).slowBarrierSet.iterator();
                     while (iter.hasNext()) {
                         val id = iter.next();
                         if (Place(id).isDead()) {
-                            set.remove(id);
+                            Team.state(teamidcopy).slowBarrierSet.remove(id);
                         }
                     }
                     if (set.isEmpty())
