@@ -1343,11 +1343,12 @@ public struct Team {
                     
                     if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" about to jump to parent " + places(myLinks.parentIndex));
                     try { // try/catch for DeadPlaceExceptions
+                        val child = here;
                         @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.parentIndex)) async {
                             sleepUntil(() => {
                                 val parentPhase = Team.state(teamidcopy).phase.get();
                                 (parentPhase >= PHASE_GATHER1 && parentPhase < PHASE_SCATTER1)
-                                }, "parent gather");
+                                }, "parent gather from " + child);
                             if (!Team.state(teamidcopy).isValid()) {
                                 throw new DeadPlaceException(here+" detected dead team member before parent gather");
                             }
@@ -1489,10 +1490,13 @@ public struct Team {
 
             if (local_child1Index == -1) {
                 Team.state(teamidcopy).phase.compareAndSet(PHASE_PARENT, PHASE_DONE);
+                Runtime.println(here+":team"+teamidcopy+" set PHASE_DONE ");
             } else if (local_child2Index == -1) {
                 Team.state(teamidcopy).phase.compareAndSet(PHASE_PARENT, PHASE_SCATTER2);
+                Runtime.println(here+":team"+teamidcopy+" set PHASE_SCATTER2 ");
             } else {
                Team.state(teamidcopy).phase.compareAndSet(PHASE_PARENT, PHASE_SCATTER1);
+               Runtime.println(here+":team"+teamidcopy+" set PHASE_SCATTER1 ");
             }
 
             sleepUntil(() => Team.state(teamidcopy).phase.get() == PHASE_DONE, "scatter complete");
