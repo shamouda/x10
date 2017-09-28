@@ -1410,7 +1410,7 @@ public struct Team {
                                 sleepUntil(() => { 
                                     val parentPhase = Team.state(teamidcopy).phase.get();
                                     (parentPhase == PHASE_SCATTER1 || parentPhase == PHASE_SCATTER2)
-                                    }, "parent scatter");
+                                    }, "parent scatter for " + child);
                             } else {
                                 Runtime.println("ERROR moving to downward phase at the parent "+here+":team"+teamidcopy+" current phase "+Team.state(teamidcopy).phase.get());
                             }
