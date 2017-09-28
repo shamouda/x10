@@ -1182,7 +1182,7 @@ public struct Team {
                             Team.state(teamidcopy).slowBarrierSet.remove(id);
                         }
                     }
-                    if (set.isEmpty())
+                    if (Team.state(teamidcopy).slowBarrierSet.isEmpty())
                         completed = true;
                     lock.unlock();
                 }
