@@ -1171,9 +1171,9 @@ public struct Team {
              * locally on another worker thread.
              */
             val sleepUntil = (condition:() => Boolean, conditionStr:String) => @NoInline {
-                var count:Long = 0;
+                //var count:Long = 0;
                 if (!condition() && Team.state(teamidcopy).isValid()) {
-                    count++;
+                    //count++;
                     if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" waiting for " + conditionStr);
                     Runtime.increaseParallelism();
                     while (!condition() && Team.state(teamidcopy).isValid()) {
@@ -1190,8 +1190,8 @@ public struct Team {
                         } else {
                             System.threadSleep(0); // release the CPU to more productive pursuits
                         }
-                        if (DEBUGINTERNALS && count%500 == 0)
-                            Runtime.println(here+":team"+teamidcopy+" still waiting for " + conditionStr + " phase=" + phaseToString());
+                    //    if (DEBUGINTERNALS && count%500 == 0)
+                    //        Runtime.println(here+":team"+teamidcopy+" still waiting for " + conditionStr + " phase=" + phaseToString());
                     }
                     Runtime.decreaseParallelism(1n);
                 }
