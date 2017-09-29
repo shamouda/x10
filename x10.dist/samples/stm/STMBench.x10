@@ -309,7 +309,7 @@ public class STMBench {
         
         val rail = new Rail[Place](activePlcs.size()-1);
         var c:Long = 0;
-        for (var i:Long = 0; i< size; i++) {
+        for (var i:Long = 0; i< activePlcs.size(); i++) {
             if (activePlcs(i).id != 0)
                 rail(c++) = activePlcs(i);
         }
