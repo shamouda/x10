@@ -306,18 +306,9 @@ public class STMBench {
         Console.OUT.println("========================================================================");
         
         val activePlcs = map.fixAndGetActivePlaces();
-        
-        val rail = new Rail[Place](activePlcs.size()-1);
-        var c:Long = 0;
-        for (var i:Long = 0; i< activePlcs.size(); i++) {
-            if (activePlcs(i).id != 0)
-                rail(c++) = activePlcs(i);
-        }
-        val activeNoP0 = new SparsePlaceGroup(rail);
-        
         val startReduce = System.nanoTime();
         if (producersCount > 1) {
-            val team = new Team(activeNoP0);
+            val team = new Team(activePlcs);
             finish for (p in activePlcs) async at (p) {
                 val plcTh = plh();
                 val times = plcTh.mergeTimes();
@@ -329,12 +320,6 @@ public class STMBench {
                 /*val localThroughput = (counts as Double ) * h * o / (times/1e6) * t;
                 Console.OUT.println("iteration:" + iteration +":"+here+":t="+t+":localthroughput(op/MS):"+localThroughput);*/
             }
-            
-            val p1Time = at (Place(1)) plh().reducedTime;
-            val p1Count = at (Place(1)) plh().reducedTxCount;
-            
-            plh().reducedTime = plh().mergeTimes() + p1Time;
-            plh().reducedTxCount = plh().mergeCounts() + p1Count;
         }
         else {
             plh().reducedTime = plh().mergeTimes();
