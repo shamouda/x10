@@ -17,7 +17,6 @@ import x10.compiler.Native;
 import x10.compiler.NoInline;
 import x10.compiler.NoReturn;
 import x10.compiler.Pragma;
-import x10.compiler.Immediate;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.concurrent.Lock;
 import x10.xrx.Runtime;
@@ -200,15 +199,6 @@ public struct Team {
     public def barrierIgnoreExceptions () : void {
         try{
             barrier();
-        }catch(ex:Exception){
-            if ( DEBUGINTERNALS) Console.OUT.println(here+" Ignoring barrier exception: " + ex.getMessage());
-        }
-    }
-    
-    public def slowBarrierIgnoreExceptions () : void {
-        try{
-            if (DEBUG) Runtime.println(here + " entering Team.x10 slowBarrier on team "+id);
-            state(id).slowBarrier[Int](state(id).places(0));
         }catch(ex:Exception){
             if ( DEBUGINTERNALS) Console.OUT.println(here+" Ignoring barrier exception: " + ex.getMessage());
         }
@@ -736,8 +726,7 @@ public struct Team {
             finish nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
         } else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             if (DEBUG) Runtime.println(here + " entering pre-allreduce barrier on team "+id);
-            //barrierIgnoreExceptions();
-            slowBarrierIgnoreExceptions();
+            barrierIgnoreExceptions();
             if (DEBUG) Runtime.println(here + " entering native allreduce on team "+id);
             val success = nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
             if (!success)
@@ -1052,9 +1041,6 @@ public struct Team {
         private var local_child1Index:Long = -1;
         private var local_child2Index:Long = -1;
 
-        private val slowBarrierSet = new x10.util.HashSet[Long]();
-        private val slowBarrierLock:Lock = new Lock();
-        
         private static def getCollName(collType:Int):String {
             switch (collType) {
                 case COLL_BARRIER: return "Barrier";
@@ -1154,52 +1140,7 @@ public struct Team {
             collective_impl[Int](COLL_BARRIER, places(0), null, 0, null, 0, 0, 0n, null, null); // barrier
             if (DEBUGINTERNALS) Runtime.println(here + " leaving init phase");
         }
-
         
-        private def slowBarrier[T](root:Place):void {
-            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamid+" entered slowBarrier, root="+root);
-            val teamidcopy = this.teamid; // needed to prevent serializing "this" in at() statements
-            
-            if (here.id == root.id) {
-                val lock = Team.state(teamidcopy).slowBarrierLock;
-                Runtime.increaseParallelism();
-                
-                lock.lock();
-                for (p in places) {
-                    if (p.id == here.id)
-                        continue;
-                    Team.state(teamidcopy).slowBarrierSet.add(p.id);
-                }
-                lock.unlock();
-                var completed:Boolean = false;
-                while (!completed) {
-                    System.threadSleep(5);
-                    lock.lock();
-                    val iter = Team.state(teamidcopy).slowBarrierSet.iterator();
-                    while (iter.hasNext()) {
-                        val id = iter.next();
-                        if (Place(id).isDead()) {
-                            Team.state(teamidcopy).slowBarrierSet.remove(id);
-                        }
-                    }
-                    if (Team.state(teamidcopy).slowBarrierSet.isEmpty())
-                        completed = true;
-                    lock.unlock();
-                }
-                Runtime.decreaseParallelism(1n);
-            }
-            else {
-                val me = here.id;
-                at (root) @Immediate("slowBarrier") async {
-                    val lock = Team.state(teamidcopy).slowBarrierLock;
-                    lock.lock();
-                    Team.state(teamidcopy).slowBarrierSet.remove(me);
-                    if (DEBUGINTERNALS) Runtime.println(here+":team"+teamid+" received signal from "+Place(me));
-                    lock.unlock();
-                }
-            }
-            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamid+" finished slowBarrier");
-        }
         /*
          * This method contains the implementation for all collectives.  Some arguments are only valid
          * for specific collectives.
