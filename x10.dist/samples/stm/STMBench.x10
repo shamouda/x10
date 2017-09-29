@@ -313,8 +313,12 @@ public class STMBench {
                 val plcTh = plh();
                 val times = plcTh.mergeTimes();
                 val counts = plcTh.mergeCounts();
-                plh().reducedTime = team.allreduce(times, Team.ADD);
-                plh().reducedTxCount = team.allreduce(counts, Team.ADD);
+                
+                plcTh.reduceSrc(0) = times;
+                plcTh.reduceSrc(1) = counts;
+                
+                team.allreduce(plcTh.reduceSrc, 0, plcTh.reduceDst, 0, 2, Team.ADD);
+                
                 if (!plcTh.started)
                     throw new STMBenchFailed(here + " never started ...");
                 /*val localThroughput = (counts as Double ) * h * o / (times/1e6) * t;
@@ -322,16 +326,18 @@ public class STMBench {
             }
         }
         else {
-            plh().reducedTime = plh().mergeTimes();
-            plh().reducedTxCount = plh().mergeCounts();
+            plh().reduceDst(0) = plh().mergeTimes();
+            plh().reduceDst(1) = plh().mergeCounts();
         }
         val elapsedReduceNS = System.nanoTime() - startReduce;
         
-        val allOperations = at (activePlcs(0)) plh().reducedTxCount * h * o;
-        val allTimeNS = at (activePlcs(0)) plh().reducedTime;
+        val allTimeNS = plh().reduceDst(0);
+        val cnt = plh().reduceDst(1);
+        val allOperations = cnt * h * o;
+        
         val producers = producersCount * t;
         val throughput = (allOperations as Double) / (allTimeNS/1e6) * producers;
-        Console.OUT.println("Reduction completed in "+((elapsedReduceNS)/1e9)+" seconds   txCount["+plh().reducedTxCount+"] OpCount["+allOperations+"]  timeNS["+plh().reducedTime+"]");
+        Console.OUT.println("Reduction completed in "+((elapsedReduceNS)/1e9)+" seconds   txCount["+cnt+"] OpCount["+allOperations+"]  timeNS["+allTimeNS+"]");
         Console.OUT.println("iteration:" + iteration + ":globalthroughput(op/MS):"+throughput);
         Console.OUT.println("========================================================================");
     }
@@ -559,6 +565,8 @@ class PlaceThroughput(threads:Long) {
     public var reducedTime:Long;
     public var reducedTxCount:Long;
 
+    public val reduceSrc = new Rail[Long]();
+    public val reduceDst = new Rail[Long]();
     public def this(virtualPlaceId:Long, threads:Long) {
         property(threads);
         this.virtualPlaceId = virtualPlaceId;
@@ -575,12 +583,17 @@ class PlaceThroughput(threads:Long) {
 
         reducedTime = 0;
         reducedTxCount = 0;
+        
+        reduceSrc(0) = 0; reduceSrc(1) = 0;
+        reduceDst(0) = 0; reduceDst(1) = 0;
     }
     
     public def reinit(other:PlaceThroughput) {
         virtualPlaceId = other.virtualPlaceId;
         thrds = other.thrds;
         recovered = true;
+        reduceSrc(0) = 0; reduceSrc(1) = 0;
+        reduceDst(0) = 0; reduceDst(1) = 0;
     }
     
     public def toString() {
