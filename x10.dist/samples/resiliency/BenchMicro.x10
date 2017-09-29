@@ -62,11 +62,12 @@ public class BenchMicro {
         Console.OUT.printf("Test based from place 0 completed in %f seconds\n", (System.nanoTime()-t0)/1e9);
         Console.OUT.println();
 
-        Console.OUT.println("Test based from place 1");
+        /*Console.OUT.println("Test based from place 1");
         t0 = System.nanoTime();
         at (Place(1)) doTest(refTime, "place 1 -- ", think, true, MIN_NANOS);
         Console.OUT.printf("Test based from place 1 completed in %f seconds\n", (System.nanoTime()-t0)/1e9);
         Console.OUT.println();
+        */
     }
 
     static def println(time0:Long, message:String) {
