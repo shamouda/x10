@@ -469,10 +469,15 @@ final class ResilientUTS implements Unserializable {
     val maxPlaces = Place.places().size();
     Console.OUT.println("Depth: " + opt.depth + ", Warmup: " + opt.warmupDepth + ", Places: " + maxPlaces
         + ", Workers/P: " + (1n << opt.power) + ", Res mode: " + Runtime.RESILIENT_MODE
-        + ", Spare places: " + opt.spares);
-
-    val enableCheckpointing = System.getenv("DISABLE_UTS_CHECKPOINTING") == null || System.getenv("DISABLE_UTS_CHECKPOINTING").equals("0");
-    val resilient = Runtime.RESILIENT_MODE != 0n && enableCheckpointing;
+        + ", Spare places: " + opt.spares + ", UTS_CKPT:" +  System.getenv("UTS_CKPT") + ", TM=" + System.getenv("TM"));
+    
+    val ckpt = System.getenv("UTS_CKPT") == null? 0 : Long.parseLong(System.getenv("UTS_CKPT"));
+    if (opt.victimsExist() && (ckpt == 0 || Runtime.RESILIENT_MODE == 0n)) {
+        Console.ERR.println("With victims, you must set UTS_CKPT=1 and X10_RESILIENT_MODE=1");
+        System.setExitCode(-1n);
+        return;
+    }
+    val resilient = Runtime.RESILIENT_MODE != 0n || ckpt == 1;
     val power = opt.power;
 
     val md = UTS.encoder();
@@ -705,6 +710,8 @@ final class ResilientUTS implements Unserializable {
 		  }
 		  return Long.parseLong(timeString) * units;
 	  }
+	  
+	  public def victimsExist() = killTimes.size() > 0 ;
 	  
 	  static def printUsage() {
 		  Console.ERR.println("invoked as ResilientUTS ARGS where ARGS can be from");
