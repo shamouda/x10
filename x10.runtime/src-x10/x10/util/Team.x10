@@ -1718,11 +1718,12 @@ public struct Team {
                             if (!Team.state(teamidcopy).isValid()) {
                                 throw new DeadPlaceException(here+" detected dead team member before parent scatter");
                             }
-
+/*
                             if (! (Team.state(teamidcopy).phase.compareAndSet(PHASE_SCATTER1, PHASE_SCATTER2)
                                 || Team.state(teamidcopy).phase.compareAndSet(PHASE_SCATTER2, PHASE_DONE))) {
                                 Runtime.println("ERROR progressing scatter "+here+":team"+teamidcopy+" current phase "+Team.state(teamidcopy).phase.get());
                             }
+*/
                             
                             if (!Team.state(teamidcopy).isValid()) {
                                 throw new DeadPlaceException(here+" detected dead team member after parent scatter");
@@ -1741,7 +1742,7 @@ public struct Team {
                     }
                 }
             }
-
+/*
             if (local_child1Index == -1) {
                 Team.state(teamidcopy).phase.compareAndSet(PHASE_PARENT, PHASE_DONE);
             } else if (local_child2Index == -1) {
@@ -1749,8 +1750,11 @@ public struct Team {
             } else {
                Team.state(teamidcopy).phase.compareAndSet(PHASE_PARENT, PHASE_SCATTER1);
             }
-
             sleepUntil(() => Team.state(teamidcopy).phase.get() == PHASE_DONE, "scatter complete");
+*/
+            Team.state(teamidcopy).phase.set(PHASE_DONE);
+            
+  
 
             // done with local structures
             local_parentIndex = -1;
