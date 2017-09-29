@@ -465,10 +465,14 @@ public class LocalStore[K] {K haszero} {
         };
         ConditionsList.get().add(cond);
         try {
-            if (Runtime.NUM_IMMEDIATE_THREADS == 0n) Runtime.increaseParallelism();
+            //if (Runtime.NUM_IMMEDIATE_THREADS == 0n) // This condition causes hanging when a place dies. 
+                                                       // The hang causes the runtime to never detect the failure, 
+                                                       // although the network has detected it 
+            Runtime.increaseParallelism();
             cond.await();
         }finally {
-            if (Runtime.NUM_IMMEDIATE_THREADS == 0n) Runtime.decreaseParallelism(1n);
+            //if (Runtime.NUM_IMMEDIATE_THREADS == 0n) 
+            Runtime.decreaseParallelism(1n);
         }
         // Unglobalize objects
         condGR.forget();
