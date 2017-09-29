@@ -20,6 +20,7 @@ import x10.compiler.Pragma;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.concurrent.Lock;
 import x10.xrx.Runtime;
+import x10.compiler.Immediate;
 
 /**
  * A team is a collection of activities that work together by simultaneously 
@@ -199,6 +200,14 @@ public struct Team {
     public def barrierIgnoreExceptions () : void {
         try{
             barrier();
+        }catch(ex:Exception){
+            if ( DEBUGINTERNALS) Console.OUT.println(here+" Ignoring barrier exception: " + ex.getMessage());
+        }
+    }
+    
+    public def slowBarrierIgnoreExceptions () : void {
+        try{
+            state(id).slowBarrier[Int](state(id).places(0));
         }catch(ex:Exception){
             if ( DEBUGINTERNALS) Console.OUT.println(here+" Ignoring barrier exception: " + ex.getMessage());
         }
@@ -726,7 +735,8 @@ public struct Team {
             finish nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
         } else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             if (DEBUG) Runtime.println(here + " entering pre-allreduce barrier on team "+id);
-            barrierIgnoreExceptions();
+            //barrierIgnoreExceptions();
+            slowBarrierIgnoreExceptions();
             if (DEBUG) Runtime.println(here + " entering native allreduce on team "+id);
             val success = nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
             if (!success)
@@ -1041,6 +1051,8 @@ public struct Team {
         private var local_child1Index:Long = -1;
         private var local_child2Index:Long = -1;
 
+        private var slowBarrierCnt:Long = 0;
+        
         private static def getCollName(collType:Int):String {
             switch (collType) {
                 case COLL_BARRIER: return "Barrier";
@@ -1141,6 +1153,37 @@ public struct Team {
             if (DEBUGINTERNALS) Runtime.println(here + " leaving init phase");
         }
         
+        private def slowBarrier[T](root:Place):void {
+            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamid+" entered slowBarrier, root="+root);
+            var t0:Long = System.nanoTime();
+            val teamidcopy = this.teamid; // needed to prevent serializing "this" in at() statements
+            val places = this.places;
+            if (here.id == root.id) {
+                var completed:Boolean = false;
+                atomic {
+                    Team.state(teamidcopy).slowBarrierCnt += places.size() - 1;
+                    if (Team.state(teamidcopy).slowBarrierCnt == 0)
+                        completed = true;
+                }
+                Runtime.increaseParallelism();
+                while (!completed) {
+                    System.threadSleep(0);
+                    atomic {
+                        if (Team.state(teamidcopy).slowBarrierCnt == 0)
+                            completed = true;
+                    }
+                }
+                Runtime.decreaseParallelism(1n);
+            }
+            else {
+                at (root) @Immediate("slowBarrier") async {
+                    atomic {
+                        Team.state(teamidcopy).slowBarrierCnt--;
+                    }
+                }
+            }
+            if (DEBUGINTERNALS) Console.OUT.printf(here+":team"+teamidcopy+" completed slowBarrier in %f seconds\n", (System.nanoTime()-t0)/1e9);
+        }
         /*
          * This method contains the implementation for all collectives.  Some arguments are only valid
          * for specific collectives.

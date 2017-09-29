@@ -306,20 +306,15 @@ public class STMBench {
         Console.OUT.println("========================================================================");
         
         val activePlcs = map.fixAndGetActivePlaces();
-        Console.OUT.println("ActivePlcs count " + activePlcs.size());
         val startReduce = System.nanoTime();
         if (producersCount > 1) {
             val team = new Team(activePlcs);
-            Console.OUT.println("Team created ...");
             finish for (p in activePlcs) async at (p) {
                 val plcTh = plh();
                 val times = plcTh.mergeTimes();
                 val counts = plcTh.mergeCounts();
-                Console.OUT.println(here + " calling allreduce times ...");    
                 plh().reducedTime = team.allreduce(times, Team.ADD);
-                Console.OUT.println(here + " calling allreduce counts ...");
                 plh().reducedTxCount = team.allreduce(counts, Team.ADD);
-                Console.OUT.println(here + " done ...");
                 if (!plcTh.started)
                     throw new STMBenchFailed(here + " never started ...");
                 /*val localThroughput = (counts as Double ) * h * o / (times/1e6) * t;
