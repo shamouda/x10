@@ -20,6 +20,7 @@ import x10.compiler.Pragma;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.concurrent.Lock;
 import x10.xrx.Runtime;
+import x10.compiler.Immediate;
 
 /**
  * A team is a collection of activities that work together by simultaneously 
@@ -199,6 +200,15 @@ public struct Team {
     public def barrierIgnoreExceptions () : void {
         try{
             barrier();
+        }catch(ex:Exception){
+            if ( DEBUGINTERNALS) Console.OUT.println(here+" Ignoring barrier exception: " + ex.getMessage());
+        }
+    }
+    
+    public def preBlockingBarrierIgnoreExceptions () : void {
+        try{
+            barrier();
+            state(id).preBlockingBarrier[Int](state(id).places(0));
         }catch(ex:Exception){
             if ( DEBUGINTERNALS) Console.OUT.println(here+" Ignoring barrier exception: " + ex.getMessage());
         }
@@ -726,7 +736,8 @@ public struct Team {
             finish nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
         } else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             if (DEBUG) Runtime.println(here + " entering pre-allreduce barrier on team "+id);
-            barrierIgnoreExceptions();
+            //barrierIgnoreExceptions();
+            preBlockingBarrierIgnoreExceptions();
             if (DEBUG) Runtime.println(here + " entering native allreduce on team "+id);
             val success = nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
             if (!success)
@@ -1586,6 +1597,246 @@ public struct Team {
                 }
                 
                 if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" failed "+getCollName(collType));
+
+                throw new DeadPlaceException("Team "+teamidcopy+" contains at least one dead member");
+            }
+        }
+        
+        
+        private def preBlockingBarrier[T](root:Place):void {
+            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamid+" entered preBlockingBarrier phase="+phase.get()+", root="+root);
+            
+            val teamidcopy = this.teamid; // needed to prevent serializing "this" in at() statements
+
+            /**
+             * Block the current activity until condition is set to true by
+             * another activity, giving preference to activities running
+             * locally on another worker thread.
+             */
+            val sleepUntil = (condition:() => Boolean, conditionStr:String) => @NoInline {
+                if (!condition() && Team.state(teamidcopy).isValid()) {
+                    if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" waiting for " + conditionStr);
+                    Runtime.increaseParallelism();
+                    while (!condition() && Team.state(teamidcopy).isValid()) {
+                        // look for dead neighboring places
+                        if (Team.state(teamidcopy).local_parentIndex > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex).isDead()) {
+                            Team.state(teamidcopy).markInvalid();
+                            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex)+" is dead!");
+                        } else if (Team.state(teamidcopy).local_child1Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index).isDead()) {
+                            Team.state(teamidcopy).markInvalid();
+                            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index)+" is dead!");
+                        } else if (Team.state(teamidcopy).local_child2Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index).isDead()) {
+                            Team.state(teamidcopy).markInvalid();
+                            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index)+" is dead!");
+                        } else {
+                            System.threadSleep(0); // release the CPU to more productive pursuits
+                        }
+                    }
+                    Runtime.decreaseParallelism(1n);
+                }
+
+                if (DEBUGINTERNALS) {
+                    if (Team.state(teamidcopy).isValid()) {
+                        Runtime.println(here+":team"+teamidcopy+" reached " + conditionStr);
+                    } else {
+                        Runtime.println(here+":team"+teamidcopy+" failed to reach " + conditionStr);
+                    }
+                }
+            };
+
+            // block if some other collective is in progress.
+            // note that local indexes are not yet set up, so we won't check for dead places in this call
+            sleepUntil(() => this.phase.compareAndSet(PHASE_READY, PHASE_INIT), "init");
+            
+            val myLinks = getLinks(myIndex, root, null);
+
+            if (DEBUGINTERNALS) { 
+                Runtime.println(here+":team"+teamidcopy
+                + " has parent "+((myLinks.parentIndex==-1)?Place.INVALID_PLACE:places(myLinks.parentIndex))
+                + ", children "+((myLinks.child1Index==-1)?Place.INVALID_PLACE:places(myLinks.child1Index))
+                + ", "+((myLinks.child2Index==-1)?Place.INVALID_PLACE:places(myLinks.child2Index)));
+            }
+            
+            // make my local data arrays visible to other places
+            local_parentIndex = myLinks.parentIndex;
+            local_grandchildren = myLinks.totalChildren;
+            local_child1Index = myLinks.child1Index;
+            local_child2Index = myLinks.child2Index;
+
+            // allow children to update our dst array
+            if (local_child1Index == -1) {
+                // no children to wait for
+                this.phase.compareAndSet(PHASE_INIT, PHASE_PARENT);
+            } else if (local_child2Index == -1) {
+                // only one child, so skip a phase waiting for the second child
+                this.phase.compareAndSet(PHASE_INIT, PHASE_GATHER2);
+            } else {
+                this.phase.compareAndSet(PHASE_INIT, PHASE_GATHER1); 
+            }
+
+            // wait for phase updates from children
+            sleepUntil(() => this.phase.get() == PHASE_PARENT, "upward");
+
+            if (Team.state(teamidcopy).isValid()) {
+            
+                if (myLinks.parentIndex == -1) {
+                    // this is the root
+                    // copy data locally from src to dst if needed
+
+                } else {
+                    // update parent and/or copy data to/from parent
+                    val sourceIndex = myIndex;
+                    val grandchildren = myLinks.totalChildren;
+                    val lastChild = myIndex + local_grandchildren + 1;
+                    val childOffset = local_offset;
+                    val childDstOffset = Team.state(teamidcopy).local_dst_off;
+                    
+                    if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" about to jump to parent " + places(myLinks.parentIndex));
+                    try { // try/catch for DeadPlaceExceptions
+                        at (places(myLinks.parentIndex)) @Immediate("team_signal_parent") async {
+                            sleepUntil(() => {
+                                val parentPhase = Team.state(teamidcopy).phase.get();
+                                (parentPhase >= PHASE_GATHER1 && parentPhase < PHASE_SCATTER1)
+                                }, "parent gather");
+                            if (!Team.state(teamidcopy).isValid()) {
+                                throw new DeadPlaceException(here+" detected dead team member before parent gather");
+                            }
+
+                            // upward phase complete for this child
+                            if (Team.state(teamidcopy).phase.compareAndSet(PHASE_GATHER1, PHASE_GATHER2)
+                             || Team.state(teamidcopy).phase.compareAndSet(PHASE_GATHER2, PHASE_PARENT)) {
+                                /*
+                                sleepUntil(() => { 
+                                    val parentPhase = Team.state(teamidcopy).phase.get();
+                                    (parentPhase == PHASE_SCATTER1 || parentPhase == PHASE_SCATTER2)
+                                    }, "parent scatter");
+                                */
+                            } else {
+                                Runtime.println("ERROR moving to downward phase at the parent "+here+":team"+teamidcopy+" current phase "+Team.state(teamidcopy).phase.get());
+                            }
+
+                            if (!Team.state(teamidcopy).isValid()) {
+                                throw new DeadPlaceException(here+" detected dead team member before parent scatter");
+                            }
+
+                            if (! (Team.state(teamidcopy).phase.compareAndSet(PHASE_SCATTER1, PHASE_SCATTER2)
+                                || Team.state(teamidcopy).phase.compareAndSet(PHASE_SCATTER2, PHASE_DONE))) {
+                                Runtime.println("ERROR progressing scatter "+here+":team"+teamidcopy+" current phase "+Team.state(teamidcopy).phase.get());
+                            }
+                            
+                            if (!Team.state(teamidcopy).isValid()) {
+                                throw new DeadPlaceException(here+" detected dead team member after parent scatter");
+                            }
+                        }
+                        if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" returned from parent " + places(myLinks.parentIndex));
+
+                    } catch (me:MultipleExceptions) {
+                        val dper = me.getExceptionsOfType[DeadPlaceException]();
+                        if (dper.size > 0) {
+                            if (DEBUGINTERNALS) Runtime.println(here+" caught DPE (multiple) from parent: "+dper(0));
+                            Team.state(teamidcopy).markInvalid();
+                        } else {
+                            throw me;
+                        }
+                    }
+                }
+            }
+
+            if (local_child1Index == -1) {
+                Team.state(teamidcopy).phase.compareAndSet(PHASE_PARENT, PHASE_DONE);
+            } else if (local_child2Index == -1) {
+                Team.state(teamidcopy).phase.compareAndSet(PHASE_PARENT, PHASE_SCATTER2);
+            } else {
+               Team.state(teamidcopy).phase.compareAndSet(PHASE_PARENT, PHASE_SCATTER1);
+            }
+
+            sleepUntil(() => Team.state(teamidcopy).phase.get() == PHASE_DONE, "scatter complete");
+
+            // done with local structures
+            local_parentIndex = -1;
+            local_child1Index = -1;
+            local_child2Index = -1;
+            
+            if (isValid()) {
+                if (local_child1Index > -1) {
+                    // Ensure activity completion messages are sent to children
+                    // before starting another team operation
+                    Runtime.x10rtProbe();
+                }
+                this.phase.compareAndSet(PHASE_DONE, PHASE_READY);
+                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" completed preBlockingBarrier");
+            } else {
+                // notify all associated places of the death of some other place
+                // note: uses myLinks so it's OK to do this after clearing local structures
+                if (myLinks.parentIndex != -1) {
+                    if (!places(myLinks.parentIndex).isDead()) {
+                        try {
+                            if (DEBUGINTERNALS) Runtime.println(here+" notifying parent "+places(myLinks.parentIndex)+"  of an invalid team");
+                            @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.parentIndex)) async {
+                                Team.state(teamidcopy).markInvalid();
+                            }
+                        } catch (me:MultipleExceptions) { }
+                    } else {
+                        // parent is dead; notify grandparent
+                        val parentLinks = getLinks(myLinks.parentIndex, root, null);
+                        if (parentLinks.parentIndex != -1) {
+                            try {
+                                if (DEBUGINTERNALS) Runtime.println(here+" notifying grandparent "+places(parentLinks.parentIndex)+"  of an invalid team");
+                                @Pragma(Pragma.FINISH_ASYNC) finish at (places(parentLinks.parentIndex)) async {
+                                    Team.state(teamidcopy).markInvalid();
+                                }
+                            } catch (me:MultipleExceptions) { }
+                        }
+                    }
+                }
+
+                val notifyGrandchildren = (childIndex:Long) => {
+                    // child is dead; notify grandchildren
+                    val childLinks = getLinks(childIndex, root, null);
+                    if (childLinks.child1Index != -1) {
+                        try {
+                            if (DEBUGINTERNALS) Runtime.println(here+" notifying grandchild 1 "+places(childLinks.child1Index)+"  of an invalid team");
+                            @Pragma(Pragma.FINISH_ASYNC) finish at (places(childLinks.child1Index)) async {
+                                Team.state(teamidcopy).markInvalid();
+                            }
+                        } catch (me:MultipleExceptions) { }
+                    }
+                    if (childLinks.child2Index != -1) {
+                        try {
+                            if (DEBUGINTERNALS) Runtime.println(here+" notifying grandchild 2 "+places(childLinks.child2Index)+"  of an invalid team");
+                            @Pragma(Pragma.FINISH_ASYNC) finish at (places(childLinks.child2Index)) async {
+                                Team.state(teamidcopy).markInvalid();
+                            }
+                        } catch (me:MultipleExceptions) { }
+                    }
+                };
+                
+                if (myLinks.child1Index != -1) {
+                    if (!places(myLinks.child1Index).isDead()) {
+                        try {
+                            if (DEBUGINTERNALS) Runtime.println(here+" notifying child1 "+places(myLinks.child1Index)+" of an invalid team");
+                            @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.child1Index)) async {
+                                Team.state(teamidcopy).markInvalid();
+                            }
+                        } catch (me:MultipleExceptions) { }
+                    } else {
+                        notifyGrandchildren(myLinks.child1Index);
+                    }
+                }
+                if (myLinks.child2Index != -1) {
+                    if (!places(myLinks.child2Index).isDead()) {
+                        try {
+                            if (DEBUGINTERNALS) Runtime.println(here+" notifying child2 "+places(myLinks.child2Index)+"  of an invalid team");
+                            @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.child2Index)) async {
+                                Team.state(teamidcopy).markInvalid();
+                            }
+                        } catch (me:MultipleExceptions) { }
+                    } else {
+                        notifyGrandchildren(myLinks.child2Index);
+                    }
+                }
+                
+                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" failed preBlockingBarrier");
 
                 throw new DeadPlaceException("Team "+teamidcopy+" contains at least one dead member");
             }
