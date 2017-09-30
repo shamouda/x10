@@ -77,7 +77,7 @@ public class BenchMicro {
         val s2 = s.substring(s.length() - 3n, s.length());
         Console.OUT.println(s1 + "." + s2 + ": " + message);
         return time;
-      }
+    }
     
     public static def doTest(refTime:Long, prefix:String, t:Long, print:Boolean, minTime:Long) {
         var time0:Long, time1:Long;
