@@ -20,6 +20,7 @@ public class BenchmarkAllreduce extends x10Test {
     private static MAX_SIZE = 2<<19;
 
 	public def run(): Boolean {
+	    val refTime = System.currentTimeMillis();
 		Console.OUT.println("Running with "+Place.numPlaces()+" places.");
         finish for (place in Place.places()) at (place) async {
             Team.WORLD.allreduce(1.0, Team.ADD); // warm up comms layer
@@ -37,13 +38,21 @@ public class BenchmarkAllreduce extends x10Test {
                     chk(dst(i) == src(i)*Place.numPlaces(), "elem " + i + " is " + dst(i) + " should be " + src(i)*Place.numPlaces());
                 }
 
-                if (here == Place.FIRST_PLACE) Console.OUT.printf("allreduce %d: %g ms\n", s, ((stop-start) as Double) / 1e6 / ITERS);
-            }            
+                if (here == Place.FIRST_PLACE) Console.OUT.printf(timeprefix(refTime) + ": allreduce %d: %g ms\n", s, ((stop-start) as Double) / 1e6 / ITERS);
+            }
         }
 
         return true;
 	}
 
+    static def timeprefix(time0:Long) {
+        val time = System.currentTimeMillis();
+        val s = "        " + (time - time0);
+        val s1 = s.substring(s.length() - 9n, s.length() - 3n);
+        val s2 = s.substring(s.length() - 3n, s.length());
+        return (s1 + "." + s2);
+    }
+    
 	public static def main(var args: Rail[String]): void {
 		new BenchmarkAllreduce().execute();
 	}
