@@ -1026,8 +1026,8 @@ public struct Team {
         // States of the pre-blocking barrier, which is called before blocking MPI calls
         private static PHASE_PB_INIT:Int = 100n;
         private static PHASE_PB_PARENT:Int = 101n;
-        private static PHASE_PB_GATHER2:Int = 102n;
-        private static PHASE_PB_GATHER1:Int = 103n;
+        private static PHASE_PB_GATHER1:Int = 102n;
+        private static PHASE_PB_GATHER2:Int = 103n;
         
         private val phase:AtomicInteger = new AtomicInteger(PHASE_READY); // which of the above phases we're in
         private val dstLock:Lock = new Lock();
