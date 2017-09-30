@@ -3125,7 +3125,9 @@ bool x10rt_net_bcast (x10rt_team team, x10rt_place role,
 
     MPI_Comm comm = mpi_tdb.comm(team);
 
+    X10RT_NET_DEBUG("%s", "pre bcast");
     MPI_COLLECTIVE(Bcast, Ibcast, buf, count, get_mpi_datatype(el), root, comm);
+    X10RT_NET_DEBUG("%s", "pre bcast");
 
     MPI_COLLECTIVE_SAVE(team);
     MPI_COLLECTIVE_SAVE(role);
