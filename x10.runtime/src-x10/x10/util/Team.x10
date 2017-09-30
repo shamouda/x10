@@ -412,7 +412,8 @@ public struct Team {
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
             finish nativeBcast(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-            barrierIgnoreExceptions();
+            //barrierIgnoreExceptions();
+            preBlockingBarrierIgnoreExceptions();
             val success = nativeBcast(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
             if (!success)
                 throw new DeadPlaceException("[Native] Team "+id+" contains at least one dead member");
