@@ -1022,6 +1022,13 @@ public struct Team {
         private static PHASE_SCATTER2:Int = 6n; // sending data to second child
         private static PHASE_DONE:Int = 7n;    // done, but not yet ready for the next collective call
         private static PHASE_INVALID:Int = -1n; // this team is invalid due to an earlier failure
+        
+        // States of the pre-blocking barrier, which is called before blocking MPI calls
+        private static PHASE_PB_INIT:Int = 100n;
+        private static PHASE_PB_PARENT:Int = 101n;
+        private static PHASE_PB_GATHER2:Int = 102n;
+        private static PHASE_PB_GATHER1:Int = 103n;
+        
         private val phase:AtomicInteger = new AtomicInteger(PHASE_READY); // which of the above phases we're in
         private val dstLock:Lock = new Lock();
 
@@ -1647,7 +1654,7 @@ public struct Team {
 
             // block if some other collective is in progress.
             // note that local indexes are not yet set up, so we won't check for dead places in this call
-            sleepUntil(() => this.phase.compareAndSet(PHASE_READY, PHASE_INIT), "init");
+            sleepUntil(() => this.phase.compareAndSet(PHASE_READY, PHASE_PB_INIT), "init");
             
             val myLinks = getLinks(myIndex, root, null);
 
@@ -1667,16 +1674,16 @@ public struct Team {
             // allow children to update our dst array
             if (local_child1Index == -1) {
                 // no children to wait for
-                this.phase.compareAndSet(PHASE_INIT, PHASE_PARENT);
+                this.phase.compareAndSet(PHASE_PB_INIT, PHASE_PB_PARENT);
             } else if (local_child2Index == -1) {
                 // only one child, so skip a phase waiting for the second child
-                this.phase.compareAndSet(PHASE_INIT, PHASE_GATHER2);
+                this.phase.compareAndSet(PHASE_PB_INIT, PHASE_PB_GATHER2);
             } else {
-                this.phase.compareAndSet(PHASE_INIT, PHASE_GATHER1); 
+                this.phase.compareAndSet(PHASE_PB_INIT, PHASE_PB_GATHER1); 
             }
 
             // wait for phase updates from children
-            sleepUntil(() => this.phase.get() == PHASE_PARENT, "upward");
+            sleepUntil(() => this.phase.get() == PHASE_PB_PARENT, "upward");
 
             if (Team.state(teamidcopy).isValid()) {
             
@@ -1697,21 +1704,16 @@ public struct Team {
                         at (places(myLinks.parentIndex)) @Immediate("team_signal_parent") async {
                             sleepUntil(() => {
                                 val parentPhase = Team.state(teamidcopy).phase.get();
-                                (parentPhase >= PHASE_GATHER1 && parentPhase < PHASE_SCATTER1)
+                                (parentPhase >= PHASE_PB_GATHER1 && parentPhase <= PHASE_PB_GATHER2)
                                 }, "parent gather");
                             if (!Team.state(teamidcopy).isValid()) {
                                 throw new DeadPlaceException(here+" detected dead team member before parent gather");
                             }
 
                             // upward phase complete for this child
-                            if (Team.state(teamidcopy).phase.compareAndSet(PHASE_GATHER1, PHASE_GATHER2)
-                             || Team.state(teamidcopy).phase.compareAndSet(PHASE_GATHER2, PHASE_PARENT)) {
-                                /*
-                                sleepUntil(() => { 
-                                    val parentPhase = Team.state(teamidcopy).phase.get();
-                                    (parentPhase == PHASE_SCATTER1 || parentPhase == PHASE_SCATTER2)
-                                    }, "parent scatter");
-                                */
+                            if (Team.state(teamidcopy).phase.compareAndSet(PHASE_PB_GATHER1, PHASE_PB_GATHER2)
+                             || Team.state(teamidcopy).phase.compareAndSet(PHASE_PB_GATHER2, PHASE_PB_PARENT)) {
+                                
                             } else {
                                 Runtime.println("ERROR moving to downward phase at the parent "+here+":team"+teamidcopy+" current phase "+Team.state(teamidcopy).phase.get());
                             }
@@ -1719,12 +1721,6 @@ public struct Team {
                             if (!Team.state(teamidcopy).isValid()) {
                                 throw new DeadPlaceException(here+" detected dead team member before parent scatter");
                             }
-/*
-                            if (! (Team.state(teamidcopy).phase.compareAndSet(PHASE_SCATTER1, PHASE_SCATTER2)
-                                || Team.state(teamidcopy).phase.compareAndSet(PHASE_SCATTER2, PHASE_DONE))) {
-                                Runtime.println("ERROR progressing scatter "+here+":team"+teamidcopy+" current phase "+Team.state(teamidcopy).phase.get());
-                            }
-*/
                             
                             if (!Team.state(teamidcopy).isValid()) {
                                 throw new DeadPlaceException(here+" detected dead team member after parent scatter");
@@ -1743,19 +1739,6 @@ public struct Team {
                     }
                 }
             }
-/*
-            if (local_child1Index == -1) {
-                Team.state(teamidcopy).phase.compareAndSet(PHASE_PARENT, PHASE_DONE);
-            } else if (local_child2Index == -1) {
-                Team.state(teamidcopy).phase.compareAndSet(PHASE_PARENT, PHASE_SCATTER2);
-            } else {
-               Team.state(teamidcopy).phase.compareAndSet(PHASE_PARENT, PHASE_SCATTER1);
-            }
-            sleepUntil(() => Team.state(teamidcopy).phase.get() == PHASE_DONE, "scatter complete");
-*/
-            Team.state(teamidcopy).phase.set(PHASE_DONE);
-            
-  
 
             // done with local structures
             local_parentIndex = -1;
@@ -1768,7 +1751,7 @@ public struct Team {
                     // before starting another team operation
                     Runtime.x10rtProbe();
                 }
-                this.phase.compareAndSet(PHASE_DONE, PHASE_READY);
+                this.phase.compareAndSet(PHASE_PB_PARENT, PHASE_READY);
                 if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" completed preBlockingBarrier");
             } else {
                 // notify all associated places of the death of some other place
