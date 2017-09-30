@@ -106,7 +106,7 @@ public class STMBench {
                     victim = victimsList;
                 runIteration(map, p, d, r, u, t, h, o, g, f, victim, optimized, flat, throughputPLH, null);
                 Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
-                
+
                 printThroughput(map, p, iter, throughputPLH, d, t, h, o);
                 resetStatistics(map, throughputPLH);
             }
@@ -299,49 +299,53 @@ public class STMBench {
 
     public static def printThroughput(map:ResilientNativeMap[Long], producersCount:Long, iteration:Long, plh:PlaceLocalHandle[PlaceThroughput], 
             d:Long, t:Long, h:Long, o:Long) {
-        map.printTxStatistics();
-        
-        Console.OUT.println("========================================================================");
-        Console.OUT.println("Collecting throughput information ..... .....");
-        Console.OUT.println("========================================================================");
-        
-        val activePlcs = map.fixAndGetActivePlaces();
-        val startReduce = System.nanoTime();
-        if (producersCount > 1) {
-            val team = new Team(activePlcs);
-            finish for (p in activePlcs) async at (p) {
-                val plcTh = plh();
-                val times = plcTh.mergeTimes();
-                val counts = plcTh.mergeCounts();
-                
-                plcTh.reduceSrc(0) = times;
-                plcTh.reduceSrc(1) = counts;
-                
-                team.allreduce(plcTh.reduceSrc, 0, plcTh.reduceDst, 0, 2, Team.ADD);
-                
-                if (!plcTh.started)
-                    throw new STMBenchFailed(here + " never started ...");
-                /*val localThroughput = (counts as Double ) * h * o / (times/1e6) * t;
-                Console.OUT.println("iteration:" + iteration +":"+here+":t="+t+":localthroughput(op/MS):"+localThroughput);*/
+        try {
+            map.printTxStatistics();
+            
+            Console.OUT.println("========================================================================");
+            Console.OUT.println("Collecting throughput information ..... .....");
+            Console.OUT.println("========================================================================");
+            
+            val activePlcs = map.fixAndGetActivePlaces();
+            val startReduce = System.nanoTime();
+            if (producersCount > 1) {
+                val team = new Team(activePlcs);
+                finish for (p in activePlcs) async at (p) {
+                    val plcTh = plh();
+                    val times = plcTh.mergeTimes();
+                    val counts = plcTh.mergeCounts();
+                    
+                    plcTh.reduceSrc(0) = times;
+                    plcTh.reduceSrc(1) = counts;
+                    
+                    team.allreduce(plcTh.reduceSrc, 0, plcTh.reduceDst, 0, 2, Team.ADD);
+                    
+                    if (!plcTh.started)
+                        throw new STMBenchFailed(here + " never started ...");
+                    /*val localThroughput = (counts as Double ) * h * o / (times/1e6) * t;
+                    Console.OUT.println("iteration:" + iteration +":"+here+":t="+t+":localthroughput(op/MS):"+localThroughput);*/
+                }
             }
-        }
-        else {
-            plh().reduceDst(0) = plh().mergeTimes();
-            plh().reduceDst(1) = plh().mergeCounts();
-        }
-        val elapsedReduceNS = System.nanoTime() - startReduce;
-        
-        val allTimeNS = plh().reduceDst(0);
-        val cnt = plh().reduceDst(1);
-        val allOperations = cnt * h * o;
-        
-        val producers = producersCount * t;
-        val throughput = (allOperations as Double) / (allTimeNS/1e6) * producers;
-        Console.OUT.println("Reduction completed in "+((elapsedReduceNS)/1e9)+" seconds   txCount["+cnt+"] OpCount["+allOperations+"]  timeNS["+allTimeNS+"]");
-        Console.OUT.println("iteration:" + iteration + ":globalthroughput(op/MS):"+throughput);
-        Console.OUT.println("========================================================================");
-    }
+            else {
+                plh().reduceDst(0) = plh().mergeTimes();
+                plh().reduceDst(1) = plh().mergeCounts();
+            }
+            val elapsedReduceNS = System.nanoTime() - startReduce;
+            
+            val allTimeNS = plh().reduceDst(0);
+            val cnt = plh().reduceDst(1);
+            val allOperations = cnt * h * o;
+            
+            val producers = producersCount * t;
+            val throughput = (allOperations as Double) / (allTimeNS/1e6) * producers;
+            Console.OUT.println("Reduction completed in "+((elapsedReduceNS)/1e9)+" seconds   txCount["+cnt+"] OpCount["+allOperations+"]  timeNS["+allTimeNS+"]");
+            Console.OUT.println("iteration:" + iteration + ":globalthroughput(op/MS):"+throughput);
+            Console.OUT.println("========================================================================");
     
+        } catch(ex:Exception) {
+            throw new Exception("Failed while collecting throughput information ...");
+        }
+    }
     public static def resetStatistics(map:ResilientNativeMap[Long], plh:PlaceLocalHandle[PlaceThroughput]) {
         map.resetTxStatistics();
         Place.places().broadcastFlat(()=>{plh().reset();}, (p:Place)=>true);
