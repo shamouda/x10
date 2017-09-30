@@ -20,6 +20,7 @@ public class BenchmarkBcast extends x10Test {
     private static MAX_SIZE = 2<<19;
 
 	public def run(): Boolean {
+	    val refTime = System.currentTimeMillis();
         val root = Place(Place.numPlaces()-1);
         finish for (place in Place.places()) at (place) async {
             val warmup = new Rail[Double](1);
@@ -38,12 +39,20 @@ public class BenchmarkBcast extends x10Test {
                     chk(dst(i) == src(i), "elem " + i + " is " + dst(i) + " should be " + src(i));
                 }
 
-                if (here == Place.FIRST_PLACE) Console.OUT.printf("bcast %d: %g ms\n", s, ((stop-start) as Double) / 1e6 / ITERS);
+                if (here == Place.FIRST_PLACE) Console.OUT.printf(timeprefix(refTime) + ": bcast %d: %g ms\n", s, ((stop-start) as Double) / 1e6 / ITERS);
             }            
         }
 
         return true;
 	}
+	
+    static def timeprefix(time0:Long) {
+        val time = System.currentTimeMillis();
+        val s = "        " + (time - time0);
+        val s1 = s.substring(s.length() - 9n, s.length() - 3n);
+        val s2 = s.substring(s.length() - 3n, s.length());
+        return (s1 + "." + s2);
+    }
 
 	public static def main(var args: Rail[String]): void {
 		new BenchmarkBcast().execute();
