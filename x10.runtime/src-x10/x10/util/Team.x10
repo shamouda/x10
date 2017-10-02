@@ -1537,14 +1537,16 @@ public struct Team {
                 this.phase.compareAndSet(PHASE_DONE, PHASE_READY);
                 if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" completed "+getCollName(collType));
             } else {
+                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" "+getCollName(collType) + " invalid path started");
                 // notify all associated places of the death of some other place
                 // note: uses myLinks so it's OK to do this after clearing local structures
+                val mex = here;
                 if (myLinks.parentIndex != -1) {
                     if (!places(myLinks.parentIndex).isDead()) {
                         try {
                             if (DEBUGINTERNALS) Runtime.println(here+" notifying parent "+places(myLinks.parentIndex)+"  of an invalid team");
                             @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.parentIndex)) async {
-                                Team.state(teamidcopy).markInvalid("child propagate to parent me");
+                                Team.state(teamidcopy).markInvalid("child["+mex+"] propagate to parent me");
                             }
                         } catch (me:MultipleExceptions) { }
                     } else {
@@ -1554,7 +1556,7 @@ public struct Team {
                             try {
                                 if (DEBUGINTERNALS) Runtime.println(here+" notifying grandparent "+places(parentLinks.parentIndex)+"  of an invalid team");
                                 @Pragma(Pragma.FINISH_ASYNC) finish at (places(parentLinks.parentIndex)) async {
-                                    Team.state(teamidcopy).markInvalid("child propagate to grandparent me");
+                                    Team.state(teamidcopy).markInvalid("child["+mex+"] propagate to grandparent me");
                                 }
                             } catch (me:MultipleExceptions) { }
                         }
@@ -1568,7 +1570,7 @@ public struct Team {
                         try {
                             if (DEBUGINTERNALS) Runtime.println(here+" notifying grandchild 1 "+places(childLinks.child1Index)+"  of an invalid team");
                             @Pragma(Pragma.FINISH_ASYNC) finish at (places(childLinks.child1Index)) async {
-                                Team.state(teamidcopy).markInvalid("parent propagate to grandchild1 me");
+                                Team.state(teamidcopy).markInvalid("parent["+mex+"] propagate to grandchild1 me");
                             }
                         } catch (me:MultipleExceptions) { }
                     }
@@ -1576,7 +1578,7 @@ public struct Team {
                         try {
                             if (DEBUGINTERNALS) Runtime.println(here+" notifying grandchild 2 "+places(childLinks.child2Index)+"  of an invalid team");
                             @Pragma(Pragma.FINISH_ASYNC) finish at (places(childLinks.child2Index)) async {
-                                Team.state(teamidcopy).markInvalid("parent propagate to grandchild2 me");
+                                Team.state(teamidcopy).markInvalid("parent["+mex+"] propagate to grandchild2 me");
                             }
                         } catch (me:MultipleExceptions) { }
                     }
@@ -1587,7 +1589,7 @@ public struct Team {
                         try {
                             if (DEBUGINTERNALS) Runtime.println(here+" notifying child1 "+places(myLinks.child1Index)+" of an invalid team");
                             @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.child1Index)) async {
-                                Team.state(teamidcopy).markInvalid("parent propagate to child1 me");
+                                Team.state(teamidcopy).markInvalid("parent["+mex+"] propagate to child1 me");
                             }
                         } catch (me:MultipleExceptions) { }
                     } else {
@@ -1599,7 +1601,7 @@ public struct Team {
                         try {
                             if (DEBUGINTERNALS) Runtime.println(here+" notifying child2 "+places(myLinks.child2Index)+"  of an invalid team");
                             @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.child2Index)) async {
-                                Team.state(teamidcopy).markInvalid("parent propagate to child2 me");
+                                Team.state(teamidcopy).markInvalid("parent["+mex+"] propagate to child2 me");
                             }
                         } catch (me:MultipleExceptions) { }
                     } else {
@@ -1760,14 +1762,16 @@ public struct Team {
                 this.phase.compareAndSet(PHASE_PB_PARENT, PHASE_READY);
                 if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" completed preBlockingBarrier");
             } else {
+                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" preBlockingBarrier invalid path started");
                 // notify all associated places of the death of some other place
                 // note: uses myLinks so it's OK to do this after clearing local structures
+                val mex = here;
                 if (myLinks.parentIndex != -1) {
                     if (!places(myLinks.parentIndex).isDead()) {
                         try {
                             if (DEBUGINTERNALS) Runtime.println(here+" notifying parent "+places(myLinks.parentIndex)+"  of an invalid team");
                             @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.parentIndex)) async {
-                                Team.state(teamidcopy).markInvalid("child propagate to parent me");
+                                Team.state(teamidcopy).markInvalid("child["+mex+"] propagate to parent me");
                             }
                         } catch (me:MultipleExceptions) { }
                     } else {
@@ -1777,7 +1781,7 @@ public struct Team {
                             try {
                                 if (DEBUGINTERNALS) Runtime.println(here+" notifying grandparent "+places(parentLinks.parentIndex)+"  of an invalid team");
                                 @Pragma(Pragma.FINISH_ASYNC) finish at (places(parentLinks.parentIndex)) async {
-                                    Team.state(teamidcopy).markInvalid("child propagate to grandparent me");
+                                    Team.state(teamidcopy).markInvalid("child["+mex+"] propagate to grandparent me");
                                 }
                             } catch (me:MultipleExceptions) { }
                         }
@@ -1791,7 +1795,7 @@ public struct Team {
                         try {
                             if (DEBUGINTERNALS) Runtime.println(here+" notifying grandchild 1 "+places(childLinks.child1Index)+"  of an invalid team");
                             @Pragma(Pragma.FINISH_ASYNC) finish at (places(childLinks.child1Index)) async {
-                                Team.state(teamidcopy).markInvalid("parent propagate to grandchild1 me");
+                                Team.state(teamidcopy).markInvalid("parent["+mex+"] propagate to grandchild1 me");
                             }
                         } catch (me:MultipleExceptions) { }
                     }
@@ -1799,7 +1803,7 @@ public struct Team {
                         try {
                             if (DEBUGINTERNALS) Runtime.println(here+" notifying grandchild 2 "+places(childLinks.child2Index)+"  of an invalid team");
                             @Pragma(Pragma.FINISH_ASYNC) finish at (places(childLinks.child2Index)) async {
-                                Team.state(teamidcopy).markInvalid("parent propagate to grandchild2 me");
+                                Team.state(teamidcopy).markInvalid("parent["+mex+"] propagate to grandchild2 me");
                             }
                         } catch (me:MultipleExceptions) { }
                     }
@@ -1810,7 +1814,7 @@ public struct Team {
                         try {
                             if (DEBUGINTERNALS) Runtime.println(here+" notifying child1 "+places(myLinks.child1Index)+" of an invalid team");
                             @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.child1Index)) async {
-                                Team.state(teamidcopy).markInvalid("parent propagate to child1 me");
+                                Team.state(teamidcopy).markInvalid("parent["+mex+"] propagate to child1 me");
                             }
                         } catch (me:MultipleExceptions) { }
                     } else {
@@ -1822,7 +1826,7 @@ public struct Team {
                         try {
                             if (DEBUGINTERNALS) Runtime.println(here+" notifying child2 "+places(myLinks.child2Index)+"  of an invalid team");
                             @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.child2Index)) async {
-                                Team.state(teamidcopy).markInvalid("parent propagate to child2 me");
+                                Team.state(teamidcopy).markInvalid("parent["+mex+"] propagate to child2 me");
                             }
                         } catch (me:MultipleExceptions) { }
                     } else {
