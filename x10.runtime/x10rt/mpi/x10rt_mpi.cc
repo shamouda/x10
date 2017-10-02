@@ -3884,6 +3884,8 @@ void x10rt_net_set_place_removed_cb(x10rt_place_removed_callback* cb) {
 #ifdef OPEN_MPI_ULFM
 void mpiErrorHandler(MPI_Comm * comm, int *errorCode, ...){
 
+	X10RT_NET_DEBUG("Place(%d): MPI error handler = %d", x10rt_net_here(), *errorCode);
+
     MPI_Group failedGroup;
 
     MPIX_Comm_failure_ack(*comm);
@@ -3942,6 +3944,7 @@ void mpiErrorHandler(MPI_Comm * comm, int *errorCode, ...){
     if (placeRemovedCB != NULL && newDeadCount > oldDeadCount) {
     	for (int i = oldDeadCount; i < newDeadCount; ++i) {
     		placeRemovedCB(global_state.deadPlaces[i]);
+    		X10RT_NET_DEBUG("Place(%d): MPI found dead palce Place(%d)", x10rt_net_here(), global_state.deadPlaces[i]);
     	}
     }
     MPI_Group_free(&failedGroup);
