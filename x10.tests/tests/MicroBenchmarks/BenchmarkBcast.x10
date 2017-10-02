@@ -25,7 +25,7 @@ public class BenchmarkBcast extends x10Test {
         finish for (place in Place.places()) at (place) async {
             val warmup = new Rail[Double](1);
             Team.WORLD.bcast(root, warmup, 0, warmup, 0, 1); // warm up comms layer
-            for (var s:Long= 1; s <= MAX_SIZE; s *= 2) {
+            for (var s:Long= 1; s <= MAX_SIZE; s *= 8) {
                 val src = new Rail[Double](s, (i:Long) => i as Double);
                 val dst = new Rail[Double](s);
                 val start = System.nanoTime();

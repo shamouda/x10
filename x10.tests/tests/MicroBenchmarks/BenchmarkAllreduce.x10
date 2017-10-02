@@ -24,7 +24,7 @@ public class BenchmarkAllreduce extends x10Test {
 		Console.OUT.println("Running with "+Place.numPlaces()+" places.");
         finish for (place in Place.places()) at (place) async {
             Team.WORLD.allreduce(1.0, Team.ADD); // warm up comms layer
-            for (var s:Long= 1; s <= MAX_SIZE; s *= 2) {
+            for (var s:Long= 1; s <= MAX_SIZE; s *= 8) {
                 val src = new Rail[Double](s, (i:Long) => i as Double);
                 val dst = new Rail[Double](s);
                 val start = System.nanoTime();
