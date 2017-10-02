@@ -16,12 +16,13 @@ import x10.util.Team;
  * Benchmarks performance of Team.allreduce for varying data size
  */
 public class BenchmarkAllreduce extends x10Test {
-    private static ITERS = 10;
+    private static ITERS = 5;
     private static MAX_SIZE = 2<<19;
 
 	public def run(): Boolean {
 	    val refTime = System.currentTimeMillis();
-		Console.OUT.println("Running with "+Place.numPlaces()+" places.");
+		Console.OUT.println("Running with "+Place.numPlaces()+" places. ITERS="+ITERS+". s*=8. ResilientMode=" + 
+	        x10.xrx.Runtime.RESILIENT_MODE + " X10_TEAM_DEBUG_INTERNALS=" + System.getenv("X10_TEAM_DEBUG_INTERNALS"));
         finish for (place in Place.places()) at (place) async {
             Team.WORLD.allreduce(1.0, Team.ADD); // warm up comms layer
             for (var s:Long= 1; s <= MAX_SIZE; s *= 8) {

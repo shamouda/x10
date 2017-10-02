@@ -16,11 +16,13 @@ import x10.util.Team;
  * Benchmarks performance of Team.bcast for varying data size
  */
 public class BenchmarkBcast extends x10Test {
-    private static ITERS = 10;
+    private static ITERS = 5;
     private static MAX_SIZE = 2<<19;
 
 	public def run(): Boolean {
 	    val refTime = System.currentTimeMillis();
+	    Console.OUT.println("Running with "+Place.numPlaces()+" places. ITERS="+ITERS+". s*=8. ResilientMode=" + 
+		        x10.xrx.Runtime.RESILIENT_MODE + " X10_TEAM_DEBUG_INTERNALS=" + System.getenv("X10_TEAM_DEBUG_INTERNALS"));
         val root = Place(Place.numPlaces()-1);
         finish for (place in Place.places()) at (place) async {
             val warmup = new Rail[Double](1);
