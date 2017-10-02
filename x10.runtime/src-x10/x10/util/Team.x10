@@ -1369,7 +1369,8 @@ public struct Team {
                             sleepUntil(() => {
                                 val parentPhase = Team.state(teamidcopy).phase.get();
                                 (parentPhase >= PHASE_GATHER1 && parentPhase < PHASE_SCATTER1)
-                                }, "parent gather", false);
+                                }, "parent gather", true);//use true because the parent's links may have not been initialized yet
+                                                          //the matching wait upward will detect neighbours failures
                             if (!Team.state(teamidcopy).isValid()) {
                                 throw new DeadPlaceException(here+" detected dead team member before parent gather");
                             }
@@ -1713,7 +1714,8 @@ public struct Team {
                             sleepUntil(() => {
                                 val parentPhase = Team.state(teamidcopy).phase.get();
                                 (parentPhase >= PHASE_PB_GATHER1 && parentPhase <= PHASE_PB_GATHER2)
-                                }, "parent gather", false);
+                                }, "parent gather", true); //use true because the parent's links may have not been initialized yet
+                                                           //the matching wait upward will detect neighbours failures
                             if (!Team.state(teamidcopy).isValid()) {
                                 throw new DeadPlaceException(here+" detected dead team member before parent gather");
                             }
@@ -1727,12 +1729,8 @@ public struct Team {
                             }
 
                             if (!Team.state(teamidcopy).isValid()) {
-                                throw new DeadPlaceException(here+" detected dead team member before parent scatter");
-                            }
-                            
-                            if (!Team.state(teamidcopy).isValid()) {
-                                throw new DeadPlaceException(here+" detected dead team member after parent scatter");
-                            }
+                                throw new DeadPlaceException(here+" detected dead team member before parent scatter--");
+                            }                            
                         }
                         if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" returned from parent " + places(myLinks.parentIndex));
 
