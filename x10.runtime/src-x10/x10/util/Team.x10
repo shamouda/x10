@@ -1174,20 +1174,22 @@ public struct Team {
              * Block the current activity until condition is set to true by
              * another activity, giving preference to activities running
              * locally on another worker thread.
+             * We don't check the status of neighbouring places when waiting for "init" (i.e. sleepUntil(codition, "init")),
+             * because at this point, we have not yet calculated the indices of the neighbours
              */
-            val sleepUntil = (condition:() => Boolean, conditionStr:String) => @NoInline {
+            val sleepUntil = (condition:() => Boolean, conditionStr:String, init:Boolean) => @NoInline {
                 if (!condition() && Team.state(teamidcopy).isValid()) {
                     if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" waiting for " + conditionStr);
                     Runtime.increaseParallelism();
                     while (!condition() && Team.state(teamidcopy).isValid()) {
                         // look for dead neighboring places
-                        if (Team.state(teamidcopy).local_parentIndex > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex).isDead()) {
+                        if (!init && Team.state(teamidcopy).local_parentIndex > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex).isDead()) {
                             Team.state(teamidcopy).markInvalid("Parent " + Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex) + " is dead");
                             if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex)+" is dead!");
-                        } else if (Team.state(teamidcopy).local_child1Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index).isDead()) {
+                        } else if (!init && Team.state(teamidcopy).local_child1Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index).isDead()) {
                             Team.state(teamidcopy).markInvalid("Child1 " + Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index) + " is dead");
                             if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index)+" is dead!");
-                        } else if (Team.state(teamidcopy).local_child2Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index).isDead()) {
+                        } else if (!init && Team.state(teamidcopy).local_child2Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index).isDead()) {
                             Team.state(teamidcopy).markInvalid("Child2 " + Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index) + " is dead");
                             if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index)+" is dead!");
                         } else {
@@ -1208,7 +1210,7 @@ public struct Team {
 
             // block if some other collective is in progress.
             // note that local indexes are not yet set up, so we won't check for dead places in this call
-            sleepUntil(() => this.phase.compareAndSet(PHASE_READY, PHASE_INIT), "init");
+            sleepUntil(() => this.phase.compareAndSet(PHASE_READY, PHASE_INIT), "init", true);
             
             val myLinks = getLinks(myIndex, root, counts);
 
@@ -1286,7 +1288,7 @@ public struct Team {
             }
 
             // wait for phase updates from children
-            sleepUntil(() => this.phase.get() == PHASE_PARENT, "upward");
+            sleepUntil(() => this.phase.get() == PHASE_PARENT, "upward", false);
 
             if (Team.state(teamidcopy).isValid()) {
                 if (collType == COLL_REDUCE || collType == COLL_ALLREDUCE) {
@@ -1367,7 +1369,7 @@ public struct Team {
                             sleepUntil(() => {
                                 val parentPhase = Team.state(teamidcopy).phase.get();
                                 (parentPhase >= PHASE_GATHER1 && parentPhase < PHASE_SCATTER1)
-                                }, "parent gather");
+                                }, "parent gather", false);
                             if (!Team.state(teamidcopy).isValid()) {
                                 throw new DeadPlaceException(here+" detected dead team member before parent gather");
                             }
@@ -1396,7 +1398,7 @@ public struct Team {
                                     finish Rail.asyncCopy(gr, childDstOffset, target, off, count);
 
                             } else if (collType == COLL_INDEXOFMAX) {
-                                sleepUntil(() => Team.state(teamidcopy).dstLock.tryLock(), "parent lock");
+                                sleepUntil(() => Team.state(teamidcopy).dstLock.tryLock(), "parent lock", false);
                                 val ldi = Team.state(teamidcopy).local_dst as Rail[DoubleIdx];
                                 if (DEBUGINTERNALS) Runtime.println(here+" IndexOfMax: parent="+ldi(0).value+" child="+childVal.value);
                                 
@@ -1408,7 +1410,7 @@ public struct Team {
                                 Team.state(teamidcopy).dstLock.unlock();
 
                             } else if (collType == COLL_INDEXOFMIN) {
-                                sleepUntil(() => Team.state(teamidcopy).dstLock.tryLock(), "parent lock");
+                                sleepUntil(() => Team.state(teamidcopy).dstLock.tryLock(), "parent lock", false);
                                 val ldi = Team.state(teamidcopy).local_dst as Rail[DoubleIdx];
                                 if (childVal.value < ldi(0).value)
                                     ldi(0) = childVal;
@@ -1429,7 +1431,7 @@ public struct Team {
                                 sleepUntil(() => { 
                                     val parentPhase = Team.state(teamidcopy).phase.get();
                                     (parentPhase == PHASE_SCATTER1 || parentPhase == PHASE_SCATTER2)
-                                    }, "parent scatter");
+                                    }, "parent scatter", false);
                             } else {
                                 Runtime.println("ERROR moving to downward phase at the parent "+here+":team"+teamidcopy+" current phase "+Team.state(teamidcopy).phase.get());
                             }
@@ -1515,7 +1517,7 @@ public struct Team {
                Team.state(teamidcopy).phase.compareAndSet(PHASE_PARENT, PHASE_SCATTER1);
             }
 
-            sleepUntil(() => Team.state(teamidcopy).phase.get() == PHASE_DONE, "scatter complete");
+            sleepUntil(() => Team.state(teamidcopy).phase.get() == PHASE_DONE, "scatter complete", false);
 
             // done with local structures
             local_src = null;
@@ -1622,20 +1624,22 @@ public struct Team {
              * Block the current activity until condition is set to true by
              * another activity, giving preference to activities running
              * locally on another worker thread.
+             * We don't check the status of neighbouring places when waiting for "init" (i.e. sleepUntil(codition, "init")),
+             * because at this point, we have not yet calculated the indices of the neighbours
              */
-            val sleepUntil = (condition:() => Boolean, conditionStr:String) => @NoInline {
+            val sleepUntil = (condition:() => Boolean, conditionStr:String, init:Boolean) => @NoInline {
                 if (!condition() && Team.state(teamidcopy).isValid()) {
                     if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" waiting for " + conditionStr);
                     Runtime.increaseParallelism();
                     while (!condition() && Team.state(teamidcopy).isValid()) {
                         // look for dead neighboring places
-                        if (Team.state(teamidcopy).local_parentIndex > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex).isDead()) {
+                        if (!init && Team.state(teamidcopy).local_parentIndex > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex).isDead()) {
                             Team.state(teamidcopy).markInvalid("Parent " + Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex) + " is dead");
                             if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex)+" is dead!");
-                        } else if (Team.state(teamidcopy).local_child1Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index).isDead()) {
+                        } else if (!init && Team.state(teamidcopy).local_child1Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index).isDead()) {
                             Team.state(teamidcopy).markInvalid("Child1 " + Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index) + " is dead");
                             if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index)+" is dead!");
-                        } else if (Team.state(teamidcopy).local_child2Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index).isDead()) {
+                        } else if (!init && Team.state(teamidcopy).local_child2Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index).isDead()) {
                             Team.state(teamidcopy).markInvalid("Child2 " + Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index) + " is dead");
                             if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index)+" is dead!");
                         } else {
@@ -1656,7 +1660,7 @@ public struct Team {
 
             // block if some other collective is in progress.
             // note that local indexes are not yet set up, so we won't check for dead places in this call
-            sleepUntil(() => this.phase.compareAndSet(PHASE_READY, PHASE_PB_INIT), "init");
+            sleepUntil(() => this.phase.compareAndSet(PHASE_READY, PHASE_PB_INIT), "init", true);
             
             val myLinks = getLinks(myIndex, root, null);
 
@@ -1685,7 +1689,7 @@ public struct Team {
             }
 
             // wait for phase updates from children
-            sleepUntil(() => this.phase.get() == PHASE_PB_PARENT, "upward");
+            sleepUntil(() => this.phase.get() == PHASE_PB_PARENT, "upward", false);
 
             if (Team.state(teamidcopy).isValid()) {
             
@@ -1707,7 +1711,7 @@ public struct Team {
                             sleepUntil(() => {
                                 val parentPhase = Team.state(teamidcopy).phase.get();
                                 (parentPhase >= PHASE_PB_GATHER1 && parentPhase <= PHASE_PB_GATHER2)
-                                }, "parent gather");
+                                }, "parent gather", false);
                             if (!Team.state(teamidcopy).isValid()) {
                                 throw new DeadPlaceException(here+" detected dead team member before parent gather");
                             }
