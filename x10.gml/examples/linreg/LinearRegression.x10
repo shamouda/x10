@@ -33,7 +33,7 @@ import x10.util.resilient.iterative.*;
  * @see Elgohary et al. (2016). "Compressed linear algebra for large-scale
  *      machine learning". http://dx.doi.org/10.14778/2994509.2994515
  */
-public class LinearRegression implements SPMDResilientIterativeApp {
+public class LinearRegression implements SPMDApp {
 	static val VERBOSE = System.getenv("LINREG_DEBUG") != null && System.getenv("LINREG_DEBUG").equals("1");
 	
     public static val MAX_SPARSE_DENSITY = 0.1f;

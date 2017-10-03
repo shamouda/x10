@@ -12,14 +12,19 @@
 
 package x10.util.resilient.iterative;
 
+import x10.util.HashMap;
+import x10.util.Team;
+import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 
-public interface GlobalResilientIterativeApp {
-    public def isFinished():Boolean;
+public interface SPMDApp {
+    public def isFinished_local():Boolean;
     
-    public def step():void;
+    public def step_local():void;
     
-    public def checkpoint(store:ApplicationSnapshotStore):void;
+    public def getCheckpointData_local():HashMap[String,Cloneable];
     
-    public def remake(changes:ChangeDescription, lastCkptIter:Long):void;
+    public def remake(changes:ChangeDescription, newTeam:Team):void;
+    
+    public def restore_local(restoreDataMap:HashMap[String,Cloneable], lastCheckpointIter:Long):void;   
 }

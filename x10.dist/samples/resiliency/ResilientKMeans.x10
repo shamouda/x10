@@ -152,7 +152,7 @@ public class ResilientKMeans {
         }
     }
     
-    static class KMeansMaster implements GlobalResilientIterativeApp {
+    static class KMeansMaster implements GlobalApp {
         val distState:DistState;
         var currentClusters:Rail[Float];
         val newClusters:Rail[Float];
@@ -280,7 +280,7 @@ public class ResilientKMeans {
                                dim:Long, numClusters:Long, iterations:Long, epsilon:Float,
                                verbose:Boolean, checkpointFreq:Long, sparePlaces:Long):Rail[Float] {
         val startTime = System.currentTimeMillis(); // the executor takes milli time.
-        val executor = new GlobalResilientIterativeExecutor(checkpointFreq, sparePlaces, false);
+        val executor = new GlobalExecutor(checkpointFreq, sparePlaces, false);
         val activePlaces = executor.activePlaces();
         
         // Initialize KMeans LocalState in active places.

@@ -22,7 +22,7 @@ import x10.util.resilient.localstore.Cloneable;
 /**
  * A resilient distributed implementation of KMeans clustering
  * created by augmenting KMeansSPMD.x10 to use the
- * SPMDResilientIterativeExecutor framework.
+ * SPMDExecutor framework.
  *
  * Team operations are used for inter-Place coordination
  * and efficient global communication.
@@ -164,7 +164,7 @@ public class ResilientKMeansSPMD {
         }
     }
 
-    static class KMeansApp implements SPMDResilientIterativeApp {
+    static class KMeansApp implements SPMDApp {
         val plh:PlaceLocalHandle[LocalState];
 
         def this(plh:PlaceLocalHandle[LocalState]) {
@@ -225,7 +225,7 @@ public class ResilientKMeansSPMD {
                                numClusters:Long, iterations:Long, epsilon:Float, verbose:Boolean,
                                checkpointFreq:Long, sparePlaces:Long):Rail[Float] {
         val startTime = System.currentTimeMillis();
-        val executor = new SPMDResilientIterativeExecutor(checkpointFreq, sparePlaces, false, false);
+        val executor = new SPMDExecutor(checkpointFreq, sparePlaces, false, false);
         val pg = executor.activePlaces();
         val team = executor.team();
 

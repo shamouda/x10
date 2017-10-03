@@ -27,7 +27,7 @@ import x10.util.resilient.PlaceManager;
 import x10.util.resilient.store.Store;
 import x10.util.resilient.localstore.Cloneable;
 
-public class GlobalResilientIterativeExecutor (home:Place) {
+public class GlobalExecutor (home:Place) {
     private static val VERBOSE = (System.getenv("EXECUTOR_DEBUG") != null
                                && System.getenv("EXECUTOR_DEBUG").equals("1"));
 
@@ -74,7 +74,7 @@ public class GlobalResilientIterativeExecutor (home:Place) {
         }
     }
 
-    public def run(app:GlobalResilientIterativeApp){here == home} {
+    public def run(app:GlobalApp){here == home} {
         run(app, Timer.milliTime());
     }
 
@@ -86,12 +86,12 @@ public class GlobalResilientIterativeExecutor (home:Place) {
 
     //the startRunTime parameter is added to allow the executor to consider 
     //any initialization time done by the application before starting the executor  
-    public def run(app:GlobalResilientIterativeApp, startRunTime:Long){here == home} {
+    public def run(app:GlobalApp, startRunTime:Long){here == home} {
         if (simplePlaceHammer != null) {
             simplePlaceHammer.scheduleTimers();
         }
         this.startRunTime = startRunTime;
-        Console.OUT.println("GlobalResilientIterativeExecutor: Application start time ["+startRunTime+"] ...");
+        Console.OUT.println("GlobalExecutor: Application start time ["+startRunTime+"] ...");
         
         applicationInitializationTime = Timer.milliTime() - startRunTime;
         var remakeRequired:Boolean = false;
@@ -157,7 +157,7 @@ public class GlobalResilientIterativeExecutor (home:Place) {
 
     }
     
-    private def remake(app:GlobalResilientIterativeApp){here == home} {
+    private def remake(app:GlobalApp){here == home} {
         if (lastCkptIter == -1) {
             Console.OUT.println("process failure occurred but no valid checkpoint exists!");
             System.killHere();
@@ -189,7 +189,7 @@ public class GlobalResilientIterativeExecutor (home:Place) {
         return restoreRequired;
     }
     
-    private def checkpoint(app:GlobalResilientIterativeApp, globalIter:Long){here == home} {
+    private def checkpoint(app:GlobalApp, globalIter:Long){here == home} {
     	if (VERBOSE) Console.OUT.println("checkpointing at iter " + globalIter);
         val startCheckpoint = Timer.milliTime();
         app.checkpoint(appStore);

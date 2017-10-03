@@ -36,7 +36,7 @@ import x10.util.resilient.iterative.*;
  * https://apache.github.io/incubator-systemml/algorithms-classification.html
  * https://github.com/apache/incubator-systemml/blob/master/scripts/algorithms/MultiLogReg.dml
  * */
-public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implements SPMDResilientIterativeApp { 
+public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implements SPMDApp { 
     static val MAX_SPARSE_DENSITY = 0.1f;
     private val C = 2;
     private val tolerance = 0.000001f;
@@ -56,7 +56,7 @@ public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implem
     private val bias:Boolean;
     
     private var plh:PlaceLocalHandle[AppTempData];
-    private val executor:SPMDResilientIterativeExecutor;
+    private val executor:SPMDExecutor;
     private var team:Team;
     private var places:PlaceGroup;
     
@@ -89,7 +89,7 @@ public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implem
     private val LT2:DistVector(N);
     
     
-    public def this(N:Long, D:Long, x_:DistBlockMatrix, y:DistVector, it:Int, nit:Int, nzd:Float, reg:Float, bias:Boolean, executor:SPMDResilientIterativeExecutor) {
+    public def this(N:Long, D:Long, x_:DistBlockMatrix, y:DistVector, it:Int, nit:Int, nzd:Float, reg:Float, bias:Boolean, executor:SPMDExecutor) {
         property(N, D);
         
         this.nzd = nzd;

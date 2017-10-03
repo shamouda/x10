@@ -25,7 +25,7 @@ import x10.matrix.regression.RegressionInputData;
 import x10.matrix.util.Debug;
 import x10.matrix.util.MathTool;
 import x10.util.Team;
-import x10.util.resilient.iterative.SPMDResilientIterativeExecutor;
+import x10.util.resilient.iterative.SPMDExecutor;
 
 /**
  * Test harness for Linear Regression using GML
@@ -94,7 +94,7 @@ public class RunLinReg {
         }
         
         val startTime = Timer.milliTime();
-        val executor = new SPMDResilientIterativeExecutor(checkpointFrequency, sparePlaces, false, true);
+        val executor = new SPMDExecutor(checkpointFrequency, sparePlaces, false, true);
         val places = executor.activePlaces();
         val team = executor.team();
         

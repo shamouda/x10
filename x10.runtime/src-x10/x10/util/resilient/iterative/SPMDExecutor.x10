@@ -25,7 +25,7 @@ import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.*;
 import x10.util.resilient.store.Store;
 
-public class SPMDResilientIterativeExecutor (home:Place) {
+public class SPMDExecutor (home:Place) {
     private static val VERBOSE = (System.getenv("EXECUTOR_DEBUG") != null 
                                 && System.getenv("EXECUTOR_DEBUG").equals("1"));
 
@@ -73,7 +73,7 @@ public class SPMDResilientIterativeExecutor (home:Place) {
         }
     }
 
-    public def run(app:SPMDResilientIterativeApp){here == home} {
+    public def run(app:SPMDApp){here == home} {
         run(app, Timer.milliTime());
     }
     
@@ -87,12 +87,12 @@ public class SPMDResilientIterativeExecutor (home:Place) {
 
     //the startRunTime parameter is added to allow the executor to consider 
     //any initialization time done by the application before starting the executor
-    public def run(app:SPMDResilientIterativeApp, startRunTime:Long){here == home} {
+    public def run(app:SPMDApp, startRunTime:Long){here == home} {
         if (simplePlaceHammer != null) {
             simplePlaceHammer.scheduleTimers();
         }
         this.startRunTime = startRunTime;
-        Console.OUT.println("SPMDResilientIterativeExecutor: Application start time ["+startRunTime+"] ...");
+        Console.OUT.println("SPMDExecutor: Application start time ["+startRunTime+"] ...");
         val root = here;
         plh = PlaceLocalHandle.make[PlaceTempData](manager().activePlaces(), ()=>new PlaceTempData());
         var tmpGlobalIter:Long = 0;        
@@ -123,7 +123,7 @@ public class SPMDResilientIterativeExecutor (home:Place) {
                 val ckptVersion = lastCkptVersion;
                 val globalIter = tmpGlobalIter;
                 
-                Console.OUT.println("SPMDResilientIterativeExecutor iter: " + plh().globalIter + " remakeRequired["+remakeRequired+"] restoreRequired["+restoreRequired+"] ...");           
+                Console.OUT.println("SPMDExecutor iter: " + plh().globalIter + " remakeRequired["+remakeRequired+"] restoreRequired["+restoreRequired+"] ...");           
                 finish for (p in manager().activePlaces()) at (p) async {
                     plh().globalIter = globalIter;
                     
@@ -186,7 +186,7 @@ public class SPMDResilientIterativeExecutor (home:Place) {
 
     }
     
-    private def remake(app:SPMDResilientIterativeApp){here == home} {
+    private def remake(app:SPMDApp){here == home} {
         if (lastCkptIter == -1) {
             throw new UnsupportedOperationException("process failure occurred but no valid checkpoint exists!");
         }
@@ -230,7 +230,7 @@ public class SPMDResilientIterativeExecutor (home:Place) {
         return restoreRequired;
     }
     
-    private def checkpoint(app:SPMDResilientIterativeApp){here == home} {
+    private def checkpoint(app:SPMDApp){here == home} {
         val startCheckpoint = Timer.milliTime();
         if (VERBOSE) Console.OUT.println("checkpointing at iter " + plh().globalIter);
         val newVersion = (lastCkptVersion+1)%2;
@@ -255,7 +255,7 @@ public class SPMDResilientIterativeExecutor (home:Place) {
         ckptTimes.add(Timer.milliTime() - startCheckpoint);
     }
     
-    private def restore(app:SPMDResilientIterativeApp, lastCkptIter:Long) {
+    private def restore(app:SPMDApp, lastCkptIter:Long) {
     	val startRestoreData = Timer.milliTime();        
         val restoreDataMap = new HashMap[String,Cloneable]();
         val iter = plh().ckptKeyVersion.keySet().iterator();
@@ -338,32 +338,32 @@ public class SPMDResilientIterativeExecutor (home:Place) {
             Console.OUT.println("AllRemake-place0:" + railToString(remakeTimes.toRail()));
         }
         Console.OUT.println("=========Totals by averaging Min/Max statistics============");
-        Console.OUT.println(">>>>>>>>>>>>>>Initialization:"      + applicationInitializationTime);
+        Console.OUT.println("Initialization:"      + applicationInitializationTime);
         Console.OUT.println();
-        Console.OUT.println("   ---AverageSingleStep:" + railAverage(averageSteps));
-        Console.OUT.println(">>>>>>>>>>>>>>TotalSteps:"+ railSum(averageSteps) as Long);
+        Console.OUT.println("AverageSingleStep:" + railAverage(averageSteps));
+        Console.OUT.println("TotalSteps:"+ railSum(averageSteps) as Long);
         Console.OUT.println();
         if (isResilient){
             Console.OUT.println("Checkpoint-all:" + railToString(ckptTimes.toRail()));
-            Console.OUT.println("   ---AverageCheckpoint:" + railAverage(ckptTimes.toRail()) );
-            Console.OUT.println(">>>>>>>>>>>>>>TotalCheckpointingTime:" + railSum(ckptTimes.toRail()) as Long);
+            Console.OUT.println("AverageCheckpoint:" + railAverage(ckptTimes.toRail()) );
+            Console.OUT.println("TotalCheckpointingTime:" + railSum(ckptTimes.toRail()) as Long);
       
             Console.OUT.println();
             Console.OUT.println("FailureDetection-all:"        + railToString(failureDetectionTimes.toRail()) );
-            Console.OUT.println("   ---AverageFailureDetection:"   + railAverage(failureDetectionTimes.toRail()) );
+            Console.OUT.println("AverageFailureDetection:"   + railAverage(failureDetectionTimes.toRail()) );
                         
             Console.OUT.println("ResilientMapRecovery-all:"      + railToString(resilientMapRecoveryTimes.toRail()) );
-            Console.OUT.println("   ---AverageResilientMapRecovery:" + railAverage(resilientMapRecoveryTimes.toRail()) );
+            Console.OUT.println("AverageResilientMapRecovery:" + railAverage(resilientMapRecoveryTimes.toRail()) );
             Console.OUT.println("AppRemake-all:"      + railToString(appRemakeTimes.toRail()) );
-            Console.OUT.println("   ---AverageAppRemake:" + railAverage(appRemakeTimes.toRail()) );
+            Console.OUT.println("AverageAppRemake:" + railAverage(appRemakeTimes.toRail()) );
             Console.OUT.println("TeamReconstruction-all:"      + railToString(reconstructTeamTimes.toRail()) );
-            Console.OUT.println("   ---AverageTeamReconstruction:" + railAverage(reconstructTeamTimes.toRail()) );
+            Console.OUT.println("AverageTeamReconstruction:" + railAverage(reconstructTeamTimes.toRail()) );
             Console.OUT.println("TotalRemake-all:"                   + railToString(remakeTimes.toRail()) );
-            Console.OUT.println("   ---AverageTotalRemake:"              + railAverage(remakeTimes.toRail()) );
+            Console.OUT.println("AverageTotalRemake:"              + railAverage(remakeTimes.toRail()) );
             
             Console.OUT.println("RestoreData-all:"      + railToString(averageRestore));
-            Console.OUT.println("   ---AverageRestoreData:"    + railAverage(averageRestore));
-            Console.OUT.println(">>>>>>>>>>>>>>TotalRecovery:" + (railSum(failureDetectionTimes.toRail()) + railSum(remakeTimes.toRail()) + railSum(averageRestore) ) as Long);
+            Console.OUT.println("AverageRestoreData:"    + railAverage(averageRestore));
+            Console.OUT.println("TotalRecovery:" + (railSum(failureDetectionTimes.toRail()) + railSum(remakeTimes.toRail()) + railSum(averageRestore) ) as Long);
         }
         Console.OUT.println("=============================");
         Console.OUT.println("Actual RunTime:" + runTime);

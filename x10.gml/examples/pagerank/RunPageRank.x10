@@ -71,7 +71,7 @@ public class RunPageRank {
             Console.OUT.println("Error in settings");
         else {
             val startTime = Timer.milliTime();
-            val executor = new SPMDResilientIterativeExecutor(checkpointFreq, sparePlaces, false, true);
+            val executor = new SPMDExecutor(checkpointFreq, sparePlaces, false, true);
             val places = executor.activePlaces();
             
             val rowBlocks = opts("r", places.size());
