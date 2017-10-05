@@ -291,7 +291,7 @@ public final class Runtime {
     static staticMonitor = new Monitor();
     public static atomicMonitor = new Monitor();
     static pool = new Pool();
-    static finishStates = new FinishState.FinishStates();
+    //static finishStates = new FinishState.FinishStates();
 
     // Work-stealing runtime
     

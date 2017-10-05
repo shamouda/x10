@@ -33,7 +33,6 @@ abstract class FinishState {
 
     // Turn this on to debug deadlocks within the finish implementation
     static VERBOSE = Configuration.envOrElse("X10_FINISH_VERBOSE", false);
-    static CLEAN_FINISH = Configuration.envOrElse("CLEAN_FINISH", true);
 
     /**
      * Called by an activity running at the current Place when it
@@ -577,7 +576,7 @@ abstract class FinishState {
                 me = (ref as GlobalRef[FinishState]{home==here})();
             } else {
                 val _ref = ref;
-                me = Runtime.finishStates(ref, ()=>new RemoteFinish(_ref));
+                me = new RemoteFinish(_ref); //Runtime.finishStates(ref, ()=>new RemoteFinish(_ref));
             }
         }
     }
@@ -669,15 +668,15 @@ abstract class FinishState {
             ////////Console.OUT.println(here + "Sara -RemAct-> " + printRemoteActivites());
             
             // if there were remote activities spawned, clean up the RemoteFinish objects which tracked them
-            if (CLEAN_FINISH) {
-                if (remoteActivities != null && remoteActivities.size() != 0) {
-                    val root = ref();
-                    remoteActivities.remove(here.id);
-                    for (placeId in remoteActivities.keySet()) {
-                        at(Place(placeId)) @Immediate("remoteFinishCleanup") async Runtime.finishStates.remove(root);
-                    }
+            /*
+            if (remoteActivities != null && remoteActivities.size() != 0) {
+                val root = ref();
+                remoteActivities.remove(here.id);
+                for (placeId in remoteActivities.keySet()) {
+                    at(Place(placeId)) @Immediate("remoteFinishCleanup") async Runtime.finishStates.remove(root);
                 }
             }
+            */
             // throw exceptions here if any were collected via the execution of child activities
             val t = MultipleExceptions.make(exceptions);
             if (null != t) throw t;
@@ -886,7 +885,7 @@ abstract class FinishState {
                 me = (ref as GlobalRef[FinishState]{home==here})();
             } else {
                 val _ref = ref;
-                me = Runtime.finishStates(ref, ()=>new DenseRemoteFinish(_ref));
+                me = new DenseRemoteFinish(_ref); //Runtime.finishStates(ref, ()=>new DenseRemoteFinish(_ref));
             }
         }
     }
@@ -1048,7 +1047,7 @@ abstract class FinishState {
                 me = (ref as GlobalRef[FinishState]{home==here})();
             } else {
                 val _ref = ref;
-                me = Runtime.finishStates(ref, ()=>new RemoteCollectingFinish[T](_ref, tmpReducer));
+                me = new RemoteCollectingFinish[T](_ref, tmpReducer); //Runtime.finishStates(ref, ()=>new RemoteCollectingFinish[T](_ref, tmpReducer));
             }
         }
         public def serialize(s:Serializer) {

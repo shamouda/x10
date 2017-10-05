@@ -238,7 +238,7 @@ final class Workers {
             }
             while (inboundTasks.steal() != null) {};
         }
-        Runtime.finishStates.clear(e);
+        //Runtime.finishStates.clear(e);
         val p = probing;
         lock.unlock();
         if (multiplace && (p || Runtime.NUM_IMMEDIATE_THREADS > 0)) Runtime.x10rtUnblockProbe();
