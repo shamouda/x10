@@ -625,13 +625,8 @@ public final class Runtime {
             submitLocalActivity(new Activity(epoch, asyncBody, state, clockPhases));
         } else {
             val src = here;
-            val ser = new Serializer();
-            ser.writeAny(state);
-            
-            val closure = ()=> @x10.compiler.RemoteInvocation("runAsync") {
-                val deser = new Deserializer(ser);
-                val stateCopy = deser.readAny() as FinishState;
-                val activity = new Activity(epoch, body, stateCopy, clockPhases);
+            val closure = ()=> @x10.compiler.RemoteInvocation("runAsync") { 
+                val activity = new Activity(epoch, body, state, clockPhases);
                 submitRemoteActivity(epoch, activity, src, state);
             };
             val preSendAction = ()=> { state.notifySubActivitySpawn(place); };
