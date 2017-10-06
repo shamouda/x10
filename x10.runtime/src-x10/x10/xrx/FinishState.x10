@@ -860,9 +860,6 @@ abstract class FinishState {
                     at(ref.home) @Immediate("notifyActivityTermination_4") async deref[RootFinish](ref).notify(message);
                 }
             }
-            //Ensure that all issued asyncat calls were processed by the network
-            Runtime.x10rtProbe();
-            
             //Remote finish will be garbage collected soon 
         }
         public def notifyShiftedActivityCompletion() {
