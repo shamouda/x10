@@ -179,7 +179,7 @@ public class BenchMicro {
             iterCount++;
         } while (time1-time0 < minTime);
         if (print) println(refTime,prefix+"fan out - internal work "+INNER_ITERS+" activities: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
-
+/*
         iterCount = 0;
         time0 = System.nanoTime();
         do {
@@ -196,7 +196,9 @@ public class BenchMicro {
             iterCount++;
         } while (time1-time0 < minTime);
         if (print) println(refTime,prefix+"fan out - broadcast: "+(time1-time0)/1E9/iterCount+" seconds");
-
+*/
+        if (print) println(refTime,prefix+"fan out - broadcast: CANCELLED");
+        
         iterCount = 0;
         time0 = System.nanoTime();
         do {
