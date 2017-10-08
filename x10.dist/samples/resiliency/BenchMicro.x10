@@ -223,8 +223,17 @@ public class BenchMicro {
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) println(refTime,prefix+"tree fan out: "+(time1-time0)/1E9/iterCount+" seconds");
+        if (print) println(refTime,prefix+"tree fan out - finish at each fanout: "+(time1-time0)/1E9/iterCount+" seconds");
 
+        iterCount = 0;
+        time0 = System.nanoTime();
+        do {
+            finish downTreeOneFinish(t);
+            time1 = System.nanoTime();
+            iterCount++;
+        } while (time1-time0 < minTime);
+        if (print) println(refTime,prefix+"tree fan out - one finish: "+(time1-time0)/1E9/iterCount+" seconds");
+        
         iterCount = 0;
         val endPlace = Place.places().prev(here);
         time0 = System.nanoTime();
@@ -253,6 +262,21 @@ public class BenchMicro {
         }
     }
 
+    private static def downTreeOneFinish(thinkTime:long):void {
+        think(thinkTime);
+        val parent = here.id;
+        val child1 = parent*2 + 1;
+        val child2 = child1 + 1;
+        if (parent == 1 && Place.numPlaces() == 2) {
+            // special case to invert tree so scaling calcuation is reasonable.
+            at (Place(0)) async think(thinkTime);
+        }
+        if (child1 < Place.numPlaces() || child2 < Place.numPlaces()) {
+            if (child1 < Place.numPlaces()) at (Place(child1)) async downTree(thinkTime);
+            if (child2 < Place.numPlaces()) at (Place(child2)) async downTree(thinkTime);
+        }
+    }
+    
     private static def ring(thinkTime:long, destination:Place):void {
         think(thinkTime);
         if (destination == here) return;
