@@ -198,7 +198,7 @@ public class BenchMicro {
         if (print) println(refTime,prefix+"fan out - broadcast: "+(time1-time0)/1E9/iterCount+" seconds");
 */
         if (print) println(refTime,prefix+"fan out - broadcast: CANCELLED");
-        
+/*        
         iterCount = 0;
         time0 = System.nanoTime();
         do {
@@ -217,15 +217,8 @@ public class BenchMicro {
             iterCount++;
         } while (time1-time0 < minTime);
         if (print) println(refTime,prefix+"fan out - nested finish broadcast: "+(time1-time0)/1E9/iterCount+" seconds");
-
-        iterCount = 0;
-        time0 = System.nanoTime();
-        do {
-            downTree(t);
-            time1 = System.nanoTime();
-            iterCount++;
-        } while (time1-time0 < minTime);
-        if (print) println(refTime,prefix+"tree fan out - finish at each fanout: "+(time1-time0)/1E9/iterCount+" seconds");
+*/
+        if (print) println(refTime,prefix+"fan out - nested finish broadcast: CANCELLED");
 
         iterCount = 0;
         time0 = System.nanoTime();
@@ -236,6 +229,15 @@ public class BenchMicro {
         } while (time1-time0 < minTime);
         if (print) println(refTime,prefix+"tree fan out - one finish: "+(time1-time0)/1E9/iterCount+" seconds");
         
+        iterCount = 0;
+        time0 = System.nanoTime();
+        do {
+            downTree(t);
+            time1 = System.nanoTime();
+            iterCount++;
+        } while (time1-time0 < minTime);
+        if (print) println(refTime,prefix+"tree fan out - finish at each fanout: "+(time1-time0)/1E9/iterCount+" seconds");
+
         iterCount = 0;
         val endPlace = Place.places().prev(here);
         time0 = System.nanoTime();
