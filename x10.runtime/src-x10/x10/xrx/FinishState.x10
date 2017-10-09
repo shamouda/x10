@@ -30,6 +30,8 @@ import x10.io.Deserializer;
 import x10.io.Serializer;
 
 abstract class FinishState {
+    // Finish Probe
+    static FINISH_PROBE = Configuration.envOrElse("FINISH_PROBE", false);
 
     // Turn this on to debug deadlocks within the finish implementation
     static VERBOSE = Configuration.envOrElse("X10_FINISH_VERBOSE", false);
@@ -860,6 +862,10 @@ abstract class FinishState {
                     at(ref.home) @Immediate("notifyActivityTermination_4") async deref[RootFinish](ref).notify(message);
                 }
             }
+            
+            if (FINISH_PROBE)
+                Runtime.x10rtProbe();
+            
             //Remote finish will be garbage collected soon 
         }
         public def notifyShiftedActivityCompletion() {
