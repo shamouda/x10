@@ -11,6 +11,7 @@
 
 import x10.xrx.Runtime;
 import x10.compiler.Native;
+import x10.compiler.Pragma;
 
 /**
  * This is a microbenchmark used to isolate the
@@ -183,7 +184,7 @@ public class BenchMicro {
         iterCount = 0;
         time0 = System.nanoTime();
         do {
-            finish {
+            @Pragma(Pragma.FINISH_DENSE) finish {
                 for (p in Place.places()) {
                     at (p) async {
                         for (q in Place.places()) at (q) async {
@@ -195,7 +196,7 @@ public class BenchMicro {
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) println(refTime,prefix+"fan out - broadcast: "+(time1-time0)/1E9/iterCount+" seconds");
+        if (print) println(refTime,prefix+"fan out - broadcast PRAGMA_DENSE: "+(time1-time0)/1E9/iterCount+" seconds");
 
         
         iterCount = 0;
