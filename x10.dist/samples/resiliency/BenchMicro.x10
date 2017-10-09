@@ -184,7 +184,7 @@ public class BenchMicro {
         iterCount = 0;
         time0 = System.nanoTime();
         do {
-            @Pragma(Pragma.FINISH_DENSE) finish {
+            /*@Pragma(Pragma.FINISH_DENSE) */finish {
                 for (p in Place.places()) {
                     at (p) async {
                         for (q in Place.places()) at (q) async {
