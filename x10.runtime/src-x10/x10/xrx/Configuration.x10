@@ -113,6 +113,8 @@ final class Configuration {
     static val RESILIENT_MODE_DEFAULT     = 1n;  // Most stable implementation of resilient finish (see FinishResilient.x10)
     static val RESILIENT_MODE_PLACE0      = 11n; // FinishResilientPlace0
     static val RESILIENT_MODE_HC          = 12n; // FinishResilientHC
+    static val RESILIENT_MODE_DIST_PESSIMISTIC = 13n; // Distributed finish implementation that tracks transit and live tasks
+    static val RESILIENT_MODE_DIST_OPTIMISTIC = 14n;  // Distributed finish implementation that tracks transit tasks only
     static val RESILIENT_MODE_X10RT_ONLY  = 99n; // Resilient/Elastic X10RT, no resilient finish
 
     static def resilient_mode():Int { // called from Runtime.x10
