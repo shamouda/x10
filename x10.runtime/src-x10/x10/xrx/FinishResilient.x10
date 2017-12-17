@@ -14,6 +14,7 @@ import x10.compiler.*;
 import x10.util.concurrent.SimpleLatch;
 import x10.util.concurrent.AtomicBoolean;
 import x10.util.concurrent.Condition;
+import x10.util.concurrent.AtomicInteger;
 
 /*
  * Common abstract class for Resilient Finish
@@ -86,12 +87,12 @@ abstract class FinishResilient extends FinishState {
             fs = FinishResilientPlace0.make(p);
             break;
         }
-        case Configuration.RESILIENT_MODE_DIST_PESSIMISTIC:
+        /*case Configuration.RESILIENT_MODE_DIST_PESSIMISTIC:
         {
             val p = (parent!=null) ? parent : getCurrentFS();
             fs = FinishResilientPessimistic.make(p);
             break;
-        }
+        }*/
         case Configuration.RESILIENT_MODE_DIST_OPTIMISTIC:
         {
             val p = (parent!=null) ? parent : getCurrentFS();
@@ -128,9 +129,9 @@ abstract class FinishResilient extends FinishState {
         case Configuration.RESILIENT_MODE_HC:
             notifyPlaceDeath_HC();
             break;
-        case Configuration.RESILIENT_MODE_DIST_PESSIMISTIC:
+        /*case Configuration.RESILIENT_MODE_DIST_PESSIMISTIC:
         	FinishResilientPessimistic.notifyPlaceDeath();
-        	break;
+        	break;*/
         case Configuration.RESILIENT_MODE_DIST_OPTIMISTIC:
         	FinishResilientOptimistic.notifyPlaceDeath();
         	break;
@@ -147,4 +148,12 @@ abstract class FinishResilient extends FinishState {
     private static def notifyPlaceDeath_HC():void {
         failJavaOnlyMode(); 
     }
+    
+    protected static struct Id(home:int,id:int) {
+        public def toString() = "<"+home+","+id+">";
+    }
+    
+    protected static val nextId = new AtomicInteger(); // per-place portion of unique id
+    
+    
 }

@@ -34,9 +34,6 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
     private static val AT = 0n;
     private static val ASYNC = 1n;
 
-    private static struct Id(home:int,id:int) {
-        public def toString() = "<"+home+","+id+">";
-    }
     private static val UNASSIGNED = Id(-1n,-1n);
 
     private static struct Task(place:Int, kind:Int) {
@@ -437,8 +434,6 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
 
     private static val lock = (here.id==0) ? new x10.util.concurrent.Lock() : null;
 
-    private static val nextId = new AtomicInteger(); // per-place portion of unique id
-    
     private val id:Id;
 
     // Initialized by custom deserializer
