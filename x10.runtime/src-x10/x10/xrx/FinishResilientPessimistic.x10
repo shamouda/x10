@@ -24,83 +24,83 @@ import x10.util.HashMap;
 import x10.util.HashSet;
 
 /**
- * Distributed Resilient Finish (records transit tasks only)
+ * Distributed Resilient Finish (records transit and live tasks)
  * This version is a corrected implementation of the distributed finish described in PPoPP14,
  * that was released in version 2.4.1
  */
-class FinishResilientOptimistic extends FinishResilient implements CustomSerialization {    
-	// local finish object
-	protected transient var me:FinishResilient; 
+class FinishResilientPessimistic extends FinishResilient implements CustomSerialization {    
+    // local finish object
+    protected transient var me:FinishResilient; 
 
     //create root finish
-    public def this (me:OptimisticFinishRootMaster) {
-    	this.me = me;
+    public def this (me:PessimisticFinishRootMaster) {
+        this.me = me;
     }
     
     //make root finish    
     static def make(parent:FinishState) {
-        val me = new OptimisticFinishRootMaster(parent);
-        val fs = new FinishResilientOptimistic(me);
+        val me = new PessimisticFinishRootMaster(parent);
+        val fs = new FinishResilientPessimistic(me);
         return fs;
     }
     
     //create remote finish
     private def this(deser:Deserializer) {
-        val root = deser.readAny() as GlobalRef[OptimisticFinishRootMaster];
+        val root = deser.readAny() as GlobalRef[PessimisticFinishRootMaster];
         val id = deser.readAny() as Id;
-        me = new OptimisticFinishRemote(root, id);
+        me = new PessimisticFinishRemote(root, id);
     }
     
     //serialize root finish
     public def serialize(ser:Serializer) {
-        if (me instanceof OptimisticFinishRootMaster)
-            (me as OptimisticFinishRootMaster).serialize(ser);
+        if (me instanceof PessimisticFinishRootMaster)
+            (me as PessimisticFinishRootMaster).serialize(ser);
         else assert false;
     }
     
     /* forward finish actions to the specialized implementation */
     def notifySubActivitySpawn(dstPlace:Place):void {
-    	me.notifySubActivitySpawn(dstPlace);
+        me.notifySubActivitySpawn(dstPlace);
     }
 
     def notifyShiftedActivitySpawn(dstPlace:Place):void {
-    	me.notifyShiftedActivitySpawn(dstPlace);
+        me.notifyShiftedActivitySpawn(dstPlace);
     }
 
     def notifyRemoteContinuationCreated():void {
-    	me.notifyRemoteContinuationCreated();
+        me.notifyRemoteContinuationCreated();
     }
 
     def notifyActivityCreation(srcPlace:Place, activity:Activity):Boolean {
-    	return me.notifyActivityCreation(srcPlace, activity);
+        return me.notifyActivityCreation(srcPlace, activity);
     }
 
     def notifyShiftedActivityCreation(srcPlace:Place):Boolean {
-    	return me.notifyShiftedActivityCreation(srcPlace);
+        return me.notifyShiftedActivityCreation(srcPlace);
     }
 
     def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void {
-    	me.notifyActivityCreationFailed(srcPlace, t);
+        me.notifyActivityCreationFailed(srcPlace, t);
     }
 
     def notifyActivityCreatedAndTerminated(srcPlace:Place):void {
-    	me.notifyActivityCreatedAndTerminated(srcPlace);
+        me.notifyActivityCreatedAndTerminated(srcPlace);
     }
 
     def notifyActivityTermination(srcPlace:Place):void {
-    	me.notifyActivityTermination(srcPlace);
+        me.notifyActivityTermination(srcPlace);
     }
 
     def notifyShiftedActivityCompletion(srcPlace:Place):void {
-    	me.notifyShiftedActivityCompletion(srcPlace);
+        me.notifyShiftedActivityCompletion(srcPlace);
     }
 
     def pushException(t:CheckedThrowable):void {
-    	me.pushException(t);
+        me.pushException(t);
     }
 
     def waitForFinish():void {
-    	me.waitForFinish();
+        me.waitForFinish();
     }
     
     static def notifyPlaceDeath():void {
@@ -109,14 +109,14 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     }
 }
 
-final class OptimisticFinishRemote extends FinishResilient {
+final class PessimisticFinishRemote extends FinishResilient {
     //root finish reference
-    private val root:GlobalRef[OptimisticFinishRootMaster];
+    private val root:GlobalRef[PessimisticFinishRootMaster];
     
     //root finish id
     private transient val id:Id;
     
-    public def this (root:GlobalRef[OptimisticFinishRootMaster], id:Id) {
+    public def this (root:GlobalRef[PessimisticFinishRootMaster], id:Id) {
         this.id = id;
         this.root = root;
     }
@@ -166,12 +166,12 @@ final class OptimisticFinishRemote extends FinishResilient {
     }
 }
 
-final class OptimisticFinishRootMaster extends FinishResilient {
+final class PessimisticFinishRootMaster extends FinishResilient {
     //root finish id
     private val id:Id;
     
     //root finish reference
-    private val root = GlobalRef[OptimisticFinishRootMaster](this);
+    private val root = GlobalRef[PessimisticFinishRootMaster](this);
 
     //parent of root finish
     private transient var parent:FinishState;
@@ -240,7 +240,7 @@ final class OptimisticFinishRootMaster extends FinishResilient {
     }
 }
 
-final class OptimisticFinishRootBackup {
+final class PessimisticFinishRootBackup {
     
     def notifySubActivitySpawn(dstPlace:Place):void {
         

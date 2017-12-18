@@ -105,7 +105,7 @@ public class FinishResilientHCLocal extends FinishResilientBridge implements x10
 
   public def notifyActivityCreatedAndTerminated(srcPlace:Place):void {
     if (srcPlace.equals(here)) {
-      notifyActivityTermination();
+      notifyActivityTermination(srcPlace);
     } else {
       init();
       f.notifyActivityCreatedAndTerminated(srcPlace);
@@ -122,12 +122,12 @@ public class FinishResilientHCLocal extends FinishResilientBridge implements x10
     return f.notifyShiftedActivityCreation(srcPlace);
   }
 
-  public def notifyShiftedActivityCompletion():void {
+  public def notifyShiftedActivityCompletion(srcPlace:Place):void {
     init();
-    f.notifyShiftedActivityCompletion();
+    f.notifyShiftedActivityCompletion(srcPlace);
   }
 
-  public def notifyActivityTermination():void {
+  public def notifyActivityTermination(srcPlace:Place):void {
     latch.lock();
     if (--local >= 0) {
       latch.unlock();
@@ -135,7 +135,7 @@ public class FinishResilientHCLocal extends FinishResilientBridge implements x10
     }
     val b = f != null && 42.equals(parent);
     latch.unlock();
-    if (b) f.notifyActivityTermination();
+    if (b) f.notifyActivityTermination(srcPlace);
     latch.release();
   }
 
@@ -145,7 +145,7 @@ public class FinishResilientHCLocal extends FinishResilientBridge implements x10
   }
   
   public def waitForFinish():void {
-    notifyActivityTermination();
+    notifyActivityTermination(here);
     if ((!Runtime.STRICT_FINISH) && (!strictFinish)) {
       joinFinish(latch);
     }

@@ -60,7 +60,7 @@ public final class Worker extends Thread implements Unserializable {
         this.promoted = promoted;
         this.workerId = workerId;
         random = new Random(workerId + (workerId << 8n) + (workerId << 16n) + (workerId << 24n));
-        activity = new Activity(Runtime.epoch(), ()=>{}, FinishState.UNCOUNTED_FINISH);
+        activity = new Activity(Runtime.epoch(), ()=>{}, FinishState.UNCOUNTED_FINISH, here);
     }
 
     // return size of the deque

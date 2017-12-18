@@ -87,12 +87,12 @@ abstract class FinishResilient extends FinishState {
             fs = FinishResilientPlace0.make(p);
             break;
         }
-        /*case Configuration.RESILIENT_MODE_DIST_PESSIMISTIC:
+        case Configuration.RESILIENT_MODE_DIST_PESSIMISTIC:
         {
             val p = (parent!=null) ? parent : getCurrentFS();
             fs = FinishResilientPessimistic.make(p);
             break;
-        }*/
+        }
         case Configuration.RESILIENT_MODE_DIST_OPTIMISTIC:
         {
             val p = (parent!=null) ? parent : getCurrentFS();
@@ -129,9 +129,9 @@ abstract class FinishResilient extends FinishState {
         case Configuration.RESILIENT_MODE_HC:
             notifyPlaceDeath_HC();
             break;
-        /*case Configuration.RESILIENT_MODE_DIST_PESSIMISTIC:
+        case Configuration.RESILIENT_MODE_DIST_PESSIMISTIC:
         	FinishResilientPessimistic.notifyPlaceDeath();
-        	break;*/
+        	break;
         case Configuration.RESILIENT_MODE_DIST_OPTIMISTIC:
         	FinishResilientOptimistic.notifyPlaceDeath();
         	break;

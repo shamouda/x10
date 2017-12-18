@@ -429,7 +429,7 @@ public final class Runtime {
      * @param job Job being submitted
      */
     public static def submitUncounted(job:()=>void):void {
-        val activity = new Activity(epoch(), job, FinishState.UNCOUNTED_FINISH);
+        val activity = new Activity(epoch(), job, FinishState.UNCOUNTED_FINISH, here);
         if (FinishState.UNCOUNTED_FINISH.notifyActivityCreation(here, activity)) {
             pool.workers.submit(activity);
         }
@@ -606,7 +606,7 @@ public final class Runtime {
         val clockPhases = a.clockPhases().make(clocks);
         if (place.id == hereLong()) {
             // Synchronous serialization
-	    val start = prof != null ? System.nanoTime() : 0;
+	        val start = prof != null ? System.nanoTime() : 0;
             val ser = new Serializer();
             ser.writeAny(body);
             if (prof != null) {
@@ -622,11 +622,11 @@ public final class Runtime {
                 val bodyCopy = deser.readAny() as ()=>void;
                 bodyCopy();
             };
-            submitLocalActivity(new Activity(epoch, asyncBody, state, clockPhases));
+            submitLocalActivity(new Activity(epoch, asyncBody, state, clockPhases, here));
         } else {
             val src = here;
             val closure = ()=> @x10.compiler.RemoteInvocation("runAsync") { 
-                val activity = new Activity(epoch, body, state, clockPhases);
+                val activity = new Activity(epoch, body, state, clockPhases, src);
                 submitRemoteActivity(epoch, activity, src, state);
             };
             val preSendAction = ()=> { state.notifySubActivitySpawn(place); };
@@ -661,7 +661,7 @@ public final class Runtime {
                 val bodyCopy = deser.readAny() as ()=>void;
                 bodyCopy();
             };
-            submitLocalActivity(new Activity(epoch, asyncBody, state));
+            submitLocalActivity(new Activity(epoch, asyncBody, state, here));
         } else {
             state.spawnRemoteActivity(place, body, prof);
         }
@@ -680,7 +680,7 @@ public final class Runtime {
         val state = a.finishState();
         val clockPhases = a.clockPhases().make(clocks);
         state.notifySubActivitySpawn(here);
-        submitLocalActivity(new Activity(epoch, body, state, clockPhases));
+        submitLocalActivity(new Activity(epoch, body, state, clockPhases, here));
     }
 
     public static def runAsync(body:()=>void):void {
@@ -691,7 +691,7 @@ public final class Runtime {
         val epoch = a.epoch;
         val state = a.finishState();
         state.notifySubActivitySpawn(here);
-        submitLocalActivity(new Activity(epoch, body, state));
+        submitLocalActivity(new Activity(epoch, body, state, here));
     }
 
     public static def runFinish(body:()=>void):void {
@@ -709,7 +709,7 @@ public final class Runtime {
         val epoch = a.epoch;
         if (place.id == hereLong()) {
             // Synchronous serialization
-	    val start = prof != null ? System.nanoTime() : 0;
+	        val start = prof != null ? System.nanoTime() : 0;
             val ser = new Serializer();
             ser.writeAny(body);
             if (prof != null) {
@@ -719,7 +719,7 @@ public final class Runtime {
             }
 
             // Prevent stopFinish from improperly scheduling an unrelated activity
-	    activity().finishState().notifyRemoteContinuationCreated(); 
+	        activity().finishState().notifyRemoteContinuationCreated(); 
 
             // Spawn asynchronous activity
             val asyncBody = ()=>{
@@ -727,11 +727,11 @@ public final class Runtime {
                 val bodyCopy = deser.readAny() as ()=>void;
                 bodyCopy();
             };
-            submitLocalActivity(new Activity(epoch, asyncBody, FinishState.UNCOUNTED_FINISH));
+            submitLocalActivity(new Activity(epoch, asyncBody, FinishState.UNCOUNTED_FINISH, here));
         } else {
             val src = here;
             val closure = ()=> @x10.compiler.RemoteInvocation("runUncountedAsync") { 
-                val activity = new Activity(epoch, body, FinishState.UNCOUNTED_FINISH);
+                val activity = new Activity(epoch, body, FinishState.UNCOUNTED_FINISH, src);
                 submitRemoteActivity(epoch, activity, src, FinishState.UNCOUNTED_FINISH);
             };
             x10rtSendMessage(place.id, closure, prof);
@@ -781,9 +781,9 @@ public final class Runtime {
         val epoch = a.epoch;
 
         // Prevent stopFinish from improperly scheduling an unrelated activity
-	activity().finishState().notifyRemoteContinuationCreated();
+	    activity().finishState().notifyRemoteContinuationCreated();
 
-        submitLocalActivity(new Activity(epoch, body, new FinishState.UncountedFinish()));
+        submitLocalActivity(new Activity(epoch, body, new FinishState.UncountedFinish(), here));
     }
 
     /**
@@ -902,7 +902,7 @@ public final class Runtime {
                     // Should not be user-visible.
                 } finally {
                     if (exc != null) localAtFS.pushException(exc);
-                    asyncFS.notifyShiftedActivityCompletion();
+                    asyncFS.notifyShiftedActivityCompletion(srcPlace);
                 }
             }
          };
@@ -1167,7 +1167,7 @@ public final class Runtime {
                     // Should not be user-visible.
                 } finally {
                     if (exc != null) localAtFS.pushException(exc);
-                    asyncFS.notifyShiftedActivityCompletion();
+                    asyncFS.notifyShiftedActivityCompletion(srcPlace);
                 }
             }
         };
@@ -1489,7 +1489,7 @@ public final class Runtime {
     }
 
     public static def submitRemoteActivity(epoch:Long, body:()=>void, src:Place, finishState:FinishState):void {
-        submitRemoteActivity(epoch, new Activity(epoch, body, finishState), src, finishState);
+        submitRemoteActivity(epoch, new Activity(epoch, body, finishState, src), src, finishState);
     }
 
     /**

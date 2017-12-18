@@ -405,12 +405,12 @@ public class FinishResilientHC extends FinishResilientBridge {
     }
 
     public
-    def notifyActivityTermination():void {
+    def notifyActivityTermination(srcPlace:Place):void {
         notifyActivityTermination(ASYNC);
     }
 
     public
-    def notifyShiftedActivityCompletion():void {
+    def notifyShiftedActivityCompletion(srcPlace:Place):void {
         notifyActivityTermination(AT);
     }
 

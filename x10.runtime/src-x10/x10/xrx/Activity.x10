@@ -56,22 +56,29 @@ public class Activity {
      * Depth of enclosing atomic blocks
      */
     private var atomicDepth:Int = 0n;
+    
+    /**
+     * The place that spawned the activity
+     * */
+    private val srcPlace:Place;
 
     /**
      * Create activity.
      */
-    def this(epoch:Long, body:()=>void, finishState:FinishState) {
+    def this(epoch:Long, body:()=>void, finishState:FinishState, srcPlace:Place) {
         this.epoch = epoch;
         this.body = body;
         this.atFinishState = FinishState.UNCOUNTED_FINISH;
         this.finishState = finishState;
+        this.srcPlace = srcPlace;
     }
 
     /**
      * Create clocked activity.
      */
-    def this(epoch:Long, body:()=>void, finishState:FinishState, clockPhases:Clock.ClockPhases) {
-        this(epoch, body, finishState);
+    def this(epoch:Long, body:()=>void, finishState:FinishState, clockPhases:Clock.ClockPhases, 
+             srcPlace:Place) {
+        this(epoch, body, finishState, srcPlace);
         this.clockPhases = clockPhases;
     }
 
@@ -142,7 +149,7 @@ public class Activity {
         }
         if (null != clockPhases) clockPhases.drop();
         try {
-            finishState.notifyActivityTermination();
+            finishState.notifyActivityTermination(srcPlace);
         } catch (DeadPlaceException) {}
         if (DEALLOC_BODY) Unsafe.dealloc(body);
     }
