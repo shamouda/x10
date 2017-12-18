@@ -29,6 +29,6 @@ public class ActivityManagement {
 
     // Invoked from native code.
     public static void activityTerminationBookkeeping(FinishState fs) {
-        fs.notifyActivityTermination(x10.xrx.Runtime.home());
+        fs.notifyActivityTermination();
     }
 }

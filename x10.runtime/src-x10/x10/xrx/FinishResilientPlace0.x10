@@ -34,6 +34,9 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
     private static val AT = 0n;
     private static val ASYNC = 1n;
 
+    private static struct Id(home:int,id:int) {
+        public def toString() = "<"+home+","+id+">";
+    }
     private static val UNASSIGNED = Id(-1n,-1n);
 
     private static struct Task(place:Int, kind:Int) {
@@ -434,6 +437,8 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
 
     private static val lock = (here.id==0) ? new x10.util.concurrent.Lock() : null;
 
+    private static val nextId = new AtomicInteger(); // per-place portion of unique id
+    
     private val id:Id;
 
     // Initialized by custom deserializer
@@ -815,10 +820,10 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
        };
     }
 
-    def notifyActivityTermination(srcPlace:Place):void {
+    def notifyActivityTermination():void {
         notifyActivityTermination(ASYNC);
     }
-    def notifyShiftedActivityCompletion(srcPlace:Place):void {
+    def notifyShiftedActivityCompletion():void {
         notifyActivityTermination(AT);
     }
     def notifyActivityTermination(kind:Int):void {
@@ -911,7 +916,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         if (verbose>=1) debug(">>>> waitForFinish(id="+id+") called");
 
         // terminate myself
-        notifyActivityTermination(here);
+        notifyActivityTermination();
 
         // If we haven't gone remote with this finish yet, see if this worker
         // can execute other asyncs that are governed by the finish before waiting on the latch.
@@ -1018,7 +1023,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                             if (verbose>=2) debug("caught and suppressed DPE from x10rtSendAsync from spawnRemoteActivity_big_back_to_spawner for "+myId);
                         }
                         wbgr.forget();
-                        fs.notifyActivityTermination(Place(srcId));
+                        fs.notifyActivityTermination();
                     }
                 } catch (dpe:DeadPlaceException) {
                     // can ignore; if the src place just died there is nothing left to do.

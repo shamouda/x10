@@ -902,7 +902,7 @@ public final class Runtime {
                     // Should not be user-visible.
                 } finally {
                     if (exc != null) localAtFS.pushException(exc);
-                    asyncFS.notifyShiftedActivityCompletion(srcPlace);
+                    asyncFS.notifyShiftedActivityCompletion();
                 }
             }
          };
@@ -1167,7 +1167,7 @@ public final class Runtime {
                     // Should not be user-visible.
                 } finally {
                     if (exc != null) localAtFS.pushException(exc);
-                    asyncFS.notifyShiftedActivityCompletion(srcPlace);
+                    asyncFS.notifyShiftedActivityCompletion();
                 }
             }
         };

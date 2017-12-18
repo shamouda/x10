@@ -87,12 +87,12 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     	me.notifyActivityCreatedAndTerminated(srcPlace);
     }
 
-    def notifyActivityTermination(srcPlace:Place):void {
-    	me.notifyActivityTermination(srcPlace);
+    def notifyActivityTermination():void {
+    	me.notifyActivityTermination();
     }
 
-    def notifyShiftedActivityCompletion(srcPlace:Place):void {
-    	me.notifyShiftedActivityCompletion(srcPlace);
+    def notifyShiftedActivityCompletion():void {
+    	me.notifyShiftedActivityCompletion();
     }
 
     def pushException(t:CheckedThrowable):void {
@@ -149,12 +149,12 @@ final class OptimisticFinishRemote extends FinishResilient {
         
     }
 
-    def notifyActivityTermination(srcPlace:Place):void {
+    def notifyActivityTermination():void {
         
     }
 
-    def notifyShiftedActivityCompletion(srcPlace:Place):void {
-        notifyActivityTermination(srcPlace);
+    def notifyShiftedActivityCompletion():void {
+        notifyActivityTermination();
     }
 
     def pushException(t:CheckedThrowable):void {
@@ -223,12 +223,12 @@ final class OptimisticFinishRootMaster extends FinishResilient {
         
     }
 
-    def notifyActivityTermination(srcPlace:Place):void {
+    def notifyActivityTermination():void {
         
     }
 
-    def notifyShiftedActivityCompletion(srcPlace:Place):void {
-        notifyActivityTermination(srcPlace);
+    def notifyShiftedActivityCompletion():void {
+        notifyActivityTermination();
     }
 
     def pushException(t:CheckedThrowable):void {
@@ -270,12 +270,12 @@ final class OptimisticFinishRootBackup {
         
     }
 
-    def notifyActivityTermination(srcPlace:Place):void {
+    def notifyActivityTermination():void {
         
     }
 
-    def notifyShiftedActivityCompletion(srcPlace:Place):void {
-        notifyActivityTermination(srcPlace);
+    def notifyShiftedActivityCompletion():void {
+        notifyActivityTermination();
     }
 
     def pushException(t:CheckedThrowable):void {

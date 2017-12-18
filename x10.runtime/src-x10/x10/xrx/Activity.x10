@@ -149,7 +149,7 @@ public class Activity {
         }
         if (null != clockPhases) clockPhases.drop();
         try {
-            finishState.notifyActivityTermination(srcPlace);
+            finishState.notifyActivityTermination();
         } catch (DeadPlaceException) {}
         if (DEALLOC_BODY) Unsafe.dealloc(body);
     }
