@@ -45,6 +45,13 @@ abstract class FinishResilient extends FinishState {
     //       for a large number of test cases to shake out mixed-mode problems.
     protected static val ASYNC_SIZE_THRESHOLD = Long.parse(Runtime.env.getOrElse("X10_RESILIENT_FINISH_SMALL_ASYNC_SIZE", "100"));
     
+    
+    protected static struct Id(home:int,id:int) {
+        public def toString() = "<"+home+","+id+">";
+    }
+    
+    protected static val nextId = new AtomicInteger(); // per-place portion of unique id
+    
     /*
      * Static methods to be implemented in subclasses
      */
@@ -148,12 +155,5 @@ abstract class FinishResilient extends FinishState {
     private static def notifyPlaceDeath_HC():void {
         failJavaOnlyMode(); 
     }
-    
-    protected static struct Id(home:int,id:int) {
-        public def toString() = "<"+home+","+id+">";
-    }
-    
-    protected static val nextId = new AtomicInteger(); // per-place portion of unique id
-    
     
 }

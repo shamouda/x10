@@ -34,9 +34,6 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
     private static val AT = 0n;
     private static val ASYNC = 1n;
 
-    private static struct Id(home:int,id:int) {
-        public def toString() = "<"+home+","+id+">";
-    }
     private static val UNASSIGNED = Id(-1n,-1n);
 
     private static struct Task(place:Int, kind:Int) {
