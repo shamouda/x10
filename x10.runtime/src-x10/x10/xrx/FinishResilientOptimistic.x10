@@ -59,49 +59,17 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     }
     
     /* forward finish actions to the specialized implementation */
-    def notifySubActivitySpawn(dstPlace:Place):void {
-    	me.notifySubActivitySpawn(dstPlace);
-    }
-
-    def notifyShiftedActivitySpawn(dstPlace:Place):void {
-    	me.notifyShiftedActivitySpawn(dstPlace);
-    }
-
-    def notifyRemoteContinuationCreated():void {
-    	me.notifyRemoteContinuationCreated();
-    }
-
-    def notifyActivityCreation(srcPlace:Place, activity:Activity):Boolean {
-    	return me.notifyActivityCreation(srcPlace, activity);
-    }
-
-    def notifyShiftedActivityCreation(srcPlace:Place):Boolean {
-    	return me.notifyShiftedActivityCreation(srcPlace);
-    }
-
-    def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void {
-    	me.notifyActivityCreationFailed(srcPlace, t);
-    }
-
-    def notifyActivityCreatedAndTerminated(srcPlace:Place):void {
-    	me.notifyActivityCreatedAndTerminated(srcPlace);
-    }
-
-    def notifyActivityTermination(srcPlace:Place):void {
-    	me.notifyActivityTermination(srcPlace);
-    }
-
-    def notifyShiftedActivityCompletion(srcPlace:Place):void {
-    	me.notifyShiftedActivityCompletion(srcPlace);
-    }
-
-    def pushException(t:CheckedThrowable):void {
-    	me.pushException(t);
-    }
-
-    def waitForFinish():void {
-    	me.waitForFinish();
-    }
+    def notifySubActivitySpawn(dstPlace:Place) { me.notifySubActivitySpawn(dstPlace); }
+    def notifyShiftedActivitySpawn(dstPlace:Place) { me.notifyShiftedActivitySpawn(dstPlace); }
+    def notifyRemoteContinuationCreated() { me.notifyRemoteContinuationCreated(); }
+    def notifyActivityCreation(srcPlace:Place, activity:Activity) { return me.notifyActivityCreation(srcPlace, activity); }
+    def notifyShiftedActivityCreation(srcPlace:Place) { return me.notifyShiftedActivityCreation(srcPlace); }
+    def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable) { me.notifyActivityCreationFailed(srcPlace, t); }
+    def notifyActivityCreatedAndTerminated(srcPlace:Place) { me.notifyActivityCreatedAndTerminated(srcPlace); }
+    def notifyActivityTermination(srcPlace:Place) { me.notifyActivityTermination(srcPlace); }
+    def notifyShiftedActivityCompletion(srcPlace:Place) { me.notifyShiftedActivityCompletion(srcPlace); }
+    def pushException(t:CheckedThrowable) { me.pushException(t); }
+    def waitForFinish() { me.waitForFinish(); }
     
     static def notifyPlaceDeath():void {
         if (verbose>=1) debug(">>>> notifyPlaceDeath called");
