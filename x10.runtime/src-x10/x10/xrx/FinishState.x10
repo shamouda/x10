@@ -129,7 +129,7 @@ abstract class FinishState {
      * Scheduling note: Will only be called on a full-fledged worker thread;
      *                  this method is allowed to block/pause.
      */
-    abstract def notifyShiftedActivityCompletion():void;
+    abstract def notifyShiftedActivityCompletion(srcPlace:Place):void;
 
     /**
      * Called to record the CheckedThrowable which caused the currently executing 
@@ -189,7 +189,7 @@ abstract class FinishState {
         public def notifyActivityTermination() {
             if (count.decrementAndGet() == 0n) latch.release();
         }
-        public def notifyShiftedActivityCompletion():void {
+        public def notifyShiftedActivityCompletion(srcPlace:Place):void {
             throw new IllegalOperationException("Cannot create shifted activity under a LocalFinish");
         }
         public def pushException(t:CheckedThrowable) {
@@ -246,7 +246,7 @@ abstract class FinishState {
         public def notifyActivityTermination() {
             if (count.decrementAndGet() == 0n) latch.release();
         }
-        public def notifyShiftedActivityCompletion() {
+        public def notifyShiftedActivityCompletion(srcPlace:Place) {
             throw new IllegalOperationException("Cannot create shifted activity under a SPMD Finish");
         }
         public def pushException(t:CheckedThrowable) {
@@ -309,7 +309,7 @@ abstract class FinishState {
                 }
             }
         }
-        public def notifyShiftedActivityCompletion() {
+        public def notifyShiftedActivityCompletion(srcPlace:Place) {
             throw new IllegalOperationException("Cannot create shifted activity under a SPMD Finish");
         }
         public def pushException(t:CheckedThrowable) {
@@ -356,7 +356,7 @@ abstract class FinishState {
         public def notifyActivityTermination():void {
             latch.release();
         }
-        public def notifyShiftedActivityCompletion():void {
+        public def notifyShiftedActivityCompletion(srcPlace:Place):void {
             throw new IllegalOperationException("Cannot create shifted activity under a FinishAsync");
         }
         public def pushException(t:CheckedThrowable):void {
@@ -407,7 +407,7 @@ abstract class FinishState {
                 };
             }
         }
-        public def notifyShiftedActivityCompletion():void {
+        public def notifyShiftedActivityCompletion(srcPlace:Place):void {
             throw new IllegalOperationException("Cannot create shifted activity under a FinishAsync");
         }
     }
@@ -445,7 +445,7 @@ abstract class FinishState {
         }
         public def notifyActivityCreatedAndTerminated(srcPlace:Place) {}
         public def notifyActivityTermination() {}
-        public def notifyShiftedActivityCompletion() {}
+        public def notifyShiftedActivityCompletion(srcPlace:Place) {}
         public def pushException(t:CheckedThrowable) {
             if (!Configuration.silenceInternalWarnings()) {
                 Runtime.println("Uncaught exception in uncounted activity");
@@ -547,7 +547,7 @@ abstract class FinishState {
             me.notifyActivityCreatedAndTerminated(srcPlace);
         }
         public def notifyActivityTermination() { me.notifyActivityTermination(); }
-        public def notifyShiftedActivityCompletion() { me.notifyShiftedActivityCompletion(); }
+        public def notifyShiftedActivityCompletion(srcPlace:Place) { me.notifyShiftedActivityCompletion(srcPlace); }
         public def pushException(t:CheckedThrowable) { me.pushException(t); }
         public def waitForFinish() { me.waitForFinish(); }
     }
@@ -636,7 +636,7 @@ abstract class FinishState {
             latch.unlock();
             latch.release();
         }
-        public def notifyShiftedActivityCompletion() {
+        public def notifyShiftedActivityCompletion(srcPlace:Place) {
             notifyActivityTermination();
         }
 
@@ -833,7 +833,7 @@ abstract class FinishState {
                 }
             }
         }
-        public def notifyShiftedActivityCompletion() {
+        public def notifyShiftedActivityCompletion(srcPlace:Place) {
             notifyActivityTermination();
         }
     }
@@ -959,7 +959,7 @@ abstract class FinishState {
             }
             Unsafe.dealloc(closure);
         }
-        public def notifyShiftedActivityCompletion() {
+        public def notifyShiftedActivityCompletion(srcPlace:Place) {
             notifyActivityTermination();
         }
     }

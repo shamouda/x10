@@ -122,9 +122,9 @@ public class FinishResilientHCLocal extends FinishResilientBridge implements x10
     return f.notifyShiftedActivityCreation(srcPlace);
   }
 
-  public def notifyShiftedActivityCompletion():void {
+  public def notifyShiftedActivityCompletion(srcPlace:Place):void {
     init();
-    f.notifyShiftedActivityCompletion();
+    f.notifyShiftedActivityCompletion(srcPlace);
   }
 
   public def notifyActivityTermination():void {

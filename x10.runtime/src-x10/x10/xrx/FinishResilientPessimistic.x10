@@ -91,8 +91,8 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         me.notifyActivityTermination();
     }
 
-    def notifyShiftedActivityCompletion():void {
-        me.notifyShiftedActivityCompletion();
+    def notifyShiftedActivityCompletion(srcPlace:Place):void {
+        me.notifyShiftedActivityCompletion(srcPlace);
     }
 
     def pushException(t:CheckedThrowable):void {
@@ -153,7 +153,7 @@ final class PessimisticFinishRemote extends FinishResilient {
         
     }
 
-    def notifyShiftedActivityCompletion():void {
+    def notifyShiftedActivityCompletion(srcPlace:Place):void {
         notifyActivityTermination();
     }
 
@@ -227,7 +227,7 @@ final class PessimisticFinishRootMaster extends FinishResilient {
         
     }
 
-    def notifyShiftedActivityCompletion():void {
+    def notifyShiftedActivityCompletion(srcPlace:Place):void {
         notifyActivityTermination();
     }
 
@@ -274,7 +274,7 @@ final class PessimisticFinishRootBackup {
         
     }
 
-    def notifyShiftedActivityCompletion():void {
+    def notifyShiftedActivityCompletion(srcPlace:Place):void {
         notifyActivityTermination();
     }
 

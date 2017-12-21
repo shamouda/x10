@@ -820,7 +820,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
     def notifyActivityTermination():void {
         notifyActivityTermination(ASYNC);
     }
-    def notifyShiftedActivityCompletion():void {
+    def notifyShiftedActivityCompletion(srcPlace:Place):void {
         notifyActivityTermination(AT);
     }
     def notifyActivityTermination(kind:Int):void {

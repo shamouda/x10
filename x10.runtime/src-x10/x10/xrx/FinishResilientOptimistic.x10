@@ -91,8 +91,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     	me.notifyActivityTermination();
     }
 
-    def notifyShiftedActivityCompletion():void {
-    	me.notifyShiftedActivityCompletion();
+    def notifyShiftedActivityCompletion(srcPlace:Place):void {
+    	me.notifyShiftedActivityCompletion(srcPlace);
     }
 
     def pushException(t:CheckedThrowable):void {
@@ -153,7 +153,7 @@ final class OptimisticFinishRemote extends FinishResilient {
         
     }
 
-    def notifyShiftedActivityCompletion():void {
+    def notifyShiftedActivityCompletion(srcPlace:Place):void {
         notifyActivityTermination();
     }
 
@@ -227,7 +227,7 @@ final class OptimisticFinishRootMaster extends FinishResilient {
         
     }
 
-    def notifyShiftedActivityCompletion():void {
+    def notifyShiftedActivityCompletion(srcPlace:Place):void {
         notifyActivityTermination();
     }
 
@@ -274,7 +274,7 @@ final class OptimisticFinishRootBackup {
         
     }
 
-    def notifyShiftedActivityCompletion():void {
+    def notifyShiftedActivityCompletion(srcPlace:Place):void {
         notifyActivityTermination();
     }
 

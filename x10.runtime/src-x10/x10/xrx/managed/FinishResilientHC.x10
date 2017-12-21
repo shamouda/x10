@@ -410,7 +410,7 @@ public class FinishResilientHC extends FinishResilientBridge {
     }
 
     public
-    def notifyShiftedActivityCompletion():void {
+    def notifyShiftedActivityCompletion(srcPlace:Place):void {
         notifyActivityTermination(AT);
     }
 
