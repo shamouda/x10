@@ -1,0 +1,195 @@
+X10_RESILIENT_VERBOSE=2
+[nsec=55631305089045 place=0 x10.xrx.Activity@0x192bfa0] FinishResilient.make called, parent=null
+[nsec=55631305881269 place=0 x10.xrx.Activity@0x192bfa0] FinishResilient.make returning, fs=FinishResilientPlace0(id=<0,0>, localCount=1)
+[nsec=55631305913039 place=0 x10.xrx.Activity@0x192bfa0] >>>> notifySubActivitySpawn(id=<0,0>) called locally, localCount now 2
+[nsec=55631305923519 place=0 x10.xrx.Activity@0x192bfa0] <<<< notifySubActivitySpawn(id=<0,0>) returning
+[nsec=55631305941211 place=0 x10.xrx.Activity@0x192bfa0] >>>> notifyActivityCreation(id=<0,0>) called locally. no action requred
+[nsec=55631305962456 place=0 x10.xrx.Activity@0x192bfa0] >>>> waitForFinish(id=<0,0>) called
+[nsec=55631305979624 place=0 x10.xrx.Activity@0x192bfa0] >>>> notifyActivityTermination(id=<0,0>) called, decremented localCount to 1
+[nsec=55631305993201 place=0 x10.xrx.Activity@0x192bfa0] calling worker.join for id=<0,0>
+[nsec=55631306010224 place=0 x10.xrx.Activity@0x192bfa0] calling latch.await for id=<0,0>
+==========
+[nsec=55631306067024 place=0 x10.xrx.Activity@0x192beb0] FinishResilient.make called, parent=null
+[nsec=55631306117642 place=0 x10.xrx.Activity@0x192beb0] FinishResilient.make returning, fs=FinishResilientPlace0(id=<0,1>, localCount=1)
+[nsec=55631306150592 place=0 x10.xrx.Activity@0x192beb0] >>>> notifySubActivitySpawn(id=<0,1>) called locally, localCount now 2
+[nsec=55631306159172 place=0 x10.xrx.Activity@0x192beb0] <<<< notifySubActivitySpawn(id=<0,1>) returning
+[nsec=55631306191460 place=0 x10.xrx.Activity@0x192beb0] >>>> notifyActivityCreation(id=<0,1>) called locally. no action requred
+[nsec=55631306214785 place=0 x10.xrx.Activity@0x192beb0] >>>> notifySubActivitySpawn(id=<0,1>) called locally, localCount now 3
+[nsec=55631306223339 place=0 x10.xrx.Activity@0x192beb0] <<<< notifySubActivitySpawn(id=<0,1>) returning
+[nsec=55631306260661 place=0 x10.xrx.Activity@0x192beb0] >>>> notifyActivityCreation(id=<0,1>) called locally. no action requred
+[nsec=55631306287803 place=0 x10.xrx.Activity@0x192beb0] >>>> notifySubActivitySpawn(id=<0,1>) called locally, localCount now 4
+[nsec=55631306319674 place=0 x10.xrx.Activity@0x192bcd0] FinishResilient.make called, parent=x10.xrx.FinishState.UncountedFinish@0x1924fe0
+[nsec=55631306321391 place=0 x10.xrx.Activity@0x192bc30] FinishResilient.make called, parent=x10.xrx.FinishState.UncountedFinish@0x1924fe0
+[nsec=55631306327242 place=0 x10.xrx.Activity@0x192beb0] <<<< notifySubActivitySpawn(id=<0,1>) returning
+[nsec=55631306364292 place=0 x10.xrx.Activity@0x192beb0] >>>> notifyActivityCreation(id=<0,1>) called locally. no action requred
+[nsec=55631306367227 place=0 x10.xrx.Activity@0x192bc30] FinishResilient.make returning, fs=FinishResilientPlace0(id=<0,2>, localCount=1)
+[nsec=55631306395978 place=0 x10.xrx.Activity@0x192bb90] FinishResilient.make called, parent=x10.xrx.FinishState.UncountedFinish@0x1924fe0
+[nsec=55631306408061 place=0 x10.xrx.Activity@0x192bc30] >>>> doing globalInit for id=<0,2>
+[nsec=55631306422876 place=0 x10.xrx.Activity@0x192bb90] FinishResilient.make returning, fs=FinishResilientPlace0(id=<0,4>, localCount=1)
+[nsec=55631306444274 place=0 x10.xrx.Activity@0x192bb90] >>>> doing globalInit for id=<0,4>
+[nsec=55631306458905 place=0 x10.xrx.Activity@0x192beb0] >>>> waitForFinish(id=<0,1>) called
+[nsec=55631306478898 place=0 x10.xrx.Activity@0x192beb0] >>>> notifyActivityTermination(id=<0,1>) called, decremented localCount to 3
+[nsec=55631306490206 place=0 x10.xrx.Activity@0x192beb0] calling worker.join for id=<0,1>
+[nsec=55631306500877 place=0 x10.xrx.Activity@0x192beb0] calling latch.await for id=<0,1>
+[nsec=55631306410399 place=0 x10.xrx.Activity@0x192bcd0] FinishResilient.make returning, fs=FinishResilientPlace0(id=<0,3>, localCount=1)
+[nsec=55631306558076 place=0 x10.xrx.Activity@0x192bcd0] >>>> doing globalInit for id=<0,3>
+[nsec=55631306597620 place=0 x10.xrx.Activity@0x192bc30] <<<< globalInit returning fs=FinishResilientPlace0(id=<0,2>, localCount=1)
+[nsec=55631306609392 place=0 x10.xrx.Activity@0x192bb90] <<<< globalInit returning fs=FinishResilientPlace0(id=<0,4>, localCount=1)
+[nsec=55631306699121 place=0 x10.xrx.Activity@0x192bcd0] <<<< globalInit returning fs=FinishResilientPlace0(id=<0,3>, localCount=1)
+[nsec=55631306915261 place=0 x10.xrx.Activity@0x192bc30] >>>> doing globalInit for id=<0,1>
+[nsec=55631306935432 place=0 x10.xrx.Activity@0x192bc30] >>>> doing globalInit for id=<0,0>
+[nsec=55631306969007 place=0 x10.xrx.Activity@0x192bc30] <<<< globalInit returning fs=FinishResilientPlace0(id=<0,0>, localCount=1)
+[nsec=55631306988091 place=0 x10.xrx.Activity@0x192bc30] <<<< globalInit returning fs=FinishResilientPlace0(id=<0,1>, localCount=3)
+[nsec=55631307035541 place=0 x10.xrx.Activity@0x192bc30] >>>> notifySubActivitySpawn(id=<0,1>) called, srcId=0 dstId=3 kind=0
+[nsec=55631307036404 place=0 x10.xrx.Activity@0x192bb90] >>>> notifySubActivitySpawn(id=<0,1>) called, srcId=0 dstId=3 kind=0
+[nsec=55631307083464 place=0 x10.xrx.Activity@0x192bcd0] >>>> notifySubActivitySpawn(id=<0,1>) called, srcId=0 dstId=1 kind=0
+[nsec=55631307132868 place=0 x10.xrx.Activity@0x192bc30] <<<< notifySubActivitySpawn(id=<0,1>) returning
+[nsec=55631307144270 place=0 x10.xrx.Activity@0x192bc30] >>>> notifySubActivitySpawn(id=<0,2>) called, srcId=0 dstId=3 kind=1
+[nsec=55631307171724 place=0 x10.xrx.Activity@0x192bc30] <<<< notifySubActivitySpawn(id=<0,2>) returning
+[nsec=55631307155703 place=0 x10.xrx.Activity@0x192bb90] <<<< notifySubActivitySpawn(id=<0,1>) returning
+[nsec=55631307191214 place=0 x10.xrx.Activity@0x192bb90] >>>> notifySubActivitySpawn(id=<0,4>) called, srcId=0 dstId=3 kind=1
+[nsec=55631307219237 place=0 x10.xrx.Activity@0x192bb90] <<<< notifySubActivitySpawn(id=<0,4>) returning
+[nsec=55631307232824 place=0 x10.xrx.Activity@0x192bcd0] <<<< notifySubActivitySpawn(id=<0,1>) returning
+[nsec=55631307248585 place=0 x10.xrx.Activity@0x192bcd0] >>>> notifySubActivitySpawn(id=<0,3>) called, srcId=0 dstId=1 kind=1
+[nsec=55631307268410 place=0 x10.xrx.Activity@0x192bcd0] <<<< notifySubActivitySpawn(id=<0,3>) returning
+[nsec=55631312152722 place=0 x10.xrx.Activity@0x192bc30] >>>> waitForFinish(id=<0,2>) called
+[nsec=55631312462628 place=0 x10.xrx.Activity@0x192bc30] >>>> notifyActivityTermination(id=<0,2>) called, dstId=0 kind=1
+[nsec=55631312405890 place=0 x10.xrx.Activity@0x192bb90] >>>> waitForFinish(id=<0,4>) called
+[nsec=55631312648337 place=0 x10.xrx.Activity@0x192bb90] >>>> notifyActivityTermination(id=<0,4>) called, dstId=0 kind=1
+[nsec=55631312551177 place=3 null] <<<< ResilientPlace0Remote(rootId=<0,2>) created
+[nsec=55631312616185 place=0 x10.xrx.Activity@0x192bc30] <<<< notifyActivityTermination(id=<0,2>) message running at place0
+[nsec=55631312742499 place=3 null] <<<< ResilientPlace0Remote(rootId=<0,1>) created
+[nsec=55631312761140 place=0 x10.xrx.Activity@0x192bc30] quiescent(id=<0,2>) called
+[nsec=55631312821796 place=0 x10.xrx.Activity@0x192bc30] quiescent(id=<0,2>) returning false
+[nsec=55631312855088 place=0 x10.xrx.Activity@0x192bc30] calling latch.await for id=<0,2>
+[nsec=55631312853673 place=3 null] >>>> notifyActivityCreation(id=<0,2>) called, srcId=0 dstId=3 kind=1
+[nsec=55631312996745 place=3 null] <<<< ResilientPlace0Remote(rootId=<0,4>) created
+[nsec=55631313049429 place=3 null] <<<< ResilientPlace0Remote(rootId=<0,1>) created
+[nsec=55631313090887 place=3 null] >>>> notifyActivityCreation(id=<0,4>) called, srcId=0 dstId=3 kind=1
+[nsec=55631312895742 place=0 x10.xrx.Activity@0x192bb90] <<<< notifyActivityTermination(id=<0,4>) message running at place0
+[nsec=55631313113312 place=0 x10.xrx.Activity@0x192bb90] quiescent(id=<0,4>) called
+[nsec=55631313125902 place=0 x10.xrx.Activity@0x192bb90] quiescent(id=<0,4>) returning false
+[nsec=55631313144220 place=0 x10.xrx.Activity@0x192bb90] calling latch.await for id=<0,4>
+[nsec=55631313247704 place=3 null] <<<< notifyActivityCreation(id=<0,2>) finally submitting activity
+[nsec=55631313305299 place=3 null] <<<< notifyActivityCreation(id=<0,4>) finally submitting activity
+[nsec=55631313396757 place=3 x10.xrx.Activity@0x20f1c30] >>>> notifyShiftedActivityCreation(id=<0,1>) called, srcId=0 dstId=3 kind=0
+[nsec=55631313397617 place=3 x10.xrx.Activity@0x20f1af0] >>>> notifyShiftedActivityCreation(id=<0,1>) called, srcId=0 dstId=3 kind=0
+p3.2 task
+[nsec=55631313826345 place=3 x10.xrx.Activity@0x20f1af0] >>>> notifyActivityTermination(id=<0,1>) called, dstId=3 kind=0
+[nsec=55631313879873 place=3 x10.xrx.Activity@0x20f1af0] >>>> notifyActivityTermination(id=<0,4>) called, dstId=3 kind=1
+p3 task
+[nsec=55631313972981 place=3 x10.xrx.Activity@0x20f1c30] >>>> notifyActivityTermination(id=<0,1>) called, dstId=3 kind=0
+[nsec=55631314022365 place=3 x10.xrx.Activity@0x20f1c30] >>>> notifyActivityTermination(id=<0,2>) called, dstId=3 kind=1
+[nsec=55631313882735 place=0 null] <<<< notifyActivityTermination(id=<0,1>) message running at place0
+[nsec=55631313899751 place=0 null] quiescent(id=<0,1>) called
+[nsec=55631313916596 place=0 null] quiescent(id=<0,1>) returning false
+[nsec=55631313944951 place=0 null] <<<< notifyActivityTermination(id=<0,4>) message running at place0
+[nsec=55631313965388 place=0 null] quiescent(id=<0,4>) called
+[nsec=55631313975425 place=0 null] quiescent(id=<0,4>) returning true
+[nsec=55631313997393 place=0 null] releasing latch id=<0,4> no exceptions
+[nsec=55631314042782 place=0 null] performing release for <0,4> at Place(0)
+[nsec=55631320069389 place=0 x10.xrx.Activity@0x192bcd0] >>>> waitForFinish(id=<0,3>) called
+[nsec=55631320118673 place=0 x10.xrx.Activity@0x192bcd0] >>>> notifyActivityTermination(id=<0,3>) called, dstId=0 kind=1
+[nsec=55631320395304 place=1 null] <<<< ResilientPlace0Remote(rootId=<0,3>) created
+[nsec=55631320513447 place=1 null] <<<< ResilientPlace0Remote(rootId=<0,1>) created
+[nsec=55631320607803 place=1 null] >>>> notifyActivityCreation(id=<0,3>) called, srcId=0 dstId=1 kind=1
+[nsec=55631320839904 place=0 x10.xrx.Activity@0x192bb90] returned from latch.await for id=<0,4>
+[nsec=55631320882509 place=0 x10.xrx.Activity@0x192bb90] >>>> notifyActivityTermination(id=<0,1>) called, decremented localCount to 2
+[nsec=55631320840022 place=0 null] releaseLatch(id=<0,4>) returning
+[nsec=55631320941597 place=0 x10.xrx.Activity@0x192bcd0] <<<< notifyActivityTermination(id=<0,3>) message running at place0
+[nsec=55631320982708 place=0 x10.xrx.Activity@0x192bcd0] quiescent(id=<0,3>) called
+[nsec=55631320995640 place=0 x10.xrx.Activity@0x192bcd0] quiescent(id=<0,3>) returning false
+[nsec=55631321008603 place=0 x10.xrx.Activity@0x192bcd0] calling latch.await for id=<0,3>
+[nsec=55631321049130 place=0 null] <<<< notifyActivityTermination(id=<0,1>) message running at place0
+[nsec=55631321066837 place=0 null] quiescent(id=<0,1>) called
+[nsec=55631321079811 place=0 null] quiescent(id=<0,1>) returning false
+[nsec=55631321107938 place=0 null] <<<< notifyActivityTermination(id=<0,2>) message running at place0
+[nsec=55631321123203 place=0 null] quiescent(id=<0,2>) called
+[nsec=55631321137372 place=0 null] quiescent(id=<0,2>) returning true
+[nsec=55631321148349 place=0 null] releasing latch id=<0,2> no exceptions
+[nsec=55631321177975 place=0 null] performing release for <0,2> at Place(0)
+[nsec=55631321190315 place=0 null] releaseLatch(id=<0,2>) returning
+[nsec=55631321218006 place=0 x10.xrx.Activity@0x192bc30] returned from latch.await for id=<0,2>
+[nsec=55631321241839 place=0 x10.xrx.Activity@0x192bc30] >>>> notifyActivityTermination(id=<0,1>) called, decremented localCount to 1
+[nsec=55631327433636 place=1 null] <<<< notifyActivityCreation(id=<0,3>) finally submitting activity
+[nsec=55631327513179 place=1 x10.xrx.Activity@0x1191c30] >>>> notifyShiftedActivityCreation(id=<0,1>) called, srcId=0 dstId=1 kind=0
+p1 task
+[nsec=55631327898018 place=1 x10.xrx.Activity@0x1191c30] FinishResilient.make called, parent=null
+[nsec=55631327960586 place=1 x10.xrx.Activity@0x1191c30] FinishResilient.make returning, fs=FinishResilientPlace0(id=<1,0>, localCount=1)
+[nsec=55631327979232 place=1 x10.xrx.Activity@0x1191c30] >>>> notifySubActivitySpawn(id=<1,0>) called locally, localCount now 2
+[nsec=55631327994828 place=1 x10.xrx.Activity@0x1191c30] <<<< notifySubActivitySpawn(id=<1,0>) returning
+[nsec=55631328015519 place=1 x10.xrx.Activity@0x1191c30] >>>> notifyActivityCreation(id=<1,0>) called locally. no action requred
+[nsec=55631328028336 place=1 x10.xrx.Activity@0x1191c30] >>>> waitForFinish(id=<1,0>) called
+[nsec=55631328037418 place=1 x10.xrx.Activity@0x1191c30] >>>> notifyActivityTermination(id=<1,0>) called, decremented localCount to 1
+[nsec=55631328044750 place=1 x10.xrx.Activity@0x1191c30] calling worker.join for id=<1,0>
+[nsec=55631328064835 place=1 x10.xrx.Activity@0x1191c30] calling latch.await for id=<1,0>
+[nsec=55631328099814 place=1 x10.xrx.Activity@0x1191be0] FinishResilient.make called, parent=x10.xrx.FinishState.UncountedFinish@0x118acf0
+[nsec=55631328127661 place=1 x10.xrx.Activity@0x1191be0] FinishResilient.make returning, fs=FinishResilientPlace0(id=<1,1>, localCount=1)
+[nsec=55631328171418 place=1 x10.xrx.Activity@0x1191be0] >>>> doing globalInit for id=<1,1>
+[nsec=55631328351144 place=1 x10.xrx.Activity@0x1191be0] <<<< globalInit returning fs=FinishResilientPlace0(id=<1,1>, localCount=1)
+[nsec=55631328393067 place=1 x10.xrx.Activity@0x1191be0] >>>> doing globalInit for id=<1,0>
+[nsec=55631328502604 place=1 x10.xrx.Activity@0x1191be0] <<<< globalInit returning fs=FinishResilientPlace0(id=<1,0>, localCount=1)
+[nsec=55631328544603 place=1 x10.xrx.Activity@0x1191be0] >>>> notifySubActivitySpawn(id=<1,0>) called, srcId=1 dstId=2 kind=0
+[nsec=55631328669014 place=1 x10.xrx.Activity@0x1191be0] <<<< notifySubActivitySpawn(id=<1,0>) returning
+[nsec=55631328684776 place=1 x10.xrx.Activity@0x1191be0] >>>> notifySubActivitySpawn(id=<1,1>) called, srcId=1 dstId=2 kind=1
+[nsec=55631328781844 place=1 x10.xrx.Activity@0x1191be0] <<<< notifySubActivitySpawn(id=<1,1>) returning
+[nsec=55631328834551 place=1 x10.xrx.Activity@0x1191be0] >>>> waitForFinish(id=<1,1>) called
+[nsec=55631328855262 place=1 x10.xrx.Activity@0x1191be0] >>>> notifyActivityTermination(id=<1,1>) called, dstId=1 kind=1
+[nsec=55631328900221 place=1 x10.xrx.Activity@0x1191be0] calling latch.await for id=<1,1>
+[nsec=55631328916363 place=0 null] <<<< notifyActivityTermination(id=<1,1>) message running at place0
+[nsec=55631328946089 place=0 null] quiescent(id=<1,1>) called
+[nsec=55631328963838 place=0 null] quiescent(id=<1,1>) returning false
+[nsec=55631329138408 place=2 null] <<<< ResilientPlace0Remote(rootId=<1,1>) created
+[nsec=55631329233934 place=2 null] <<<< ResilientPlace0Remote(rootId=<1,0>) created
+[nsec=55631329316014 place=2 null] >>>> notifyActivityCreation(id=<1,1>) called, srcId=1 dstId=2 kind=1
+[nsec=55631329466368 place=2 null] <<<< notifyActivityCreation(id=<1,1>) finally submitting activity
+[nsec=55631329512056 place=2 x10.xrx.Activity@0x1683c30] >>>> notifyShiftedActivityCreation(id=<1,0>) called, srcId=1 dstId=2 kind=0
+p2 task
+[nsec=55631329756543 place=2 x10.xrx.Activity@0x1683c30] >>>> notifyActivityTermination(id=<1,0>) called, dstId=2 kind=0
+[nsec=55631329806889 place=2 x10.xrx.Activity@0x1683c30] >>>> notifyActivityTermination(id=<1,1>) called, dstId=2 kind=1
+[nsec=55631329809531 place=0 null] <<<< notifyActivityTermination(id=<1,0>) message running at place0
+[nsec=55631329825713 place=0 null] quiescent(id=<1,0>) called
+[nsec=55631329836577 place=0 null] quiescent(id=<1,0>) returning false
+[nsec=55631329862289 place=0 null] <<<< notifyActivityTermination(id=<1,1>) message running at place0
+[nsec=55631329877784 place=0 null] quiescent(id=<1,1>) called
+[nsec=55631329889842 place=0 null] quiescent(id=<1,1>) returning true
+[nsec=55631329909726 place=0 null] releasing latch id=<1,1> no exceptions
+[nsec=55631329951692 place=0 null] releaseLatch(id=<1,1>) returning
+[nsec=55631329983340 place=1 null] performing release for <1,1> at Place(1)
+[nsec=55631330009999 place=1 x10.xrx.Activity@0x1191be0] returned from latch.await for id=<1,1>
+[nsec=55631330031176 place=1 x10.xrx.Activity@0x1191be0] >>>> notifyActivityTermination(id=<1,0>) called, dstId=1 kind=1
+[nsec=55631330080887 place=0 null] <<<< notifyActivityTermination(id=<1,0>) message running at place0
+[nsec=55631330096022 place=0 null] quiescent(id=<1,0>) called
+[nsec=55631330107323 place=0 null] quiescent(id=<1,0>) returning true
+[nsec=55631330127970 place=0 null] releasing latch id=<1,0> no exceptions
+[nsec=55631330170084 place=0 null] releaseLatch(id=<1,0>) returning
+[nsec=55631330181770 place=1 null] performing release for <1,0> at Place(1)
+[nsec=55631330202477 place=1 x10.xrx.Activity@0x1191c30] returned from latch.await for id=<1,0>
+[nsec=55631330223116 place=1 x10.xrx.Activity@0x1191c30] >>>> notifyActivityTermination(id=<0,1>) called, dstId=1 kind=0
+[nsec=55631330269517 place=1 x10.xrx.Activity@0x1191c30] >>>> notifyActivityTermination(id=<0,3>) called, dstId=1 kind=1
+[nsec=55631330324372 place=0 null] <<<< notifyActivityTermination(id=<0,1>) message running at place0
+[nsec=55631330344595 place=0 null] quiescent(id=<0,1>) called
+[nsec=55631330356236 place=0 null] quiescent(id=<0,1>) returning false
+[nsec=55631330386557 place=0 null] <<<< notifyActivityTermination(id=<0,3>) message running at place0
+[nsec=55631330399921 place=0 null] quiescent(id=<0,3>) called
+[nsec=55631330411069 place=0 null] quiescent(id=<0,3>) returning true
+[nsec=55631330421856 place=0 null] releasing latch id=<0,3> no exceptions
+[nsec=55631330454474 place=0 null] performing release for <0,3> at Place(0)
+[nsec=55631330469241 place=0 null] releaseLatch(id=<0,3>) returning
+[nsec=55631330484306 place=0 x10.xrx.Activity@0x192bcd0] returned from latch.await for id=<0,3>
+[nsec=55631330517356 place=0 x10.xrx.Activity@0x192bcd0] >>>> notifyActivityTermination(id=<0,1>) called, dstId=0 kind=1
+[nsec=55631330547939 place=0 x10.xrx.Activity@0x192bcd0] <<<< notifyActivityTermination(id=<0,1>) message running at place0
+[nsec=55631330565134 place=0 x10.xrx.Activity@0x192bcd0] quiescent(id=<0,1>) called
+[nsec=55631330580523 place=0 x10.xrx.Activity@0x192bcd0] quiescent(id=<0,1>) returning true
+[nsec=55631330591860 place=0 x10.xrx.Activity@0x192bcd0] releasing latch id=<0,1> no exceptions
+[nsec=55631330616772 place=0 x10.xrx.Activity@0x192bcd0] performing release for <0,1> at Place(0)
+[nsec=55631330632325 place=0 x10.xrx.Activity@0x192bcd0] releaseLatch(id=<0,1>) returning
+[nsec=55631330659074 place=0 x10.xrx.Activity@0x192beb0] returned from latch.await for id=<0,1>
+[nsec=55631330689457 place=0 x10.xrx.Activity@0x192beb0] >>>> notifyActivityTermination(id=<0,0>) called, dstId=0 kind=1
+[nsec=55631330715161 place=0 x10.xrx.Activity@0x192beb0] <<<< notifyActivityTermination(id=<0,0>) message running at place0
+[nsec=55631330730703 place=0 x10.xrx.Activity@0x192beb0] quiescent(id=<0,0>) called
+[nsec=55631330740797 place=0 x10.xrx.Activity@0x192beb0] quiescent(id=<0,0>) returning true
+[nsec=55631330750817 place=0 x10.xrx.Activity@0x192beb0] releasing latch id=<0,0> no exceptions
+[nsec=55631330777110 place=0 x10.xrx.Activity@0x192beb0] performing release for <0,0> at Place(0)
+[nsec=55631330791336 place=0 x10.xrx.Activity@0x192beb0] releaseLatch(id=<0,0>) returning
+[nsec=55631330801014 place=0 x10.xrx.Activity@0x192bfa0] returned from latch.await for id=<0,0>

@@ -1,0 +1,35 @@
+X10_RESILIENT_VERBOSE=2
+[nsec=55622396616707 place=0 x10.xrx.Activity@0x1e6ffa0] FinishResilient.make called, parent=null
+[nsec=55622396740470 place=0 x10.xrx.Activity@0x1e6ffa0] FinishResilient.make returning, fs=PessimisticMaster(id=<0,0>, parentId=<-1,-1>)
+==========
+[nsec=55622396772385 place=0 x10.xrx.Activity@0x1e6ffa0] calling latch.await for id=<0,0>
+[nsec=55622396786878 place=0 x10.xrx.Activity@0x1e6feb0] FinishResilient.make called, parent=null
+[nsec=55622396829759 place=0 x10.xrx.Activity@0x1e6feb0] FinishResilient.make returning, fs=PessimisticMaster(id=<0,1>, parentId=<-1,-1>)
+[nsec=55622396925929 place=0 x10.xrx.Activity@0x1e6fcd0] FinishResilient.make called, parent=x10.xrx.FinishState.UncountedFinish@0x1e68fe0
+[nsec=55622396945956 place=0 x10.xrx.Activity@0x1e6fcd0] FinishResilient.make returning, fs=PessimisticMaster(id=<0,2>, parentId=<-1,-1>)
+[nsec=55622397099751 place=0 x10.xrx.Activity@0x1e6fcd0] calling latch.await for id=<0,2>
+[nsec=55622398086325 place=0 x10.xrx.Activity@0x1e6feb0] calling latch.await for id=<0,1>
+[nsec=55622398094390 place=0 x10.xrx.Activity@0x1e6fb40] FinishResilient.make called, parent=x10.xrx.FinishState.UncountedFinish@0x1e68fe0
+[nsec=55622398094393 place=0 x10.xrx.Activity@0x1e6faf0] FinishResilient.make called, parent=x10.xrx.FinishState.UncountedFinish@0x1e68fe0
+[nsec=55622398124789 place=0 x10.xrx.Activity@0x1e6fb40] FinishResilient.make returning, fs=PessimisticMaster(id=<0,3>, parentId=<-1,-1>)
+[nsec=55622398222567 place=0 x10.xrx.Activity@0x1e6fb40] calling latch.await for id=<0,3>
+[nsec=55622398352371 place=3 null] <<<< PessimisticFinishRemote(rootId=<0,3>) created
+[nsec=55622398463652 place=3 null] <<<< PessimisticFinishRemote(rootId=<0,1>) created
+p3 task
+[nsec=55622398764884 place=0 x10.xrx.Activity@0x1e6faf0] FinishResilient.make returning, fs=PessimisticMaster(id=<0,4>, parentId=<-1,-1>)
+[nsec=55622398841360 place=0 x10.xrx.Activity@0x1e6faf0] calling latch.await for id=<0,4>
+[nsec=55622398852552 place=3 null] <<<< PessimisticFinishRemote(rootId=<0,4>) created
+[nsec=55622398885158 place=3 null] <<<< PessimisticFinishRemote(rootId=<0,1>) created
+p3.2 task
+[nsec=55622399056467 place=1 null] <<<< PessimisticFinishRemote(rootId=<0,2>) created
+[nsec=55622399131680 place=1 null] <<<< PessimisticFinishRemote(rootId=<0,1>) created
+p1 task
+[nsec=55622399251247 place=1 x10.xrx.Activity@0xb84b90] FinishResilient.make called, parent=null
+[nsec=55622399329822 place=1 x10.xrx.Activity@0xb84b90] FinishResilient.make returning, fs=PessimisticMaster(id=<1,0>, parentId=<-1,-1>)
+[nsec=55622399357219 place=1 x10.xrx.Activity@0xb84b90] calling latch.await for id=<1,0>
+[nsec=55622399412834 place=1 x10.xrx.Activity@0xb84b40] FinishResilient.make called, parent=x10.xrx.FinishState.UncountedFinish@0xb7ccf0
+[nsec=55622399443681 place=1 x10.xrx.Activity@0xb84b40] FinishResilient.make returning, fs=PessimisticMaster(id=<1,1>, parentId=<-1,-1>)
+[nsec=55622399553632 place=1 x10.xrx.Activity@0xb84b40] calling latch.await for id=<1,1>
+[nsec=55622399643519 place=2 null] <<<< PessimisticFinishRemote(rootId=<1,1>) created
+[nsec=55622399718544 place=2 null] <<<< PessimisticFinishRemote(rootId=<1,0>) created
+p2 task
