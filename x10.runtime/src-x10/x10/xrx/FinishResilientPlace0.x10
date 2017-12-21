@@ -30,26 +30,7 @@ import x10.util.HashSet;
 final class FinishResilientPlace0 extends FinishResilient implements CustomSerialization {
     private static val verbose = FinishResilient.verbose;
     private static val place0 = Place.FIRST_PLACE;
-
-    private static val AT = 0n;
-    private static val ASYNC = 1n;
-
-    private static val UNASSIGNED = Id(-1n,-1n);
-
-    private static struct Task(place:Int, kind:Int) {
-        public def toString() = "<"+(kind == AT ? "at" : "async")+" live @ "+place+">";
-        def this(place:Long, kind:Int) {
-            property(place as Int, kind);
-        }
-    }
-
-    private static struct Edge(src:Int, dst:Int, kind:Int) {
-        public def toString() = "<"+(kind == AT ? "at" : "async")+" from "+src+" to "+dst+">";
-        def this(srcId:Long, dstId:Long, kind:Int) {
-            property(srcId as Int, dstId as Int, kind);
-        }
-    }
-
+    
     /**
      * State of a single finish; always stored in Place0
      */
@@ -468,6 +449,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         grlc = (lc.home == here) ? lc : GlobalRef[AtomicInteger](new AtomicInteger(1n));
         isGlobal = true;
         strictFinish = true;
+        if (verbose>=1) debug("<<<< ResilientPlace0Remote(rootId="+id+") created");
     }
 
     public def serialize(ser:Serializer) {
