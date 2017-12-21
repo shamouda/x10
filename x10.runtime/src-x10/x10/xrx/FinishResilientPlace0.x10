@@ -817,7 +817,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
        };
     }
 
-    def notifyActivityTermination():void {
+    def notifyActivityTermination(srcPlace:Place):void {
         notifyActivityTermination(ASYNC);
     }
     def notifyShiftedActivityCompletion(srcPlace:Place):void {
@@ -913,7 +913,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         if (verbose>=1) debug(">>>> waitForFinish(id="+id+") called");
 
         // terminate myself
-        notifyActivityTermination();
+        notifyActivityTermination(here);
 
         // If we haven't gone remote with this finish yet, see if this worker
         // can execute other asyncs that are governed by the finish before waiting on the latch.
@@ -1020,7 +1020,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                             if (verbose>=2) debug("caught and suppressed DPE from x10rtSendAsync from spawnRemoteActivity_big_back_to_spawner for "+myId);
                         }
                         wbgr.forget();
-                        fs.notifyActivityTermination();
+                        fs.notifyActivityTermination(Place(srcId));
                     }
                 } catch (dpe:DeadPlaceException) {
                     // can ignore; if the src place just died there is nothing left to do.

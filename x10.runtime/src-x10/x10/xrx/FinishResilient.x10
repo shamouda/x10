@@ -67,7 +67,7 @@ abstract class FinishResilient extends FinishState {
     // def notifyShiftedActivityCreation(srcPlace:Place):Boolean;
     // def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void;
     // def notifyActivityCreatedAndTerminated(srcPlace:Place):void;
-    // def notifyActivityTermination():void;
+    // def notifyActivityTermination(srcPlace:Place):void;
     // def notifyShiftedActivityTermination():void;
     // def pushException(t:CheckedThrowable):void;
     // def waitForFinish():void;

@@ -87,8 +87,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     	me.notifyActivityCreatedAndTerminated(srcPlace);
     }
 
-    def notifyActivityTermination():void {
-    	me.notifyActivityTermination();
+    def notifyActivityTermination(srcPlace:Place):void {
+    	me.notifyActivityTermination(srcPlace);
     }
 
     def notifyShiftedActivityCompletion(srcPlace:Place):void {
@@ -149,12 +149,12 @@ final class OptimisticFinishRemote extends FinishResilient {
         
     }
 
-    def notifyActivityTermination():void {
+    def notifyActivityTermination(srcPlace:Place):void {
         
     }
 
     def notifyShiftedActivityCompletion(srcPlace:Place):void {
-        notifyActivityTermination();
+        notifyActivityTermination(srcPlace);
     }
 
     def pushException(t:CheckedThrowable):void {
@@ -223,12 +223,12 @@ final class OptimisticFinishRootMaster extends FinishResilient {
         
     }
 
-    def notifyActivityTermination():void {
+    def notifyActivityTermination(srcPlace:Place):void {
         
     }
 
     def notifyShiftedActivityCompletion(srcPlace:Place):void {
-        notifyActivityTermination();
+        notifyActivityTermination(srcPlace);
     }
 
     def pushException(t:CheckedThrowable):void {
@@ -270,12 +270,12 @@ final class OptimisticFinishRootBackup {
         
     }
 
-    def notifyActivityTermination():void {
+    def notifyActivityTermination(srcPlace:Place):void {
         
     }
 
     def notifyShiftedActivityCompletion(srcPlace:Place):void {
-        notifyActivityTermination();
+        notifyActivityTermination(srcPlace);
     }
 
     def pushException(t:CheckedThrowable):void {

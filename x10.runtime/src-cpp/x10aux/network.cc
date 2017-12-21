@@ -376,7 +376,11 @@ static void cuda_post (const x10rt_msg_params *p, size_t blocks, size_t threads,
     {
         x10aux::deserialization_buffer buf(static_cast<char*>(p->msg), p->len);
         x10::xrx::FinishState* fs = buf.read<x10::xrx::FinishState*>();
-        fs->notifyActivityTermination();
+        fs->notifyActivityTermination(x10::lang::Place::_make(x10aux::here));
+        /*FIXME: is x10aux::here the right value to use,
+         *       I use it assuming that srcPlace parameter is not
+         *       used in non-resilient finish
+         */
     }
 }
 
@@ -462,12 +466,12 @@ void *x10aux::coll_enter() {
 
 void x10aux::coll_handler(void *arg) {
     x10::xrx::FinishState* fs = (x10::xrx::FinishState*)arg;
-    fs->notifyActivityTermination();
+    fs->notifyActivityTermination(x10::lang::Place::_make(x10aux::here));
 }
 //used with ULFM, called only when a collective has failed due to a process failure
 void x10aux::failed_coll_handler(void *arg) {
     x10::xrx::FinishState* fs = (x10::xrx::FinishState*)arg;
-    fs->notifyActivityTermination();
+    fs->notifyActivityTermination(x10::lang::Place::_make(x10aux::here));
 }
 
 struct pointer_pair {
@@ -491,7 +495,7 @@ void x10aux::coll_handler2(x10rt_team id, void *arg) {
     x10rt_team *t = (x10rt_team*)p->snd;
     *t = id;
     x10aux::system_dealloc(p);
-    fs->notifyActivityTermination();
+    fs->notifyActivityTermination(x10::lang::Place::_make(x10aux::here));
 }
 
 x10::lang::String *x10aux::runtime_name (void)
