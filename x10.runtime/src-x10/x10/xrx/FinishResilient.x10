@@ -45,9 +45,26 @@ abstract class FinishResilient extends FinishState {
     //       for a large number of test cases to shake out mixed-mode problems.
     protected static val ASYNC_SIZE_THRESHOLD = Long.parse(Runtime.env.getOrElse("X10_RESILIENT_FINISH_SMALL_ASYNC_SIZE", "100"));
     
-    
     protected static struct Id(home:int,id:int) {
         public def toString() = "<"+home+","+id+">";
+    }
+
+    protected static val UNASSIGNED = Id(-1n,-1n);
+    protected static val AT = 0n;
+    protected static val ASYNC = 1n;
+    
+    protected static struct Task(place:Int, kind:Int) {
+        public def toString() = "<"+(kind == AT ? "at" : "async")+" live @ "+place+">";
+        def this(place:Long, kind:Int) {
+            property(place as Int, kind);
+        }
+    }
+
+    protected static struct Edge(src:Int, dst:Int, kind:Int) {
+        public def toString() = "<"+(kind == AT ? "at" : "async")+" from "+src+" to "+dst+">";
+        def this(srcId:Long, dstId:Long, kind:Int) {
+            property(srcId as Int, dstId as Int, kind);
+        }
     }
     
     protected static val nextId = new AtomicInteger(); // per-place portion of unique id
