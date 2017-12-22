@@ -28,7 +28,7 @@ import x10.util.concurrent.Condition;
 import x10.util.concurrent.Latch;
 import x10.util.concurrent.Monitor;
 import x10.util.concurrent.SimpleLatch;
-
+import x10.util.resilient.concurrent.ResilientCondition;
 
 /**
  * XRX invocation protocol:
@@ -1395,6 +1395,7 @@ public final class Runtime {
         } else {
             FinishResilient.notifyPlaceDeath();
             GetRegistry.notifyPlaceDeath();
+            ResilientCondition.notifyPlaceDeath();
         }
     }
 
