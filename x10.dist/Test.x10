@@ -3,17 +3,23 @@ import x10.xrx.Runtime;
 public class Test {
     
     public static def main(args:Rail[String]) {
-//        at (Place(3)){
+        at (Place(3)){
 
         val home = here;
         val next = Place(1);
 
+/*
         finish {
              at (next) async {
                  at (home) async {
                     think();
                  }
              }
+        }
+*/
+
+        finish {
+            at (next) { think(); }
         }
 
 
@@ -28,7 +34,20 @@ public class Test {
            think();
        }
 */
-  //  }    
+
+/*
+      finish {
+          at (next) async {
+              finish {
+                  for (j in 1..3) {                                    
+                      async { think(); };
+                  }
+              }
+          }
+      }
+*/
+
+    }    
 
     }
 
