@@ -101,31 +101,34 @@ abstract class FinishResilient extends FinishState {
         return (a!=null) ? a.finishState() : null;
     }
     static def make(parent:FinishState):FinishState { // parent may be null
-        if (verbose>=1) debug("FinishResilient.make called, parent=" + parent);
         var fs:FinishState;
         switch (Runtime.RESILIENT_MODE) {
         case Configuration.RESILIENT_MODE_DEFAULT:
         case Configuration.RESILIENT_MODE_PLACE0:
         {
             val p = (parent!=null) ? parent : getCurrentFS();
+            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
             fs = FinishResilientPlace0.make(p);
             break;
         }
         case Configuration.RESILIENT_MODE_DIST_PESSIMISTIC:
         {
             val p = (parent!=null) ? parent : getCurrentFS();
+            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
             fs = FinishResilientPessimistic.make(p);
             break;
         }
         case Configuration.RESILIENT_MODE_DIST_OPTIMISTIC:
         {
             val p = (parent!=null) ? parent : getCurrentFS();
+            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
             fs = FinishResilientOptimistic.make(p);
             break;
         }
         case Configuration.RESILIENT_MODE_HC:
         {
            val p = (parent!=null) ? parent : getCurrentFS();
+           if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
            val o = p as Any;
            fs = makeFinishResilientHCLocal(o);
            break;

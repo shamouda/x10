@@ -470,6 +470,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 if (!frParent.isGlobal) frParent.globalInit();
                 parentId = frParent.id;
             } else {
+            	if (verbose>=1) debug(">>>> FinishP0 globalInit id="+ id + " foriegn parent of type: " + parent);
                 parentId = UNASSIGNED;
             }
             val gfs = this.ref;
@@ -478,6 +479,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 try {
                     lock.lock();
                     val state = new State(myId, parentId, gfs);
+                    if (verbose>=1) debug(">>>> creating new State id="+myId +" parentId="+parentId);
                     states.put(myId, state);
                     State.increment(state.live, Task(gfs.home.id, ASYNC)); // duplicated from my localCount
                     state.numActive = 1;
@@ -1133,6 +1135,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         if (state == null) {
             if (verbose>=1) debug(">>>> initializing state for id="+myId);
             state = new State(myId, parentId, gfs);
+            if (verbose>=1) debug(">>>> creating new State id="+myId +" parentId="+parentId);
             states.put(myId, state);
             State.increment(state.live, Task(gfs.home.id, ASYNC)); // duplicated from my localCount
             state.numActive = 1;

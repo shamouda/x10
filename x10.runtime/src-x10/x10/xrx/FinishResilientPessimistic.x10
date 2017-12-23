@@ -23,7 +23,9 @@ import x10.util.GrowableRail;
 import x10.util.HashMap;
 import x10.util.HashSet;
 import x10.util.concurrent.Lock;
-
+import x10.util.resilient.concurrent.ResilientCondition;
+import x10.util.concurrent.Condition;
+//LAST thing: should I add the package name? x10.xrx.
 /**
  * Distributed Resilient Finish (records transit and live tasks)
  * This version is a corrected implementation of the distributed finish described in PPoPP14,
@@ -94,7 +96,7 @@ final class PessimisticFinishRemote extends FinishResilient {
     //instance level lock
     private val ilock = new Lock();
 
-    public def toString():String = "PessimisticFinishRemote(rootId="+rootId+")";
+    //public def toString():String = "PessimisticFinishRemote(rootId="+rootId+")";
     
     public def this (rootId:Id) {
         this.rootId = rootId;
@@ -147,86 +149,6 @@ final class PessimisticFinishRemote extends FinishResilient {
     }
 }
 
-class FinishRequest {
-    public static val ADD_CHILD = 0;
-    public static val NOTIFY_ACT_TERM = 1;
-    
-    private val type:Long;
-    private var childId:Id;
-    private val masterId:Id;
-    
-    public def isLocal() = (masterId.home = here.id);
-    
-}
-
-class MasterResponse {
-    var backupPlaceId:Int;
-    var excp:Exception;
-}
-
-final class Replicator {
-    
-    public static def masterDo(req:FinishRequest) {
-        if (req.isLocal())
-            return masterDoLocal(req);
-        
-        val masterRes = new GlobalRef[MasterResponse](new MasterResponse());
-        if (req.type == FinishRequest.ADD_CHILD) {
-            val masterId = req.masterId;
-            val childId = req.childId;
-            val master = Place(masterId.home);
-            val condGR = ResilientCondition.makeGR(master);
-            val closure = (gr:GlobalRef[Condition]) => { 
-                at (master) @Immediate("master_add_child") async {
-                    try {
-                        val parent = find(parentId);
-                        assert (parent != null) : "fatal error, parent is null";
-                        val backup = parent.addChild(childId);
-                        
-                        at (condGR) @Immediate("master_add_child_success") async {
-                            masterRes().backupPlaceId = backup;
-                            condGR().release();
-                        }
-                    } catch (t:Exception) {
-                        at (condGR) @Immediate("master_add_child_failure") async {
-                            masterRes().excp = t;
-                            condGR().release();
-                        };
-                    }
-                }; 
-            };
-            
-            cond.run(closure);
-            
-            if (cond().failed()) {
-                masterRes().excp = new DeadPlaceException(Place(-1n));
-            }
-            cond.forget();
-        }
-        return masterRes();
-    }
-    
-    public static def masterDoLocal(req:FinishRequest) {
-        val masterRes = new MasterResponse();
-        if (req.type == FinishRequest.ADD_CHILD) {
-            val parentId = req.parentId;
-            val childId = req.childId;
-            val parent = find(parentId);
-            assert (parent != null) : "fatal error, parent is null";
-            
-            val backup = parent.addChild(childId);
-            try{                        
-                masterRes.backupPlaceId = backup;
-            } catch (t:Exception) {
-                masterRes.excp = t;
-            }
-
-            if (masterRes.excp == null) {
-                
-            }
-        }
-    }
-} 
 final class PessimisticRootFinishMaster extends FinishResilient {
     //a global class-level lock
     private static glock = new Lock();
@@ -239,9 +161,6 @@ final class PessimisticRootFinishMaster extends FinishResilient {
 
     //finish id (this is a root finish)
     private val id:Id;
-    
-    //the direct parent of this finish (can be at same or different place)
-    private val parentId:Id;
     
     //the direct parent finish object (used for recursive initializing)
     private val parent:FinishState;
@@ -262,27 +181,35 @@ final class PessimisticRootFinishMaster extends FinishResilient {
     //flag to indicate whether finish has been resiliently replicated or not
     private transient var isGlobal:Boolean = false;
 
-    public def toString():String = "PessimisticMaster(id="+id+", parentId="+parentId+")";
+    //public def toString():String = "PessimisticMaster(id="+id+", parentId="+parentId+")";
     
     public def this (parent:FinishState) {
-        this.id = Id(here.id as Int, nextId.getAndIncrement());
+    	val tmpID = Id(here.id as Int, nextId.getAndIncrement());
+        this.id = tmpID;
         this.numActive = 1;
         this.parent = parent;
+    }
+    
+    
+    private def getParentId() {
+    	val parentId:Id;
         if (parent instanceof PessimisticRootFinishMaster)
             parentId = (parent as PessimisticRootFinishMaster).id;
         else if (parent instanceof PessimisticFinishRemote)
             parentId = (parent as PessimisticFinishRemote).rootId;
-        else 
+        else {
+        	if (verbose>=1) debug(">>>> PessimisticMaster.this id="+ id + " foriegn parent of type: " + parent);
             parentId = UNASSIGNED;
+        }
+        return parentId;
     }
     
     public def serialize(ser:Serializer) {
-        if (!isGlobal)
-            globalInit(); // Once we have more than 1 copy of the finish state, we must go global
+        if (!isGlobal) globalInit(); // Once we have more than 1 copy of the finish state, we must go global
         ser.writeAny(id);
     }
     
-    public def find(id:Id) {
+    public static def find(id:Id) {
         try {
             glock.lock();
             return fmasters.getOrElse(id, null);
@@ -292,12 +219,16 @@ final class PessimisticRootFinishMaster extends FinishResilient {
     }
     
     public def addChild(child:Id) {
+    	if (verbose>=1) debug(">>>> addChild id="+id + ", child=" + child);
         try {
             latch.lock();
             if (children == null) {
                 children = new HashSet[Id]();
             }
             children.add(child);
+            if (verbose>=1) debug("<<<< addChild id="+ id + ", child=" + child + 
+            		              ", backup=" + backupPlaceId.get());
+            return backupPlaceId.get();
         } finally {
             latch.unlock();
         }
@@ -307,7 +238,17 @@ final class PessimisticRootFinishMaster extends FinishResilient {
         latch.lock();
         if (!isGlobal) {
             if (verbose>=1) debug(">>>> doing globalInit for id="+id);
+            val parentId = getParentId();
             
+            if (parent instanceof PessimisticRootFinishMaster) {
+                val frParent = parent as PessimisticRootFinishMaster;
+                if (!frParent.isGlobal) frParent.globalInit();
+            }
+            
+            if (parentId != UNASSIGNED) {
+            	val req = new FinishRequest(FinishRequest.ADD_CHILD, parentId, id);
+            	val masterRes = Replicator.masterDo(req);
+            }
             
             isGlobal = true;
             if (verbose>=1) debug("<<<< globalInit returning fs="+this);
@@ -453,3 +394,94 @@ final class PessimisticRootFinishBackup implements x10.io.Unserializable {
         
     }
 }
+
+
+class FinishRequest {
+    static val ADD_CHILD = 0;
+    static val NOTIFY_ACT_TERM = 1;
+    val reqType:Long;
+    var childId:FinishResilient.Id;
+    val masterId:FinishResilient.Id;
+    
+    public def this(reqType:Long, masterId:FinishResilient.Id,
+    		childId:FinishResilient.Id) {
+    	this.reqType = reqType;
+    	this.masterId = masterId;
+    	this.childId = childId;
+    }
+    
+    public def isLocal() = (masterId.home == here.id as Int);
+    
+}
+
+class MasterResponse {
+    var backupPlaceId:Int;
+    var excp:Exception;
+}
+
+final class Replicator {
+    
+    public static def masterDo(req:FinishRequest) {
+        if (req.isLocal())
+            return masterDoLocal(req);
+        
+        val masterRes = new GlobalRef[MasterResponse](new MasterResponse());
+        if (req.reqType == FinishRequest.ADD_CHILD) {
+            val masterId = req.masterId;
+            val childId = req.childId;
+            val master = Place(masterId.home);
+            val rCond = ResilientCondition.make(master);
+            val condGR = rCond.gr;
+            val closure = (gr:GlobalRef[Condition]) => {
+                at (master) @Immediate("master_add_child") async {
+                	var backVar:Int = -1n;
+                    var exVar:Exception = null;
+                    try {
+                        val parent = PessimisticRootFinishMaster.find(masterId);
+                        assert (parent != null) : "fatal error, parent is null";
+                        backVar = parent.addChild(childId);
+                    } catch (t:Exception) {
+                    	exVar = t;
+                    }
+                    val backup = backVar;
+                    val ex = exVar;
+                    at (condGR) @Immediate("master_add_child_response") async {
+                        (masterRes as GlobalRef[MasterResponse]{self.home == here})().backupPlaceId = backup;
+                        (masterRes as GlobalRef[MasterResponse]{self.home == here})().excp = ex;
+                        condGR().release();
+                    }
+                }; 
+            };
+            
+            rCond.run(closure);
+            
+            if (rCond.failed()) {
+                masterRes().excp = new DeadPlaceException(Place(-1n));
+            }
+            rCond.forget();
+        }
+        return masterRes();
+    }
+    
+    public static def masterDoLocal(req:FinishRequest) {
+        val masterRes = new MasterResponse();
+        if (req.reqType == FinishRequest.ADD_CHILD) {
+            val masterId = req.masterId;
+            val childId = req.childId;
+            val parent = PessimisticRootFinishMaster.find(masterId);
+            assert (parent != null) : "fatal error, parent is null";
+            
+            val backup = parent.addChild(childId);
+            try{                        
+                masterRes.backupPlaceId = backup;
+            } catch (t:Exception) {
+                masterRes.excp = t;
+            }
+
+            if (masterRes.excp == null) {
+                
+            }
+        }
+        return masterRes;
+    }
+} 

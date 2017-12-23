@@ -4,6 +4,7 @@ import x10.util.concurrent.Condition;
 import x10.util.concurrent.Lock;
 import x10.io.Unserializable;
 import x10.util.ArrayList;
+import x10.xrx.Runtime;
 
 /**
  * A wrapper for x10.util.concurrent.Condition 
@@ -13,7 +14,7 @@ public class ResilientCondition implements Unserializable {
     private transient val onePlace:Boolean;
     private transient var place:Place;
     private transient var group:PlaceGroup;
-    private val gr = new GlobalRef[Condition](new Condition());
+    public val gr = new GlobalRef[Condition](new Condition());
 
     private static val all = new ArrayList[ResilientCondition]();
     private static val lock = new Lock();
@@ -28,20 +29,20 @@ public class ResilientCondition implements Unserializable {
         group = pg;
     }
     
-    public static def makeGR(p:Place){
+    public static def make(p:Place){
         val instance = new ResilientCondition(p);
         lock.lock();
         all.add(instance);
         lock.unlock();
-        return instance.gr;
+        return instance;
     }
     
-    public static def makeGR(pg:PlaceGroup){
+    public static def make(pg:PlaceGroup){
         val instance = new ResilientCondition(pg);
         lock.lock();
         all.add(instance);
         lock.unlock();
-        return instance.gr;
+        return instance;
     }
     
     public def failed() {
