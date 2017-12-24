@@ -432,8 +432,10 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
 
     private def localCount():AtomicInteger = (grlc as GlobalRef[AtomicInteger]{self.home == here})();
 
-    public def toString():String = "FinishResilientPlace0(id="+id+", localCount="+localCount().get()+")";
-
+    private val pId:Id;
+    
+    public def toString():String = "FinishResilientPlace0(id="+id+", parentId="+pId+", localCount="+localCount().get()+")";
+    
     private def this(p:FinishState) { 
         latch = new SimpleLatch();
         grlc = GlobalRef[AtomicInteger](new AtomicInteger(1n)); // for myself.  Will be decremented in waitForFinish
@@ -441,6 +443,14 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         isGlobal = false;
         strictFinish = false;
         id = Id(here.id as Int, nextId.getAndIncrement());
+        
+        if (parent instanceof FinishResilientPlace0) {
+            val frParent = parent as FinishResilientPlace0;
+            pId = frParent.id;
+        } else {
+        	if (verbose>=1) debug("FinishResilientPlace0(id="+id+") foreign parent found of type " + parent);
+            pId = UNASSIGNED;
+        }
     }
 
     private def this(deser:Deserializer) {
@@ -449,6 +459,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         grlc = (lc.home == here) ? lc : GlobalRef[AtomicInteger](new AtomicInteger(1n));
         isGlobal = true;
         strictFinish = true;
+        pId = id;
         if (verbose>=1) debug("<<<< ResilientPlace0Remote(rootId="+id+") created");
     }
 
