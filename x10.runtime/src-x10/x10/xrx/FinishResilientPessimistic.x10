@@ -25,13 +25,14 @@ import x10.util.HashMap;
 import x10.util.HashSet;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.concurrent.ResilientCondition;
-import x10.util.resilient.concurrent.ResilientSimpleLatch;
 import x10.util.concurrent.Condition;
 
 //TODO: reuse remote finish
 //TODO: do we need to memorize all remote objects and delete them explicitly?
 //TODO: bulk globalInit for chain of finishes.
 //TODO: createBackup: repeat if backup place is dead. block until another place is found!!
+//TODO: CHECK in ResilientFinishP0 -> line 174: decrement(adopterState.live, t);  should be adopterState.liveAdopted
+
 /**
  * Distributed Resilient Finish (records transit and live tasks)
  * This version is a corrected implementation of the distributed finish described in PPoPP14,
@@ -61,6 +62,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
     private var rootState:RootMasterState;
     
     private val id:Id;
+    
     private val grlc:GlobalRef[AtomicInteger];
     
     private def localCount():AtomicInteger = (grlc as GlobalRef[AtomicInteger]{self.home == here})();
@@ -117,7 +119,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
     public def serialize(ser:Serializer) {
     	assert isRoot : "only a root finish should be serialized" ;
         if (verbose>=1) debug(">>>> serialize(id="+rootState.id+") called ");
-        if (!rootState.isGlobal) globalInit(); // Once we have more than 1 copy of the finish state, we must go global
+        globalInit(); // Once we have more than 1 copy of the finish state, we must go global
         ser.writeAny(id);
         ser.writeAny(grlc);
         if (verbose>=1) debug("<<<< serialize(id="+id+") returning ");
@@ -264,6 +266,20 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	    	}
 	    }
 	    
+	    def localFinishReleased() {
+	    	try { 
+	    		latch.lock();
+		        if (!isGlobal) {
+		            if (verbose>=1) debug(">>>> notifyActivityTermination(id="+id+") zero localCount on local finish; releasing latch");
+		            latch.release();
+		            return true;
+		        } 
+		        return false;
+	    	} finally {
+	    		latch.unlock();
+	    	}
+	    }
+	    
 	    def addChild(child:Id) {
 	    	if (verbose>=1) debug(">>>> Master.addChild id="+id + ", child=" + child + " called");
 	        try {
@@ -326,7 +342,76 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         		latch.unlock();
         	}
         }
-	    
+        
+        def liveToCompleted(srcId:Long, dstId:Long, kind:Int, tag:String, toAdopter:Boolean) {
+        	if (verbose>=1) debug(">>>> Master.liveToCompleted id="+id + ", srcId=" + srcId + ", dstId=" + dstId + " called");
+        	try {
+	            latch.lock();
+	            val t = Task(dstId, kind);
+	            if (!toAdopter) {
+	                decrement(live, t);
+	                numActive--;
+	                if (quiescent()) {
+	                    releaseLatch();
+	                    //removeFromStates();
+	                }
+	            } else {
+	            	decrement(liveAdopted(), t);
+	                numActive--;
+	                if (quiescent()) {
+	                    releaseLatch();
+	                    //removeFromStates();
+	                }
+	            }
+	            if (verbose>=3) {
+	                debug("==== Master.liveToCompleted "+tag+"(id="+id+") after update for: "+srcId + " ==> "+dstId+" kind="+kind);
+	                dump();
+	            }
+	            if (verbose>=1) debug("<<<< Master.liveToCompleted returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
+	            return backupPlaceId;
+        	} finally {
+        		latch.unlock();
+        	}
+        }
+        
+        def quiescent():Boolean {
+            if (verbose>=2) debug("quiescent(id="+id+") called");
+            /* TODO: revise this
+            if (isAdopted()) {
+                if (verbose>=2) debug("quiescent(id="+id+") returning false, already adopted by adopterId=="+adopterId);
+                return false;
+            }
+            */
+            if (numActive < 0) {
+                debug("COUNTING ERROR: quiescent(id="+id+") negative numActive!!!");
+                dump();
+                assert false : "COUNTING ERROR: quiescent(id="+id+") negative numActive!!!";
+                return true; // TODO: This really should be converted to a fatal error....
+            }
+        
+            val quiet = numActive == 0;
+            if (verbose>=3) dump();
+            if (verbose>=2 || (verbose>=1 && quiet)) debug("quiescent(id="+id+") returning " + quiet);
+            return quiet;
+        }
+        
+        def releaseLatch() {
+            /* TODO: revise this
+            if (isAdopted()) {
+                if (verbose>=1) debug("releaseLatch(id="+id+") called on adopted finish; not releasing latch");
+            } else */
+            {
+                val exceptions = (excs == null || excs.isEmpty()) ?  null : excs.toRail();
+                if (verbose>=2) debug("releasing latch id="+id+(exceptions == null ? " no exceptions" : " with exceptions"));
+                if (exceptions != null) {
+                    if (excs == null) excs = new GrowableRail[CheckedThrowable](exceptions.size);
+                    excs.addAll(exceptions);
+                }
+                latch.release();
+            }
+            if (verbose>=2) debug("releaseLatch(id="+id+") returning");
+        }
+        
 	    public def exec(req:FinishRequest) {
 	    	val id = req.id;
 	        val resp = new MasterResponse();
@@ -345,7 +430,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	        	val dstId = req.dstId;
 	        	val toAdopter = req.toAdopter;
 	        	val kind = req.kind;
-	        	resp.transit_shouldSubmit = false;
+	        	resp.transit_ok = false;
 	        	if (verbose>=1) debug(">>>> Master.exec [req=TRANSIT, id=" + id + ", srcId=" + srcId + ", dstId="
 	                    + dstId + ", kind=" + kind + " ] called");
 	        	try{
@@ -360,22 +445,22 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	                    }
 	                } else {
 	                	resp.backupPlaceId = inTransit(srcId, dstId, kind, "notifySubActivitySpawn", toAdopter);
-	                	resp.transit_shouldSubmit = true;
+	                	resp.transit_ok = true;
 	                }
 	        	} catch (t:Exception) {
 	        		resp.backupPlaceId = -1n;
 	            	resp.excp = t;
 	        	}
 	        	if (verbose>=1) debug("<<<< Master.exec [req=TRANSIT, id=" + id + ", srcId=" + srcId + ", dstId="
-	                    + dstId + ",kind=" + kind + " ] returning");
+	                    + dstId + ", kind=" + kind + ", transit_ok="+resp.transit_ok+" ] returning");
 	        } else if (req.reqType == FinishRequest.LIVE) {
 	        	val srcId = req.srcId;
 	        	val dstId = req.dstId;
 	        	val toAdopter = req.toAdopter;
 	        	val kind = req.kind;
-	        	resp.live_shouldSubmit = false;
+	        	resp.live_ok = false;
 	        	if (verbose>=1) debug(">>>> Master.exec [req=LIVE, id=" + id + ", srcId=" + srcId + ", dstId="
-	                    + dstId + ",kind=" + kind + " ] called");
+	                    + dstId + ", kind=" + kind + " ] called");
 	        	try{
 	        		if (Place(srcId).isDead() || Place(dstId).isDead()) {
 		                // NOTE: no state updates or DPE processing here.
@@ -384,14 +469,38 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	        			if (verbose>=1) debug("==== notifyActivityCreation(id="+id+") suppressed: "+srcId + " ==> "+dstId+" kind="+kind);
 	        		} else {
 	        			resp.backupPlaceId = transitToLive(srcId, dstId, kind, "notifyActivityCreation", toAdopter);
-	        			resp.live_shouldSubmit = true;
+	        			resp.live_ok = true;
+	        			if (verbose>=1) debug("==== notifyActivityCreation(id="+id+") counters set: "+srcId + " ==> "+dstId+" kind="+kind);
 	        		}
 	        	} catch (t:Exception) {
 	        		resp.backupPlaceId = -1n;
 	            	resp.excp = t;
 	        	}
 	        	if (verbose>=1) debug("<<<< Master.exec [req=LIVE, id=" + id + ", srcId=" + srcId + ", dstId="
-	                    + dstId + ",kind=" + kind + " ] returning");
+	                    + dstId + ", kind=" + kind + ", live_ok=" + resp.live_ok + " ] returning");
+	        } else if (req.reqType == FinishRequest.TERM) {
+	        	val srcId = req.srcId;
+	        	val dstId = req.dstId;
+	        	val toAdopter = req.toAdopter;
+	        	val kind = req.kind;
+	        	if (verbose>=1) debug(">>>> Master.exec [req=TERM, id=" + id + ", srcId=" + srcId + ", dstId="
+	                    + dstId + ", kind=" + kind + " ] called");
+	        	try{
+	        		if (Place(dstId).isDead()) {
+	                    // NOTE: no state updates or DPE processing here.
+	                    //       Must happen exactly once and is done
+	                    //       when Place0 is notified of a dead place.
+	                    if (verbose>=1) debug("==== notifyActivityTermination(id="+id+") suppressed: "+dstId+" kind="+kind);
+	                } else {
+	        			resp.backupPlaceId = liveToCompleted(srcId, dstId, kind, "notifyActivityTermination", toAdopter);
+	        			if (verbose>=1) debug("==== notifyActivityTermination(id="+id+") counters set: "+srcId + " ==> "+dstId+" kind="+kind);
+	                }
+	        	} catch (t:Exception) {
+	        		resp.backupPlaceId = -1n;
+	            	resp.excp = t;
+	        	}
+	        	if (verbose>=1) debug("<<<< Master.exec [req=TERM, id=" + id + ", srcId=" + srcId + ", dstId="
+	                    + dstId + ", kind=" + kind + ", live_ok=" + resp.live_ok + " ] returning");
 	        }
 	        return resp;
 	    }
@@ -524,6 +633,51 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         		ilock.unlock();
         	}
         }
+        
+        def liveToCompleted(srcId:Long, dstId:Long, kind:Int, tag:String, toAdopter:Boolean) {
+        	if (verbose>=1) debug(">>>> Backup.liveToCompleted id="+id + ", srcId=" + srcId + ", dstId=" + dstId + " called");
+        	try {
+        		ilock.lock();
+	            val t = Task(dstId, kind);
+	            if (!toAdopter) {
+	                decrement(live, t);
+	                numActive--;
+	                if (quiescent()) {
+	                    //releaseLatch();
+	                    //removeFromStates();
+	                }
+	            } else {
+	            	decrement(liveAdopted(), t);
+	                numActive--;
+	                if (quiescent()) {
+	                    //releaseLatch();
+	                    //removeFromStates();
+	                }
+	            }
+	            if (verbose>=1) debug("<<<< Backup.liveToCompleted returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
+        	} finally {
+        		ilock.unlock();
+        	}
+        }
+        
+        def quiescent():Boolean {
+            if (verbose>=2) debug("quiescent(id="+id+") called");
+            /* TODO: revise this
+            if (isAdopted()) {
+                if (verbose>=2) debug("quiescent(id="+id+") returning false, already adopted by adopterId=="+adopterId);
+                return false;
+            }
+            */
+            if (numActive < 0) {
+                debug("COUNTING ERROR: quiescent(id="+id+") negative numActive!!!");
+                assert false : "COUNTING ERROR: quiescent(id="+id+") negative numActive!!!";
+                return true; // TODO: This really should be converted to a fatal error....
+            }
+        
+            val quiet = numActive == 0;
+            if (verbose>=2 || (verbose>=1 && quiet)) debug("quiescent(id="+id+") returning " + quiet);
+            return quiet;
+        }
 	    
 	    public def exec(req:FinishRequest) {
 	        val resp = new BackupResponse();
@@ -536,8 +690,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	            	resp.excp = t;
 	            }
 	            if (verbose>=1) debug("<<<< Backup.exec returning [req=ADD_CHILD, masterId="+adopterId+", childId="+childId+"]");
-	        }
-	        else if (req.reqType == FinishRequest.TRANSIT) {
+	        } else if (req.reqType == FinishRequest.TRANSIT) {
 	        	val srcId = req.srcId;
 	        	val dstId = req.dstId;
 	        	val toAdopter = req.toAdopter;
@@ -551,8 +704,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	            }
 	        	if (verbose>=1) debug(">>>> Backup.exec [req=TRANSIT, id=" + id + ", srcId=" + srcId + ", dstId="
 	                    + dstId + ",kind=" + kind + " ] returning");
-	        }
-	        else if (req.reqType == FinishRequest.LIVE) {
+	        } else if (req.reqType == FinishRequest.LIVE) {
 	        	val srcId = req.srcId;
 	        	val dstId = req.dstId;
 	        	val toAdopter = req.toAdopter;
@@ -565,6 +717,20 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	            	resp.excp = t;
 	            }
 	        	if (verbose>=1) debug(">>>> Backup.exec [req=LIVE, id=" + id + ", srcId=" + srcId + ", dstId="
+	                    + dstId + ",kind=" + kind + " ] returning");
+	        } else if (req.reqType == FinishRequest.TERM) {
+	        	val srcId = req.srcId;
+	        	val dstId = req.dstId;
+	        	val toAdopter = req.toAdopter;
+	        	val kind = req.kind;
+	        	if (verbose>=1) debug(">>>> Backup.exec [req=TERM, id=" + id + ", srcId=" + srcId + ", dstId="
+	                    + dstId + ",kind=" + kind + " ] called");
+	        	try{
+	        		liveToCompleted(srcId, dstId, kind, "notifyActivityTermination", toAdopter);
+	        	} catch (t:Exception) {
+	            	resp.excp = t;
+	            }
+	        	if (verbose>=1) debug(">>>> Backup.exec [req=TERM, id=" + id + ", srcId=" + srcId + ", dstId="
 	                    + dstId + ",kind=" + kind + " ] returning");
 	        }
 	        return resp;
@@ -665,10 +831,9 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
      	val myId = id; //don't copy this
      	val parentId = rootState.parentId;
      	val backRes = new GlobalRef[Cell[Boolean]](new Cell[Boolean](false));
-        //val rCond = ResilientCondition.make(backup);
-     	val rCond = ResilientSimpleLatch.make(backup);
+        val rCond = ResilientCondition.make(backup);
         val condGR = rCond.gr;
-        val closure = (gr:GlobalRef[SimpleLatch]/*[Condition]*/) => {
+        val closure = (gr:GlobalRef[Condition]) => {
             at (backup) @Immediate("backup_create") async {
                 val backFin = FinishResilientPessimistic.findOrCreateBackup(myId, parentId);
                 val success = backFin != null;
@@ -720,8 +885,8 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
     	if (verbose>=1) debug(">>>> notifyActivityCreation(id="+myId+",isRoot="+isRoot+", parentId="+parentId+") called, srcId="+here.id + " dstId="+dstId+" kind="+kind);
     	val req = new FinishRequest(FinishRequest.LIVE, parentId, srcId, dstId, kind);
     	val resp = Replicator.exec(req);
-    	if (verbose>=1) debug("<<<< notifyActivityCreation(id="+myId+",isRoot="+isRoot+", parentId="+parentId+") returning (submit="+resp.live_shouldSubmit+"), srcId="+here.id + " dstId="+dstId+" kind="+kind);
-        return resp.live_shouldSubmit;
+    	if (verbose>=1) debug("<<<< notifyActivityCreation(id="+myId+",isRoot="+isRoot+", parentId="+parentId+") returning (submit="+resp.live_ok+"), srcId="+here.id + " dstId="+dstId+" kind="+kind);
+        return resp.live_ok;
     }
     
     def notifyShiftedActivitySpawn(dstPlace:Place):void {
@@ -745,11 +910,38 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
     }
 
     def notifyActivityTermination(srcPlace:Place):void {
-        
+        notifyActivityTermination(srcPlace, ASYNC);
     }
-
     def notifyShiftedActivityCompletion(srcPlace:Place):void {
-        notifyActivityTermination(srcPlace);
+        notifyActivityTermination(srcPlace, AT);
+    }
+    def notifyActivityTermination(srcPlace:Place, kind:Int):void {
+        val lc = localCount().decrementAndGet();
+        val myId = this.id;
+
+        if (lc > 0) {
+            if (verbose>=1) debug(">>>> notifyActivityTermination(id="+myId+") called, decremented localCount to "+lc);
+            return;
+        }
+
+        // If this is not the root finish, we are done with the finish state.
+        // If this is the root finish, it will be kept alive because waitForFinish
+        // is an instance method and it is on the stack of some activity.
+        /* TODO: revise this
+        forgetGlobalRefs();
+         */
+        
+        if (rootState.localFinishReleased()) {
+        	return;
+        }
+        
+        val srcId = srcPlace.id as Int; 
+        val dstId = here.id as Int;
+    	val parentId = isRoot? myId: remoteState.id;
+    	if (verbose>=1) debug(">>>> notifyActivityTermination(id="+myId+",isRoot="+isRoot+", parentId="+parentId+") called, srcId="+here.id + " dstId="+dstId+" kind="+kind);
+    	val req = new FinishRequest(FinishRequest.TERM, parentId, srcId, dstId, kind);
+    	val resp = Replicator.exec(req);
+    	if (verbose>=1) debug("<<<< notifyActivityTermination(id="+myId+",isRoot="+isRoot+", parentId="+parentId+") returning, srcId="+here.id + " dstId="+dstId+" kind="+kind);
     }
 
     def pushException(t:CheckedThrowable):void {
@@ -782,7 +974,7 @@ class FinishRequest {
     //add child request
     var childId:FinishResilient.Id;
     
-    //transit request
+    //transit/live/term request
     var srcId:Int;
     var dstId:Int;
     var kind:Int;
@@ -820,8 +1012,8 @@ class FinishRequest {
 class MasterResponse {
     var backupPlaceId:Int;
     var excp:Exception;
-    var transit_shouldSubmit:Boolean = false;
-    var live_shouldSubmit:Boolean = false;
+    var transit_ok:Boolean = false;
+    var live_ok:Boolean = false;
 }
 
 class BackupResponse {
@@ -831,8 +1023,8 @@ class BackupResponse {
 }
 
 class ReplicatorResponse {
-	var transit_shouldSubmit:Boolean = false;
-	var live_shouldSubmit:Boolean = false;
+	var transit_ok:Boolean = false;
+	var live_ok:Boolean = false;
 }
 
 class MasterDied extends Exception {}
@@ -864,11 +1056,11 @@ final class Replicator {
 	    			req.adopterId = adopterId;
 	    			mresp = masterExec(req);
 	    	    }
-	    	    repResp.transit_shouldSubmit = mresp.transit_shouldSubmit;
-	    	    repResp.live_shouldSubmit = mresp.live_shouldSubmit;
+	    	    repResp.transit_ok = mresp.transit_ok;
+	    	    repResp.live_ok = mresp.live_ok;
 	    	    if (verbose>=1) debug(">>>> Replicator.exec() masterDone =>"
-	    	    		+ " transit_shouldSubmit = " + repResp.transit_shouldSubmit 
-	    	    		+ " live_shouldSubmit = " + repResp.live_shouldSubmit );
+	    	    		+ " transit_ok = " + repResp.transit_ok 
+	    	    		+ " live_ok = " + repResp.live_ok );
 	    	    if (mresp.backupPlaceId != -1n) {
 		    	    req.backupPlaceId = mresp.backupPlaceId;
 		    		val bresp = backupExec(req);
@@ -903,49 +1095,43 @@ final class Replicator {
         }
         val masterRes = new GlobalRef[MasterResponse](new MasterResponse());
         val master = Place(req.id.home);
-        //val rCond = ResilientCondition.make(master);
-        val rCond = ResilientSimpleLatch.make(master);
+        val rCond = ResilientCondition.make(master);
         val condGR = rCond.gr;
-        val closure = (gr:GlobalRef[SimpleLatch]/*[Condition]*/) => {
+        val closure = (gr:GlobalRef[Condition]) => {
             at (master) @Immediate("master_exec") async {
                 val parent = FinishResilientPessimistic.findMaster(req.id);
                 assert (parent != null) : "fatal error, parent is null";
                 val resp = parent.exec(req);
-                Console.OUT.println("masterExec -> 0");
+                val r_back = resp.backupPlaceId;
+                val r_liveok = resp.live_ok;
+                val r_transitok = resp.transit_ok;
+                val r_exp = resp.excp;
                 at (condGR) @Immediate("master_exec_response") async {
-                	Console.OUT.println("masterExec -> 1");
                 	val mRes = (masterRes as GlobalRef[MasterResponse]{self.home == here})();
-                	mRes.backupPlaceId = resp.backupPlaceId;
-                	Console.OUT.println("masterExec -> 2");
-                	mRes.excp = resp.excp;
-                	Console.OUT.println("masterExec -> 3");
+                	mRes.backupPlaceId = r_back;
+                	mRes.live_ok = r_liveok;
+                	mRes.transit_ok = r_transitok;
+                	mRes.excp = r_exp;
                     condGR().release();
-                    Console.OUT.println("masterExec -> 4");
                 }
-            }; 
+            }
         };
         
         rCond.run(closure);
-        Console.OUT.println("masterExec -> 5");
+        
         if (rCond.failed()) {
-        	Console.OUT.println("masterExec -> 6");
             masterRes().excp = new DeadPlaceException(master);
         }
         rCond.forget();
-        Console.OUT.println("masterExec -> 7");
         val resp = masterRes();
-        Console.OUT.println("masterExec -> 8");
         if (resp.excp != null) { 
         	if (resp.excp instanceof DeadPlaceException) {
-        		Console.OUT.println("masterExec -> 9");
         	    throw new MasterDied();
         	}
         	else {
-        		Console.OUT.println("masterExec -> 10");
         		throw resp.excp;
         	}
         }
-        Console.OUT.println("masterExec -> 11");
         return resp;
     }
     
@@ -960,26 +1146,31 @@ final class Replicator {
         }
         val backupRes = new GlobalRef[BackupResponse](new BackupResponse());
         val backup = Place(req.backupPlaceId);
-        //val rCond = ResilientCondition.make(backup);
-        val rCond = ResilientSimpleLatch.make(backup);
+        val rCond = ResilientCondition.make(backup);
         val condGR = rCond.gr;
-        val closure = (gr:GlobalRef[SimpleLatch]/*[Condition]*/) => {
+        val closure = (gr:GlobalRef[Condition]) => {
             at (backup) @Immediate("backup_exec") async {
                 val parentBackup = FinishResilientPessimistic.findBackupOrThrow(req.id);
                 val resp = parentBackup.exec(req);
+                val r_isAdopt = resp.isAdopted;
+                val r_adoptId = resp.adopterId;
+                val r_excp = resp.excp;
                 at (condGR) @Immediate("backup_exec_response") async {
                 	val bRes = (backupRes as GlobalRef[BackupResponse]{self.home == here})();
-                	bRes.isAdopted = resp.isAdopted;
-                	bRes.adopterId = resp.adopterId;
-                	bRes.excp = resp.excp;
+                	bRes.isAdopted = r_isAdopt;
+                	bRes.adopterId = r_adoptId;
+                	bRes.excp = r_excp;
                     condGR().release();
                 }
-            }; 
+            }
         };
+        
         rCond.run(closure);
+        
         if (rCond.failed()) {
         	backupRes().excp = new DeadPlaceException(backup);
         }
+        
         rCond.forget();
         val resp = backupRes();
         if (resp.excp != null) { 
@@ -1000,10 +1191,9 @@ final class Replicator {
     		val backupRes = new GlobalRef[BackupResponse](new BackupResponse());
     		val backup = Place(backupPlaceId);
     		//we cannot use Immediate activities, because this function is blocking
-            //val rCond = ResilientCondition.make(backup);
-    		val rCond = ResilientSimpleLatch.make(backup);
+            val rCond = ResilientCondition.make(backup);
             val condGR = rCond.gr;
-            val closure = (gr:GlobalRef[SimpleLatch]/*[Condition]*/) => {
+            val closure = (gr:GlobalRef[Condition]) => {
                 at (backup) @Uncounted async {
                 	var adopterIdVar:FinishResilient.Id = FinishResilient.UNASSIGNED;
                     var exVar:Exception = null;
@@ -1022,7 +1212,7 @@ final class Replicator {
                         resp.excp = ex;
                         condGR().release();
                     }
-                }; 
+                }
             };
             
             rCond.run(closure);
