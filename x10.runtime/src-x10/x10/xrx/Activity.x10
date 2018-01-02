@@ -60,7 +60,7 @@ public class Activity {
     /**
      * The place that spawned the activity
      * */
-    private val srcPlace:Place;
+    public val srcPlace:Place;
 
     /**
      * Create activity.

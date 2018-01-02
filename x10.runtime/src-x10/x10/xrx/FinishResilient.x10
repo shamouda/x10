@@ -59,7 +59,7 @@ abstract class FinishResilient extends FinishState {
     
     public static val AT = 0n;
     public static val ASYNC = 1n;
-    
+       
     protected static struct Task(place:Int, kind:Int) {
         public def toString() = "<"+(kind == AT ? "at" : "async")+" live @ "+place+">";
         def this(place:Long, kind:Int) {
@@ -128,8 +128,9 @@ abstract class FinishResilient extends FinishState {
         case Configuration.RESILIENT_MODE_DIST_OPTIMISTIC:
         {
             val p = (parent!=null) ? parent : getCurrentFS();
-            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
-            fs = FinishResilientOptimistic.make(p);
+            val src = Runtime.activity().srcPlace;
+            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p + " src=" + src);
+            fs = FinishResilientOptimistic.make(p, src);
             break;
         }
         case Configuration.RESILIENT_MODE_HC:

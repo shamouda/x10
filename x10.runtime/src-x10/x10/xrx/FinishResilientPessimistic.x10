@@ -855,10 +855,10 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         val dstId = here.id as Int;
         val parentId = id;
     	val kind = FinishResilient.AT;
-    	if (verbose>=1) debug(">>>> notifyActivityCreation(id="+parentId+",isRoot="+isRoot+") called, srcId=" + srcId + " dstId="+dstId+" kind="+kind);
+    	if (verbose>=1) debug(">>>> notifyShiftedActivityCreation(id="+parentId+",isRoot="+isRoot+") called, srcId=" + srcId + " dstId="+dstId+" kind="+kind);
     	val req = new FinishRequest(FinishRequest.LIVE, parentId, srcId, dstId, kind);
     	val resp = FinishReplicator.exec(req);
-    	if (verbose>=1) debug("<<<< notifyActivityCreation(id="+parentId+",isRoot="+isRoot+") returning (submit="+resp.live_ok+"), srcId=" + srcId + " dstId="+dstId+" kind="+kind);
+    	if (verbose>=1) debug("<<<< notifyShiftedActivityCreation(id="+parentId+",isRoot="+isRoot+") returning (submit="+resp.live_ok+"), srcId=" + srcId + " dstId="+dstId+" kind="+kind);
         return resp.live_ok;
     }
     
