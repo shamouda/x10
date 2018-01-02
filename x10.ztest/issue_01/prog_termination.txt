@@ -1,0 +1,43 @@
+[nsec=3690651424665 place=0 x10.xrx.Activity@0x16dfaf0] <<<< Replicator.backupExec returning [type=TERM,id=<0,1>,childId=<0,0>,srcId=0,dstId=0]
+[nsec=3690651444848 place=0 x10.xrx.Activity@0x16dfaf0] <<<< notifyActivityTermination(id=<0,1>,isRoot=true, parentId=<0,1>) returning, srcId=0 dstId=0 kind=1
+[nsec=3690651448002 place=0 x10.xrx.Activity@0x16dfb90] returned from latch.await for id=<0,1>
+[nsec=3690651475285 place=0 x10.xrx.Activity@0x16dfb90] <<<< localFinishReleased(id=<0,0>) false: global finish
+[nsec=3690651486316 place=0 x10.xrx.Activity@0x16dfb90] >>>> notifyActivityTermination(id=<0,0>,isRoot=true, parentId=<0,0>) called, srcId=0 dstId=0 kind=1
+[nsec=3690651497300 place=0 x10.xrx.Activity@0x16dfb90] >>>> Replicator.masterExec called [type=TERM,id=<0,0>,childId=<0,0>,srcId=0,dstId=0]
+[nsec=3690651504838 place=0 x10.xrx.Activity@0x16dfb90] >>>> findMaster(id=<0,0>) called
+[nsec=3690651513111 place=0 x10.xrx.Activity@0x16dfb90] <<<< findMaster(id=<0,0>) returning
+[nsec=3690651523291 place=0 x10.xrx.Activity@0x16dfb90] >>>> Master.exec [req=TERM, id=<0,0>, srcId=0, dstId=0, kind=1 ] called
+[nsec=3690651530452 place=0 x10.xrx.Activity@0x16dfb90] >>>> Master.liveToCompleted id=<0,0>, srcId=0, dstId=0 called
+[nsec=3690651539313 place=0 x10.xrx.Activity@0x16dfb90] >>>> Master.quiescent(id=<0,0>) called
+[nsec=3690651563213 place=0 x10.xrx.Activity@0x16dfb90] State dump:
+             id:<0,0>
+      numActive:0
+       parentId: <-1,-1>
+       children: {<0,1> }
+
+[nsec=3690651570386 place=0 x10.xrx.Activity@0x16dfb90] <<<< Master.quiescent(id=<0,0>) returning true
+[nsec=3690651576680 place=0 x10.xrx.Activity@0x16dfb90] releasing latch id=<0,0> no exceptions
+[nsec=3690651585998 place=0 x10.xrx.Activity@0x16dfb90] releaseLatch(id=<0,0>) returning
+[nsec=3690651592364 place=0 x10.xrx.Activity@0x16dfb90] <<<< Master.liveToCompleted returning id=<0,0>, srcId=0, dstId=0
+[nsec=3690651600130 place=0 x10.xrx.Activity@0x16dfb90] <<<< Master.exec [req=TERM, id=<0,0>, srcId=0, dstId=0, kind=1, live_ok=false ] returning
+[nsec=3690651603276 place=0 x10.xrx.Activity@0x16dfcd0] returned from latch.await for id=<0,0>
+[nsec=3690651611132 place=0 x10.xrx.Activity@0x16dfb90] <<<< Replicator.masterExec returning [type=TERM,id=<0,0>,childId=<0,0>,srcId=0,dstId=0]
+[nsec=3690651620778 place=0 x10.xrx.Activity@0x16dfb90] >>>> Replicator.exec() masterDone => transit_ok = false live_ok = false
+[nsec=3690651628846 place=0 x10.xrx.Activity@0x16dfb90] >>>> Replicator.backupExec called [type=TERM,id=<0,0>,childId=<0,0>,srcId=0,dstId=0]
+Place 0 marking remote place 2 as dead, error: bad message 
+Place 0 marking remote place 3 as dead, error: bad message 
+[nsec=3690656113793 place=1 null] >>>> findBackupOrThrow(id=<0,0>) called
+[nsec=3690656131649 place=1 null] <<<< findBackupOrThrow(id=<0,0>) returning
+[nsec=3690656140398 place=1 null] >>>> Backup.exec [req=TERM, id=<0,0>, srcId=0, dstId=0, kind=1 ] called
+[nsec=3690656147208 place=1 null] >>>> Backup.liveToCompleted called (id=<0,0>, numActive=1, srcId=0, dstId=0) 
+[nsec=3690656156166 place=1 null] >>>> Backup.quiescent(id=<0,0>) called
+[nsec=3690656162409 place=1 null] <<<< Backup.quiescent(id=<0,0>) returning true
+[nsec=3690656167462 place=1 null] <<<< Backup.liveToCompleted returning (id=<0,0>, numActive=0, srcId=0, dstId=0) 
+[nsec=3690656174238 place=1 null] <<<< Backup.exec [req=TERM, id=<0,0>, srcId=0, dstId=0, kind=1 ] returning
+Place 1 marking remote place 2 as dead, error: bad message 
+Place 1 marking remote place 3 as dead, error: bad message 
+[nsec=3690656281217 place=1 x10.xrx.Activity@0xf670a0] FinishResilient.notifyPlaceDeath called
+[nsec=3690656308103 place=1 x10.xrx.Activity@0xf670a0] >>>> notifyPlaceDeath called
+[nsec=3690656441157 place=1 x10.xrx.Activity@0xf670a0] <<<< notifyPlaceDeath returning [isDead: place(0)=false place(1)=false ]
+[nsec=3690656452601 place=1 x10.xrx.Activity@0xf670a0] FinishResilient.notifyPlaceDeath returning
+
