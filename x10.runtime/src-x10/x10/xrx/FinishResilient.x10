@@ -45,13 +45,20 @@ abstract class FinishResilient extends FinishState {
     //       for a large number of test cases to shake out mixed-mode problems.
     protected static val ASYNC_SIZE_THRESHOLD = Long.parse(Runtime.env.getOrElse("X10_RESILIENT_FINISH_SMALL_ASYNC_SIZE", "100"));
     
-    protected static struct Id(home:int,id:int) {
+    public static struct Id(home:int,id:int) {
         public def toString() = "<"+home+","+id+">";
     }
 
-    protected static val UNASSIGNED = Id(-1n,-1n);
-    protected static val AT = 0n;
-    protected static val ASYNC = 1n;
+    public static val UNASSIGNED = Id(-1n,-1n);
+    
+    /* The implicit top finish is not replicated in the replication-based implementations.
+     * Place 0 starts the shutdown procedure when that finish is released, and sometimes, shutting down
+     * occurs while place 0 is exchanging the final replication
+     * messages with place 1 for the top finish. This behaviour caused the programs to hang while shutting down.*/
+    public static val TOP_FINISH = Id(0n,0n);
+    
+    public static val AT = 0n;
+    public static val ASYNC = 1n;
     
     protected static struct Task(place:Int, kind:Int) {
         public def toString() = "<"+(kind == AT ? "at" : "async")+" live @ "+place+">";
