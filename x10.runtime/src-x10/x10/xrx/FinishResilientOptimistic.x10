@@ -32,6 +32,7 @@ import x10.util.concurrent.Condition;
 //TODO: bulk globalInit for a chain of finishes.
 //TODO: createBackup: repeat if backup place is dead. block until another place is found!!
 //TODO: postpone backup creation to be with transit
+//TODO: add to spec: termination from src=dst must not communicate.
 /**
  * Distributed Resilient Finish (records transit tasks only)
  * This version is a corrected implementation of the distributed finish described in PPoPP14,
@@ -83,10 +84,16 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     	isRoot = false;
     	id = deser.readAny() as Id;
     	val lc = deser.readAny() as GlobalRef[AtomicInteger];
-    	grlc = (lc.home == here) ? lc : GlobalRef[AtomicInteger](new AtomicInteger(1n));
     	val src = deser.readAny() as Place;
     	remoteState = new OptimisticRemoteState(id, src);
-    	if (verbose>=1) debug("<<<< RemoteFinish(id="+id+") created");
+    	if (lc.home == here) {
+    	    grlc = lc;
+    	    if (verbose>=1) debug("<<<< RemoteFinish(id="+id+",src="+src+",lcHome="+lc.home+") createdA");    
+    	}
+    	else {
+    	    grlc = GlobalRef[AtomicInteger](new AtomicInteger(1n));
+    	    if (verbose>=1) debug("<<<< RemoteFinish(id="+id+",src="+src+",lcHome="+lc.home+") createdB with new lc=1");
+    	}
     }
     
     //make root finish    
@@ -98,7 +105,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     
     //serialize a root finish
     public def serialize(ser:Serializer) {
-        assert isRoot : "only a root finish can be serialized" ;
         if (verbose>=1) debug(">>>> serialize(id="+id+",isRoot="+isRoot+") called ");
         globalInit(false); // Once we have more than 1 copy of the finish state, we must go global
                            // false means don't create a backup
@@ -695,7 +701,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
      * This method can't block because it may run on an @Immediate worker.  
      */
     def notifyActivityCreation(srcPlace:Place, activity:Activity):Boolean {
-        val srcId = here.id as Int;
+        val srcId = srcPlace.id as Int;
         if (verbose>=1) debug(">>>> notifyActivityCreation(id="+id+",isRoot="+isRoot+",srcId=" + srcId +") called");
         if (!isRoot) {
             if (srcPlace.id == here.id)
@@ -755,17 +761,25 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     }
 
     def notifyActivityTermination(srcPlace:Place):void {
-        notifyActivityTermination(srcPlace, ASYNC);
+        notifyActivityTermination(srcPlace, ASYNC, false);
     }
     def notifyShiftedActivityCompletion(srcPlace:Place):void {
-        notifyActivityTermination(srcPlace, AT);
+        notifyActivityTermination(srcPlace, AT, false);
     }
-    def notifyActivityTermination(srcPlace:Place, kind:Int):void {
+    def notifyActivityTermination(srcPlace:Place, kind:Int, waitForFinish:Boolean):void {
         val lc = localCount().decrementAndGet();
-
+        val srcId = srcPlace.id as Int; 
+        val dstId = here.id as Int;
+        if (verbose>=1) debug(">>>> notifyActivityTermination(id="+id+",isRoot="+isRoot+",srcId="+srcId + " dstId="+dstId+",wff="+waitForFinish+") called, decremented localCount to "+lc);
         if (lc > 0) {
-            if (verbose>=1) debug(">>>> notifyActivityTermination(id="+id+") called, decremented localCount to "+lc);
             return;
+        }
+        
+        if (lc < 0) {
+            for (var i:Long = 0 ; i < 100; i++) {
+                debug("FATAL ERROR: notifyActivityTermination(id="+id+",isRoot="+isRoot+") reached a negative local count");
+                assert false: "FATAL ERROR: notifyActivityTermination(id="+id+",isRoot="+isRoot+") reached a negative local count";
+            }
         }
 
         // If this is not the root finish, we are done with the finish state.
@@ -774,17 +788,25 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         forgetGlobalRefs();
         
         if (isRoot && rootState.localFinishReleased()) {
-        	if (verbose>=1) debug("<<<< notifyActivityTermination(id="+id+",isRoot="+isRoot+") returning");
+        	if (verbose>=1) debug("<<<< notifyActivityTermination(id="+id+",isRoot="+isRoot+",srcId="+srcId + " dstId="+dstId+",wff="+waitForFinish+") returning");
         	return;
         }
         
+        if (!isRoot && srcId == dstId) {
+            if (verbose>=1) debug("<<<< notifyActivityTermination(id="+id+",isRoot="+isRoot+",srcId="+srcId + " dstId="+dstId+",wff="+waitForFinish+") src = dst && !root, no communication needed");
+            return;
+        }
+        
+        if (srcId == dstId && srcId != id.home) {
+            debug("FATAL ERROR: notifyActivityTermination(id="+id+",isRoot="+isRoot+") src=dst && src != home");
+            assert false: "FATAL ERROR: notifyActivityTermination(id="+id+",isRoot="+isRoot+") src=dst && src != home";
+        }
+        
         val parentId:Id = isRoot? rootState.parentId : UNASSIGNED;
-        val srcId = srcPlace.id as Int; 
-        val dstId = here.id as Int;
-    	if (verbose>=1) debug(">>>> notifyActivityTermination(id="+id+",parentId="+parentId+",isRoot="+isRoot+") called, srcId="+here.id + " dstId="+dstId+" kind="+kind);
+    	if (verbose>=1) debug("==== notifyActivityTermination(id="+id+",parentId="+parentId+",isRoot="+isRoot+",srcId="+srcId + " dstId="+dstId+",wff="+waitForFinish+") called, kind="+kind);
     	val req = new FinishRequest(FinishRequest.TERM, id, parentId, srcId, dstId, kind);
     	val resp = FinishReplicator.exec(req);
-    	if (verbose>=1) debug("<<<< notifyActivityTermination(id="+id+",parentId="+parentId+",isRoot="+isRoot+") returning, srcId="+here.id + " dstId="+dstId+" kind="+kind);
+    	if (verbose>=1) debug("<<<< notifyActivityTermination(id="+id+",parentId="+parentId+",isRoot="+isRoot+",srcId="+srcId + " dstId="+dstId+",wff="+waitForFinish+") returning, kind="+kind);
     }
 
     def waitForFinish():void {
@@ -792,7 +814,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
 		if (verbose>=1) debug(">>>> waitForFinish(id="+id+") called, lc = " + localCount().get() );
 
         // terminate myself
-        notifyActivityTermination(here);
+        notifyActivityTermination(here, ASYNC, true);
 
         // If we haven't gone remote with this finish yet, see if this worker
         // can execute other asyncs that are governed by the finish before waiting on the latch.
