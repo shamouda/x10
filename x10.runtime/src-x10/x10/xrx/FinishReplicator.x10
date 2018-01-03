@@ -353,9 +353,15 @@ public final class FinishReplicator {
     }
     
     public static def finalizeReplication() {
+        var c:Long = 0;
+        if (verbose>=1) debug("<<<< Replicator.finalizeReplication called " );
         while (place0Pending.get() != 0n) {
             System.threadSleep(0); // release the CPU to more productive pursuits
+            if (c++ % 1000 == 0) {
+                if (verbose>=1) debug("<<<< Replicator.finalizeReplication WARNING c="+c + " p0pending="+place0Pending.get());        
+            }
         }
+        if (verbose>=1) debug("<<<< Replicator.finalizeReplication returning" );
     }
 }
 
