@@ -11,8 +11,11 @@ public class SimpleNestedFinish {
                         Console.OUT.println("finish3");
                         at (Place(2)) async {
                         	Console.OUT.println("p2 task");
-                        	finish {
-                                Console.OUT.println("finish4");
+                        	at (Place(3)) async {
+                        	    Console.OUT.println("p3 task from p2");
+                            	finish {
+                                    Console.OUT.println("finish4");
+                            	}
                         	}
                         }
                     }
