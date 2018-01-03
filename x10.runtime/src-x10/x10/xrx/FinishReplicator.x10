@@ -37,10 +37,11 @@ public final class FinishReplicator {
     //default previous place - may be updated in notifyPlaceDeath
     static val prevPlaceId = new AtomicInteger(((here.id -1 + Place.numPlaces())%Place.numPlaces()) as Int);
     
-    
     static val verbose = System.getenv("X10_RESILIENT_VERBOSE") == null? 0 : Long.parseLong(System.getenv("X10_RESILIENT_VERBOSE"));
     
     static val place0Pending = new AtomicInteger(0n);
+    
+    static val OPTIMISTIC = Configuration.resilient_mode() == Configuration.RESILIENT_MODE_DIST_OPTIMISTIC;
     
     static def debug(msg:String) {
         val nsec = System.nanoTime();
@@ -72,17 +73,6 @@ public final class FinishReplicator {
         }
     }
     
-    static def findBackupOrThrow(id:FinishResilient.Id):FinishBackupState {
-        if (verbose>=1) debug(">>>> findBackupOrThrow(id="+id+") called");
-        try {
-            glock.lock();
-            val bs = fbackups.getOrThrow(id);
-            if (verbose>=1) debug("<<<< findBackupOrThrow(id="+id+") returning");
-            return bs;
-        } finally {
-            glock.unlock();
-        }
-    }
     
     /*static def releaseBackup(id:FinishResilient.Id) {
         if (verbose>=1) debug(">>>> releaseBackup(id="+id+") called ");
@@ -96,17 +86,36 @@ public final class FinishReplicator {
         }
     }*/
     
-    static def findOrCreateBackup(id:FinishResilient.Id,
-            makeClosure:()=>FinishBackupState):FinishBackupState {
-        if (verbose>=1) debug(">>>> findOrCreateBackup(id="+id+") called ");
+    static def findBackupOrThrow(id:FinishResilient.Id):FinishBackupState {
+        if (verbose>=1) debug(">>>> findBackupOrThrow(id="+id+") called");
+        try {
+            glock.lock();
+            val bs = fbackups.getOrThrow(id);
+            if (verbose>=1) debug("<<<< findBackupOrThrow(id="+id+") returning");
+            return bs;
+        } finally {
+            glock.unlock();
+        }
+    }
+    
+    /*markAdopted is used in cases when the parent attempts to adopt, before the backup creation*/
+    static def findBackupOrCreate(id:FinishResilient.Id, parentId:FinishResilient.Id, markAdopted:Boolean):FinishBackupState {
+        if (verbose>=1) debug(">>>> findOrCreateBackup(id="+id+", parentId="+parentId+") called ");
         try {
             glock.lock();
             var bs:FinishBackupState = fbackups.getOrElse(id, null);
             if (bs == null) {
-                bs = makeClosure(); //new FinishBackupState(id, parentId);
+                if (OPTIMISTIC)
+                    bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId);
+                else
+                    bs = new FinishResilientPessimistic.PessimisticBackupState(id, parentId);
+                if (markAdopted)
+                    bs.markAsAdopted();
                 fbackups.put(id, bs);
+                if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") returning, created bs="+bs);
             }
-            if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+") returning bs="+bs);
+            else
+                if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") returning, found bs="+bs);
             return bs;
         } finally {
             glock.unlock();
@@ -142,9 +151,15 @@ public final class FinishReplicator {
                         + " backupPlaceId = " + mresp.backupPlaceId
                         + " transit_ok = " + repResp.transit_ok 
                         + " live_ok = " + repResp.live_ok );
-              //  assert (mresp.backupPlaceId != -1n) : "fatal error, backup -1 means master had a fatal error before reporting its backup value"; 
-                if (mresp.backupPlaceId != -1n && 
-                    req.id != FinishResilient.TOP_FINISH) {
+                if (mresp.backupPlaceId == -1n) {
+                    debug("==== Replicator(id="+req.id+").exec() FATAL ERROR Backup = -1 ");
+                    assert false : "fatal error, backup -1 means master had a fatal error before reporting its backup value";
+                }
+                val backupGo = req.id != FinishResilient.TOP_FINISH &&
+                        ( (req.reqType != FinishRequest.TRANSIT && req.reqType != FinishRequest.LIVE ) ||
+                          (req.reqType == FinishRequest.TRANSIT && repResp.transit_ok) || 
+                          (req.reqType == FinishRequest.LIVE && repResp.live_ok) );
+                if (backupGo) {
                     req.backupPlaceId = mresp.backupPlaceId;
                     val bresp = backupExec(req);
                     if (bresp.isAdopted) {
@@ -152,7 +167,7 @@ public final class FinishReplicator {
                         req.adopterId = bresp.adopterId;
                     }
                 } else {
-                    if (verbose>=1) debug("==== Replicator(id="+req.id+").exec() no replication for TOP_FINISH");    
+                    if (verbose>=1) debug("==== Replicator(id="+req.id+").exec() backupGo = false");    
                 }
                 
                 if (verbose>=1) debug("<<<< Replicator(id="+req.id+").exec() returning");
@@ -229,7 +244,11 @@ public final class FinishReplicator {
     public static def backupExec(req:FinishRequest) {
         if (verbose>=1) debug(">>>> Replicator(id="+req.id+").backupExec called [" + req + "]" );
         if (req.backupPlaceId == here.id as Int) {
-            val bFin = findBackupOrThrow(req.id);
+            val bFin:FinishBackupState;
+            if (req.reqType == FinishRequest.TRANSIT)
+                bFin = findBackupOrCreate(req.id, req.parentId, false);
+            else
+                bFin = findBackupOrThrow(req.id);
             val resp = bFin.exec(req);
             if (resp.excp != null) { 
                 throw resp.excp;
@@ -240,14 +259,21 @@ public final class FinishReplicator {
         if (here.id == 0) {
             place0Pending.incrementAndGet();
         }
+        val createOk = req.reqType == FinishRequest.TRANSIT ||
+                       req.reqType == FinishRequest.EXCP ||
+                (req.reqType == FinishRequest.TERM && req.id.home == here.id as Int) ;
         val backupRes = new GlobalRef[BackupResponse](new BackupResponse());
         val backup = Place(req.backupPlaceId);
         val rCond = ResilientCondition.make(backup);
         val condGR = rCond.gr;
         val closure = (gr:GlobalRef[Condition]) => {
             at (backup) @Immediate("backup_exec") async {
-                val parentBackup = findBackupOrThrow(req.id);
-                val resp = parentBackup.exec(req);
+                val bFin:FinishBackupState;
+                if (createOk) // termination of remote messages
+                    bFin = findBackupOrCreate(req.id, req.parentId, false);                 // must find the backup object
+                else
+                    bFin = findBackupOrThrow(req.id);
+                val resp = bFin.exec(req);
                 val r_isAdopt = resp.isAdopted;
                 val r_adoptId = resp.adopterId;
                 val r_excp = resp.excp;
@@ -338,11 +364,12 @@ final class FinishRequest {
     static val TRANSIT = 1;
     static val LIVE = 2;
     static val TERM = 3;
+    static val EXCP = 4;
     
     val reqType:Long;
     val typeDesc:String;
-    
     val id:FinishResilient.Id;
+    var parentId:FinishResilient.Id;
     
     //add child request
     var childId:FinishResilient.Id = FinishResilient.UNASSIGNED;
@@ -351,6 +378,9 @@ final class FinishRequest {
     var srcId:Int;
     var dstId:Int;
     var kind:Int;
+    
+    //excp
+    var ex:CheckedThrowable;
     
     //redirect to adopter
     var toAdopter:Boolean = false;
@@ -364,11 +394,12 @@ final class FinishRequest {
     
     //ADD_CHILD
     public def this(reqType:Long, id:FinishResilient.Id,
-            childId:FinishResilient.Id) {
+        childId:FinishResilient.Id) {
         this.reqType = reqType;
         this.id = id;
         this.childId = childId;
         this.toAdopter = false;
+        this.parentId = parentId;
         if (reqType == ADD_CHILD)
             typeDesc = "ADD_CHILD";
         else if (reqType == TRANSIT)
@@ -377,13 +408,42 @@ final class FinishRequest {
             typeDesc = "LIVE" ;
         else if (reqType == TERM)
             typeDesc = "TERM" ;
+        else if (reqType == EXCP)
+            typeDesc = "EXCP" ;
         else {
             typeDesc = "";
             assert false : "invalid request type";
         }
     }
     
-    //TRANSIT/LIVE/TERM
+    //TRANSIT/TERM  -> parentId must be given to create backup
+    public def this(reqType:Long, id:FinishResilient.Id,
+            parentId:FinishResilient.Id,
+            srcId:Int, dstId:Int, kind:Int) {
+        this.reqType = reqType;
+        this.id = id;
+        this.toAdopter = false;
+        this.srcId = srcId;
+        this.dstId = dstId;
+        this.kind = kind;
+        this.parentId = parentId;
+        if (reqType == ADD_CHILD)
+            typeDesc = "ADD_CHILD";
+        else if (reqType == TRANSIT)
+            typeDesc = "TRANSIT";
+        else if (reqType == LIVE)
+            typeDesc = "LIVE" ;
+        else if (reqType == TERM)
+            typeDesc = "TERM" ; 
+        else if (reqType == EXCP)
+            typeDesc = "EXCP" ;
+        else {
+            typeDesc = "";
+            assert false : "invalid request type";
+        }
+    }
+    
+    //LIVE -> parent not needed, backup must have been already created.
     public def this(reqType:Long, id:FinishResilient.Id,
             srcId:Int, dstId:Int, kind:Int) {
         this.reqType = reqType;
@@ -400,6 +460,34 @@ final class FinishRequest {
             typeDesc = "LIVE" ;
         else if (reqType == TERM)
             typeDesc = "TERM" ; 
+        else if (reqType == EXCP)
+            typeDesc = "EXCP" ;
+        else {
+            typeDesc = "";
+            assert false : "invalid request type";
+        }
+    }
+    
+    
+   //EXCP  -> parentId must be given to create backup
+    public def this(reqType:Long, id:FinishResilient.Id,
+            parentId:FinishResilient.Id,
+            ex:CheckedThrowable) {
+        this.reqType = reqType;
+        this.id = id;
+        this.toAdopter = false;
+        this.parentId = parentId;
+        this.ex = ex;
+        if (reqType == ADD_CHILD)
+            typeDesc = "ADD_CHILD";
+        else if (reqType == TRANSIT)
+            typeDesc = "TRANSIT";
+        else if (reqType == LIVE)
+            typeDesc = "LIVE" ;
+        else if (reqType == TERM)
+            typeDesc = "TERM" ; 
+        else if (reqType == EXCP)
+            typeDesc = "EXCP" ;
         else {
             typeDesc = "";
             assert false : "invalid request type";

@@ -11,6 +11,7 @@
 package x10.xrx;
 
 public abstract class FinishBackupState {
+    abstract def markAsAdopted():void;
     abstract def exec(req:FinishRequest):BackupResponse;
     abstract def getAdopter():FinishResilient.Id;
 }

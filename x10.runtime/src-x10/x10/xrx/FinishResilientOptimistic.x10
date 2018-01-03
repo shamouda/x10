@@ -53,7 +53,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     
     public def toString():String { 
     	return ( isRoot? "FinishResilientOptimistic(id="+id+", parentId="+rootState.parentId+", isRoot=true)" : 
-               "FinishResilientOptimistic(parentId="+id+", isRoot=false)");
+               "FinishResilientOptimistic(id="+id+", isRoot=false)");
     }
 
     static @Inline def increment[K](map:HashMap[K,Int], k:K) {
@@ -98,19 +98,19 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     
     //serialize a root finish
     public def serialize(ser:Serializer) {
-    	assert isRoot : "only a root finish can be serialized" ;
-        if (verbose>=1) debug(">>>> serialize(id="+rootState.id+") called ");
-        globalInit(); // Once we have more than 1 copy of the finish state, we must go global
+        assert isRoot : "only a root finish can be serialized" ;
+        if (verbose>=1) debug(">>>> serialize(id="+id+",isRoot="+isRoot+") called ");
+        globalInit(false); // Once we have more than 1 copy of the finish state, we must go global
+                           // false means don't create a backup
         ser.writeAny(id);
         ser.writeAny(grlc);
         ser.writeAny(here);
-        if (verbose>=1) debug("<<<< serialize(id="+id+") returning ");
+        if (verbose>=1) debug("<<<< serialize(id="+id+",isRoot="+isRoot+") returning ");
     }
     
     private def forgetGlobalRefs():void {
         (grlc as GlobalRef[AtomicInteger]{self.home==here}).forget();
     }
-    
     
 	public static final class OptimisticRemoteState implements x10.io.Unserializable {
 		val id:Id; //parent root finish
@@ -212,20 +212,32 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
 
-	    def addException(t:CheckedThrowable) {
-	    	try {
-        		latch.lock();
-        		if (excs == null) excs = new GrowableRail[CheckedThrowable]();
-        		excs.add(t);
-	    	} finally {
-        		latch.unlock();
-        	}
+	    def addExceptionUnsafe(t:CheckedThrowable) {
+    		if (excs == null) excs = new GrowableRail[CheckedThrowable]();
+    		excs.add(t);
 	    }
 	    
         def addDeadPlaceException(placeId:Long) {
-            val e = new DeadPlaceException(Place(placeId));
-            addException(e);
+            try {
+                latch.lock();
+                val e = new DeadPlaceException(Place(placeId));
+                addExceptionUnsafe(e);
+                return backupPlaceId;
+            } finally {
+                latch.unlock();
+            }
         }
+        
+        def addException(t:CheckedThrowable) {
+            try {
+                latch.lock();
+                addExceptionUnsafe(t);
+                return backupPlaceId;
+            } finally {
+                latch.unlock();
+            }
+        }
+        
 	    
 	    def updateBackup(newBackup:Int) {
 	    	try {
@@ -259,6 +271,21 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
 	    		latch.unlock();
 	    	}
 	    }
+	    
+       def localFinishExceptionPushed(t:CheckedThrowable) {
+            try { 
+                latch.lock();
+                if (!isGlobal) {
+                    if (verbose>=1) debug(">>>> localFinishExceptionPushed(id="+id+") true");
+                    addExceptionUnsafe(t);
+                    return true;
+                } 
+                if (verbose>=1) debug("<<<< localFinishExceptionPushed(id="+id+") false: global finish");
+                return false;
+            } finally {
+                latch.unlock();
+            }
+        }
 	    
         def inTransit(srcId:Long, dstId:Long, kind:Int, tag:String) {
         	if (verbose>=1) debug(">>>> Master(id="+id+").inTransit srcId=" + srcId + ", dstId=" + dstId + " called");
@@ -354,7 +381,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
 	                } else if (Place(dstId).isDead()) {
 	                    if (kind == FinishResilient.ASYNC) {
 	                        if (verbose>=1) debug("==== notifySubActivitySpawn(id="+id+") destination "+dstId + "is dead; pushed DPE for async");
-	                        addDeadPlaceException(dstId);
+	                        resp.backupPlaceId = addDeadPlaceException(dstId);
 	                    } else {
 	                        if (verbose>=1) debug("==== notifySubActivitySpawn(id="+id+") destination "+dstId + "is dead; dropped at");
 	                    }
@@ -391,7 +418,18 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
 	        	}
 	        	if (verbose>=1) debug("<<<< Master(id="+id+").exec [req=TERM, srcId=" + srcId + ", dstId="
 	                    + dstId + ", kind=" + kind + " ] returning");
-	        }
+	        } else if (req.reqType == FinishRequest.EXCP) {
+                val ex = req.ex;
+                if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=EXCP, ex="+ex+" ] called");
+                try{
+                    resp.backupPlaceId = addException(ex);
+                } catch (t:Exception) { //fatal
+                    t.printStackTrace();
+                    resp.backupPlaceId = -1n;
+                    resp.excp = t;
+                }
+                if (verbose>=1) debug("<<<< Master(id="+id+").exec [req=EXCP, ex="+ex+" ] returning");
+            }
 	        return resp;
 	    }
 	}
@@ -430,19 +468,37 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
 	        increment(transit, Edge(id.home, id.home, FinishResilient.ASYNC));
 	    }
 	    
-	    def addException(t:CheckedThrowable) {
-	    	try {
-	    		ilock.lock();
-        		if (excs == null) excs = new GrowableRail[CheckedThrowable]();
-        		excs.add(t);
-	    	} finally {
-	    		ilock.unlock();
-        	}
+	    def markAsAdopted() {
+	        try {
+                ilock.lock();
+                isAdopted = true;
+            } finally {
+                ilock.unlock();
+            }
+	    }
+	    
+	    def addExceptionUnsafe(t:CheckedThrowable) {
+    		if (excs == null) excs = new GrowableRail[CheckedThrowable]();
+    		excs.add(t);
 	    }
 	    
         def addDeadPlaceException(placeId:Long) {
-            val e = new DeadPlaceException(Place(placeId));
-            addException(e);
+            try {
+                ilock.lock();
+                val e = new DeadPlaceException(Place(placeId));
+                addExceptionUnsafe(e);
+            } finally {
+                ilock.unlock();
+            }
+        }
+        
+        def addException(t:CheckedThrowable) {
+            try {
+                ilock.lock();
+                addExceptionUnsafe(t);
+            } finally {
+                ilock.unlock();
+            }
         }
         
 	    //waits until backup is adopted
@@ -537,12 +593,23 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
 	            }
 	        	if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=TERM, srcId=" + srcId + ", dstId="
 	                    + dstId + ", kind=" + kind + " ] returning");
-	        }
+	        } else if (req.reqType == FinishRequest.EXCP) {
+                val ex = req.ex;
+                if (verbose>=1) debug(">>>> Backup(id="+id+").exec [req=EXCP, ex="+ex+" ] called");
+                try{
+                    addException(ex);
+                } catch (t:Exception) { //fatal
+                    resp.excp = t;
+                }
+                if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=EXCP, ex="+ex+" ] returning");
+            }
 	        return resp;
 	    }
 	}
     
-    private def globalInit() {
+	//makeBackup is true only when a parent local finish if forced to be global
+	//by a child
+    private def globalInit(makeBackup:Boolean) {
     	if (isRoot) {
     		rootState.latch.lock();
 	        if (!rootState.isGlobal) {
@@ -552,9 +619,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     	            
     	            if (parent instanceof FinishResilientOptimistic) {
     	                val frParent = parent as FinishResilientOptimistic;
-    	                if (frParent.isRoot) frParent.globalInit();
+    	                if (frParent.isRoot) frParent.globalInit(true);
     	            }
-    	            createBackup();
+    	            if (makeBackup)
+    	                createBackup();
 	            } else {
 	                if (verbose>=1) debug("=== globalInit(id="+id+") replication not required for top finish");    
 	            }
@@ -582,8 +650,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         val condGR = rCond.gr;
         val closure = (gr:GlobalRef[Condition]) => {
             at (backup) @Immediate("backup_create") async {
-                val backFin = FinishReplicator.findOrCreateBackup(myId, ()=>{return new OptimisticBackupState(myId, parentId);});
-                val success = backFin != null;
+                val bFin = FinishReplicator.findBackupOrCreate(myId, parentId, false);
+                val success = bFin != null;
                 at (condGR) @Immediate("backup_create_response") async {
                 	val bRes = (backRes as GlobalRef[Cell[Boolean]]{self.home == here})();
                 	bRes.value = success;
@@ -592,7 +660,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }; 
         };
         rCond.run(closure);
-        /*TODO: complete the below lines*/
+        //TODO: complete the below lines
         if (rCond.failed()) {
             val excp = new DeadPlaceException(backup);
         }
@@ -609,17 +677,17 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     }
     
     def notifySubActivitySpawn(dstPlace:Place, kind:Int):void {
-    	val parentId = id;
     	val srcId = here.id as Int;
         val dstId = dstPlace.id as Int;
         if (dstId == here.id as Int) {
         	val lc = localCount().incrementAndGet();
-            if (verbose>=1) debug(">>>> notifySubActivitySpawn(id="+parentId+",isRoot="+isRoot+") called locally, localCount now "+lc);
+            if (verbose>=1) debug(">>>> notifySubActivitySpawn(id="+id+",isRoot="+isRoot+") called locally, localCount now "+lc);
         } else {
-        	if (verbose>=1) debug(">>>> notifySubActivitySpawn(id="+parentId+",isRoot="+isRoot+") called, srcId="+here.id + " dstId="+dstId+" kind="+kind);
-        	val req = new FinishRequest(FinishRequest.TRANSIT, parentId, srcId, dstId, kind);
+            val parentId:Id = isRoot? rootState.parentId : UNASSIGNED;
+        	if (verbose>=1) debug(">>>> notifySubActivitySpawn(id="+id+", parentId="+parentId+",isRoot="+isRoot+") called, srcId="+here.id + " dstId="+dstId+" kind="+kind);
+        	val req = new FinishRequest(FinishRequest.TRANSIT, id, parentId, srcId, dstId, kind);
         	FinishReplicator.exec(req);
-        	if (verbose>=1) debug("<<<< notifySubActivitySpawn(id="+parentId+",isRoot="+isRoot+") returning, srcId="+here.id + " dstId="+dstId+" kind="+kind);
+        	if (verbose>=1) debug("<<<< notifySubActivitySpawn(id="+id+", parentId="+parentId+",isRoot="+isRoot+") returning, srcId="+here.id + " dstId="+dstId+" kind="+kind);
         }
     }
     
@@ -656,15 +724,34 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     }
     
     def notifyRemoteContinuationCreated():void {
-        
+        for (var i:Long = 0; i < 100; i++) {
+            debug(">>>> FATAL notifyRemoteContinuationCreated(id="+id+") called");
+        }
     }
 
     def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void {
-        
+        for (var i:Long = 0; i < 100; i++) {
+            debug(">>>> FATAL notifyActivityCreationFailed(id="+id+") called");
+        }
     }
 
     def notifyActivityCreatedAndTerminated(srcPlace:Place):void {
+        for (var i:Long = 0; i < 100; i++) {
+            debug(">>>> FATAL notifyActivityCreatedAndTerminated(id="+id+") called");
+        }
+    }
+    
+    def pushException(t:CheckedThrowable):void {
+        if (isRoot && rootState.localFinishExceptionPushed(t)) {
+            if (verbose>=1) debug("<<<< pushException(id="+id+",isRoot="+isRoot+",t="+t.getMessage()+") returning");
+            return;
+        }
         
+        val parentId:Id = isRoot? rootState.parentId : UNASSIGNED;
+        if (verbose>=1) debug(">>>> pushException(id="+id+",isRoot="+isRoot+",t="+t.getMessage()+") called");
+        val req = new FinishRequest(FinishRequest.EXCP, id, parentId, t);
+        val resp = FinishReplicator.exec(req);
+        if (verbose>=1) debug("<<<< pushException(id="+id+",isRoot="+isRoot+",t="+t.getMessage()+") returning");
     }
 
     def notifyActivityTermination(srcPlace:Place):void {
@@ -675,10 +762,9 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     }
     def notifyActivityTermination(srcPlace:Place, kind:Int):void {
         val lc = localCount().decrementAndGet();
-        val parentId = id;
 
         if (lc > 0) {
-            if (verbose>=1) debug(">>>> notifyActivityTermination(id="+parentId+") called, decremented localCount to "+lc);
+            if (verbose>=1) debug(">>>> notifyActivityTermination(id="+id+") called, decremented localCount to "+lc);
             return;
         }
 
@@ -688,20 +774,17 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         forgetGlobalRefs();
         
         if (isRoot && rootState.localFinishReleased()) {
-        	if (verbose>=1) debug("<<<< notifyActivityTermination(id="+parentId+",isRoot="+isRoot+") returning");
+        	if (verbose>=1) debug("<<<< notifyActivityTermination(id="+id+",isRoot="+isRoot+") returning");
         	return;
         }
         
+        val parentId:Id = isRoot? rootState.parentId : UNASSIGNED;
         val srcId = srcPlace.id as Int; 
         val dstId = here.id as Int;
-    	if (verbose>=1) debug(">>>> notifyActivityTermination(id="+parentId+",isRoot="+isRoot+") called, srcId="+here.id + " dstId="+dstId+" kind="+kind);
-    	val req = new FinishRequest(FinishRequest.TERM, parentId, srcId, dstId, kind);
+    	if (verbose>=1) debug(">>>> notifyActivityTermination(id="+id+",parentId="+parentId+",isRoot="+isRoot+") called, srcId="+here.id + " dstId="+dstId+" kind="+kind);
+    	val req = new FinishRequest(FinishRequest.TERM, id, parentId, srcId, dstId, kind);
     	val resp = FinishReplicator.exec(req);
-    	if (verbose>=1) debug("<<<< notifyActivityTermination(id="+parentId+",isRoot="+isRoot+") returning, srcId="+here.id + " dstId="+dstId+" kind="+kind);
-    }
-
-    def pushException(t:CheckedThrowable):void {
-        
+    	if (verbose>=1) debug("<<<< notifyActivityTermination(id="+id+",parentId="+parentId+",isRoot="+isRoot+") returning, srcId="+here.id + " dstId="+dstId+" kind="+kind);
     }
 
     def waitForFinish():void {
@@ -713,11 +796,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
 
         // If we haven't gone remote with this finish yet, see if this worker
         // can execute other asyncs that are governed by the finish before waiting on the latch.
-        /*TODO: revise this 
-        if ((!Runtime.STRICT_FINISH) && (Runtime.STATIC_THREADS || !strictFinish)) {
+        /*TODO: revise this*/ 
+        if ((!Runtime.STRICT_FINISH) && (Runtime.STATIC_THREADS /*|| !strictFinish*/)) {
             if (verbose>=2) debug("calling worker.join for id="+id);
-            Runtime.worker().join(this.latch);
-        }*/
+            Runtime.worker().join(rootState.latch);
+        }
 
         // wait for the latch release
         if (verbose>=2) debug("calling latch.await for id="+id);
@@ -738,11 +821,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     }
     
     static def notifyPlaceDeath():void {
-        if (verbose>=1) debug(">>>> notifyPlaceDeath called");
-        var str:String = "";
-        for (p in Place.places()) {
-            str += "place(" + p.id + ")=" + p.isDead() + " "; 
+        if (verbose>=1) {
+            debug(">>>> notifyPlaceDeath called");
+            var str:String = "";
+            for (p in Place.places()) {
+                str += "place(" + p.id + ")=" + p.isDead() + " "; 
+            }
+            debug("<<<< notifyPlaceDeath returning [isDead: "+str+"]");
         }
-        if (verbose>=1) debug("<<<< notifyPlaceDeath returning [isDead: "+str+"]");
     }
 }
