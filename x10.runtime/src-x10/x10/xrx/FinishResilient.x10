@@ -15,6 +15,7 @@ import x10.util.concurrent.SimpleLatch;
 import x10.util.concurrent.AtomicBoolean;
 import x10.util.concurrent.Condition;
 import x10.util.concurrent.AtomicInteger;
+import x10.util.concurrent.Lock;
 
 /*
  * Common abstract class for Resilient Finish
@@ -76,6 +77,9 @@ abstract class FinishResilient extends FinishState {
     
     protected static val nextId = new AtomicInteger(); // per-place portion of unique id
     
+    //a global lock to access static maps used in replicated resilient finish
+    public static glock = Configuration.resilient_replicated_finish()? new Lock() : null;
+
     /*
      * Static methods to be implemented in subclasses
      */

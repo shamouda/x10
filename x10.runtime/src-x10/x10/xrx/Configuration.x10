@@ -126,6 +126,12 @@ final class Configuration {
         v = sysPropOrElse("X10_RESILIENT_MODE", v);
         return v;
     }
+    
+    static def resilient_replicated_finish():Boolean {
+        val resmode = resilient_mode();
+        return resmode == RESILIENT_MODE_DIST_PESSIMISTIC ||
+               resmode == RESILIENT_MODE_DIST_OPTIMISTIC;
+    }
 }
 
 // vim:shiftwidth=4:tabstop=4:expandtab

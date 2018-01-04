@@ -15,13 +15,9 @@ import x10.util.resilient.concurrent.ResilientCondition;
 import x10.compiler.Immediate;
 import x10.compiler.Uncounted;
 import x10.util.HashMap;
-import x10.util.concurrent.Lock;
 import x10.util.concurrent.AtomicInteger;
 
 public final class FinishReplicator {
-    //a global class-level lock
-    private static glock = new Lock();
-
     //the set of all masters
     private static fmasters = new HashMap[FinishResilient.Id, FinishMasterState]();
     
@@ -53,23 +49,23 @@ public final class FinishReplicator {
     static def addMaster(id:FinishResilient.Id, fs:FinishMasterState) {
         if (verbose>=1) debug(">>>> addMaster(id="+id+") called");
         try {
-            glock.lock();
+            FinishResilient.glock.lock();
             fmasters.put(id, fs);
             if (verbose>=1) debug("<<<< addMaster(id="+id+") returning");
         } finally {
-            glock.unlock();
+            FinishResilient.glock.unlock();
         }
     }
     
     static def findMaster(id:FinishResilient.Id):FinishMasterState {
         if (verbose>=1) debug(">>>> findMaster(id="+id+") called");
         try {
-            glock.lock();
+            FinishResilient.glock.lock();
             val fs = fmasters.getOrElse(id, null);
             if (verbose>=1) debug("<<<< findMaster(id="+id+") returning");
             return fs;
         } finally {
-            glock.unlock();
+            FinishResilient.glock.unlock();
         }
     }
     
@@ -77,24 +73,24 @@ public final class FinishReplicator {
     /*static def releaseBackup(id:FinishResilient.Id) {
         if (verbose>=1) debug(">>>> releaseBackup(id="+id+") called ");
         try {
-            glock.lock();
+            FinishResilient.glock.lock();
             val bs = fbackups.getOrThrow(id);
             bs.release();
             if (verbose>=1) debug("<<<< releaseBackup(id="+id+") returning bs="+bs);
         } finally {
-            glock.unlock();
+            FinishResilient.glock.unlock();
         }
     }*/
     
     static def findBackupOrThrow(id:FinishResilient.Id):FinishBackupState {
         if (verbose>=1) debug(">>>> findBackupOrThrow(id="+id+") called");
         try {
-            glock.lock();
+            FinishResilient.glock.lock();
             val bs = fbackups.getOrThrow(id);
             if (verbose>=1) debug("<<<< findBackupOrThrow(id="+id+") returning");
             return bs;
         } finally {
-            glock.unlock();
+            FinishResilient.glock.unlock();
         }
     }
     
@@ -102,7 +98,7 @@ public final class FinishReplicator {
     static def findBackupOrCreate(id:FinishResilient.Id, parentId:FinishResilient.Id, markAdopted:Boolean):FinishBackupState {
         if (verbose>=1) debug(">>>> findOrCreateBackup(id="+id+", parentId="+parentId+") called ");
         try {
-            glock.lock();
+            FinishResilient.glock.lock();
             var bs:FinishBackupState = fbackups.getOrElse(id, null);
             if (bs == null) {
                 if (OPTIMISTIC)
@@ -118,14 +114,14 @@ public final class FinishReplicator {
                 if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") returning, found bs="+bs);
             return bs;
         } finally {
-            glock.unlock();
+            FinishResilient.glock.unlock();
         }
     }
     
     //used only when master replica is found dead
     public static def getBackupPlace(masterHome:Int) {
         try {
-            glock.lock();
+            FinishResilient.glock.lock();
             val backup = backupMap.getOrElse (masterHome, -1n);
             if (backup == -1n) {
                 return nextPlaceId.get();
@@ -134,7 +130,7 @@ public final class FinishReplicator {
                 return backup;
             }
         } finally {
-            glock.unlock();
+            FinishResilient.glock.unlock();
         }
     }
     
@@ -243,6 +239,9 @@ public final class FinishReplicator {
     
     public static def backupExec(req:FinishRequest) {
         if (verbose>=1) debug(">>>> Replicator(id="+req.id+").backupExec called [" + req + "]" );
+        val createOk = req.reqType == FinishRequest.TRANSIT ||
+                       req.reqType == FinishRequest.EXCP ||
+                       (req.reqType == FinishRequest.TERM && req.id.home == here.id as Int);
         if (req.backupPlaceId == here.id as Int) {
             val bFin:FinishBackupState;
             if (req.reqType == FinishRequest.TRANSIT)
@@ -259,9 +258,6 @@ public final class FinishReplicator {
         if (here.id == 0) {
             place0Pending.incrementAndGet();
         }
-        val createOk = req.reqType == FinishRequest.TRANSIT ||
-                       req.reqType == FinishRequest.EXCP ||
-                (req.reqType == FinishRequest.TERM && req.id.home == here.id as Int) ;
         val backupRes = new GlobalRef[BackupResponse](new BackupResponse());
         val backup = Place(req.backupPlaceId);
         val rCond = ResilientCondition.make(backup);
@@ -371,11 +367,13 @@ final class FinishRequest {
     static val LIVE = 2;
     static val TERM = 3;
     static val EXCP = 4;
+    static val TERM_MUL = 5; //multiple terminations in one message
     
     val reqType:Long;
     val typeDesc:String;
     val id:FinishResilient.Id;
     var parentId:FinishResilient.Id;
+    var map:HashMap[FinishResilient.Task,Int];
     
     //add child request
     var childId:FinishResilient.Id = FinishResilient.UNASSIGNED;
@@ -406,23 +404,10 @@ final class FinishRequest {
         this.childId = childId;
         this.toAdopter = false;
         this.parentId = parentId;
-        if (reqType == ADD_CHILD)
-            typeDesc = "ADD_CHILD";
-        else if (reqType == TRANSIT)
-            typeDesc = "TRANSIT";
-        else if (reqType == LIVE)
-            typeDesc = "LIVE" ;
-        else if (reqType == TERM)
-            typeDesc = "TERM" ;
-        else if (reqType == EXCP)
-            typeDesc = "EXCP" ;
-        else {
-            typeDesc = "";
-            assert false : "invalid request type";
-        }
+        this.typeDesc = "ADD_CHILD";
     }
     
-    //TRANSIT/TERM  -> parentId must be given to create backup
+    //TRANSIT/TERM  -> parentId must be given to create backup if needed
     public def this(reqType:Long, id:FinishResilient.Id,
             parentId:FinishResilient.Id,
             srcId:Int, dstId:Int, kind:Int) {
@@ -433,20 +418,14 @@ final class FinishRequest {
         this.dstId = dstId;
         this.kind = kind;
         this.parentId = parentId;
-        if (reqType == ADD_CHILD)
-            typeDesc = "ADD_CHILD";
-        else if (reqType == TRANSIT)
+        if (reqType == TRANSIT)
             typeDesc = "TRANSIT";
         else if (reqType == LIVE)
             typeDesc = "LIVE" ;
         else if (reqType == TERM)
             typeDesc = "TERM" ; 
-        else if (reqType == EXCP)
-            typeDesc = "EXCP" ;
-        else {
-            typeDesc = "";
-            assert false : "invalid request type";
-        }
+        else
+            typeDesc = "" ;
     }
     
     //LIVE -> parent not needed, backup must have been already created.
@@ -458,24 +437,18 @@ final class FinishRequest {
         this.srcId = srcId;
         this.dstId = dstId;
         this.kind = kind;
-        if (reqType == ADD_CHILD)
-            typeDesc = "ADD_CHILD";
-        else if (reqType == TRANSIT)
+        if (reqType == TRANSIT)
             typeDesc = "TRANSIT";
         else if (reqType == LIVE)
             typeDesc = "LIVE" ;
         else if (reqType == TERM)
             typeDesc = "TERM" ; 
-        else if (reqType == EXCP)
-            typeDesc = "EXCP" ;
-        else {
-            typeDesc = "";
-            assert false : "invalid request type";
-        }
+        else
+            typeDesc = "" ;
     }
     
     
-   //EXCP  -> parentId must be given to create backup
+    //EXCP  -> parentId must be given to create backup if needed
     public def this(reqType:Long, id:FinishResilient.Id,
             parentId:FinishResilient.Id,
             ex:CheckedThrowable) {
@@ -484,20 +457,22 @@ final class FinishRequest {
         this.toAdopter = false;
         this.parentId = parentId;
         this.ex = ex;
-        if (reqType == ADD_CHILD)
-            typeDesc = "ADD_CHILD";
-        else if (reqType == TRANSIT)
-            typeDesc = "TRANSIT";
-        else if (reqType == LIVE)
-            typeDesc = "LIVE" ;
-        else if (reqType == TERM)
-            typeDesc = "TERM" ; 
-        else if (reqType == EXCP)
-            typeDesc = "EXCP" ;
-        else {
-            typeDesc = "";
-            assert false : "invalid request type";
-        }
+        typeDesc = "EXCP" ;
+    }
+    
+    
+    //TERM_MULT  -> parentId must be given to create backup if needed
+    public def this(reqType:Long, id:FinishResilient.Id,
+            parentId:FinishResilient.Id,
+            dstId:Int,
+            map:HashMap[FinishResilient.Task,Int]) {
+        this.reqType = reqType;
+        this.id = id;
+        this.toAdopter = false;
+        this.parentId = parentId;
+        this.dstId = dstId;
+        this.map = map;
+        typeDesc = "TERM_MULT" ;
     }
     
     public def isLocal() = (id.home == here.id as Int);
