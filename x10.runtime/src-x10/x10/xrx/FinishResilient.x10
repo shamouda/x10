@@ -16,6 +16,7 @@ import x10.util.concurrent.AtomicBoolean;
 import x10.util.concurrent.Condition;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.concurrent.Lock;
+import x10.util.HashMap;
 
 /*
  * Common abstract class for Resilient Finish
@@ -188,4 +189,25 @@ abstract class FinishResilient extends FinishState {
         failJavaOnlyMode(); 
     }
     
+    static @Inline def increment[K](map:HashMap[K,Int], k:K) {
+        map.put(k, map.getOrElse(k, 0n)+1n);
+    }
+
+    static @Inline def decrement[K](map:HashMap[K,Int], k:K) {
+        val oldCount = map(k);
+        if (oldCount == 1n) {
+             map.remove(k);
+        } else {
+             map(k) = oldCount-1n;
+        }
+    }
+    
+    static @Inline def deduct[K](map:HashMap[K,Int], k:K, cnt:Int) {
+        val oldCount = map(k);
+        if (oldCount == cnt) {
+             map.remove(k);
+        } else {
+             map(k) = oldCount-cnt;
+        }
+    }
 }

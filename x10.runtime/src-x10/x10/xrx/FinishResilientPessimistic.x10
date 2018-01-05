@@ -33,92 +33,151 @@ import x10.util.concurrent.Condition;
 //TODO: createBackup: repeat if backup place is dead. block until another place is found!!
 //TODO: CHECK in ResilientFinishP0 -> line 174: decrement(adopterState.live, t);  should be adopterState.liveAdopted
 //TODO: does the backup need to keep the exceptions list???
+//TODO: strictFinish
 /**
  * Distributed Resilient Finish (records transit and live tasks)
  * This version is a corrected implementation of the distributed finish described in PPoPP14,
  * that was released in version 2.4.1
  */
 class FinishResilientPessimistic extends FinishResilient implements CustomSerialization {
-    
-    private val isRoot:Boolean;
-    
-    private var remoteState:PessimisticRemoteState;
-    
-    private var rootState:PessimisticMasterState;
-    
-    private val id:Id;
-    
-    private val grlc:GlobalRef[AtomicInteger];
-    
-    private def localCount():AtomicInteger = (grlc as GlobalRef[AtomicInteger]{self.home == here})();
-    
+	protected transient var me:FinishResilient; // local finish object
+    val id:Id;
+
     public def toString():String { 
-    	return ( isRoot? "FinishResilientPessimistic(id="+id+", parentId="+rootState.parentId+", isRoot=true)" : 
-               "FinishResilientPessimistic(parentId="+id+", isRoot=false)");
+    	return me.toString();
     }
-
-    static @Inline def increment[K](map:HashMap[K,Int], k:K) {
-        map.put(k, map.getOrElse(k, 0n)+1n);
-    }
-
-    static @Inline def decrement[K](map:HashMap[K,Int], k:K) {
-        val oldCount = map(k);
-        if (oldCount == 1n) {
-             map.remove(k);
-        } else {
-             map(k) = oldCount-1n;
-        }
-    }
+    
+    def notifySubActivitySpawn(place:Place):void { me.notifySubActivitySpawn(place); }
+    def notifyShiftedActivitySpawn(place:Place):void { me.notifyShiftedActivitySpawn(place); }
+    def notifyActivityCreation(srcPlace:Place, activity:Activity):Boolean { return me.notifyActivityCreation(srcPlace, activity); }
+    def notifyShiftedActivityCreation(srcPlace:Place):Boolean { return notifyShiftedActivityCreation(srcPlace); }
+    def notifyRemoteContinuationCreated():void { me.notifyRemoteContinuationCreated(); }
+    def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void { me.notifyActivityCreationFailed(srcPlace, t); }
+    def notifyActivityCreatedAndTerminated(srcPlace:Place):void { me.notifyActivityCreatedAndTerminated(srcPlace); }
+    def pushException(t:CheckedThrowable):void { me.pushException(t); }
+    def notifyActivityTermination(srcPlace:Place):void { me.notifyActivityTermination(srcPlace); }
+    def notifyShiftedActivityCompletion(srcPlace:Place):void { me.notifyShiftedActivityCompletion(srcPlace); }
+    def waitForFinish():void { me.waitForFinish(); }
 
     //create root finish
     public def this (parent:FinishState) {
-    	isRoot = true;
     	id = Id(here.id as Int, nextId.getAndIncrement());
-    	grlc = GlobalRef[AtomicInteger](new AtomicInteger(1n));
-    	rootState = new PessimisticMasterState(id, parent);
+    	val grlc = GlobalRef[AtomicInteger](new AtomicInteger(1n));
+    	me = new PessimisticMasterState(id, parent, grlc);
     }
     
     //create remote finish
     private def this(deser:Deserializer) {
-    	isRoot = false;
     	id = deser.readAny() as Id;
-    	remoteState = new PessimisticRemoteState(id);
     	val lc = deser.readAny() as GlobalRef[AtomicInteger];
-    	val src = deser.readAny() as Place;
         if (lc.home == here) {
-            grlc = lc;
-            if (verbose>=1) debug("<<<< RemoteFinish(id="+id+",src="+src+",lcHome="+lc.home+") createdA");    
+            me = new PessimisticRemoteState(id, lc);
+            if (verbose>=1) debug("<<<< RemoteFinish(id="+id+",lcHome="+lc.home+") createdA");    
         }
         else {
-            grlc = GlobalRef[AtomicInteger](new AtomicInteger(1n));
-            if (verbose>=1) debug("<<<< RemoteFinish(id="+id+",src="+src+",lcHome="+lc.home+") createdB with new lc=1");
+            val grlc = GlobalRef[AtomicInteger](new AtomicInteger(1n));
+            me = new PessimisticRemoteState(id, grlc);
+            if (verbose>=1) debug("<<<< RemoteFinish(id="+id+",lcHome="+lc.home+") createdB with new lc=1");
         }
     }
     
     //make root finish    
     static def make(parent:FinishState) {
         val fs = new FinishResilientPessimistic(parent);
-        FinishReplicator.addMaster(fs.id, fs.rootState);
+        FinishReplicator.addMaster(fs.id, fs.me as PessimisticMasterState);
         return fs;
     }
     
     //serialize a root finish
     public def serialize(ser:Serializer) {
-        if (verbose>=1) debug(">>>> serialize(id="+id+",isRoot="+isRoot+") called ");
+        if (verbose>=1) debug(">>>> serialize(id="+id+") called ");
         globalInit(false); // Once we have more than 1 copy of the finish state, we must go global
                            // false means don't create a backup
         ser.writeAny(id);
+        val grlc = me instanceof PessimisticMasterState ?
+        				(me as PessimisticMasterState).grlc :
+        				(me as PessimisticRemoteState).grlc ;
         ser.writeAny(grlc);
-        ser.writeAny(here);
-        if (verbose>=1) debug("<<<< serialize(id="+id+",isRoot="+isRoot+") returning ");
+        if (verbose>=1) debug("<<<< serialize(id="+id+") returning ");
     }
     
-    private def forgetGlobalRefs():void {
-        (grlc as GlobalRef[AtomicInteger]{self.home==here}).forget();
+    private def globalInit(makeBackup:Boolean) {
+    	if (me instanceof PessimisticMasterState) {
+    		val rootState = me as PessimisticMasterState;
+    		rootState.latch.lock();
+	        if (!rootState.isGlobal) {
+	            if (verbose>=1) debug(">>>> globalInit(id="+id+") called");
+	            if (id != TOP_FINISH) {
+    	        	val parent = rootState.parent;
+    	            
+    	            if (parent instanceof FinishResilientPessimistic) {
+    	                val frParent = parent as FinishResilientPessimistic;
+    	                if (frParent.me instanceof PessimisticMasterState) (frParent as FinishResilientPessimistic).globalInit(true);
+    	            }
+    	            
+    	            if (rootState.parentId != UNASSIGNED) {
+    	            	val req = new FinishRequest(FinishRequest.ADD_CHILD, rootState.parentId, id);
+    	            	FinishReplicator.exec(req);
+    	            }
+    	            if (makeBackup)
+    	                createBackup();
+	            } else {
+	                if (verbose>=1) debug("=== globalInit(id="+id+") replication not required for top finish");    
+	            }
+	            
+	            rootState.isGlobal = true;
+	            if (verbose>=1) debug("<<<< globalInit(id="+id+") returning");
+	        }
+	        rootState.latch.unlock();
+        }
     }
     
+    private def createBackup() {
+    	val rootState = me as PessimisticMasterState;
+    	//TODO: redo if backup dies
+    	if (verbose>=1) debug(">>>> createBackup(id="+id+") called fs="+this);
+     	val backup = Place(rootState.getBackupPlaceId());
+     	if (backup.isDead()) {
+     		if (verbose>=1) debug("<<<< createBackup(id="+id+") returning fs="+this + " dead backup");
+     		return false;
+     	}
+     	val myId = id; //don't copy this
+     	val parentId = rootState.parentId;
+     	val backRes = new GlobalRef[Cell[Boolean]](new Cell[Boolean](false));
+        val rCond = ResilientCondition.make(backup);
+        val condGR = rCond.gr;
+        val closure = (gr:GlobalRef[Condition]) => {
+            at (backup) @Immediate("backup_create") async {
+                val bFin = FinishReplicator.findBackupOrCreate(myId, parentId, false);
+                val success = bFin != null;
+                at (condGR) @Immediate("backup_create_response") async {
+                	val bRes = (backRes as GlobalRef[Cell[Boolean]]{self.home == here})();
+                	bRes.value = success;
+                    condGR().release();
+                }
+            }; 
+        };
+        rCond.run(closure);
+        //TODO: complete the below        
+        if (rCond.failed()) {
+            val excp = new DeadPlaceException(backup);
+        }
+        rCond.forget();
+        return true;
+    }
     
-	public static final class PessimisticRemoteState implements x10.io.Unserializable {
+    static def notifyPlaceDeath():void {
+        if (verbose>=1) {
+            debug(">>>> notifyPlaceDeath called");
+            var str:String = "";
+            for (p in Place.places()) {
+                str += "place(" + p.id + ")=" + p.isDead() + " "; 
+            }
+            debug("<<<< notifyPlaceDeath returning [isDead: "+str+"]");
+        }
+    }
+    
+	public static final class PessimisticRemoteState extends FinishResilient implements x10.io.Unserializable {
 		val id:Id; //parent root finish
 	
 	    //instance level lock
@@ -128,10 +187,147 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	    var adopterId:Id = UNASSIGNED;
 	
 	    var isAdopted:Boolean = false;
-	     ///////////////////////////////////DON't USE    
-	    public def this (val id:Id) {
+	    
+	    private val grlc:GlobalRef[AtomicInteger];
+	    private def localCount():AtomicInteger = (grlc as GlobalRef[AtomicInteger]{self.home == here})();
+	    
+	    public def this (val id:Id, grlc:GlobalRef[AtomicInteger]) {
             this.id = id;
+            this.grlc = grlc;
         }
+	    
+	    private def forgetGlobalRefs():void {
+	        (grlc as GlobalRef[AtomicInteger]{self.home==here}).forget();
+	    }
+	    
+	    def notifySubActivitySpawn(place:Place):void {
+	        notifySubActivitySpawn(place, ASYNC);
+	    }
+	    
+	    def notifyShiftedActivitySpawn(place:Place):void {
+	        notifySubActivitySpawn(place, AT);
+	    }
+	    
+	    def notifySubActivitySpawn(dstPlace:Place, kind:Int):void {
+	    	val srcId = here.id as Int;
+	        val dstId = dstPlace.id as Int;
+	        if (dstId == here.id as Int) {
+	        	val lc = localCount().incrementAndGet();
+	            if (verbose>=1) debug(">>>> Remote(id="+id+").notifySubActivitySpawn(srcId="+here.id + " dstId="+dstId+" kind="+kind+") called locally, localCount now "+lc);
+	        } else {
+	            val parentId = UNASSIGNED;
+	        	if (verbose>=1) debug(">>>> Remote(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+here.id + " dstId="+dstId+" kind="+kind+") called ");
+	        	val req = new FinishRequest(FinishRequest.TRANSIT, id, parentId, srcId, dstId, kind);
+	        	FinishReplicator.exec(req);
+	        	if (verbose>=1) debug("<<<< Remote(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+here.id + " dstId="+dstId+" kind="+kind+") returning");
+	        }
+	    }
+	    
+	    /*
+	     * This method can't block because it may run on an @Immediate worker.  
+	     * Since the replication protocol is blocking, we create an uncounted activity to perform replication.
+	     */
+	    def notifyActivityCreation(srcPlace:Place, activity:Activity):Boolean {
+	        val srcId = srcPlace.id as Int; 
+	        val dstId = here.id as Int;
+	        val kind = FinishResilient.ASYNC;
+	        if (srcId == dstId) {
+	            if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreation(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+") called locally. no action required");
+	            return true;
+	        }
+	        
+	        Runtime.submitUncounted( ()=>{
+	        	if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreation(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+") called");
+	        	val req = new FinishRequest(FinishRequest.LIVE, id, srcId, dstId, kind);
+	        	val resp = FinishReplicator.exec(req);
+	        	if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreation(isrcId=" + srcId + ",dstId="+dstId+",kind="+kind+") returning (submit="+resp.live_ok+")");
+	            if (resp.live_ok) {
+	            	Runtime.worker().push(activity);
+	            }
+	        });
+	        
+	    	return false;
+	    }
+	    
+	    /*
+	     * See similar method: notifyActivityCreation
+	     * Blocking is allowed here.
+	     */
+	    def notifyShiftedActivityCreation(srcPlace:Place):Boolean {
+	        val srcId = srcPlace.id as Int; 
+	        val dstId = here.id as Int;
+	    	val kind = FinishResilient.AT;
+	    	if (verbose>=1) debug(">>>> Remote(id="+id+").notifyShiftedActivityCreation(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+") called");
+	    	val req = new FinishRequest(FinishRequest.LIVE, id, srcId, dstId, kind);
+	    	val resp = FinishReplicator.exec(req);
+	    	if (verbose>=1) debug("<<<< Remote(id="+id+").notifyShiftedActivityCreation(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+") returning (submit="+resp.live_ok+")");
+	        return resp.live_ok;
+	    }
+	    
+	    def notifyRemoteContinuationCreated():void {
+	        for (var i:Long = 0; i < 100; i++) {
+	            debug(">>>> FATAL Remote(id="+id+").notifyRemoteContinuationCreated() called");
+	        }
+	    }
+
+	    def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void {
+	        for (var i:Long = 0; i < 100; i++) {
+	            debug(">>>> FATAL Remote(id="+id+").notifyActivityCreationFailed() called");
+	        }
+	    }
+
+	    def notifyActivityCreatedAndTerminated(srcPlace:Place):void {
+	        for (var i:Long = 0; i < 100; i++) {
+	            debug(">>>> FATAL Remote(id="+id+").notifyActivityCreatedAndTerminated() called");
+	        }
+	    }
+	    
+	    def pushException(t:CheckedThrowable):void {
+	        val parentId = UNASSIGNED;
+	        if (verbose>=1) debug(">>>> Remote(id="+id+").pushException(t="+t.getMessage()+") called");
+	        val req = new FinishRequest(FinishRequest.EXCP, id, parentId, t);
+	        val resp = FinishReplicator.exec(req);
+	        if (verbose>=1) debug("<<<< Remote(id="+id+").pushException(t="+t.getMessage()+") returning");
+	    }
+
+	    def notifyActivityTermination(srcPlace:Place):void {
+	        notifyActivityTermination(srcPlace, ASYNC);
+	    }
+	    def notifyShiftedActivityCompletion(srcPlace:Place):void {
+	        notifyActivityTermination(srcPlace, AT);
+	    }
+	    def notifyActivityTermination(srcPlace:Place, kind:Int):void {
+	        val lc = localCount().decrementAndGet();
+
+	        if (lc > 0) {
+	            if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityTermination called, decremented localCount to "+lc);
+	            return;
+	        }
+	        
+	        if (lc < 0) {
+	            for (var i:Long = 0 ; i < 100; i++) {
+	                debug("FATAL ERROR: Remote(id="+id+").notifyActivityTerminationreached a negative local count");
+	                assert false: "FATAL ERROR: Remote(id="+id+").notifyActivityTermination reached a negative local count";
+	            }
+	        }
+	        
+	        // If this is not the root finish, we are done with the finish state.
+	        // If this is the root finish, it will be kept alive because waitForFinish
+	        // is an instance method and it is on the stack of some activity.
+	        forgetGlobalRefs();
+	        
+	        val parentId = UNASSIGNED;
+	        val srcId = srcPlace.id as Int; 
+	        val dstId = here.id as Int;
+	    	if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + " dstId="+dstId+" kind="+kind+") called");
+	    	val req = new FinishRequest(FinishRequest.TERM, id, parentId, srcId, dstId, kind);
+	    	val resp = FinishReplicator.exec(req);
+	    	if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + " dstId="+dstId+" kind="+kind+") returning");
+	    }
+
+	    def waitForFinish():void {
+	    	assert false : "fatal, waitForFinish must not be called from a remote finish" ;
+	    }
 	}
 	
 	public static final class PessimisticMasterState extends FinishMasterState implements x10.io.Unserializable {
@@ -163,11 +359,20 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	    var backupPlaceId:Int = FinishReplicator.nextPlaceId.get();
 	    
         var excs:GrowableRail[CheckedThrowable]; 
+	    
+	    val grlc:GlobalRef[AtomicInteger];
 	
-	    def this(id:Id, parent:FinishState) {
+	    private def localCount():AtomicInteger = (grlc as GlobalRef[AtomicInteger]{self.home == here})();
+	    
+	    private def forgetGlobalRefs():void {
+	        (grlc as GlobalRef[AtomicInteger]{self.home==here}).forget();
+	    }
+	    
+	    def this(id:Id, parent:FinishState, grlc:GlobalRef[AtomicInteger]) {
 	        this.id = id;
 	        this.numActive = 1;
 	        this.parent = parent;
+	        this.grlc = grlc;
 	        increment(live, Task(id.home, FinishResilient.ASYNC));
 	        if (parent instanceof FinishResilientPessimistic) {
 	            parentId = (parent as FinishResilientPessimistic).id;
@@ -542,6 +747,169 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             }
 	        return resp;
 	    }
+	    
+	    def notifySubActivitySpawn(place:Place):void {
+	        notifySubActivitySpawn(place, ASYNC);
+	    }
+	    
+	    def notifyShiftedActivitySpawn(place:Place):void {
+	        notifySubActivitySpawn(place, AT);
+	    }
+	    
+	    def notifySubActivitySpawn(dstPlace:Place, kind:Int):void {
+	    	val srcId = here.id as Int;
+	        val dstId = dstPlace.id as Int;
+	        if (dstId == here.id as Int) {
+	        	val lc = localCount().incrementAndGet();
+	            if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called locally, localCount now "+lc);
+	        } else {
+	        	if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
+	        	val req = new FinishRequest(FinishRequest.TRANSIT, id, parentId, srcId, dstId, kind);
+	        	FinishReplicator.exec(req);
+	        	if (verbose>=1) debug("<<<< Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
+	        }
+	    }
+	    
+	    /*
+	     * This method can't block because it may run on an @Immediate worker.  
+	     * Since the replication protocol is blocking, we create an uncounted activity to perform replication.
+	     */
+	    def notifyActivityCreation(srcPlace:Place, activity:Activity):Boolean {
+	        val srcId = srcPlace.id as Int; 
+	        val dstId = here.id as Int;
+	        val kind = FinishResilient.ASYNC;
+	        if (srcId == dstId) {
+	            if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreation(srcId="+srcId+",dstId="+dstId+",kind="+kind+") called locally. no action required");
+	            return true;
+	        }
+	        
+	        Runtime.submitUncounted( ()=>{
+	        	if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreation(srcId="+srcId+",dstId="+dstId+",kind="+kind+") called");
+	        	val req = new FinishRequest(FinishRequest.LIVE, id, srcId, dstId, kind);
+	        	val resp = FinishReplicator.exec(req);
+	        	if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreation(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning (submit="+resp.live_ok+")");
+	            if (resp.live_ok) {
+	            	Runtime.worker().push(activity);
+	            }
+	        });
+	        
+	    	return false;
+	    }
+	    
+	    /*
+	     * See similar method: notifyActivityCreation
+	     * Blocking is allowed here.
+	     */
+	    def notifyShiftedActivityCreation(srcPlace:Place):Boolean {
+	        val srcId = srcPlace.id as Int; 
+	        val dstId = here.id as Int;
+	    	val kind = FinishResilient.AT;
+	    	if (verbose>=1) debug(">>>> Root(id="+id+").notifyShiftedActivityCreation(srcId="+srcId+",dstId="+dstId+",kind="+kind+") called");
+	    	val req = new FinishRequest(FinishRequest.LIVE, id, srcId, dstId, kind);
+	    	val resp = FinishReplicator.exec(req);
+	    	if (verbose>=1) debug("<<<< Root(id="+id+").notifyShiftedActivityCreation(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning (submit="+resp.live_ok+")");
+	        return resp.live_ok;
+	    }
+	    
+	    def notifyRemoteContinuationCreated():void {
+	        for (var i:Long = 0; i < 100; i++) {
+	            debug(">>>> FATAL notifyRemoteContinuationCreated(id="+id+") called");
+	        }
+	    }
+
+	    def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void {
+	        for (var i:Long = 0; i < 100; i++) {
+	            debug(">>>> FATAL notifyActivityCreationFailed(id="+id+") called");
+	        }
+	    }
+
+	    def notifyActivityCreatedAndTerminated(srcPlace:Place):void {
+	        for (var i:Long = 0; i < 100; i++) {
+	            debug(">>>> FATAL notifyActivityCreatedAndTerminated(id="+id+") called");
+	        }
+	    }
+	    
+	    def pushException(t:CheckedThrowable):void {
+	        if (localFinishExceptionPushed(t)) {
+	            if (verbose>=1) debug("<<<< Root(id="+id+").pushException(t="+t.getMessage()+") returning");
+	            return;
+	        }
+	        
+	        if (verbose>=1) debug(">>>> Root(id="+id+").pushException(t="+t.getMessage()+") called");
+	        val req = new FinishRequest(FinishRequest.EXCP, id, parentId, t);
+	        val resp = FinishReplicator.exec(req);
+	        if (verbose>=1) debug("<<<< Root(id="+id+").pushException(t="+t.getMessage()+") returning");
+	    }
+
+	    def notifyActivityTermination(srcPlace:Place):void {
+	        notifyActivityTermination(srcPlace, ASYNC);
+	    }
+	    def notifyShiftedActivityCompletion(srcPlace:Place):void {
+	        notifyActivityTermination(srcPlace, AT);
+	    }
+	    def notifyActivityTermination(srcPlace:Place, kind:Int):void {
+	        val lc = localCount().decrementAndGet();
+
+	        if (lc > 0) {
+	            if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityTermination() called, decremented localCount to "+lc);
+	            return;
+	        }
+	        
+	        if (lc < 0) {
+	            for (var i:Long = 0 ; i < 100; i++) {
+	                debug("FATAL ERROR: Root(id="+id+").notifyActivityTermination() reached a negative local count");
+	                assert false: "FATAL ERROR: Root(id="+id+").notifyActivityTermination() reached a negative local count";
+	            }
+	        }
+	        
+	        // If this is not the root finish, we are done with the finish state.
+	        // If this is the root finish, it will be kept alive because waitForFinish
+	        // is an instance method and it is on the stack of some activity.
+	        forgetGlobalRefs();
+	        
+	        if (localFinishReleased()) {
+	        	if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination() returning");
+	        	return;
+	        }
+	        val srcId = srcPlace.id as Int;
+	        val dstId = here.id as Int;
+	    	if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityTermination(srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
+	    	val req = new FinishRequest(FinishRequest.TERM, id, parentId, srcId, dstId, kind);
+	    	val resp = FinishReplicator.exec(req);
+	    	if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
+	    }
+
+	    def waitForFinish():void {
+			if (verbose>=1) debug(">>>> waitForFinish(id="+id+") called, lc = " + localCount().get() );
+
+	        // terminate myself
+	        notifyActivityTermination(here);
+
+	        // If we haven't gone remote with this finish yet, see if this worker
+	        // can execute other asyncs that are governed by the finish before waiting on the latch.
+	        /*TODO: revise this */
+	        if ((!Runtime.STRICT_FINISH) && (Runtime.STATIC_THREADS /*|| !strictFinish*/)) {
+	            if (verbose>=2) debug("calling worker.join for id="+id);
+	            Runtime.worker().join(this.latch);
+	        }
+
+	        // wait for the latch release
+	        if (verbose>=2) debug("calling latch.await for id="+id);
+	        latch.await(); // wait for the termination (latch may already be released)
+	        if (verbose>=2) debug("returned from latch.await for id="+id);
+
+	        // no more messages will come back to this finish state 
+	        forgetGlobalRefs();
+	        
+	        // get exceptions and throw wrapped in a ME if there are any
+	        if (excs != null) throw new MultipleExceptions(excs);
+	        
+	        if (id == TOP_FINISH) {
+	            //blocks until final replication messages sent from place 0
+	            //are responded to.
+	            FinishReplicator.finalizeReplication();
+	        }
+	    }
 	}
 	
 	public static final class PessimisticBackupState extends FinishBackupState implements x10.io.Unserializable {
@@ -806,245 +1174,4 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	        return resp;
 	    }
 	}
-    
-    private def globalInit(makeBackup:Boolean) {
-    	if (isRoot) {
-    		rootState.latch.lock();
-	        if (!rootState.isGlobal) {
-	            if (verbose>=1) debug(">>>> globalInit(id="+id+") called");
-	            if (id != TOP_FINISH) {
-    	        	val parent = rootState.parent;
-    	            
-    	            if (parent instanceof FinishResilientPessimistic) {
-    	                val frParent = parent as FinishResilientPessimistic;
-    	                if (frParent.isRoot) frParent.globalInit(true);
-    	            }
-    	            
-    	            if (rootState.parentId != UNASSIGNED) {
-    	            	val req = new FinishRequest(FinishRequest.ADD_CHILD, rootState.parentId, id);
-    	            	FinishReplicator.exec(req);
-    	            }
-    	            if (makeBackup)
-    	                createBackup();
-	            } else {
-	                if (verbose>=1) debug("=== globalInit(id="+id+") replication not required for top finish");    
-	            }
-	            
-	            rootState.isGlobal = true;
-	            if (verbose>=1) debug("<<<< globalInit(id="+id+") returning");
-	        }
-	        rootState.latch.unlock();
-        }
-    }
-    
-    private def createBackup() {
-    	//TODO: redo if backup dies
-    	if (verbose>=1) debug(">>>> createBackup(id="+id+") called fs="+this);
-     	val backup = Place(rootState.getBackupPlaceId());
-     	if (backup.isDead()) {
-     		if (verbose>=1) debug("<<<< createBackup(id="+id+") returning fs="+this + " dead backup");
-     		return false;
-     	}
-     	val myId = id; //don't copy this
-     	val parentId = rootState.parentId;
-     	val backRes = new GlobalRef[Cell[Boolean]](new Cell[Boolean](false));
-        val rCond = ResilientCondition.make(backup);
-        val condGR = rCond.gr;
-        val closure = (gr:GlobalRef[Condition]) => {
-            at (backup) @Immediate("backup_create") async {
-                val bFin = FinishReplicator.findBackupOrCreate(myId, parentId, false);
-                val success = bFin != null;
-                at (condGR) @Immediate("backup_create_response") async {
-                	val bRes = (backRes as GlobalRef[Cell[Boolean]]{self.home == here})();
-                	bRes.value = success;
-                    condGR().release();
-                }
-            }; 
-        };
-        rCond.run(closure);
-        //TODO: complete the below        
-        if (rCond.failed()) {
-            val excp = new DeadPlaceException(backup);
-        }
-        rCond.forget();
-        return true;
-    }
-    
-    def notifySubActivitySpawn(place:Place):void {
-        notifySubActivitySpawn(place, ASYNC);
-    }
-    
-    def notifyShiftedActivitySpawn(place:Place):void {
-        notifySubActivitySpawn(place, AT);
-    }
-    
-    def notifySubActivitySpawn(dstPlace:Place, kind:Int):void {
-    	val srcId = here.id as Int;
-        val dstId = dstPlace.id as Int;
-        if (dstId == here.id as Int) {
-        	val lc = localCount().incrementAndGet();
-            if (verbose>=1) debug(">>>> notifySubActivitySpawn(id="+id+",isRoot="+isRoot+") called locally, localCount now "+lc);
-        } else {
-            val parentId:Id = isRoot? rootState.parentId : UNASSIGNED;
-        	if (verbose>=1) debug(">>>> notifySubActivitySpawn(id="+id+",parentId="+parentId+",isRoot="+isRoot+") called, srcId="+here.id + " dstId="+dstId+" kind="+kind);
-        	val req = new FinishRequest(FinishRequest.TRANSIT, id, parentId, srcId, dstId, kind);
-        	FinishReplicator.exec(req);
-        	if (verbose>=1) debug("<<<< notifySubActivitySpawn(id="+id+",parentId="+parentId+",isRoot="+isRoot+") returning, srcId="+here.id + " dstId="+dstId+" kind="+kind);
-        }
-    }
-    
-    /*
-     * This method can't block because it may run on an @Immediate worker.  
-     * Since the replication protocol is blocking, we create an uncounted activity to perform replication.
-     */
-    def notifyActivityCreation(srcPlace:Place, activity:Activity):Boolean {
-        val srcId = srcPlace.id as Int; 
-        val dstId = here.id as Int;
-        if (srcId == dstId) {
-            if (verbose>=1) debug(">>>> notifyActivityCreation(id="+id+") called locally. no action required");
-            return true;
-        }
-        
-        Runtime.submitUncounted( ()=>{
-        	val kind = FinishResilient.ASYNC;
-        	if (verbose>=1) debug(">>>> notifyActivityCreation(id="+id+",isRoot="+isRoot+") called, srcId=" + srcId + " dstId="+dstId+" kind="+kind);
-        	val req = new FinishRequest(FinishRequest.LIVE, id, srcId, dstId, kind);
-        	val resp = FinishReplicator.exec(req);
-        	if (verbose>=1) debug("<<<< notifyActivityCreation(id="+id+",isRoot="+isRoot+") returning (submit="+resp.live_ok+"), srcId=" + srcId + " dstId="+dstId+" kind="+kind);
-            if (resp.live_ok) {
-            	Runtime.worker().push(activity);
-            }
-        });
-        
-    	return false;
-    }
-    
-    /*
-     * See similar method: notifyActivityCreation
-     * Blocking is allowed here.
-     */
-    def notifyShiftedActivityCreation(srcPlace:Place):Boolean {
-        val srcId = srcPlace.id as Int; 
-        val dstId = here.id as Int;
-    	val kind = FinishResilient.AT;
-    	if (verbose>=1) debug(">>>> notifyShiftedActivityCreation(id="+id+",isRoot="+isRoot+") called, srcId=" + srcId + " dstId="+dstId+" kind="+kind);
-    	val req = new FinishRequest(FinishRequest.LIVE, id, srcId, dstId, kind);
-    	val resp = FinishReplicator.exec(req);
-    	if (verbose>=1) debug("<<<< notifyShiftedActivityCreation(id="+id+",isRoot="+isRoot+") returning (submit="+resp.live_ok+"), srcId=" + srcId + " dstId="+dstId+" kind="+kind);
-        return resp.live_ok;
-    }
-    
-    def notifyRemoteContinuationCreated():void {
-        for (var i:Long = 0; i < 100; i++) {
-            debug(">>>> FATAL notifyRemoteContinuationCreated(id="+id+") called");
-        }
-    }
-
-    def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void {
-        for (var i:Long = 0; i < 100; i++) {
-            debug(">>>> FATAL notifyActivityCreationFailed(id="+id+") called");
-        }
-    }
-
-    def notifyActivityCreatedAndTerminated(srcPlace:Place):void {
-        for (var i:Long = 0; i < 100; i++) {
-            debug(">>>> FATAL notifyActivityCreatedAndTerminated(id="+id+") called");
-        }
-    }
-    
-    def pushException(t:CheckedThrowable):void {
-        if (isRoot && rootState.localFinishExceptionPushed(t)) {
-            if (verbose>=1) debug("<<<< pushException(id="+id+",isRoot="+isRoot+",t="+t.getMessage()+") returning");
-            return;
-        }
-        
-        val parentId:Id = isRoot? rootState.parentId : UNASSIGNED;
-        if (verbose>=1) debug(">>>> pushException(id="+id+",isRoot="+isRoot+",t="+t.getMessage()+") called");
-        val req = new FinishRequest(FinishRequest.EXCP, id, parentId, t);
-        val resp = FinishReplicator.exec(req);
-        if (verbose>=1) debug("<<<< pushException(id="+id+",isRoot="+isRoot+",t="+t.getMessage()+") returning");
-    }
-
-    def notifyActivityTermination(srcPlace:Place):void {
-        notifyActivityTermination(srcPlace, ASYNC);
-    }
-    def notifyShiftedActivityCompletion(srcPlace:Place):void {
-        notifyActivityTermination(srcPlace, AT);
-    }
-    def notifyActivityTermination(srcPlace:Place, kind:Int):void {
-        val lc = localCount().decrementAndGet();
-
-        if (lc > 0) {
-            if (verbose>=1) debug(">>>> notifyActivityTermination(id="+id+") called, decremented localCount to "+lc);
-            return;
-        }
-        
-        if (lc < 0) {
-            for (var i:Long = 0 ; i < 100; i++) {
-                debug("FATAL ERROR: notifyActivityTermination(id="+id+",isRoot="+isRoot+") reached a negative local count");
-                assert false: "FATAL ERROR: notifyActivityTermination(id="+id+",isRoot="+isRoot+") reached a negative local count";
-            }
-        }
-        
-        // If this is not the root finish, we are done with the finish state.
-        // If this is the root finish, it will be kept alive because waitForFinish
-        // is an instance method and it is on the stack of some activity.
-        forgetGlobalRefs();
-        
-        if (isRoot && rootState.localFinishReleased()) {
-        	if (verbose>=1) debug("<<<< notifyActivityTermination(id="+id+",isRoot="+isRoot+") returning");
-        	return;
-        }
-        val parentId:Id = isRoot? rootState.parentId : UNASSIGNED;
-        val srcId = srcPlace.id as Int; 
-        val dstId = here.id as Int;
-    	if (verbose>=1) debug(">>>> notifyActivityTermination(id="+id+",parentId="+parentId+",isRoot="+isRoot+") called, srcId="+srcId + " dstId="+dstId+" kind="+kind);
-    	val req = new FinishRequest(FinishRequest.TERM, id, parentId, srcId, dstId, kind);
-    	val resp = FinishReplicator.exec(req);
-    	if (verbose>=1) debug("<<<< notifyActivityTermination(id="+id+",parentId="+parentId+",isRoot="+isRoot+") returning, srcId="+srcId + " dstId="+dstId+" kind="+kind);
-    }
-
-    def waitForFinish():void {
-    	assert isRoot : "fatal, waitForFinish must not be called from a remote finish" ;
-		if (verbose>=1) debug(">>>> waitForFinish(id="+id+") called, lc = " + localCount().get() );
-
-        // terminate myself
-        notifyActivityTermination(here);
-
-        // If we haven't gone remote with this finish yet, see if this worker
-        // can execute other asyncs that are governed by the finish before waiting on the latch.
-        /*TODO: revise this */
-        if ((!Runtime.STRICT_FINISH) && (Runtime.STATIC_THREADS /*|| !strictFinish*/)) {
-            if (verbose>=2) debug("calling worker.join for id="+id);
-            Runtime.worker().join(rootState.latch);
-        }
-
-        // wait for the latch release
-        if (verbose>=2) debug("calling latch.await for id="+id);
-        rootState.latch.await(); // wait for the termination (latch may already be released)
-        if (verbose>=2) debug("returned from latch.await for id="+id);
-
-        // no more messages will come back to this finish state 
-        forgetGlobalRefs();
-        
-        // get exceptions and throw wrapped in a ME if there are any
-        if (rootState.excs != null) throw new MultipleExceptions(rootState.excs);
-        
-        if (id == TOP_FINISH) {
-            //blocks until final replication messages sent from place 0
-            //are responded to.
-            FinishReplicator.finalizeReplication();
-        }
-    }
-    
-    static def notifyPlaceDeath():void {
-        if (verbose>=1) {
-            debug(">>>> notifyPlaceDeath called");
-            var str:String = "";
-            for (p in Place.places()) {
-                str += "place(" + p.id + ")=" + p.isDead() + " "; 
-            }
-            debug("<<<< notifyPlaceDeath returning [isDead: "+str+"]");
-        }
-    }
 }

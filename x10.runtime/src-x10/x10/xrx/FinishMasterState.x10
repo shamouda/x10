@@ -10,6 +10,6 @@
  */
 package x10.xrx;
 
-public abstract class FinishMasterState {
+public abstract class FinishMasterState extends FinishResilient {
     abstract def exec(req:FinishRequest):MasterResponse;
 }
