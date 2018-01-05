@@ -52,7 +52,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
 	def notifySubActivitySpawn(place:Place):void { me.notifySubActivitySpawn(place); }
 	def notifyShiftedActivitySpawn(place:Place):void { me.notifyShiftedActivitySpawn(place); }
 	def notifyActivityCreation(srcPlace:Place, activity:Activity):Boolean { return me.notifyActivityCreation(srcPlace, activity); }
-	def notifyShiftedActivityCreation(srcPlace:Place):Boolean { return notifyShiftedActivityCreation(srcPlace); }
+	def notifyShiftedActivityCreation(srcPlace:Place):Boolean { return me.notifyShiftedActivityCreation(srcPlace); }
 	def notifyRemoteContinuationCreated():void { me.notifyRemoteContinuationCreated(); }
 	def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void { me.notifyActivityCreationFailed(srcPlace, t); }
 	def notifyActivityCreatedAndTerminated(srcPlace:Place):void { me.notifyActivityCreatedAndTerminated(srcPlace); }
