@@ -135,28 +135,24 @@ public final class FinishReplicator {
     }
     
     
-    public static def exec(req:FinishRequest):ReplicatorResponse {
+    public static def exec(req:FinishRequest):Boolean {
         if (verbose>=1) debug(">>>> Replicator(id="+req.id+").exec() called");
-        val repResp = new ReplicatorResponse();
+        var submit:Boolean = false;
         while (true) {
             try {
                 val mresp:MasterResponse = masterExec(req);
-                repResp.transit_ok = mresp.transit_ok;
-                repResp.live_ok = mresp.live_ok;
+                submit = mresp.submit;
                 if (verbose>=1) debug(">>>> Replicator(id="+req.id+").exec() masterDone =>"
                         + " backupPlaceId = " + mresp.backupPlaceId
-                        + " transit_ok = " + repResp.transit_ok 
-                        + " live_ok = " + repResp.live_ok );
+                        + " submit = " + submit );
                 if (mresp.backupPlaceId == -1n) {
                     debug("==== Replicator(id="+req.id+").exec() FATAL ERROR Backup = -1 ");
                     assert false : "fatal error, backup -1 means master had a fatal error before reporting its backup value";
                 }
-                val backupGo = req.id != FinishResilient.TOP_FINISH &&
-                        ( (req.reqType != FinishRequest.TRANSIT && req.reqType != FinishRequest.LIVE ) ||
-                          (req.reqType == FinishRequest.TRANSIT && repResp.transit_ok) || 
-                          (req.reqType == FinishRequest.LIVE && repResp.live_ok) );
+                val backupGo = req.id != FinishResilient.TOP_FINISH && ( submit || (mresp.transitSubmitDPE && req.reqType == FinishRequest.TRANSIT));
                 if (backupGo) {
                     req.backupPlaceId = mresp.backupPlaceId;
+                    req.transitSubmitDPE = mresp.transitSubmitDPE;
                     val bresp = backupExec(req);
                     if (bresp.isAdopted) {
                         req.toAdopter = true;
@@ -178,7 +174,7 @@ public final class FinishReplicator {
                 break; //master should re-replicate
             }
         }
-        return repResp;
+        return submit;
     }
     
     public static def masterExec(req:FinishRequest) {
@@ -204,14 +200,14 @@ public final class FinishReplicator {
                 assert (parent != null) : "fatal error, parent is null";
                 val resp = parent.exec(req);
                 val r_back = resp.backupPlaceId;
-                val r_liveok = resp.live_ok;
-                val r_transitok = resp.transit_ok;
+                val r_submit = resp.submit;
+                val r_submitDPE = resp.transitSubmitDPE;
                 val r_exp = resp.excp;
                 at (condGR) @Immediate("master_exec_response") async {
                     val mRes = (masterRes as GlobalRef[MasterResponse]{self.home == here})();
                     mRes.backupPlaceId = r_back;
-                    mRes.live_ok = r_liveok;
-                    mRes.transit_ok = r_transitok;
+                    mRes.submit = r_submit;
+                    mRes.transitSubmitDPE = r_submitDPE;
                     mRes.excp = r_exp;
                     condGR().release();
                 }
@@ -244,7 +240,7 @@ public final class FinishReplicator {
                        (req.reqType == FinishRequest.TERM && req.id.home == here.id as Int);
         if (req.backupPlaceId == here.id as Int) {
             val bFin:FinishBackupState;
-            if (req.reqType == FinishRequest.TRANSIT)
+            if (createOk)
                 bFin = findBackupOrCreate(req.id, req.parentId, false);
             else
                 bFin = findBackupOrThrow(req.id);
@@ -255,7 +251,7 @@ public final class FinishReplicator {
             if (verbose>=1) debug("<<<< Replicator(id="+req.id+").backupExec returning [" + req + "]" );
             return resp;
         }
-        if (here.id == 0) {
+        if (here.id == 0) { //replication requests issued from place0
             place0Pending.incrementAndGet();
         }
         val backupRes = new GlobalRef[BackupResponse](new BackupResponse());
@@ -364,19 +360,14 @@ public final class FinishReplicator {
 class MasterResponse {
     var backupPlaceId:Int;
     var excp:Exception;
-    var transit_ok:Boolean = false;
-    var live_ok:Boolean = false;
+    var submit:Boolean = false;
+    var transitSubmitDPE:Boolean = false;
 }
 
 class BackupResponse {
     var isAdopted:Boolean;
     var adopterId:FinishResilient.Id;
     var excp:Exception;
-}
-
-class ReplicatorResponse {
-    var transit_ok:Boolean = false;
-    var live_ok:Boolean = false;
 }
 
 class MasterDied extends Exception {}

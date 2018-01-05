@@ -23,6 +23,7 @@ import x10.util.GrowableRail;
 import x10.util.HashMap;
 import x10.util.HashSet;
 
+//TODO: don't use getOrCreate unnecessarily (i.e. in notifyActivityCreation[Failed])
 /**
  * Place0-based Resilient Finish
  * This version is optimized and does not use ResilientStorePlace0
@@ -756,6 +757,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 } else {
                     parentId = UNASSIGNED;
                 }
+                // TODO: Sara to verify the below message with Dave, it seems incorrect
                 // if srcId == dstId, then notifySubActivitySpawn goes directly to live (not transit)
                 // so we need to decrement accordingly here and then check for quiescence.
                 at (place0) @Immediate("notifyActivityCreatedAndTerminated_quiescence_check_to_zero") async {

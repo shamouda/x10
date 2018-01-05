@@ -19,6 +19,7 @@ public class FinishRequest {
     static val TERM = 3;
     static val EXCP = 4;
     static val TERM_MUL = 5; //multiple terminations in one message
+    static val TRANSIT_TERM = 6;
     
     val reqType:Long;
     val typeDesc:String;
@@ -42,6 +43,8 @@ public class FinishRequest {
     var adopterId:FinishResilient.Id;
     
     var backupPlaceId:Int = -1n;
+    
+    var transitSubmitDPE:Boolean = false;
     
     public def toString() {
         return "type=" + typeDesc + ",id="+id+",childId="+childId+",srcId="+srcId+",dstId="+dstId;
@@ -70,6 +73,30 @@ public class FinishRequest {
         this.kind = kind;
         this.parentId = parentId;
         if (reqType == TRANSIT)
+            typeDesc = "TRANSIT";
+        else if (reqType == LIVE)
+            typeDesc = "LIVE" ;
+        else if (reqType == TERM)
+            typeDesc = "TERM" ; 
+        else
+            typeDesc = "" ;
+    }
+    
+    //TRANSIT_TERM -> parent not needed, backup must have been already created.
+    public def this(reqType:Long, id:FinishResilient.Id,
+            srcId:Int, dstId:Int, kind:Int,
+            ex:CheckedThrowable) {
+        this.reqType = reqType;
+        this.id = id;
+        this.toAdopter = false;
+        this.srcId = srcId;
+        this.dstId = dstId;
+        this.kind = kind;
+        this.parentId = parentId;
+        this.ex = ex;
+        if (reqType == TRANSIT_TERM)
+            typeDesc = "TRANSIT_TERM";
+        else if (reqType == TRANSIT)
             typeDesc = "TRANSIT";
         else if (reqType == LIVE)
             typeDesc = "LIVE" ;
