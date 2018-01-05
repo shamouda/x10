@@ -33,6 +33,7 @@ import x10.util.concurrent.Condition;
 //TODO: postpone backup creation to be with transit
 //TODO: toString
 //TODO: strictFinish
+//TODO: implement adoption 
 /**
  * Distributed Resilient Finish (records transit tasks only)
  * This version is a corrected implementation of the distributed finish described in PPoPP14,
@@ -105,8 +106,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         if (verbose>=1) debug("<<<< serialize(id="+id+") returning ");
     }
     
-    //makeBackup is true only when a parent local finish if forced to be global
-	//by a child
+    //makeBackup is true only when a parent finish if forced to be global by its child
     private def globalInit(makeBackup:Boolean) {
     	if (me instanceof OptimisticMasterState) {
     		val rootState = me as OptimisticMasterState;
@@ -158,7 +158,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }; 
         };
         rCond.run(closure);
-        //TODO: complete the below lines
+        //TODO: revise the below lines
         if (rCond.failed()) {
             val excp = new DeadPlaceException(backup);
         }
@@ -167,6 +167,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     }
     
     static def notifyPlaceDeath():void {
+        //TODO: implement adoption 
         if (verbose>=1) {
             debug(">>>> notifyPlaceDeath called");
             var str:String = "";
@@ -178,13 +179,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     }
     
     /* Because we record only the transit tasks with src-dst, we must record the
-     * number of received tasks from each place, so that we can properly report termination at the end.
+     * number of received tasks from each place, to be able to identify which transit tasks terminated.
      * 
      * For adoption, we rely on getting information about remote tasks from remote finish objects.
      * Therefore, we must store the remote objects until root finish is released.
      * 
-     * To save memory, we will not create a remote object for each src place,
-     * but one remote object per finish that has a HashSet recording the counts of received tasks from each place. 
+     * To save memory, we won't create a remote object for each src place for each finish,
+     * rather we create one remote object per finish with hash maps recording received and reported tasks per place.
      */
     public static final class OptimisticRemoteState extends FinishResilient implements x10.io.Unserializable {
     	val id:Id; //parent root finish
@@ -197,9 +198,9 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
 
         var isAdopted:Boolean = false;
         
-        val received = new HashMap[Task,Int]();
+        val received = new HashMap[Task,Int](); //increasing counts
         
-        val reported = new HashMap[Task,Int]();
+        val reported = new HashMap[Task,Int](); //increasing counts
         
         var denySet:HashSet[Id] = null; // lazily allocated
         
@@ -374,18 +375,21 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def notifyRemoteContinuationCreated():void {
+            //TODO: implement this
             for (var i:Long = 0; i < 100; i++) {
                 debug(">>>> FATAL notifyRemoteContinuationCreated(id="+id+") called");
             }
         }
 
         def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void {
+            //TODO: implement this
             for (var i:Long = 0; i < 100; i++) {
                 debug(">>>> FATAL notifyActivityCreationFailed(id="+id+") called");
             }
         }
 
         def notifyActivityCreatedAndTerminated(srcPlace:Place):void {
+            //TODO: implement this
             for (var i:Long = 0; i < 100; i++) {
                 debug(">>>> FATAL notifyActivityCreatedAndTerminated(id="+id+") called");
             }
@@ -440,6 +444,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
 
         //resilient finish counter set
         var numActive:Long;
+    
         val transit = new HashMap[Edge,Int]();
         
         //the nested finishes within this finish scope
@@ -836,18 +841,21 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def notifyRemoteContinuationCreated():void {
+            //TODO: implement this
             for (var i:Long = 0; i < 100; i++) {
                 debug(">>>> FATAL notifyRemoteContinuationCreated(id="+id+") called");
             }
         }
 
         def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void {
+            //TODO: implement this
             for (var i:Long = 0; i < 100; i++) {
                 debug(">>>> FATAL notifyActivityCreationFailed(id="+id+") called");
             }
         }
 
         def notifyActivityCreatedAndTerminated(srcPlace:Place):void {
+            //TODO: implement this
             for (var i:Long = 0; i < 100; i++) {
                 debug(">>>> FATAL notifyActivityCreatedAndTerminated(id="+id+") called");
             }
@@ -947,6 +955,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         
         //resilient finish counter set
         var numActive:Long;
+        
         val transit = new HashMap[FinishResilient.Edge,Int]();
         
         //the nested finishes within this finish scope

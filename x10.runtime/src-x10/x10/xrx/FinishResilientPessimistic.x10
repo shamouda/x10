@@ -34,6 +34,7 @@ import x10.util.concurrent.Condition;
 //TODO: CHECK in ResilientFinishP0 -> line 174: decrement(adopterState.live, t);  should be adopterState.liveAdopted
 //TODO: does the backup need to keep the exceptions list???
 //TODO: strictFinish
+//TODO: implement adoption 
 /**
  * Distributed Resilient Finish (records transit and live tasks)
  * This version is a corrected implementation of the distributed finish described in PPoPP14,
@@ -158,7 +159,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             }; 
         };
         rCond.run(closure);
-        //TODO: complete the below        
+        //TODO: revise the below        
         if (rCond.failed()) {
             val excp = new DeadPlaceException(backup);
         }
@@ -189,6 +190,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	    var isAdopted:Boolean = false;
 	    
 	    private val grlc:GlobalRef[AtomicInteger];
+	    
 	    private def localCount():AtomicInteger = (grlc as GlobalRef[AtomicInteger]{self.home == here})();
 	    
 	    public def this (val id:Id, grlc:GlobalRef[AtomicInteger]) {
@@ -265,18 +267,21 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	    }
 	    
 	    def notifyRemoteContinuationCreated():void {
+	        //TODO: implement this
 	        for (var i:Long = 0; i < 100; i++) {
 	            debug(">>>> FATAL Remote(id="+id+").notifyRemoteContinuationCreated() called");
 	        }
 	    }
 
 	    def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void {
+	        //TODO: implement this
 	        for (var i:Long = 0; i < 100; i++) {
 	            debug(">>>> FATAL Remote(id="+id+").notifyActivityCreationFailed() called");
 	        }
 	    }
 
 	    def notifyActivityCreatedAndTerminated(srcPlace:Place):void {
+	        //TODO: implement this
 	        for (var i:Long = 0; i < 100; i++) {
 	            debug(">>>> FATAL Remote(id="+id+").notifyActivityCreatedAndTerminated() called");
 	        }
@@ -812,18 +817,21 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	    }
 	    
 	    def notifyRemoteContinuationCreated():void {
+	        //TODO: implement this
 	        for (var i:Long = 0; i < 100; i++) {
 	            debug(">>>> FATAL notifyRemoteContinuationCreated(id="+id+") called");
 	        }
 	    }
 
 	    def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void {
+	        //TODO: implement this
 	        for (var i:Long = 0; i < 100; i++) {
 	            debug(">>>> FATAL notifyActivityCreationFailed(id="+id+") called");
 	        }
 	    }
 
 	    def notifyActivityCreatedAndTerminated(srcPlace:Place):void {
+	        //TODO: implement this
 	        for (var i:Long = 0; i < 100; i++) {
 	            debug(">>>> FATAL notifyActivityCreatedAndTerminated(id="+id+") called");
 	        }
