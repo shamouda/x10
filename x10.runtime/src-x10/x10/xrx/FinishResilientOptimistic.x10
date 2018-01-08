@@ -239,7 +239,33 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 }
             }
         }
-        //TODO: print the query list
+        if (verbose >=1 ) {
+        	val s = new x10.util.StringBuilder();
+        	if (resolveReqs.size() > 0) {
+        		for (e in resolveReqs.entries()) {
+        			val pl = e.getKey();
+        			val reqs = e.getValue();
+        			val bkps = reqs.countBackups;
+        			val recvs = reqs.countReceived;
+        			s.add("   From place: " + pl + "\n");
+        			if (bkps.size() > 0) {
+        				s.add("  countBackups:\n");
+        				for (b in bkps.entries()) {
+        					s.add(b.getKey() + ", ");
+        				}
+        				s.add("\n");
+        			}
+        			if (recvs.size() > 0) {
+        				s.add("  countReceives:\n");
+        				for (r in recvs.entries()) {
+        					s.add("<id="+r.getKey().id+",src="+r.getKey().src + ">, ");
+        				}
+        				s.add("\n");
+        			}
+        		}
+        	}
+        	debug(s.toString());
+        }
         //TODO: send the list and get responses
         //TODO: update counts accordingly and check if quicent reached
         //Create backups and masters as necessary
@@ -546,7 +572,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         
         var strictFinish:Boolean = false;
         
-        //will be updated in notifyPlaceDeath
+        //may be updated in notifyPlaceDeath
         var backupPlaceId:Int = FinishReplicator.nextPlaceId.get();
         
         var excs:GrowableRail[CheckedThrowable]; 

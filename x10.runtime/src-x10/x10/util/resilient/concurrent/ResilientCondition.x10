@@ -11,22 +11,14 @@ import x10.xrx.Runtime;
  * that releases the condition when the releasing place dies.
  */
 public class ResilientCondition implements Unserializable {
-    private transient val onePlace:Boolean;
     private transient var place:Place;
-    private transient var group:PlaceGroup;
     public val gr = new GlobalRef[Condition](new Condition());
 
     private static val all = new ArrayList[ResilientCondition]();
     private static val lock = new Lock();
     
     private def this(p:Place) {
-        onePlace = true;
         place = p;
-    }
-    
-    private def this(pg:PlaceGroup) {
-        onePlace = false;
-        group = pg;
     }
     
     public static def make(p:Place){
@@ -37,24 +29,8 @@ public class ResilientCondition implements Unserializable {
         return instance;
     }
     
-    public static def make(pg:PlaceGroup){
-        val instance = new ResilientCondition(pg);
-        lock.lock();
-        all.add(instance);
-        lock.unlock();
-        return instance;
-    }
-    
     public def failed() {
-        if (onePlace) 
-            return place.isDead();
-        else {
-            for (p in group) {
-                if (p.isDead())
-                    return true;
-            }
-            return false;
-        }
+        return place.isDead();
     }
     
     public def forget() {
