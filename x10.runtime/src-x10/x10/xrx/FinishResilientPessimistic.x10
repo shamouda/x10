@@ -35,9 +35,8 @@ import x10.util.concurrent.Condition;
 //TODO: does the backup need to keep the exceptions list???
 //TODO: implement adoption 
 //TODO: test notifyActivityCreationFailed()
-//TODO: test notifyRemoteContinuationCreated()
-//TODO: implement notifyActivityCreatedAndTerminated()
 //TODO: handle removeFromStates()
+//FIXME: main termination is buggy. use LULESH to reproduce the bug. how to wait until all replication work has finished.
 /**
  * Distributed Resilient Finish (records transit and live tasks)
  * This version is a corrected implementation of the distributed finish described in PPoPP14,
@@ -182,6 +181,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         }
     }
     
+    //REMOTE
 	public static final class PessimisticRemoteState extends FinishResilient implements x10.io.Unserializable {
 		val id:Id; //parent root finish
 	
@@ -279,17 +279,51 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	    def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable, kind:Int):void { 
 	        val srcId = srcPlace.id as Int;
 	        val dstId = here.id as Int;
-	        if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
-	        val req = new FinishRequest(FinishRequest.TRANSIT_TERM, id, srcId, dstId, kind, t);
-            val resp = FinishReplicator.exec(req);
-            if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
+            //we cannot block in this method, because it can be called from an immediate thread
+	        Runtime.submitUncounted( ()=>{
+    	        if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
+    	        val req = new FinishRequest(FinishRequest.TRANSIT_TERM, id, srcId, dstId, kind, t);
+                val resp = FinishReplicator.exec(req);
+                if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
+	        });
 	    }
 
-	    def notifyActivityCreatedAndTerminated(srcPlace:Place):void {
-	        //TODO: implement this
-	        for (var i:Long = 0; i < 100; i++) {
-	            debug(">>>> FATAL Remote(id="+id+").notifyActivityCreatedAndTerminated() called");
-	        }
+	    def notifyActivityCreatedAndTerminated(srcPlace:Place) {
+	        notifyActivityCreatedAndTerminated(srcPlace, ASYNC);
+	    }
+	    
+	    def notifyActivityCreatedAndTerminated(srcPlace:Place, kind:Int) {
+	        val srcId = srcPlace.id as Int; 
+            val dstId = here.id as Int;
+            val parentId = UNASSIGNED;
+            if (srcId == dstId) {
+                //perform termination steps, but use TRANSIT_TERM request rather than TERM
+                val lc = localCount().decrementAndGet();
+
+                if (lc > 0) {
+                    if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreatedAndTerminated called, decremented localCount to "+lc);
+                    return;
+                }
+                
+                if (lc < 0) {
+                    for (var i:Long = 0 ; i < 100; i++) {
+                        debug("FATAL ERROR: Remote(id="+id+").notifyActivityCreatedAndTerminated a negative local count");
+                        assert false: "FATAL ERROR: Remote(id="+id+").notifyActivityCreatedAndTerminated reached a negative local count";
+                    }
+                }
+                
+                // If this is not the root finish, we are done with the finish state.
+                // If this is the root finish, it will be kept alive because waitForFinish
+                // is an instance method and it is on the stack of some activity.
+                forgetGlobalRefs();
+            }
+            //we cannot block in this method, because it can be called from an immediate thread
+            Runtime.submitUncounted( ()=>{
+                if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreatedAndTerminated(parentId="+parentId+",srcId="+srcId + " dstId="+dstId+" kind="+kind+") called");
+                val req = new FinishRequest(FinishRequest.TRANSIT_TERM, id, srcId, dstId, kind, null);
+                val resp = FinishReplicator.exec(req);
+                if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreatedAndTerminated(parentId="+parentId+",srcId="+srcId + " dstId="+dstId+" kind="+kind+") returning");
+            });
 	    }
 	    
 	    def pushException(t:CheckedThrowable):void {
@@ -340,6 +374,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	    }
 	}
 	
+	//ROOT
 	public static final class PessimisticMasterState extends FinishMasterState implements x10.io.Unserializable {
 		val id:Id;
 	
@@ -454,6 +489,15 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         def addExceptionUnsafe(t:CheckedThrowable) {
             if (excs == null) excs = new GrowableRail[CheckedThrowable]();
             excs.add(t);
+        }
+        
+        def isGlobal() {
+            try {
+                latch.lock();
+                return isGlobal;
+            } finally {
+                latch.unlock();
+            }
         }
         
         def addDeadPlaceException(placeId:Long) {
@@ -891,18 +935,55 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable, kind:Int):void { 
             val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
-            if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
-            val req = new FinishRequest(FinishRequest.TRANSIT_TERM, id, srcId, dstId, kind, t);
-            val resp = FinishReplicator.exec(req);
-            if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
+            //we cannot block in this method, because it can be called from an immediate thread
+            Runtime.submitUncounted( ()=>{
+                if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
+                val req = new FinishRequest(FinishRequest.TRANSIT_TERM, id, srcId, dstId, kind, t);
+                val resp = FinishReplicator.exec(req);
+                if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
+            });
         }
         
-	    def notifyActivityCreatedAndTerminated(srcPlace:Place):void {
-	        //TODO: implement this
-	        for (var i:Long = 0; i < 100; i++) {
-	            debug(">>>> FATAL notifyActivityCreatedAndTerminated(id="+id+") called");
-	        }
-	    }
+        def notifyActivityCreatedAndTerminated(srcPlace:Place) {
+            notifyActivityCreatedAndTerminated(srcPlace, ASYNC);
+        }
+        
+        def notifyActivityCreatedAndTerminated(srcPlace:Place, kind:Int) {
+            val srcId = srcPlace.id as Int; 
+            val dstId = here.id as Int;
+            if (srcId == dstId) {
+                val lc = localCount().decrementAndGet();
+
+                if (lc > 0) {
+                    if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreatedAndTerminated() called, decremented localCount to "+lc);
+                    return;
+                }
+                
+                if (lc < 0) {
+                    for (var i:Long = 0 ; i < 100; i++) {
+                        debug("FATAL ERROR: Root(id="+id+").notifyActivityCreatedAndTerminated() reached a negative local count");
+                        assert false: "FATAL ERROR: Root(id="+id+").notifyActivityCreatedAndTerminated() reached a negative local count";
+                    }
+                }
+                
+                // If this is not the root finish, we are done with the finish state.
+                // If this is the root finish, it will be kept alive because waitForFinish
+                // is an instance method and it is on the stack of some activity.
+                forgetGlobalRefs();
+                
+                if (localFinishReleased()) {
+                    if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreatedAndTerminated() returning");
+                    return;
+                }
+            }
+            //we cannot block in this method, because it can be called from an immediate thread
+            Runtime.submitUncounted( ()=>{
+                if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreatedAndTerminated(srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
+                val req = new FinishRequest(FinishRequest.TRANSIT_TERM, id, srcId, dstId, kind, null);
+                val resp = FinishReplicator.exec(req);
+                if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreatedAndTerminated(srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
+            });
+        }
 	    
 	    def pushException(t:CheckedThrowable):void {
 	        if (localFinishExceptionPushed(t)) {

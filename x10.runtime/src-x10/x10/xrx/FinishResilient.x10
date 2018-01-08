@@ -63,7 +63,12 @@ abstract class FinishResilient extends FinishState {
     public static val ASYNC = 1n;
        
     protected static struct Task(place:Int, kind:Int) {
-        public def toString() = "<"+(kind == AT ? "at" : "async")+" live @ "+place+">";
+        public def toString() {
+            if (Runtime.RESILIENT_MODE == Configuration.RESILIENT_MODE_DIST_OPTIMISTIC)
+                return "<"+(kind == AT ? "at" : "async")+" from "+place+">";
+            else return "<"+(kind == AT ? "at" : "async")+" live @ "+place+">";
+        }
+        
         def this(place:Long, kind:Int) {
             property(place as Int, kind);
         }

@@ -30,12 +30,10 @@ import x10.util.concurrent.Condition;
 //TODO: clean remote finishes
 //TODO: bulk globalInit for a chain of finishes.
 //TODO: createBackup: repeat if backup place is dead. block until another place is found!!
-//TODO: postpone backup creation to be with transit
 //TODO: toString
 //TODO: implement adoption 
 //TODO: test notifyActivityCreationFailed()
-//TODO: test notifyRemoteContinuationCreated()
-//TODO: revise with p0 and test notifyActivityCreatedAndTerminated()
+//FIXME: main termination is buggy. use LULESH to reproduce the bug. how to wait until all replication work has finished.
 /**
  * Distributed Resilient Finish (records transit tasks only)
  * This version is a corrected implementation of the distributed finish described in PPoPP14,
@@ -386,20 +384,38 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable, kind:Int):void { 
             val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
-            if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
-            val req = new FinishRequest(FinishRequest.TERM, id, srcId, dstId, kind);
-            req.ex = t;
-            val resp = FinishReplicator.exec(req);
-            if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
+            Runtime.submitUncounted( ()=>{
+                if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
+                val req = new FinishRequest(FinishRequest.TERM, id, srcId, dstId, kind);
+                req.ex = t;
+                val resp = FinishReplicator.exec(req);
+                if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
+            });
         }
 
-        def notifyActivityCreatedAndTerminated(srcPlace:Place):void {
+        def notifyActivityCreatedAndTerminated(srcPlace:Place) {
+            notifyActivityCreatedAndTerminated(srcPlace, ASYNC);
+        }
+        def notifyActivityCreatedAndTerminated(srcPlace:Place, kind:Int) {
             val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
-            if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") called");
-            notifyActivityCreation(srcPlace, null);
-            notifyActivityTermination(srcPlace, ASYNC);
-            if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
+            val parentId = UNASSIGNED;
+            if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId +",dstId="+dstId+",kind="+ASYNC+") called");
+            val lc = notifyReceived(Task(srcId, ASYNC));
+            if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId +",dstId="+dstId+",kind="+ASYNC+") returning, localCount = " + lc);
+            
+            val map = notifyTerminationAndGetMap(Task(srcId, kind));
+            if (map == null) {
+                if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning, map is null");
+                return;
+            }
+            
+            Runtime.submitUncounted( ()=>{
+                if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root");
+                val req = new FinishRequest(FinishRequest.TERM_MUL, id, parentId, dstId, map);
+                val resp = FinishReplicator.exec(req);
+                if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
+            });
         }
         
         def pushException(t:CheckedThrowable):void {
@@ -436,7 +452,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         	assert false : "fatal, waitForFinish must not be called from a remote finish" ;
         }
     }
-
+    
+    //ROOT
     public static final class OptimisticMasterState extends FinishMasterState implements x10.io.Unserializable {
     	val id:Id;
 
@@ -866,20 +883,24 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable, kind:Int):void { 
             val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
-            if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
-            val req = new FinishRequest(FinishRequest.TERM, id, srcId, dstId, kind);
-            req.ex = t;
-            val resp = FinishReplicator.exec(req);
-            if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
+            Runtime.submitUncounted( ()=>{
+                if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
+                val req = new FinishRequest(FinishRequest.TERM, id, srcId, dstId, kind);
+                req.ex = t;
+                val resp = FinishReplicator.exec(req);
+                if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
+            });
         }
 
         def notifyActivityCreatedAndTerminated(srcPlace:Place):void {
             val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
             if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") called");
-            notifyActivityCreation(srcPlace, null);
-            notifyActivityTermination(srcPlace, ASYNC);
-            if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
+            //no need to call notifyActivityCreation() since it does NOOP in Root finish
+            Runtime.submitUncounted( ()=>{
+                notifyActivityTermination(srcPlace, ASYNC);
+                if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
+            });
         }
         
         def pushException(t:CheckedThrowable):void {
