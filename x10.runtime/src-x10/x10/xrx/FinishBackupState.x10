@@ -14,4 +14,6 @@ public abstract class FinishBackupState {
     abstract def markAsAdopted():void;
     abstract def exec(req:FinishRequest):BackupResponse;
     abstract def getAdopter():FinishResilient.Id;
+    abstract def lock():void;
+    abstract def unlock():void;
 }

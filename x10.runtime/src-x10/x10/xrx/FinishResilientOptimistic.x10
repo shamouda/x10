@@ -27,13 +27,14 @@ import x10.util.concurrent.Lock;
 import x10.util.resilient.concurrent.ResilientCondition;
 import x10.util.concurrent.Condition;
 
-//TODO: clean remote finishes
+//TODO: clean remote finishes - design a piggybacking protocol for GC
 //TODO: bulk globalInit for a chain of finishes.
 //TODO: createBackup: repeat if backup place is dead. block until another place is found!!
 //TODO: toString
 //TODO: implement adoption 
 //TODO: test notifyActivityCreationFailed()
 //FIXME: main termination is buggy. use LULESH to reproduce the bug. how to wait until all replication work has finished.
+//FIXME: handle RemoteCreationDenied
 /**
  * Distributed Resilient Finish (records transit tasks only)
  * This version is a corrected implementation of the distributed finish described in PPoPP14,
@@ -50,6 +51,16 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
 	//a cache for remote finish objects
 	private static val remotes = new HashMap[Id, OptimisticRemoteState]() ;
 	
+    //remote deny list
+    private static val remoteDeny = new HashSet[Id]();
+    
+    protected static struct ReceivedQueryId(id:Id, src:Int) {
+        public def toString() = "<receivedQuery id=" + id + " src=" + src + ">";
+        def this(id:Id, src:Int) {
+            property(id, src);
+        }
+    }
+    
 	def notifySubActivitySpawn(place:Place):void { me.notifySubActivitySpawn(place); }
 	def notifyShiftedActivitySpawn(place:Place):void { me.notifyShiftedActivitySpawn(place); }
 	def notifyActivityCreation(srcPlace:Place, activity:Activity):Boolean { return me.notifyActivityCreation(srcPlace, activity); }
@@ -74,6 +85,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             FinishResilient.glock.lock();
             var remoteState:OptimisticRemoteState = remotes.getOrElse(id, null);
             if (remoteState == null) {
+                if (remoteDeny.contains(id))
+                    throw new RemoteCreationDenied();
                 remoteState = new OptimisticRemoteState(id);
                 remotes.put(id, remoteState);
             }
@@ -168,15 +181,69 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     }
     
     static def notifyPlaceDeath():void {
-        //TODO: implement adoption 
-        if (verbose>=1) {
-            debug(">>>> notifyPlaceDeath called");
-            var str:String = "";
-            for (p in Place.places()) {
-                str += "place(" + p.id + ")=" + p.isDead() + " "; 
+        debug(">>>> notifyPlaceDeath called");
+        val newDead = FinishReplicator.getNewDeadPlaces();
+        val resolveReqs = new HashMap[Int,ResolveRequest]();
+        
+        val masters = FinishReplicator.lockAndGetImpactedMasters(newDead); //any master who contacted the dead place or whose backup was lost
+        if (!masters.isEmpty()) {
+            for (dead in newDead) {
+                val backup = FinishReplicator.getBackupPlace(dead);
+                for (mx in masters) {
+                    val m = mx as OptimisticMasterState; 
+                    for (entry in m.transit.entries()) {
+                        val edge = entry.getKey();
+                        if (newDead.contains(edge.dst)) {
+                            var rreq:ResolveRequest = resolveReqs.getOrElse(backup, null);
+                            if (rreq == null){
+                                rreq = new ResolveRequest();
+                                resolveReqs.put(backup, rreq);
+                            }
+                            rreq.countBackups.put(m.id, -1n);
+                        } else if (newDead.contains(edge.src)) {
+                            var rreq:ResolveRequest = resolveReqs.getOrElse(edge.dst, null);
+                            if (rreq == null){
+                                rreq = new ResolveRequest();
+                                resolveReqs.put(edge.dst, rreq);
+                            }
+                            rreq.countReceived.put(ReceivedQueryId(m.id, dead), -1n);
+                        }
+                    }
+                }
             }
-            debug("<<<< notifyPlaceDeath returning [isDead: "+str+"]");
         }
+        val backups = FinishReplicator.lockAndGetImpactedBackups(newDead); //any backup who lost its master.
+        if (!backups.isEmpty()) {
+            for (dead in newDead) {
+                val backup = here.id as Int;
+                for (bx in backups) {
+                    val b = bx as  OptimisticBackupState;
+                    for (entry in b.transit.entries()) {
+                        val edge = entry.getKey();
+                        if (newDead.contains(edge.dst)) {
+                            var rreq:ResolveRequest = resolveReqs.getOrElse(backup, null);
+                            if (rreq == null){
+                                rreq = new ResolveRequest();
+                                resolveReqs.put(backup, rreq);
+                            }
+                            rreq.countBackups.put(b.id, -1n);
+                        } else if (newDead.contains(edge.src)) {
+                            var rreq:ResolveRequest = resolveReqs.getOrElse(edge.dst, null);
+                            if (rreq == null){
+                                rreq = new ResolveRequest();
+                                resolveReqs.put(edge.dst, rreq);
+                            }
+                            rreq.countReceived.put(ReceivedQueryId(b.id, dead), -1n);
+                        }
+                    }
+                }
+            }
+        }
+        //TODO: print the query list
+        //TODO: send the list and get responses
+        //TODO: update counts accordingly and check if quicent reached
+        //Create backups and masters as necessary
+        debug("<<<< notifyPlaceDeath returning");
     }
     
     /* Because we record only the transit tasks with src-dst, we must record the
@@ -203,7 +270,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         
         val reported = new HashMap[Task,Int](); //increasing counts
         
-        var denySet:HashSet[Id] = null; // lazily allocated
+        var taskDeny:HashSet[Id] = null; // lazily allocated
         
         var lc:Int = 0n; //whenever lc reaches zero, report reported-received to root finish and set reported=received
         
@@ -503,6 +570,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }
         }
         
+        public def lock() {
+            latch.lock();
+        }
+        public def unlock() {
+            latch.unlock();
+        }
+        
         public def lc_Get() {
             try {
                 latch.lock();
@@ -658,7 +732,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (t != null) addExceptionUnsafe(t);
                 if (quiescent()) {
                     releaseLatch();
-                    //removeFromStates();
+                    FinishReplicator.removeMaster(id);
                 }
                 if (verbose>=3) {
                     debug("==== Master(id="+id+").inTransit srcId=" + srcId + ", dstId=" + dstId + " dumping after update");
@@ -678,7 +752,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             numActive-=cnt;
             if (quiescent()) {
                 releaseLatch();
-                //removeFromStates();
+                FinishReplicator.removeMaster(id);
             }
             if (verbose>=3) {
                 debug("==== Master(id="+id+").transitToCompletedMul srcId=" + srcId + ", dstId=" + dstId + " dumping after update");
@@ -725,6 +799,15 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 latch.release();
             }
             if (verbose>=2) debug("Master(id="+id+").releaseLatch returning");
+        }
+        
+        public def isImpactedByDeadPlaces(newDead:HashSet[Int]) {
+            for (e in transit.entries()) {
+                val edge = e.getKey();
+                if (newDead.contains(edge.src) || newDead.contains(edge.dst))
+                    return true;
+            }
+            return false;
         }
         
         public def exec(req:FinishRequest) {
@@ -1019,6 +1102,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             FinishResilient.increment(transit, FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC));
         }
         
+        public def lock() {
+            ilock.lock();
+        }
+        public def unlock() {
+            ilock.unlock();
+        }
+        
         def markAsAdopted() {
             try {
                 ilock.lock();
@@ -1091,7 +1181,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (ex != null) addExceptionUnsafe(ex);
                 if (quiescent()) {
                     isReleased = true;
-                    //removeFromStates();
+                    FinishReplicator.removeBackup(id);
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").transitToCompleted returning (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ") ");
             } finally {
@@ -1109,7 +1199,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 numActive-=cnt;
                 if (quiescent()) {
                     isReleased = true;
-                    //removeFromStates();
+                    FinishReplicator.removeBackup(id);
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").transitToCompletedMul returning (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ", cnt="+cnt+") ");
             } finally {
@@ -1198,4 +1288,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             return resp;
         }
     }
+}
+
+class RemoteCreationDenied extends Exception {}
+class ResolveRequest {
+    val countBackups = new HashMap[FinishResilient.Id, Int]();
+    val countReceived = new HashMap[FinishResilientOptimistic.ReceivedQueryId, Int]();
 }

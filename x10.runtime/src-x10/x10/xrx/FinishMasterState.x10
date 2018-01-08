@@ -10,6 +10,11 @@
  */
 package x10.xrx;
 
+import x10.util.HashSet;
+
 public abstract class FinishMasterState extends FinishResilient {
     abstract def exec(req:FinishRequest):MasterResponse;
+    abstract def isImpactedByDeadPlaces(newDead:HashSet[Int]):Boolean;
+    abstract def lock():void;
+    abstract def unlock():void;
 }

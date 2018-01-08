@@ -15,17 +15,23 @@ import x10.util.resilient.concurrent.ResilientCondition;
 import x10.compiler.Immediate;
 import x10.compiler.Uncounted;
 import x10.util.HashMap;
+import x10.util.HashSet;
 import x10.util.concurrent.AtomicInteger;
+
+//TODO: handle BackupCreationDenied
 
 public final class FinishReplicator {
     //the set of all masters
-    private static fmasters = new HashMap[FinishResilient.Id, FinishMasterState]();
+    private static val fmasters = new HashMap[FinishResilient.Id, FinishMasterState]();
     
     //the set of all backups
-    private static fbackups = new HashMap[FinishResilient.Id, FinishBackupState]();
+    private static val fbackups = new HashMap[FinishResilient.Id, FinishBackupState]();
     
-    //backup mapping
-    private static backupMap = new HashMap[Int, Int]();
+    //backup deny list
+    private static val backupDeny = new HashSet[FinishResilient.Id]();
+    
+    //backup place mapping
+    private static val backupMap = new HashMap[Int, Int]();
     
     //default next place - may be updated in notifyPlaceDeath
     static val nextPlaceId = new AtomicInteger(((here.id +1)%Place.numPlaces()) as Int);
@@ -39,12 +45,86 @@ public final class FinishReplicator {
     
     static val OPTIMISTIC = Configuration.resilient_mode() == Configuration.RESILIENT_MODE_DIST_OPTIMISTIC;
     
+    static val allDead = new HashSet[Int]();
+    
     static def debug(msg:String) {
         val nsec = System.nanoTime();
         val output = "[nsec=" + nsec + " place=" + here.id + " " + Runtime.activity() + "] " + msg;
         Console.OUT.println(output); Console.OUT.flush();
     }
     
+    static def getNewDeadPlaces() {
+        val newDead = new HashSet[Int]();
+        try {
+            FinishResilient.glock.lock();
+            for (i in 0n..((Place.numPlaces() as Int) - 1n)) {
+                if (Place.isDead(i) && !allDead.contains(i)) {
+                    newDead.add(i);
+                    allDead.add(i);
+                }
+            }
+        } finally {
+            FinishResilient.glock.unlock();
+        }
+        return newDead;
+    }
+    
+    static def lockAndGetImpactedMasters(newDead:HashSet[Int]) {
+        val result = new HashSet[FinishMasterState]();
+        try {
+            FinishResilient.glock.lock();
+            for (e in fmasters.entries()) {
+                val id = e.getKey();
+                val mFin = e.getValue();
+                mFin.lock();
+                if (mFin.isImpactedByDeadPlaces(newDead)) {
+                    result.add(mFin);
+                }
+                else {
+                    mFin.unlock();
+                }
+            }
+        } finally {
+            FinishResilient.glock.unlock();
+        }
+        return result;
+    }
+    
+    static def lockAndGetImpactedBackups(newDead:HashSet[Int]) {
+        val result = new HashSet[FinishBackupState]();
+        try {
+            FinishResilient.glock.lock();
+            for (e in fbackups.entries()) {
+                val id = e.getKey();
+                val bFin = e.getValue();
+                if (newDead.contains(id.home)) {
+                    bFin.lock();
+                    result.add(bFin);
+                }
+            }
+        } finally {
+            FinishResilient.glock.unlock();
+        }
+        return result;
+    }
+    
+    static def removeMaster(id:FinishResilient.Id) {
+        try {
+            FinishResilient.glock.lock();
+            fmasters.delete(id);
+        } finally {
+            FinishResilient.glock.unlock();
+        }
+    }
+    
+    static def removeBackup(id:FinishResilient.Id) {
+        try {
+            FinishResilient.glock.lock();
+            fbackups.delete(id);
+        } finally {
+            FinishResilient.glock.unlock();
+        }
+    }
     
     static def addMaster(id:FinishResilient.Id, fs:FinishMasterState) {
         if (verbose>=1) debug(">>>> addMaster(id="+id+") called");
@@ -101,6 +181,11 @@ public final class FinishReplicator {
             FinishResilient.glock.lock();
             var bs:FinishBackupState = fbackups.getOrElse(id, null);
             if (bs == null) {
+                if (backupDeny.contains(id)) {
+                    if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") failed, BackupCreationDenied");
+                    throw new BackupCreationDenied();
+                }
+                
                 if (OPTIMISTIC)
                     bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId);
                 else
@@ -134,7 +219,7 @@ public final class FinishReplicator {
         }
     }
     
-    
+    //FIXME: must give parent Id in all cases, because backupGetAdopter may create the backup
     public static def exec(req:FinishRequest):Boolean {
         if (verbose>=1) debug(">>>> Replicator(id="+req.id+").exec() called");
         var submit:Boolean = false;
@@ -300,10 +385,10 @@ public final class FinishReplicator {
         if (verbose>=1) debug("<<<< Replicator(id="+req.id+").backupExec returning [" + req + "]" );
         return resp;
     }
-    
+
     public static def backupGetAdopter(backupPlaceId:Int, id:FinishResilient.Id):FinishResilient.Id {
-        if (backupPlaceId == here.id as Int) { //
-             val bFin = findBackupOrThrow(id);
+        if (backupPlaceId == here.id as Int) { 
+             val bFin = findBackupOrThrow(id); //FIXME: findBackupOrCreate
              return bFin.getAdopter();
         }
         else {
@@ -373,3 +458,4 @@ class BackupResponse {
 class MasterDied extends Exception {}
 class BackupDied extends Exception {}
 class MasterAndBackupDied extends Exception {}
+class BackupCreationDenied extends Exception {}

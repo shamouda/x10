@@ -430,6 +430,18 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	        }
 	    }
 	    
+        public def lock() {
+            latch.lock();
+        }
+        
+        public def unlock() {
+            latch.unlock();
+        }
+        
+        public def isImpactedByDeadPlaces(newDead:HashSet[Int]):Boolean {
+            return false;
+        }
+        
         def dump() {
             val s = new x10.util.StringBuilder();
             s.add("State dump:\n");
@@ -1104,7 +1116,15 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	        increment(live, Task(id.home, FinishResilient.ASYNC));
 	    }
 	    
-       def markAsAdopted() {
+        public def lock() {
+            ilock.lock();
+        }
+        
+        public def unlock() {
+            ilock.unlock();
+        }
+	    
+        def markAsAdopted() {
             try {
                 ilock.lock();
                 isAdopted = true;
