@@ -15,9 +15,9 @@ public abstract class FinishBackupState {
     abstract def exec(req:FinishRequest):BackupResponse;
     abstract def getNewMasterBlocking():FinishResilient.Id;
     
-    
+    abstract def getId():FinishResilient.Id;
     abstract def lock():void;
     abstract def unlock():void;
     abstract def getParentId():FinishResilient.Id;
-    abstract def getNewMasterPlace():Int;
+    abstract def getPlaceOfMaster():Int;
 }

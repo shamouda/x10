@@ -40,12 +40,15 @@ public class FinishRequest {
     var backupPlaceId:Int = -1n;
     var transitSubmitDPE:Boolean = false;
     
+    //optimistic finish source
+    var optFinSrc:Int = -1n;
+    
     public def toString() {
         return "type=" + typeDesc + ",id="+id+",childId="+childId+",srcId="+srcId+",dstId="+dstId;
     }
     
     private def this(id:FinishResilient.Id, masterPlaceId:Int,
-            reqType:Long, typeDesc:String, parentId:FinishResilient.Id,
+            reqType:Long, typeDesc:String, parentId:FinishResilient.Id, optFinSrc:Int,
             map:HashMap[FinishResilient.Task,Int],
             childId:FinishResilient.Id, srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable) {
         this.id = id;
@@ -53,6 +56,7 @@ public class FinishRequest {
         this.reqType = reqType;
         this.typeDesc = typeDesc;     
         this.parentId = parentId;
+        this.optFinSrc = optFinSrc;
         this.toAdopter = false;   
         this.map = map;
         this.childId = childId;
@@ -65,38 +69,38 @@ public class FinishRequest {
     public static def makeAddChildRequest(id:FinishResilient.Id,
         childId:FinishResilient.Id) {
         val masterPlaceId = FinishReplicator.getMasterPlace(id.home);
-        return new FinishRequest(id, masterPlaceId, ADD_CHILD, "ADD_CHILD", FinishResilient.UNASSIGNED, null, childId, -1n, -1n, -1n, null);
+        return new FinishRequest(id, masterPlaceId, ADD_CHILD, "ADD_CHILD", FinishResilient.UNASSIGNED, -1n, null, childId, -1n, -1n, -1n, null);
     }
     
-    public static def makeTransitRequest(id:FinishResilient.Id,parentId:FinishResilient.Id,srcId:Int, dstId:Int,kind:Int) {
+    public static def makeTransitRequest(id:FinishResilient.Id,parentId:FinishResilient.Id,optFinSrc:Int,srcId:Int, dstId:Int,kind:Int) {
         val masterPlaceId = FinishReplicator.getMasterPlace(id.home);
-        return new FinishRequest(id, masterPlaceId, TRANSIT, "TRANSIT", parentId, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, null);
+        return new FinishRequest(id, masterPlaceId, TRANSIT, "TRANSIT", parentId, optFinSrc, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, null);
     }
     
-    public static def makeTransitTermRequest(id:FinishResilient.Id,parentId:FinishResilient.Id,srcId:Int, dstId:Int,kind:Int, ex:CheckedThrowable) {
+    public static def makeTransitTermRequest(id:FinishResilient.Id,parentId:FinishResilient.Id,optFinSrc:Int,srcId:Int, dstId:Int,kind:Int, ex:CheckedThrowable) {
         val masterPlaceId = FinishReplicator.getMasterPlace(id.home);
-        return new FinishRequest(id, masterPlaceId, TRANSIT_TERM, "TRANSIT_TERM", parentId, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, ex);
+        return new FinishRequest(id, masterPlaceId, TRANSIT_TERM, "TRANSIT_TERM", parentId, optFinSrc, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, ex);
     }
     
-    public static def makeLiveRequest(id:FinishResilient.Id,parentId:FinishResilient.Id,srcId:Int, dstId:Int,kind:Int) {
+    public static def makeLiveRequest(id:FinishResilient.Id,parentId:FinishResilient.Id,optFinSrc:Int,srcId:Int, dstId:Int,kind:Int) {
         val masterPlaceId = FinishReplicator.getMasterPlace(id.home);
-        return new FinishRequest(id, masterPlaceId, LIVE, "LIVE", parentId, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, null);
+        return new FinishRequest(id, masterPlaceId, LIVE, "LIVE", parentId, optFinSrc, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, null);
     }
     
-    public static def makeTermRequest(id:FinishResilient.Id,parentId:FinishResilient.Id,srcId:Int, dstId:Int,kind:Int) {
+    public static def makeTermRequest(id:FinishResilient.Id,parentId:FinishResilient.Id,optFinSrc:Int,srcId:Int, dstId:Int,kind:Int) {
         val masterPlaceId = FinishReplicator.getMasterPlace(id.home);
-        return new FinishRequest(id, masterPlaceId, TERM, "TERM", parentId, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, null);
+        return new FinishRequest(id, masterPlaceId, TERM, "TERM", parentId, optFinSrc, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, null);
     }
     
-    public static def makeExcpRequest(id:FinishResilient.Id,parentId:FinishResilient.Id,ex:CheckedThrowable) {
+    public static def makeExcpRequest(id:FinishResilient.Id,parentId:FinishResilient.Id,optFinSrc:Int,ex:CheckedThrowable) {
         val masterPlaceId = FinishReplicator.getMasterPlace(id.home);
-        return new FinishRequest(id, masterPlaceId, EXCP, "EXCP", parentId, null, FinishResilient.UNASSIGNED, -1n, -1n, -1n, ex);
+        return new FinishRequest(id, masterPlaceId, EXCP, "EXCP", parentId, optFinSrc, null, FinishResilient.UNASSIGNED, -1n, -1n, -1n, ex);
     }
     
-    public static def makeTermMulRequest(id:FinishResilient.Id, parentId:FinishResilient.Id, dstId:Int,
+    public static def makeTermMulRequest(id:FinishResilient.Id, parentId:FinishResilient.Id, optFinSrc:Int, dstId:Int,
             map:HashMap[FinishResilient.Task,Int]) {
         val masterPlaceId = FinishReplicator.getMasterPlace(id.home);
-        return new FinishRequest(id, masterPlaceId, TERM_MUL, "TERM_MUL", parentId, map, FinishResilient.UNASSIGNED, -1n, dstId, -1n, null);
+        return new FinishRequest(id, masterPlaceId, TERM_MUL, "TERM_MUL", parentId, optFinSrc, map, FinishResilient.UNASSIGNED, -1n, dstId, -1n, null);
     }
    
     public def isMasterLocal() = masterPlaceId == here.id as Int;
