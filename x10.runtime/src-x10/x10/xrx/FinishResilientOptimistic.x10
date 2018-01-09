@@ -25,6 +25,7 @@ import x10.util.HashMap;
 import x10.util.HashSet;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.concurrent.ResilientCondition;
+import x10.util.resilient.concurrent.ResilientLowLevelFinish;
 import x10.util.concurrent.Condition;
 
 //TODO: clean remote finishes - design a piggybacking protocol for GC
@@ -35,6 +36,7 @@ import x10.util.concurrent.Condition;
 //TODO: test notifyActivityCreationFailed()
 //FIXME: main termination is buggy. use LULESH to reproduce the bug. how to wait until all replication work has finished.
 //FIXME: handle RemoteCreationDenied
+//FIXME: ReceivedQueryId must have src and dst
 /**
  * Distributed Resilient Finish (records transit tasks only)
  * This version is a corrected implementation of the distributed finish described in PPoPP14,
@@ -54,10 +56,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     //remote deny list
     private static val remoteDeny = new HashSet[Id]();
     
-    protected static struct ReceivedQueryId(id:Id, src:Int) {
-        public def toString() = "<receivedQuery id=" + id + " src=" + src + ">";
-        def this(id:Id, src:Int) {
-            property(id, src);
+    protected static struct ReceivedQueryId(id:Id, src:Int, dst:Int) {
+        public def toString() = "<receivedQuery id=" + id + " src=" + src + " dst="+dst+">";
+        def this(id:Id, src:Int, dst:Int) {
+            property(id, src, dst);
         }
     }
     
@@ -78,6 +80,22 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     	id = Id(here.id as Int, nextId.getAndIncrement());
     	me = new OptimisticMasterState(id, parent, src);
     	if (verbose>=1) debug("<<<< RootFinish(id="+id+", src="+src+") created");
+    }
+    
+    private static def countReceived(id:Id, src:Int) {
+        var count:Int = 0n;
+        try {
+            FinishResilient.glock.lock();
+            val remote = remotes.getOrElse(id, null);
+            if (remote != null) {
+                count = remote.countReceived(src);
+            }
+            //no more remotes for this finish id should be created
+            remoteDeny.add(id);
+        } finally {
+            FinishResilient.glock.unlock();
+        }
+        return count;
     }
     
     private static def getRemote(id:Id) {
@@ -181,7 +199,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     }
     
     static def notifyPlaceDeath():void {
-        debug(">>>> notifyPlaceDeath called");
+        if (verbose>=1) debug(">>>> notifyPlaceDeath called");
         val newDead = FinishReplicator.getNewDeadPlaces();
         val resolveReqs = new HashMap[Int,ResolveRequest]();
         
@@ -206,7 +224,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                                 rreq = new ResolveRequest();
                                 resolveReqs.put(edge.dst, rreq);
                             }
-                            rreq.countReceived.put(ReceivedQueryId(m.id, dead), -1n);
+                            rreq.countReceived.put(ReceivedQueryId(m.id, dead, edge.dst), -1n);
                         }
                     }
                 }
@@ -233,7 +251,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                                 rreq = new ResolveRequest();
                                 resolveReqs.put(edge.dst, rreq);
                             }
-                            rreq.countReceived.put(ReceivedQueryId(b.id, dead), -1n);
+                            rreq.countReceived.put(ReceivedQueryId(b.id, dead, edge.dst), -1n);
                         }
                     }
                 }
@@ -266,10 +284,107 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         	}
         	debug(s.toString());
         }
-        //TODO: send the list and get responses
-        //TODO: update counts accordingly and check if quicent reached
-        //Create backups and masters as necessary
-        debug("<<<< notifyPlaceDeath returning");
+        
+        val places = new Rail[Int](resolveReqs.size());
+        val iter = resolveReqs.keySet().iterator();
+        var i:Long = 0;
+        while (iter.hasNext()) {
+            val pl = iter.next();
+            places(i) = pl;
+        }
+        val fin = ResilientLowLevelFinish.make(places);
+        val gr = fin.getGr();
+        val outputGr = GlobalRef[HashMap[Int,ResolveRequest]](resolveReqs);
+        val closure = (gr:GlobalRef[ResilientLowLevelFinish]) => {
+            for (p in places) {
+                val requests = resolveReqs.getOrThrow(p);
+                at (Place(p)) @Immediate("resolve_request") async {
+                    val countBackups = requests.countBackups;
+                    val countReceived = requests.countReceived;
+                    
+                    if (countBackups.size() > 0) {
+                        for (b in countBackups.entries()) {
+                            val parentId = b.getKey();
+                            val count = FinishReplicator.countBackups(parentId);
+                            countBackups.put(parentId, count);   
+                        }
+                    }
+                    
+                    if (countReceived.size() > 0) {
+                        for (r in countReceived.entries()) {
+                            val key = r.getKey();
+                            val count = countReceived(key.id, key.src);
+                            countReceived.put(key, count);
+                        }
+                    }
+                    val me = here.id as Int;
+                    at (gr) @Immediate("resolve_request_response") async {
+                        val output = (outputGr as GlobalRef[HashMap[Int,ResolveRequest]]{self.home == here})().getOrThrow(me);
+                        
+                        for (ve in countBackups.entries()) {
+                            output.countBackups.put(ve.getKey(), ve.getValue());
+                        }
+                        for (vr in countReceived.entries()) {
+                            output.countReceived.put(vr.getKey(), vr.getValue());
+                        }
+                        
+                        gr().notifyTermination(me);
+                    }
+                }
+            }
+        };
+        
+        fin.run(closure);
+        
+        if (fin.failed())
+            throw new Exception("FATAL ERROR: another place failed during recovery ...");
+
+        //merge all results
+        val countBackups = new HashMap[FinishResilient.Id, Int]();
+        val countReceived = new HashMap[FinishResilientOptimistic.ReceivedQueryId, Int]();
+        
+        for (e in resolveReqs.entries()) {
+            val v = e.getValue();
+            for (ve in v.countBackups.entries()) {
+                countBackups.put(ve.getKey(), ve.getValue());
+            }
+            for (vr in v.countReceived.entries()) {
+                countReceived.put(vr.getKey(), vr.getValue());
+            }
+        }
+        
+        //
+        //update counts and check if quiecent reached
+        for (m in masters) {
+            val master = m as OptimisticMasterState;
+            //convert to dead
+            master.convertToDead(newDead, countBackups);
+            //convert from dead
+            master.convertFromDead(newDead, countReceived);
+        }
+
+        for (b in backups) {
+            val backup = b as OptimisticBackupState;
+            //convert to dead
+            backup.convertToDead(newDead, countBackups);
+            
+            //convert from dead
+            backup.convertFromDead(newDead, countReceived);
+        }
+        
+        //TODO: handle cases when master or backup quiecent
+
+        //TODO: ......Create backups and masters as necessary.......
+        
+        //TODO: handle quiecent from root finish to its parent root finish
+        
+        for (m in masters) {
+            m.unlock();
+        }
+        for (b in backups) {
+            b.unlock();
+        }
+        if (verbose>=1) debug("<<<< notifyPlaceDeath returning");
     }
     
     /* Because we record only the transit tasks with src-dst, we must record the
@@ -296,12 +411,27 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         
         val reported = new HashMap[Task,Int](); //increasing counts
         
-        var taskDeny:HashSet[Id] = null; // lazily allocated
+        var taskDeny:HashSet[Int] = null; // lazily allocated
         
         var lc:Int = 0n; //whenever lc reaches zero, report reported-received to root finish and set reported=received
         
         public def this (val id:Id) {
             this.id = id;
+        }
+        
+        public def countReceived(src:Int) {
+            var count:Int = 0n;
+            try {
+                ilock.lock();
+                val cAsync = received.getOrElse(Task(src, ASYNC),0n);
+                val cAt = received.getOrElse(Task(src, AT),0n);
+                count = cAsync + cAt;
+                //no more tasks from that src place should be accepted
+                taskDeny.add(src);
+            } finally {
+                ilock.unlock();
+            }
+            return count;
         }
         
         def dump() {
@@ -596,9 +726,61 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }
         }
         
+        public def convertToDead(newDead:HashSet[Int], countBackups:HashMap[FinishResilient.Id, Int]) {
+            for (e in transit.entries()) {
+                val key = e.getKey();
+                if (newDead.contains(key.dst)) {
+                    val t1 = e.getValue();
+                    val t2 = countBackups.get(id);
+                    assert t1 > 0 : "FATAL error, t1 must be positive";
+                    if (t1 >= t2) {
+                        val count = t1-t2;
+                        numActive -= count;
+                        transit.put(key, t2);
+                        assert numActive >= 0 : "FATAL error, numActive must not be negative";
+                        for (1..count) {
+                            if (verbose>=3) debug("adding DPE to "+id+" for transit task at "+key.dst);
+                            addExceptionUnsafe(new DeadPlaceException(Place(key.dst)));
+                        }
+                    }
+                    else assert false: "FATAL error, t1 >= t2 condition not met";
+                }
+            }
+            if (quiescent()) {
+                releaseLatch();
+                FinishReplicator.removeMaster(id);
+            }
+        }
+        
+        public def convertFromDead(newDead:HashSet[Int], countReceived:HashMap[FinishResilientOptimistic.ReceivedQueryId, Int]) {
+            for (e in transit.entries()) {
+                val key = e.getKey();
+                if (newDead.contains(key.src)) {
+                    val t1 = e.getValue();
+                    val rcvId = FinishResilientOptimistic.ReceivedQueryId(id, key.src, key.dst);
+                    val t2 = countReceived.get(rcvId);
+                    assert t1 > 0 : "FATAL error, t1 must be positive";
+                    if (t1 >= t2) {
+                        val count = t1-t2;
+                        numActive -= count;
+                        transit.put(key, t2);
+                        assert numActive >= 0 : "FATAL error, numActive must not be negative";
+                        // we don't add DPE when src is dead; we can assume that the message was not sent as long as it was not received.
+                    }
+                    else assert false: "FATAL error, t1 >= t2 condition not met";
+                }
+            }
+            if (quiescent()) {
+                releaseLatch();
+                FinishReplicator.removeMaster(id);
+            }
+        }
+        
         public def lock() {
             latch.lock();
         }
+        
+        
         public def unlock() {
             latch.unlock();
         }
@@ -1135,7 +1317,59 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             ilock.unlock();
         }
         
-        def markAsAdopted() {
+        public def getParentId() = parentId;
+        
+        public def convertToDead(newDead:HashSet[Int], countBackups:HashMap[FinishResilient.Id, Int]) {
+            for (e in transit.entries()) {
+                val key = e.getKey();
+                if (newDead.contains(key.dst)) {
+                    val t1 = e.getValue();
+                    val t2 = countBackups.get(id);
+                    assert t1 > 0 : "FATAL error, t1 must be positive";
+                    if (t1 >= t2) {
+                        val count = t1-t2;
+                        numActive -= count;
+                        transit.put(key, t2);
+                        assert numActive >= 0 : "FATAL error, numActive must not be negative";
+                        for (1..count) {
+                            if (verbose>=3) debug("adding DPE to "+id+" for transit task at "+key.dst);
+                            addExceptionUnsafe(new DeadPlaceException(Place(key.dst)));
+                        }
+                    }
+                    else assert false: "FATAL error, t1 >= t2 condition not met";
+                }
+            }
+            if (quiescent()) {
+                isReleased = true;
+                FinishReplicator.removeBackup(id);
+            }
+        }
+        
+        public def convertFromDead(newDead:HashSet[Int], countReceived:HashMap[FinishResilientOptimistic.ReceivedQueryId, Int]) {
+            for (e in transit.entries()) {
+                val key = e.getKey();
+                if (newDead.contains(key.src)) {
+                    val t1 = e.getValue();
+                    val rcvId = FinishResilientOptimistic.ReceivedQueryId(id, key.src, key.dst);
+                    val t2 = countReceived.get(rcvId);
+                    assert t1 > 0 : "FATAL error, t1 must be positive";
+                    if (t1 >= t2) {
+                        val count = t1-t2;
+                        numActive -= count;
+                        transit.put(key, t2);
+                        assert numActive >= 0 : "FATAL error, numActive must not be negative";
+                        // we don't add DPE when src is dead; we can assume that the message was not sent as long as it was not received.
+                    }
+                    else assert false: "FATAL error, t1 >= t2 condition not met";
+                }
+            }
+            if (quiescent()) {
+                isReleased = true;
+                FinishReplicator.removeBackup(id);
+            }
+        }
+        
+        public def markAsAdopted() {
             try {
                 ilock.lock();
                 isAdopted = true;

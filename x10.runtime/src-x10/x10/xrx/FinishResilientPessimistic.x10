@@ -1124,7 +1124,9 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             ilock.unlock();
         }
 	    
-        def markAsAdopted() {
+        public def getParentId() = parentId;
+        
+        public def markAsAdopted() {
             try {
                 ilock.lock();
                 isAdopted = true;

@@ -18,8 +18,6 @@ import x10.util.HashMap;
 import x10.util.HashSet;
 import x10.util.concurrent.AtomicInteger;
 
-//TODO: handle BackupCreationDenied
-
 public final class FinishReplicator {
     //the set of all masters
     private static val fmasters = new HashMap[FinishResilient.Id, FinishMasterState]();
@@ -51,6 +49,22 @@ public final class FinishReplicator {
         val nsec = System.nanoTime();
         val output = "[nsec=" + nsec + " place=" + here.id + " " + Runtime.activity() + "] " + msg;
         Console.OUT.println(output); Console.OUT.flush();
+    }
+    
+    static def countBackups(parentId:FinishResilient.Id) {
+        var count:Int = 0n;
+        try {
+            FinishResilient.glock.lock();
+            for (e in fbackups.entries()) {
+                if (e.getValue().getParentId() == parentId)
+                    count++;
+            }
+            //no more backups under this parent should be created
+            backupDeny.add(parentId);
+        } finally {
+            FinishResilient.glock.unlock();
+        }
+        return count;
     }
     
     static def getNewDeadPlaces() {
@@ -181,9 +195,10 @@ public final class FinishReplicator {
             FinishResilient.glock.lock();
             var bs:FinishBackupState = fbackups.getOrElse(id, null);
             if (bs == null) {
-                if (backupDeny.contains(id)) {
+                if (backupDeny.contains(parentId)) {
                     if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") failed, BackupCreationDenied");
                     throw new BackupCreationDenied();
+                    //no need to handle this exception; the caller has died.
                 }
                 
                 if (OPTIMISTIC)

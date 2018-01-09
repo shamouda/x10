@@ -16,4 +16,5 @@ public abstract class FinishBackupState {
     abstract def getAdopter():FinishResilient.Id;
     abstract def lock():void;
     abstract def unlock():void;
+    abstract def getParentId():FinishResilient.Id;
 }
