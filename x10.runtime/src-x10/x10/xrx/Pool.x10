@@ -141,7 +141,7 @@ class Pool {
                     //}
                 }
                 // release any finishes that may have quiesced due to activities vanishing
-                Runtime.notifyPlaceDeath();
+                Runtime.submitUncounted(()=>{ Runtime.notifyPlaceDeath(); });
             }
             activity = worker.poll();
             if (null != activity || latch()) return activity;
