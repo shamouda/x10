@@ -37,6 +37,7 @@ import x10.util.concurrent.Condition;
 //FIXME: main termination is buggy. use LULESH to reproduce the bug. how to wait until all replication work has finished.
 //FIXME: handle RemoteCreationDenied
 //FIXME: FinishReplicator.nominateMasterPlaceForBackupsHere
+//FIXME: the denyBackup must include the source place + the parent id, not parent id only
 /**
  * Distributed Resilient Finish (records transit tasks only)
  * This version is a corrected implementation of the distributed finish described in PPoPP14,
@@ -1656,6 +1657,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     
     static def processCountingRequests(resolveReqs:HashMap[Int,ResolveRequest]) {
         if (verbose>=1) debug(">>>> processCountingRequests(size="+resolveReqs.size()+") called");
+        if (resolveReqs.size() == 0) {
+            if (verbose>=1) debug(">>>> processCountingRequests(size="+resolveReqs.size()+") returning, zero size");
+            return;
+        }
         val places = new Rail[Int](resolveReqs.size());
         val iter = resolveReqs.keySet().iterator();
         var i:Long = 0;
@@ -1670,47 +1675,51 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             for (p in places) {
                 val requests = resolveReqs.getOrThrow(p);
                 if (verbose>=1) debug("==== processCountingRequests  moving from " + here + " to " + Place(p));
-                at (Place(p)) @Immediate("counting_request") async {
-                    if (verbose>=1) debug("==== processCountingRequests  reached from " + gr.home + " to " + here);
-                    val countBackups = requests.countBackups;
-                    val countReceived = requests.countReceived;
-                    if (verbose>=1) debug("==== processCountingRequests  NULL-1");
-                    if (countBackups.size() > 0) {
-                        if (verbose>=1) debug("==== processCountingRequests  NULL-2");
-                        for (b in countBackups.entries()) {
-                            val parentId = b.getKey();
-                            val count = FinishReplicator.countBackups(parentId);
-                            countBackups.put(parentId, count);   
+                if (Place(p).isDead()) {
+                    (gr as GlobalRef[ResilientLowLevelFinish]{self.home == here})().notifyFailure();
+                } else {
+                    at (Place(p)) @Immediate("counting_request") async {
+                        if (verbose>=1) debug("==== processCountingRequests  reached from " + gr.home + " to " + here);
+                        val countBackups = requests.countBackups;
+                        val countReceived = requests.countReceived;
+                        if (verbose>=1) debug("==== processCountingRequests  NULL-1");
+                        if (countBackups.size() > 0) {
+                            if (verbose>=1) debug("==== processCountingRequests  NULL-2");
+                            for (b in countBackups.entries()) {
+                                val parentId = b.getKey();
+                                val count = FinishReplicator.countBackups(parentId);
+                                countBackups.put(parentId, count);   
+                            }
+                            if (verbose>=1) debug("==== processCountingRequests  NULL-3");
                         }
-                        if (verbose>=1) debug("==== processCountingRequests  NULL-3");
-                    }
-                    
-                    if (countReceived.size() > 0) {
-                        if (verbose>=1) debug("==== processCountingRequests  NULL-4");
-                        for (r in countReceived.entries()) {
-                            val key = r.getKey();
-                            val count = countReceived(key.id, key.src);
-                            countReceived.put(key, count);
-                        }
-                        if (verbose>=1) debug("==== processCountingRequests  NULL-5");
-                    }
-                    
-                    val me = here.id as Int;
-                    if (verbose>=1) debug("==== processCountingRequests  reporting termination to " + gr.home + " from " + here);
-                    at (gr) @Immediate("counting_response") async {
-                        if (verbose>=1) debug("==== processCountingRequests  NULL-6");
-                        val output = (outputGr as GlobalRef[HashMap[Int,ResolveRequest]]{self.home == here})().getOrThrow(me);
                         
-                        for (ve in countBackups.entries()) {
-                            output.countBackups.put(ve.getKey(), ve.getValue());
+                        if (countReceived.size() > 0) {
+                            if (verbose>=1) debug("==== processCountingRequests  NULL-4");
+                            for (r in countReceived.entries()) {
+                                val key = r.getKey();
+                                val count = countReceived(key.id, key.src);
+                                countReceived.put(key, count);
+                            }
+                            if (verbose>=1) debug("==== processCountingRequests  NULL-5");
                         }
-                        if (verbose>=1) debug("==== processCountingRequests  NULL-7");
-                        for (vr in countReceived.entries()) {
-                            output.countReceived.put(vr.getKey(), vr.getValue());
+                        
+                        val me = here.id as Int;
+                        if (verbose>=1) debug("==== processCountingRequests  reporting termination to " + gr.home + " from " + here);
+                        at (gr) @Immediate("counting_response") async {
+                            if (verbose>=1) debug("==== processCountingRequests  NULL-6");
+                            val output = (outputGr as GlobalRef[HashMap[Int,ResolveRequest]]{self.home == here})().getOrThrow(me);
+                            
+                            for (ve in countBackups.entries()) {
+                                output.countBackups.put(ve.getKey(), ve.getValue());
+                            }
+                            if (verbose>=1) debug("==== processCountingRequests  NULL-7");
+                            for (vr in countReceived.entries()) {
+                                output.countReceived.put(vr.getKey(), vr.getValue());
+                            }
+                            if (verbose>=1) debug("==== processCountingRequests  NULL-8");
+                            gr().notifyTermination(me);
+                            if (verbose>=1) debug("==== processCountingRequests  NULL-9");
                         }
-                        if (verbose>=1) debug("==== processCountingRequests  NULL-8");
-                        gr().notifyTermination(me);
-                        if (verbose>=1) debug("==== processCountingRequests  NULL-9");
                     }
                 }
             }
@@ -1757,11 +1766,15 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             for (bx in backups) {
                 val b = bx as OptimisticBackupState;
                 val master = Place(places(i));
-                at (master) @Immediate("create_masters") async {
-                    FinishReplicator.addMaster(b.id, new OptimisticMasterState(b, backupPlaceId));
-                    val me = here.id as Int;
-                    at (gr) @Immediate("create_masters_response") async {
-                        gr().notifyTermination(me);
+                if (master.isDead()) {
+                    (gr as GlobalRef[ResilientLowLevelFinish]{self.home == here})().notifyFailure();
+                } else {
+                    at (master) @Immediate("create_masters") async {
+                        FinishReplicator.addMaster(b.id, new OptimisticMasterState(b, backupPlaceId));
+                        val me = here.id as Int;
+                        at (gr) @Immediate("create_masters_response") async {
+                            gr().notifyTermination(me);
+                        }
                     }
                 }
             }
@@ -1822,13 +1835,17 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 val numActive = m.numActive;
                 val transit = m.transit;
                 val excs = m.excs;
-                at (backup) @Immediate("create_or_sync_backup") async {
-                    val markAdopted = false;
-                    FinishReplicator.createBackupOrSync(id, parentId, optSrc, numActive, transit,
-                            excs, placeOfMaster, markAdopted);
-                    val me = here.id as Int;
-                    at (gr) @Immediate("create_or_sync_backup_response") async {
-                        gr().notifyTermination(me);
+                if (backup.isDead()) {
+                    (gr as GlobalRef[ResilientLowLevelFinish]{self.home == here})().notifyFailure();
+                } else {
+                    at (backup) @Immediate("create_or_sync_backup") async {
+                        val markAdopted = false;
+                        FinishReplicator.createBackupOrSync(id, parentId, optSrc, numActive, transit,
+                                excs, placeOfMaster, markAdopted);
+                        val me = here.id as Int;
+                        at (gr) @Immediate("create_or_sync_backup_response") async {
+                            gr().notifyTermination(me);
+                        }
                     }
                 }
             }
