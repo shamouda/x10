@@ -570,6 +570,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         
         public def convertToDead(newDead:HashSet[Int], countBackups:HashMap[FinishResilient.Id, Int]) {
             if (verbose>=1) debug(">>>> Master(id="+id+").convertToDead called");
+            val toRemove = new HashSet[Edge]();
             for (e in transit.entries()) {
                 val key = e.getKey();
                 if (newDead.contains(key.dst)) {
@@ -580,7 +581,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                         val count = t1-t2;
                         numActive -= count;
                         if (t2 == 0n)
-                            transit.remove(key);
+                            toRemove.add(key);                            
                         else
                             transit.put(key, t2);
                         assert numActive >= 0 : "FATAL error, numActive must not be negative";
@@ -594,6 +595,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     else assert false: "FATAL error, t1 >= t2 condition not met";
                 }
             }
+            
+            for (e in toRemove)
+                transit.remove(e);
+                    
             if (quiescent()) {
                 releaseLatch();
                 notifyParent();
@@ -604,6 +609,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         
         public def convertFromDead(newDead:HashSet[Int], countReceived:HashMap[FinishResilientOptimistic.ReceivedQueryId, Int]) {
             if (verbose>=1) debug(">>>> Master(id="+id+").convertFromDead called");
+            val toRemove = new HashSet[Edge]();
             for (e in transit.entries()) {
                 val key = e.getKey();
                 if (newDead.contains(key.src)) {
@@ -615,7 +621,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                         val count = t1-t2;
                         numActive -= count;
                         if (t2 == 0n)
-                            transit.remove(key);
+                            toRemove.add(key);
                         else
                             transit.put(key, t2);
                         assert numActive >= 0 : "FATAL error, numActive must not be negative";
@@ -624,6 +630,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     else assert false: "FATAL error, t1 >= t2 condition not met";
                 }
             }
+            for (e in toRemove)
+                transit.remove(e);
             if (quiescent()) {
                 releaseLatch();
                 notifyParent();
@@ -1257,6 +1265,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         
         public def convertToDead(newDead:HashSet[Int], countBackups:HashMap[FinishResilient.Id, Int]) {
             if (verbose>=1) debug(">>>> Backup(id="+id+").convertToDead called");
+            val toRemove = new HashSet[Edge]();
             for (e in transit.entries()) {
                 val key = e.getKey();
                 if (newDead.contains(key.dst)) {
@@ -1267,7 +1276,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                         val count = t1-t2;
                         numActive -= count;
                         if (t2 == 0n)
-                            transit.remove(key);
+                            toRemove.add(key);
                         else
                             transit.put(key, t2);
                         assert numActive >= 0 : "FATAL error, numActive must not be negative";
@@ -1281,6 +1290,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     else assert false: "FATAL error, t1 >= t2 condition not met";
                 }
             }
+            for (e in toRemove)
+                transit.remove(e);
             if (quiescent()) {
                 isReleased = true;
                 notifyParent();
@@ -1291,6 +1302,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         
         public def convertFromDead(newDead:HashSet[Int], countReceived:HashMap[FinishResilientOptimistic.ReceivedQueryId, Int]) {
             if (verbose>=1) debug(">>>> Backup(id="+id+").convertFromDead called");
+            val toRemove = new HashSet[Edge]();
             for (e in transit.entries()) {
                 val key = e.getKey();
                 if (newDead.contains(key.src)) {
@@ -1302,7 +1314,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                         val count = t1-t2;
                         numActive -= count;
                         if (t2 == 0n)
-                            transit.remove(key);
+                            toRemove.add(key);
                         else
                             transit.put(key, t2);
                         assert numActive >= 0 : "FATAL error, numActive must not be negative";
@@ -1311,6 +1323,9 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     else assert false: "FATAL error, t1 >= t2 condition not met";
                 }
             }
+            for (e in toRemove)
+                transit.remove(e);
+                    
             if (quiescent()) {
                 isReleased = true;
                 notifyParent();
