@@ -17,6 +17,7 @@ import x10.compiler.Uncounted;
 import x10.util.HashMap;
 import x10.util.HashSet;
 import x10.util.concurrent.AtomicInteger;
+import x10.util.GrowableRail;
 
 public final class FinishReplicator {
     //the set of all masters
@@ -434,11 +435,39 @@ public final class FinishReplicator {
         return result;
     }
     
-    static def nominateMasterPlaceForBackupsHere() {
-    	//FIXME: implement this
-    	return 0n;
+    static def nominateMasterPlace(deadHome:Int) {
+        var m:Int;
+        try {
+            FinishResilient.glock.lock();
+            m = masterMap.getOrElse(deadHome,-1n);
+            if (m == -1n || m == deadHome) {
+                m = ((deadHome - 1 + Place.numPlaces())%Place.numPlaces()) as Int;
+                masterMap.put(deadHome, m);
+            }
+            
+        } finally {
+            FinishResilient.glock.unlock();
+        }
+        if (verbose>=1) debug("<<<< nominateMasterPlace(deadHome="+deadHome+") returning m="+m);
+        return m;
     }
     
+    static def nominateBackupPlace(deadHome:Int) {
+        var b:Int;
+        try {
+            FinishResilient.glock.lock();
+            b = backupMap.getOrElse(deadHome,-1n);
+            if (b == -1n || b == deadHome) {
+                b = ((deadHome + 1)%Place.numPlaces()) as Int;
+                backupMap.put(deadHome, b);
+            }
+            
+        } finally {
+            FinishResilient.glock.unlock();
+        }
+        if (verbose>=1) debug("<<<< nominateBackupPlace(deadHome="+deadHome+") returning b="+b);
+        return b;
+    }    
     static def removeMaster(id:FinishResilient.Id) {
         try {
             FinishResilient.glock.lock();
@@ -508,7 +537,7 @@ public final class FinishReplicator {
     }
     
     /*markAdopted is used in cases when the parent attempts to adopt, before the backup creation*/
-    static def findBackupOrCreate(id:FinishResilient.Id, parentId:FinishResilient.Id, markAdopted:Boolean, src:Place):FinishBackupState {
+    static def findBackupOrCreate(id:FinishResilient.Id, parentId:FinishResilient.Id, markAdopted:Boolean, optSrc:Int):FinishBackupState {
         if (verbose>=1) debug(">>>> findOrCreateBackup(id="+id+", parentId="+parentId+") called ");
         try {
             FinishResilient.glock.lock();
@@ -521,7 +550,7 @@ public final class FinishReplicator {
                 }
                 
                 if (OPTIMISTIC)
-                    bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, src);
+                    bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, Place(optSrc));
                 else {
                     bs = new FinishResilientPessimistic.PessimisticBackupState(id, parentId);
                     if (markAdopted)
@@ -532,6 +561,39 @@ public final class FinishReplicator {
             }
             else
                 if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") returning, found bs="+bs);
+            return bs;
+        } finally {
+            FinishResilient.glock.unlock();
+        }
+    }
+    
+    static def createBackupOrSync(id:FinishResilient.Id, parentId:FinishResilient.Id, src:Place, numActive:Long, 
+            transit:HashMap[FinishResilient.Edge,Int],
+            excs:GrowableRail[CheckedThrowable], placeOfMaster:Int, markAdopted:Boolean):FinishBackupState {
+        if (verbose>=1) debug(">>>> createBackupOrSync(id="+id+", parentId="+parentId+") called ");
+        try {
+            FinishResilient.glock.lock();
+            var bs:FinishBackupState = fbackups.getOrElse(id, null);
+            /*
+            if (bs == null) {
+                assert !backupDeny.contains(parentId) : "must not be in denyList";
+                
+                if (OPTIMISTIC)
+                    bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, src, numActive, 
+                            transit, excs, placeOfMaster);
+                else {
+                    bs = new FinishResilientPessimistic.PessimisticBackupState(id, parentId);
+                    if (markAdopted)
+                        bs.markAsAdopted();
+                }
+                fbackups.put(id, bs);
+                if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") returning, created bs="+bs);
+            }
+            else {
+                bs.sync(numActive, transit, excs, placeOfMaster);
+                if (verbose>=1) debug("<<<< createBackupOrSync(id="+id+", parentId="+parentId+") returning from sync);
+            }
+            */
             return bs;
         } finally {
             FinishResilient.glock.unlock();

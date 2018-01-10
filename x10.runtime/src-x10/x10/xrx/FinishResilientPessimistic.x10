@@ -1084,6 +1084,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	    }
 	}
 	
+    //BACKUP
 	public static final class PessimisticBackupState extends FinishBackupState implements x10.io.Unserializable {
 	    //instance level lock
 	    val ilock = new Lock();
@@ -1119,6 +1120,11 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	        this.numActive = 1;
 	        this.parentId = parentId;
 	        increment(live, Task(id.home, FinishResilient.ASYNC));
+	    }
+	    
+	    def sync(_numActive:Long, _transit:HashMap[FinishResilient.Edge,Int],
+	            _excs:GrowableRail[CheckedThrowable], _placeOfMaster:Int):void {
+	        //FIXME: implement this
 	    }
 	    
 	    public def getId() = id;

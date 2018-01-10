@@ -179,7 +179,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
      	val myId = id; //don't copy this
      	val home = here;
      	val parentId = rootState.parentId;
-     	val src = rootState.src;
+     	val src = rootState.optSrc;
         val rCond = ResilientCondition.make(backup);
         val condGR = rCond.gr;
         val closure = (gr:GlobalRef[Condition]) => {
@@ -422,7 +422,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             Runtime.submitUncounted( ()=>{
                 if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
                 val parentId = UNASSIGNED;
-                val req = FinishRequest.makeTermRequest(id, parentId, srcId, dstId, kind);
+                val req = FinishRequest.makeTermRequest(id, parentId, -1n, srcId, dstId, kind);
                 req.ex = t;
                 val resp = FinishReplicator.exec(req);
                 if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
@@ -527,27 +527,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         var isAdopted:Boolean = false;
         
     	//initialize from backup values
-    
-        /*def this(id:Id, parentId:Id, parent:FinishState, numActive:Long, transit:HashMap[Edge,Int],
-        		strictFinish:Boolean, backupPlaceId:Int, excs:GrowableRail[CheckedThrowable],
-        		src:Place) {
-        	this.id = id;
-        	this.parentId = parentId;
-        	this.parent = parent;
-        	this.numActive = numActive;
-        	this.transit = transit;
-        	this.strictFinish = strictFinish;
-        	this.backupPlaceId = backupPlaceId;
-        	this.excs = excs;
-        	this.src = src;
-        	
-        	this.latch = null;
-        	this.isGlobal = true;
-        	this.backupChanged = true;
-        	this.lc = 0;
-        	this.isAdopted = true;
-        }*/
-        
         def this(backup:OptimisticBackupState, backupPlaceId:Int) {
         	this.id = backup.id;
         	this.parentId = backup.parentId;
@@ -555,7 +534,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         	this.transit = backup.transit;
         	this.backupPlaceId = backupPlaceId;
         	this.excs = backup.excs;
-        	this.optSrc = backup.src;
+        	this.optSrc = backup.optSrc;
         	
         	this.strictFinish = false;
         	this.parent = null;
@@ -571,7 +550,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             this.id = id;
             this.numActive = 1;
             this.parent = parent;
-            this.src = src;
+            this.optSrc = src;
             transit = new HashMap[Edge,Int]();
             increment(transit, Edge(id.home, id.home, FinishResilient.ASYNC));
             if (parent instanceof FinishResilientOptimistic) {
@@ -878,7 +857,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         public def isImpactedByDeadPlaces(newDead:HashSet[Int]) {
             for (e in transit.entries()) {
                 val edge = e.getKey();
-                if (newDead.contains(edge.src) || newDead.contains(edge.dst))
+                if (newDead.contains(edge.src) || newDead.contains(edge.dst) || 
+                        newDead.contains(backupPlaceId) /*required re-replication*/)
                     return true;
             }
             return false;
@@ -1134,6 +1114,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
     }
 
+    //BACKUP
     public static final class OptimisticBackupState extends FinishBackupState implements x10.io.Unserializable {
         private static val verbose = FinishResilient.verbose;
         static def debug(msg:String) {
@@ -1171,6 +1152,31 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             FinishResilient.increment(transit, FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC));
             this.placeOfMaster = id.home;
             this.optSrc = src;
+        }
+        
+        
+        def this(id:FinishResilient.Id, _parentId:FinishResilient.Id, src:Place, _numActive:Long, _transit:HashMap[FinishResilient.Edge,Int],
+                _excs:GrowableRail[CheckedThrowable], _placeOfMaster:Int) {
+            this.id = id;
+            this.numActive = _numActive;
+            this.parentId = _parentId;
+            for (e in _transit.entries()) {
+                this.transit.put(e.getKey(), e.getValue());
+            }
+            this.placeOfMaster = _placeOfMaster;
+            this.excs = _excs;
+            this.optSrc = src;
+        }
+        
+        def sync(_numActive:Long, _transit:HashMap[FinishResilient.Edge,Int],
+                _excs:GrowableRail[CheckedThrowable], _placeOfMaster:Int) {
+            this.numActive = _numActive;
+            this.transit.clear();
+            for (e in _transit.entries()) {
+                this.transit.put(e.getKey(), e.getValue());
+            }
+            this.placeOfMaster = _placeOfMaster;
+            this.excs = _excs;
         }
         
         public def getId() = id;
@@ -1590,39 +1596,106 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         return count;
     }
     
-    //FIXME: nominate another master of the selected one is dead
+    //FIXME: nominate another master if the nominated one is dead
     static def createMasters(backups:HashSet[FinishBackupState]) {
-    	val newMasterPlace = FinishReplicator.nominateMasterPlaceForBackupsHere();
-    	for (b in backups) {
-    		val backup = b as OptimisticBackupState;
-    		backup.isAdopted = true;
-    		backup.placeOfMaster = newMasterPlace;
-    	}
-    	val backupPlaceId = here.id as Int;
-        val master = Place(newMasterPlace);
-        val rCond = ResilientCondition.make(master);
-        val condGR = rCond.gr;
-        val closure = (gr:GlobalRef[Condition]) => {
-            at (master) @Immediate("create_new_master") async {
-            	for (b in backups) {
-            		val backup = b as OptimisticBackupState;
-            		backup.isAdopted = true;
-            		backup.placeOfMaster = newMasterPlace;
-            		FinishReplicator.addMaster(backup.id, new OptimisticMasterState(backup, backupPlaceId));
-            	}
-                at (condGR) @Immediate("master_exec_response") async {
-                    condGR().release();
+        if (verbose>=1) debug(">>>> createMasters(size="+backups.size()+" called");
+        if (backups.size() == 0) {
+            if (verbose>=1) debug("<<<< createMasters(size="+backups.size()+" returning, zero size");
+            return;
+        }
+        
+        val places = new Rail[Int](backups.size());
+        var i:Long = 0;
+        for (bx in backups) {
+            val b = bx as OptimisticBackupState;
+            val newMasterPlace = FinishReplicator.nominateMasterPlace(b.placeOfMaster);
+            b.placeOfMaster = newMasterPlace;
+            b.isAdopted = true;
+            places(i) = b.placeOfMaster;
+        }
+        
+        val fin = ResilientLowLevelFinish.make(places);
+        val gr = fin.getGr();
+        val backupPlaceId = here.id as Int;
+        val closure = (gr:GlobalRef[ResilientLowLevelFinish]) => {
+            for (bx in backups) {
+                val b = bx as OptimisticBackupState;
+                val master = Place(b.placeOfMaster);
+                at (master) @Immediate("create_new_backup") async {
+                    FinishReplicator.addMaster(b.id, new OptimisticMasterState(b, backupPlaceId));
+                    val me = here.id as Int;
+                    at (gr) @Immediate("create_new_backup_response") async {
+                        gr().notifyTermination(me);
+                    }
                 }
             }
         };
         
-        rCond.run(closure);
+        fin.run(closure);
         
-        if (rCond.failed()) {
-        	//FIXME: try another master
-            throw new Exception("Fatal exception, another failure during recovery");
+        if (fin.failed())
+            throw new Exception("FATAL ERROR: another place failed during recovery ...");
+
+        
+        if (verbose>=1) debug("<<<< createMasters(size="+backups.size()+" returning");
+    }
+    
+    //FIXME: nominate another backup if the nominated one is dead
+    static def createOrSyncBackups(newDead:HashSet[Int], masters:HashSet[FinishMasterState]) {
+        if (verbose>=1) debug(">>>> createOrSyncBackups(size="+masters.size()+" called");
+        if (masters.size() == 0) {
+            if (verbose>=1) debug("<<<< createOrSyncBackups(size="+masters.size()+" returning, zero size");
+            return;
         }
-        rCond.forget();
+        
+        val places = new Rail[Int](masters.size());
+        val iter = masters.iterator();
+        var i:Long = 0;
+        while (iter.hasNext()) {
+            val m = iter.next() as OptimisticMasterState;
+            if (newDead.contains(m.backupPlaceId)) {
+                places(i) = FinishReplicator.nominateBackupPlace(m.backupPlaceId);
+                m.backupPlaceId = places(i);
+            }
+            else {
+                places(i) = m.backupPlaceId;
+            }
+            
+        }
+        val fin = ResilientLowLevelFinish.make(places);
+        val gr = fin.getGr();
+        val placeOfMaster = here.id as Int;
+        val closure = (gr:GlobalRef[ResilientLowLevelFinish]) => {
+            for (mx in masters) {
+                val m = mx as OptimisticMasterState;
+                val backup = Place(m.backupPlaceId);
+                
+                val id = m.id;
+                val parentId = m.parentId;
+                val src = m.optSrc;
+                val numActive = m.numActive;
+                val transit = m.transit;
+                val excs = m.excs;
+                val markAdopted = false;
+                at (backup) @Immediate("create_new_backup") async {
+                    FinishReplicator.createBackupOrSync(id, parentId, src, numActive, transit,
+                            excs, placeOfMaster, markAdopted);
+                    
+                    val me = here.id as Int;
+                    at (gr) @Immediate("create_new_backup_response") async {
+                        gr().notifyTermination(me);
+                    }
+                }
+            }
+        };
+        
+        fin.run(closure);
+        
+        if (fin.failed())
+            throw new Exception("FATAL ERROR: another place failed during recovery ...");
+
+        
+        if (verbose>=1) debug("<<<< createOrSyncBackups(size="+masters.size()+" returning");
     }
     
     static def notifyPlaceDeath():void {
@@ -1676,14 +1749,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         //TODO: handle cases when master or backup quiecent
-
-        //TODO: ......Create backups and masters as necessary.......
         
-        //TODO: set the newBackupPlaceId in the master
-        
-        //TODO: sync backups
-        
-        //createBackups(masters);
+        createOrSyncBackups(newDead, masters);
         for (m in masters) {
             m.unlock();
         }
