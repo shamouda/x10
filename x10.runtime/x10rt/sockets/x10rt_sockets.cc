@@ -1514,9 +1514,9 @@ void x10rt_net_finalize (void)
 	if (context.numPlaces == 1)
 		return;
 
-	#ifdef DEBUG
+	//#ifdef DEBUG
 		fprintf(stderr, "X10rt.Sockets: shutting down place %u\n", context.myPlaceId);
-	#endif
+	//#endif
 
 	if (context.useNonblockingLinks)
 	{

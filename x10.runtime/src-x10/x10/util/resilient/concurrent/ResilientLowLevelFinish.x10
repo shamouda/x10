@@ -92,10 +92,10 @@ public class ResilientLowLevelFinish implements Unserializable {
     
     public def await() {
         try {
-        	if (Runtime.NUM_IMMEDIATE_THREADS == 0n) Runtime.increaseParallelism();
+        	Runtime.increaseParallelism();
             cond.await();
         } finally {
-        	if (Runtime.NUM_IMMEDIATE_THREADS == 0n) Runtime.decreaseParallelism(1n);
+        	Runtime.decreaseParallelism(1n);
         }
     }
     

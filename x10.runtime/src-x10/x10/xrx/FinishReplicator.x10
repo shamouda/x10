@@ -83,13 +83,17 @@ public final class FinishReplicator {
                 if (verbose>=1) debug("<<<< Replicator(id="+req.id+").exec() returning");
                 break;
             } catch (ex:MasterDied) {
-                prepareRequestForNewMaster(req);
+                prepareRequestForNewMaster(req); // we communicate with backup to ask for the new master location
                 if (verbose>=1) debug("==== Replicator(id="+req.id+").exec() threw MasterDied exception, forward to newMaster " + req.id + " @ " + req.masterPlaceId);
             } catch (ex:MasterChanged) { 
                 req.toAdopter = true;
                 req.id = ex.newMasterId;
                 req.masterPlaceId = ex.newMasterPlace;
                 if (verbose>=1) debug("==== Replicator(id="+req.id+").exec() threw MasterChanged exception, forward to newMaster " + req.id + " @ " + req.masterPlaceId);
+            } catch (ex:MasterMigrating) {
+                if (verbose>=1) debug("==== Replicator(id="+req.id+").exec() threw MasterMigrating exception, retry later");
+                //try again later
+                System.threadSleep(10);
             } catch (ex:BackupDied) {
                 debug("<<<< Replicator(id="+req.id+").exec() returning: ignored backup failure exception");
                 break; //master should re-replicate
@@ -225,6 +229,7 @@ public final class FinishReplicator {
         val initBackup = getBackupPlace(id.home);
         var curBackup:Int = initBackup;
         do {
+            if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+") called, trying curBackup="+curBackup );
             if (curBackup == here.id as Int) { 
                  val bFin = findBackup(id);
                  if (bFin != null) {
@@ -255,7 +260,7 @@ public final class FinishReplicator {
                             val found = foundVar;
                             val newMasterId = newMasterIdVar;
                             val newMasterPlace = newMasterPlaceVar;
-                            at (condGR) @Immediate("backup_get_adopter_response") async {
+                            at (condGR) @Immediate("backup_get_new_master_response") async {
                                 val req = (reqGR as GlobalRef[FinishRequest]{self.home == here})();
                                 if (found) {
                                     req.id = newMasterId;
@@ -284,7 +289,10 @@ public final class FinishReplicator {
         if (!req.toAdopter)
             throw new Exception("Fatal exception, cannot find backup for id=" + id);
         
-        updateBackupPlace(id.home, curBackup);
+        if (verbose>=1) debug("<<<< prepareRequestForNewMaster(id="+id+") returning, curBackup="+curBackup + " newMasterId="+req.id+",newMasterPlace="+req.masterPlaceId+",toAdopter="+req.toAdopter);
+        if (curBackup != initBackup)
+            updateBackupPlace(id.home, curBackup);
+        updateMasterPlace(req.id.home, req.masterPlaceId);
     }
     
     /***************** Utilities *********************************/
@@ -313,7 +321,7 @@ public final class FinishReplicator {
             FinishResilient.glock.lock();
             val b = backupMap.getOrElse(idHome, -1n);
             if (b == -1n)
-                return idHome;
+                return ((idHome+1)%Place.numPlaces()) as Int;
             else
                 return b;
         } finally {
@@ -325,6 +333,17 @@ public final class FinishReplicator {
         try {
             FinishResilient.glock.lock();
             backupMap.put(idHome, backupPlaceId);
+            if (verbose>=1) debug("<<<< updateBackupPlace(idHome="+idHome+",newPlace="+backupPlaceId+") returning");
+        } finally {
+            FinishResilient.glock.unlock();
+        }
+    }
+    
+    static def updateMasterPlace(idHome:Int, masterPlaceId:Int) {
+        try {
+            FinishResilient.glock.lock();
+            masterMap.put(idHome, masterPlaceId);
+            if (verbose>=1) debug("<<<< updateMasterPlace(idHome="+idHome+",newPlace="+masterPlaceId+") returning");
         } finally {
             FinishResilient.glock.unlock();
         }
@@ -340,6 +359,7 @@ public final class FinishReplicator {
             }
             //no more backups under this parent should be created
             backupDeny.add(parentId);
+            if (verbose>=1) debug("<<<< countBackups(parentId="+parentId+") returning, count = " + count + " and parentId added to denyList");
         } finally {
             FinishResilient.glock.unlock();
         }
@@ -348,7 +368,7 @@ public final class FinishReplicator {
     
     /************** Adoption Utilities ****************/
     static def getNewDeadPlaces() {
-    	if (verbose>=1) debug(">>>> getNewDeadPlaces called");
+        if (verbose>=1) debug(">>>> getNewDeadPlaces called");
         val newDead = new HashSet[Int]();
         try {
             FinishResilient.glock.lock();
@@ -359,14 +379,14 @@ public final class FinishReplicator {
                 }
             }
             if (verbose>=1) {
-            	if (newDead.size() > 0) {
-            		val s = new x10.util.StringBuilder();
-            		for (d in newDead)
-            			s.add(d + " ");
-            		debug("<<<< getNewDeadPlaces returning, newDead= " + s.toString());	
-            	} else {
-            		debug("<<<< getNewDeadPlaces returning, newDead is Empty");	
-            	}
+                if (newDead.size() > 0) {
+                    val s = new x10.util.StringBuilder();
+                    for (d in newDead)
+                        s.add(d + " ");
+                    debug("<<<< getNewDeadPlaces returning, newDead= " + s.toString()); 
+                } else {
+                    debug("<<<< getNewDeadPlaces returning, newDead is Empty"); 
+                }
             }
         } finally {
             FinishResilient.glock.unlock();
@@ -374,31 +394,27 @@ public final class FinishReplicator {
         return newDead;
     }
     
-    static def lockAndGetImpactedMasters(newDead:HashSet[Int]) {
-    	if (verbose>=1) debug(">>>> lockAndGetImpactedMasters called");
+    static def getImpactedMasters(newDead:HashSet[Int]) {
+        if (verbose>=1) debug(">>>> lockAndGetImpactedMasters called");
         val result = new HashSet[FinishMasterState]();
         try {
             FinishResilient.glock.lock();
             for (e in fmasters.entries()) {
                 val id = e.getKey();
                 val mFin = e.getValue();
-                mFin.lock();
                 if (mFin.isImpactedByDeadPlaces(newDead)) {
                     result.add(mFin);
                 }
-                else {
-                    mFin.unlock();
-                }
             }
             if (verbose>=1) {
-            	if (result.size() > 0) {
-            		val s = new x10.util.StringBuilder();
-            		for (m in result)
-            			s.add(m.getId() + " ");
-            		debug("<<<< lockAndGetImpactedMasters returning, masters= " + s.toString());	
-            	} else {
-            		debug("<<<< lockAndGetImpactedMasters returning, masters is Empty");	
-            	}
+                if (result.size() > 0) {
+                    val s = new x10.util.StringBuilder();
+                    for (m in result)
+                        s.add(m.getId() + " ");
+                    debug("<<<< lockAndGetImpactedMasters returning, masters= " + s.toString());    
+                } else {
+                    debug("<<<< lockAndGetImpactedMasters returning, masters is Empty");    
+                }
             }
         } finally {
             FinishResilient.glock.unlock();
@@ -406,8 +422,8 @@ public final class FinishReplicator {
         return result;
     }
     
-    static def lockAndGetImpactedBackups(newDead:HashSet[Int]) {
-    	if (verbose>=1) debug(">>>> lockAndGetImpactedBackups called");
+    static def getImpactedBackups(newDead:HashSet[Int]) {
+        if (verbose>=1) debug(">>>> lockAndGetImpactedBackups called");
         val result = new HashSet[FinishBackupState]();
         try {
             FinishResilient.glock.lock();
@@ -415,19 +431,18 @@ public final class FinishReplicator {
                 val id = e.getKey();
                 val bFin = e.getValue();
                 if (newDead.contains(bFin.getPlaceOfMaster())) {
-                    bFin.lock();
                     result.add(bFin);
                 }
             }
             if (verbose>=1) {
-            	if (result.size() > 0) {
-            		val s = new x10.util.StringBuilder();
-            		for (b in result)
-            			s.add(b.getId() + " ");
-            		debug("<<<< lockAndGetImpactedMasters returning, backups= " + s.toString());	
-            	} else {
-            		debug("<<<< lockAndGetImpactedMasters returning, backups is Empty");	
-            	}
+                if (result.size() > 0) {
+                    val s = new x10.util.StringBuilder();
+                    for (b in result)
+                        s.add(b.getId() + " ");
+                    debug("<<<< lockAndGetImpactedBackups returning, backups= " + s.toString());    
+                } else {
+                    debug("<<<< lockAndGetImpactedBackups returning, backups is Empty");    
+                }
             }
         } finally {
             FinishResilient.glock.unlock();
@@ -467,7 +482,8 @@ public final class FinishReplicator {
         }
         if (verbose>=1) debug("<<<< nominateBackupPlace(deadHome="+deadHome+") returning b="+b);
         return b;
-    }    
+    }
+    
     static def removeMaster(id:FinishResilient.Id) {
         try {
             FinishResilient.glock.lock();
@@ -554,7 +570,7 @@ public final class FinishReplicator {
                 else {
                     bs = new FinishResilientPessimistic.PessimisticBackupState(id, parentId);
                     if (markAdopted)
-                    	bs.markAsAdopted();
+                        bs.markAsAdopted();
                 }
                 fbackups.put(id, bs);
                 if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") returning, created bs="+bs);
@@ -574,7 +590,7 @@ public final class FinishReplicator {
         try {
             FinishResilient.glock.lock();
             var bs:FinishBackupState = fbackups.getOrElse(id, null);
-            /*
+            
             if (bs == null) {
                 assert !backupDeny.contains(parentId) : "must not be in denyList";
                 
@@ -588,17 +604,16 @@ public final class FinishReplicator {
                 }
                 fbackups.put(id, bs);
                 if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") returning, created bs="+bs);
-            }
-            else {
+            } else {
                 bs.sync(numActive, transit, excs, placeOfMaster);
-                if (verbose>=1) debug("<<<< createBackupOrSync(id="+id+", parentId="+parentId+") returning from sync);
+                if (verbose>=1) debug("<<<< createBackupOrSync(id="+id+", parentId="+parentId+") returning from sync");
             }
-            */
             return bs;
         } finally {
             FinishResilient.glock.unlock();
         }
     }
+
     
     //FIXME: doesn't fully fix the final termination problem.
     public static def finalizeReplication() {
@@ -628,6 +643,8 @@ class BackupResponse {
 
 class MasterDied extends Exception {}
 class BackupDied extends Exception {}
+class MasterMigrating extends Exception {}
+
 class MasterChanged(newMasterId:FinishResilient.Id,newMasterPlace:Int)  extends Exception {}
 
 class MasterAndBackupDied extends Exception {}

@@ -22,7 +22,6 @@ public class BenchmarkAllreduce extends x10Test {
 	public def run(): Boolean {
         finish for (place in Place.places()) at (place) async {
             Team.WORLD.allreduce(1.0, Team.ADD); // warm up comms layer
-            /*
             for (var s:Long= 1; s <= MAX_SIZE; s *= 2) {
                 val src = new Rail[Double](s, (i:Long) => i as Double);
                 val dst = new Rail[Double](s);
@@ -39,7 +38,6 @@ public class BenchmarkAllreduce extends x10Test {
 
                 if (here == Place.FIRST_PLACE) Console.OUT.printf("allreduce %d: %g ms\n", s, ((stop-start) as Double) / 1e6 / ITERS);
             } 
-            */           
         }
 
         return true;
