@@ -1621,10 +1621,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             for (bx in backups) {
                 val b = bx as OptimisticBackupState;
                 val master = Place(b.placeOfMaster);
-                at (master) @Immediate("create_new_backup") async {
+                at (master) @Immediate("create_new_master") async {
                     FinishReplicator.addMaster(b.id, new OptimisticMasterState(b, backupPlaceId));
                     val me = here.id as Int;
-                    at (gr) @Immediate("create_new_backup_response") async {
+                    at (gr) @Immediate("create_new_master_response") async {
                         gr().notifyTermination(me);
                     }
                 }

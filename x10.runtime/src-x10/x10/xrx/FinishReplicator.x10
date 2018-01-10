@@ -164,7 +164,7 @@ public final class FinishReplicator {
         if (req.isBackupLocal()) {
             val bFin:FinishBackupState;
             if (createOk)
-                bFin = findBackupOrCreate(req.id, req.parentId, false, req.optFinSrc);
+                bFin = findBackupOrCreate(req.id, req.parentId, false, Place(req.optFinSrc));
             else
                 bFin = findBackupOrThrow(req.id);
             val resp = bFin.exec(req);
@@ -185,7 +185,7 @@ public final class FinishReplicator {
             at (backup) @Immediate("backup_exec") async {
                 val bFin:FinishBackupState;
                 if (createOk) // termination of remote messages
-                    bFin = findBackupOrCreate(req.id, req.parentId, false, req.optFinSrc);                 // must find the backup object
+                    bFin = findBackupOrCreate(req.id, req.parentId, false, Place(req.optFinSrc)); // must find the backup object
                 else
                     bFin = findBackupOrThrow(req.id);
                 val resp = bFin.exec(req);
@@ -537,7 +537,7 @@ public final class FinishReplicator {
     }
     
     /*markAdopted is used in cases when the parent attempts to adopt, before the backup creation*/
-    static def findBackupOrCreate(id:FinishResilient.Id, parentId:FinishResilient.Id, markAdopted:Boolean, optSrc:Int):FinishBackupState {
+    static def findBackupOrCreate(id:FinishResilient.Id, parentId:FinishResilient.Id, markAdopted:Boolean, optSrc:Place):FinishBackupState {
         if (verbose>=1) debug(">>>> findOrCreateBackup(id="+id+", parentId="+parentId+") called ");
         try {
             FinishResilient.glock.lock();
@@ -550,7 +550,7 @@ public final class FinishReplicator {
                 }
                 
                 if (OPTIMISTIC)
-                    bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, Place(optSrc));
+                    bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, optSrc);
                 else {
                     bs = new FinishResilientPessimistic.PessimisticBackupState(id, parentId);
                     if (markAdopted)
