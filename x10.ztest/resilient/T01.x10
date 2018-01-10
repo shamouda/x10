@@ -1,5 +1,6 @@
 import x10.util.concurrent.AtomicInteger;
-
+//x10c++ T01.x10 -o t01.o
+//X10_RESILIENT_VERBOSE=0 X10_RESILIENT_MODE=14 X10_NPLACES=4 ./t01.o
 public class T01 {
     static OUTER_ITERS = 100;
     static INNER_ITERS = 100;
@@ -18,7 +19,7 @@ public class T01 {
                 at (Place(1)) async {
                     think(1);
                     val me = here;
-                    at (gr) { 
+                    at (gr) async { 
                         val c = gr().incrementAndGet();
                         Console.OUT.println(me + " incr to " + c);
                     }
@@ -32,7 +33,7 @@ public class T01 {
                 at (Place(3)) async {
                     think(1);
                     val me = here;
-                    at (gr) {
+                    at (gr) async {
                         val c = gr().incrementAndGet();
                         Console.OUT.println(me + " incr to " + c);
                     }
