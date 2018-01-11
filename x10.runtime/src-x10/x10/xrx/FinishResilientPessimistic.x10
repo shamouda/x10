@@ -154,7 +154,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         val condGR = rCond.gr;
         val closure = (gr:GlobalRef[Condition]) => {
             at (backup) @Immediate("backup_create") async {
-                val bFin = FinishReplicator.findBackupOrCreate(myId, parentId, false, Place(-1));
+                val bFin = FinishReplicator.findBackupOrCreate(myId, parentId, false, Place(-1), DUMMY_INT);
                 val success = bFin != null;
                 at (condGR) @Immediate("backup_create_response") async {
                 	val bRes = (backRes as GlobalRef[Cell[Boolean]]{self.home == here})();
@@ -225,7 +225,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	        } else {
 	            val parentId = UNASSIGNED;
 	        	if (verbose>=1) debug(">>>> Remote(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+here.id + " dstId="+dstId+" kind="+kind+") called ");
-	        	val req = FinishRequest.makeTransitRequest(id, parentId, DUMMY_INT, srcId, dstId, kind);
+	        	val req = FinishRequest.makeTransitRequest(id, parentId, DUMMY_INT, DUMMY_INT, srcId, dstId, kind);
 	        	FinishReplicator.exec(req);
 	        	if (verbose>=1) debug("<<<< Remote(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+here.id + " dstId="+dstId+" kind="+kind+") returning");
 	        }
@@ -247,7 +247,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	        Runtime.submitUncounted( ()=>{
 	        	if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreation(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+") called");
 	        	val parentId = UNASSIGNED;
-	        	val req = FinishRequest.makeLiveRequest(id, parentId, DUMMY_INT, srcId, dstId, kind);
+	        	val req = FinishRequest.makeLiveRequest(id, parentId, DUMMY_INT, DUMMY_INT, srcId, dstId, kind);
 	        	val submit = FinishReplicator.exec(req);
 	        	if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreation(isrcId=" + srcId + ",dstId="+dstId+",kind="+kind+") returning (submit="+submit+")");
 	            if (submit) {
@@ -268,7 +268,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	    	val kind = FinishResilient.AT;
 	    	if (verbose>=1) debug(">>>> Remote(id="+id+").notifyShiftedActivityCreation(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+") called");
 	    	val parentId = UNASSIGNED;
-            val req = FinishRequest.makeLiveRequest(id, parentId, DUMMY_INT, srcId, dstId, kind);
+            val req = FinishRequest.makeLiveRequest(id, parentId, DUMMY_INT, DUMMY_INT, srcId, dstId, kind);
 	    	val submit = FinishReplicator.exec(req);
 	    	if (verbose>=1) debug("<<<< Remote(id="+id+").notifyShiftedActivityCreation(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+") returning (submit="+submit+")");
 	        return submit;
@@ -287,7 +287,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	        Runtime.submitUncounted( ()=>{
     	        if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
     	        val parentId = UNASSIGNED;
-    	        val req = FinishRequest.makeTransitTermRequest(id, parentId, DUMMY_INT, srcId, dstId, kind, t);
+    	        val req = FinishRequest.makeTransitTermRequest(id, parentId, DUMMY_INT, DUMMY_INT, srcId, dstId, kind, t);
                 val resp = FinishReplicator.exec(req);
                 if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
 	        });
@@ -325,7 +325,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             //we cannot block in this method, because it can be called from an immediate thread
             Runtime.submitUncounted( ()=>{
                 if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreatedAndTerminated(parentId="+parentId+",srcId="+srcId + " dstId="+dstId+" kind="+kind+") called");
-                val req = FinishRequest.makeTransitTermRequest(id, parentId, DUMMY_INT, srcId, dstId, kind, null);
+                val req = FinishRequest.makeTransitTermRequest(id, parentId, DUMMY_INT, DUMMY_INT, srcId, dstId, kind, null);
                 val resp = FinishReplicator.exec(req);
                 if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreatedAndTerminated(parentId="+parentId+",srcId="+srcId + " dstId="+dstId+" kind="+kind+") returning");
             });
@@ -334,7 +334,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	    def pushException(t:CheckedThrowable):void {
 	        val parentId = UNASSIGNED;
 	        if (verbose>=1) debug(">>>> Remote(id="+id+").pushException(t="+t.getMessage()+") called");
-	        val req = FinishRequest.makeExcpRequest(id, parentId, DUMMY_INT, t);
+	        val req = FinishRequest.makeExcpRequest(id, parentId, DUMMY_INT, DUMMY_INT, t);
 	        val resp = FinishReplicator.exec(req);
 	        if (verbose>=1) debug("<<<< Remote(id="+id+").pushException(t="+t.getMessage()+") returning");
 	    }
@@ -369,7 +369,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	        val srcId = srcPlace.id as Int; 
 	        val dstId = here.id as Int;
 	    	if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + " dstId="+dstId+" kind="+kind+") called");
-	    	val req = FinishRequest.makeTermRequest(id, parentId, DUMMY_INT, srcId, dstId, kind);
+	    	val req = FinishRequest.makeTermRequest(id, parentId, DUMMY_INT, DUMMY_INT, srcId, dstId, kind);
 	    	val resp = FinishReplicator.exec(req);
 	    	if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + " dstId="+dstId+" kind="+kind+") returning");
 	    }
@@ -895,7 +895,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	            if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called locally, localCount now "+lc);
 	        } else {
 	        	if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
-	        	val req = FinishRequest.makeTransitRequest(id, parentId, DUMMY_INT, srcId, dstId, kind);
+	        	val req = FinishRequest.makeTransitRequest(id, parentId, DUMMY_INT, DUMMY_INT, srcId, dstId, kind);
 	        	FinishReplicator.exec(req);
 	        	if (verbose>=1) debug("<<<< Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
 	        }
@@ -916,7 +916,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	        
 	        Runtime.submitUncounted( ()=>{
 	        	if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreation(srcId="+srcId+",dstId="+dstId+",kind="+kind+") called");
-	        	val req = FinishRequest.makeLiveRequest(id, parentId, DUMMY_INT, srcId, dstId, kind);
+	        	val req = FinishRequest.makeLiveRequest(id, parentId, DUMMY_INT, DUMMY_INT, srcId, dstId, kind);
 	        	val submit = FinishReplicator.exec(req);
 	        	if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreation(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning (submit="+submit+")");
 	            if (submit) {
@@ -936,7 +936,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	        val dstId = here.id as Int;
 	    	val kind = FinishResilient.AT;
 	    	if (verbose>=1) debug(">>>> Root(id="+id+").notifyShiftedActivityCreation(srcId="+srcId+",dstId="+dstId+",kind="+kind+") called");
-	    	val req = FinishRequest.makeLiveRequest(id, parentId, DUMMY_INT, srcId, dstId, kind);
+	    	val req = FinishRequest.makeLiveRequest(id, parentId, DUMMY_INT, DUMMY_INT, srcId, dstId, kind);
 	    	val submit = FinishReplicator.exec(req);
 	    	if (verbose>=1) debug("<<<< Root(id="+id+").notifyShiftedActivityCreation(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning (submit="+submit+")");
 	        return submit;
@@ -957,7 +957,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             //we cannot block in this method, because it can be called from an immediate thread
             Runtime.submitUncounted( ()=>{
                 if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
-                val req = FinishRequest.makeTransitTermRequest(id, parentId, DUMMY_INT, srcId, dstId, kind, t);
+                val req = FinishRequest.makeTransitTermRequest(id, parentId, DUMMY_INT, DUMMY_INT, srcId, dstId, kind, t);
                 val resp = FinishReplicator.exec(req);
                 if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
             });
@@ -998,7 +998,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             //we cannot block in this method, because it can be called from an immediate thread
             Runtime.submitUncounted( ()=>{
                 if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreatedAndTerminated(srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
-                val req = FinishRequest.makeTransitTermRequest(id, parentId, DUMMY_INT, srcId, dstId, kind, null);
+                val req = FinishRequest.makeTransitTermRequest(id, parentId, DUMMY_INT, DUMMY_INT, srcId, dstId, kind, null);
                 val resp = FinishReplicator.exec(req);
                 if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreatedAndTerminated(srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
             });
@@ -1011,7 +1011,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	        }
 	        
 	        if (verbose>=1) debug(">>>> Root(id="+id+").pushException(t="+t.getMessage()+") called");
-	        val req = FinishRequest.makeExcpRequest(id, parentId, DUMMY_INT, t);
+	        val req = FinishRequest.makeExcpRequest(id, parentId, DUMMY_INT, DUMMY_INT, t);
 	        val resp = FinishReplicator.exec(req);
 	        if (verbose>=1) debug("<<<< Root(id="+id+").pushException(t="+t.getMessage()+") returning");
 	    }
@@ -1049,7 +1049,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	        val srcId = srcPlace.id as Int;
 	        val dstId = here.id as Int;
 	    	if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityTermination(srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
-	        val req = FinishRequest.makeTermRequest(id, parentId, DUMMY_INT, srcId, dstId, kind);
+	        val req = FinishRequest.makeTermRequest(id, parentId, DUMMY_INT, DUMMY_INT, srcId, dstId, kind);
 	    	val resp = FinishReplicator.exec(req);
 	    	if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
 	    }

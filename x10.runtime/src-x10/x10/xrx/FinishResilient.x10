@@ -139,8 +139,9 @@ abstract class FinishResilient extends FinishState {
         {
             val p = (parent!=null) ? parent : getCurrentFS();
             val src = Runtime.activity().srcPlace;
+            val kind = Runtime.activity().atFinishState() instanceof FinishResilientOptimistic ? AT : ASYNC ;
             if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p + " src=" + src);
-            fs = FinishResilientOptimistic.make(p, src);
+            fs = FinishResilientOptimistic.make(p, src, kind);
             break;
         }
         case Configuration.RESILIENT_MODE_HC:
