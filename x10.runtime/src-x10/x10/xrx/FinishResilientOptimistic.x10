@@ -44,8 +44,6 @@ import x10.util.concurrent.Condition;
 //FIXME: how to know the 'kind' of my relation to parent, ASYNC or AT. if AT don't notifyParent()
 /**
  * Distributed Resilient Finish (records transit tasks only)
- * This version is a corrected implementation of the distributed finish described in PPoPP14,
- * that was released in version 2.4.1
  */
 class FinishResilientOptimistic extends FinishResilient implements CustomSerialization {
     private static val DUMMY_INT = -1n;
