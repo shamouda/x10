@@ -509,6 +509,7 @@ public final class FinishReplicator {
         try {
             FinishResilient.glock.lock();
             fmasters.put(id, fs);
+            if (verbose>=3) fs.dump();
             if (verbose>=1) debug("<<<< addMaster(id="+id+") returning");
         } finally {
             FinishResilient.glock.unlock();

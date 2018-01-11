@@ -18,4 +18,5 @@ public abstract class FinishMasterState extends FinishResilient {
     abstract def lock():void;
     abstract def unlock():void;
     abstract def getId():Id;
+    abstract def dump():void;
 }

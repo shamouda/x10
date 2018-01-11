@@ -41,6 +41,11 @@ public class ResilientCondition implements Unserializable {
     }
     
     public def await() {
+        if (place.isDead()) {
+            forceRelease();
+            return;
+        }
+        
         try {
         	if (Runtime.NUM_IMMEDIATE_THREADS == 0n) Runtime.increaseParallelism();
             (gr as GlobalRef[Condition]{self.home == here})().await();

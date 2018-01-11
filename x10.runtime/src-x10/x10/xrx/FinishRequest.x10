@@ -44,7 +44,7 @@ public class FinishRequest {
     var optFinSrc:Int = -1n;
     
     public def toString() {
-        return "type=" + typeDesc + ",id="+id+",childId="+childId+",srcId="+srcId+",dstId="+dstId;
+        return "type=" + typeDesc + ",id="+id+",childId="+childId+",srcId="+srcId+",dstId="+dstId+",ex="+(ex == null? "null": ex.getMessage());
     }
     
     private def this(id:FinishResilient.Id, masterPlaceId:Int,

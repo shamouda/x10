@@ -449,7 +449,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             return false;
         }
         
-        def dump() {
+        public def dump() {
             val s = new x10.util.StringBuilder();
             s.add("State dump:\n");
             s.add("             id:" + id); s.add('\n');
