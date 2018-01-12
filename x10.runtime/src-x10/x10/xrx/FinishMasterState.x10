@@ -20,3 +20,11 @@ public abstract class FinishMasterState extends FinishResilient {
     abstract def getId():Id;
     abstract def dump():void;
 }
+
+class MasterResponse {
+    var backupPlaceId:Int;
+    var excp:Exception;
+    var submit:Boolean = false;
+    var transitSubmitDPE:Boolean = false;
+    var backupChanged:Boolean = false;
+}

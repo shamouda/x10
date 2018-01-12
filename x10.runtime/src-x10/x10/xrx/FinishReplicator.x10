@@ -586,6 +586,7 @@ public final class FinishReplicator {
     
     static def createBackupOrSync(id:FinishResilient.Id, parentId:FinishResilient.Id, src:Place, optKind:Int, numActive:Long, 
             transit:HashMap[FinishResilient.Edge,Int],
+            sent:HashMap[FinishResilient.Edge,Int], 
             excs:GrowableRail[CheckedThrowable], placeOfMaster:Int, markAdopted:Boolean):FinishBackupState {
         if (verbose>=1) debug(">>>> createBackupOrSync(id="+id+", parentId="+parentId+") called ");
         try {
@@ -597,7 +598,7 @@ public final class FinishReplicator {
                 
                 if (OPTIMISTIC)
                     bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, src, optKind, numActive, 
-                            transit, excs, placeOfMaster);
+                            transit, sent, excs, placeOfMaster);
                 else {
                     bs = new FinishResilientPessimistic.PessimisticBackupState(id, parentId);
                     if (markAdopted)
@@ -606,7 +607,7 @@ public final class FinishReplicator {
                 fbackups.put(id, bs);
                 if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") returning, created bs="+bs);
             } else {
-                bs.sync(numActive, transit, excs, placeOfMaster);
+                bs.sync(numActive, transit, sent, excs, placeOfMaster);
                 if (verbose>=1) debug("<<<< createBackupOrSync(id="+id+", parentId="+parentId+") returning from sync");
             }
             return bs;
@@ -628,18 +629,6 @@ public final class FinishReplicator {
         }
         if (verbose>=1) debug("<<<< Replicator.finalizeReplication returning" );
     }
-}
-
-class MasterResponse {
-    var backupPlaceId:Int;
-    var excp:Exception;
-    var submit:Boolean = false;
-    var transitSubmitDPE:Boolean = false;
-    var backupChanged:Boolean = false;
-}
-
-class BackupResponse {
-    var excp:Exception;
 }
 
 class MasterDied extends Exception {}
