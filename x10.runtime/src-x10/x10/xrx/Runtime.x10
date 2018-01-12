@@ -623,7 +623,7 @@ public final class Runtime {
                 val bodyCopy = deser.readAny() as ()=>void;
                 bodyCopy();
             };
-            submitLocalActivity(new Activity(epoch, asyncBody, state, clockPhases, here));
+            submitLocalActivity(new Activity(epoch, asyncBody, state, clockPhases, a.srcPlace));
         } else {
             val src = here;
             val closure = ()=> @x10.compiler.RemoteInvocation("runAsync") { 
@@ -662,7 +662,7 @@ public final class Runtime {
                 val bodyCopy = deser.readAny() as ()=>void;
                 bodyCopy();
             };
-            submitLocalActivity(new Activity(epoch, asyncBody, state, here));
+            submitLocalActivity(new Activity(epoch, asyncBody, state, a.srcPlace));
         } else {
             state.spawnRemoteActivity(place, body, prof);
         }
@@ -681,7 +681,7 @@ public final class Runtime {
         val state = a.finishState();
         val clockPhases = a.clockPhases().make(clocks);
         state.notifySubActivitySpawn(here);
-        submitLocalActivity(new Activity(epoch, body, state, clockPhases, here));
+        submitLocalActivity(new Activity(epoch, body, state, clockPhases, a.srcPlace));
     }
 
     public static def runAsync(body:()=>void):void {
@@ -692,7 +692,7 @@ public final class Runtime {
         val epoch = a.epoch;
         val state = a.finishState();
         state.notifySubActivitySpawn(here);
-        submitLocalActivity(new Activity(epoch, body, state, here));
+        submitLocalActivity(new Activity(epoch, body, state, a.srcPlace));
     }
 
     public static def runFinish(body:()=>void):void {
@@ -728,7 +728,7 @@ public final class Runtime {
                 val bodyCopy = deser.readAny() as ()=>void;
                 bodyCopy();
             };
-            submitLocalActivity(new Activity(epoch, asyncBody, FinishState.UNCOUNTED_FINISH, here));
+            submitLocalActivity(new Activity(epoch, asyncBody, FinishState.UNCOUNTED_FINISH, a.srcPlace));
         } else {
             val src = here;
             val closure = ()=> @x10.compiler.RemoteInvocation("runUncountedAsync") { 
@@ -784,7 +784,7 @@ public final class Runtime {
         // Prevent stopFinish from improperly scheduling an unrelated activity
 	    activity().finishState().notifyRemoteContinuationCreated();
 
-        submitLocalActivity(new Activity(epoch, body, new FinishState.UncountedFinish(), here));
+        submitLocalActivity(new Activity(epoch, body, new FinishState.UncountedFinish(), a.srcPlace));
     }
 
     /**

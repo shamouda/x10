@@ -35,14 +35,9 @@ import x10.util.concurrent.Condition;
 //TODO: test notifyActivityCreationFailed()
 //FIXME: main termination is buggy. use LULESH to reproduce the bug. how to wait until all replication work has finished.
 //FIXME: handle RemoteCreationDenied
-//FIXME: is it correct that I allow the backup to notify parent if it detects quiescent during recovery?
 //FIXME: revise FinishLowLevel and ResilientCondition for cases when we wait just before the place dies.
 //FIXME: revise setLocalTaskCount  after we added sent
 //FIXME: remove transit all together for better performance for the normal case scenario
-//FIXME: revise the code related to nominating a backup place and master place
-//       always make sure that the reference if is id.home which doesn't change
-
-//FIXME: how optSrc is valued when nested local activities result in creating a child finish???  do we still keep track of the heierarchy?
 /**
  * Distributed Resilient Finish (records transit tasks only)
  */
@@ -228,9 +223,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         //instance level lock
         val ilock = new Lock();
         
-        //root of root (potential adopter) 
-        var adopterId:Id = UNASSIGNED;
-
         var isAdopted:Boolean = false;
         
         val received = new HashMap[Task,Int](); //increasing counts
@@ -266,7 +258,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             s.add("           here:" + here.id); s.add('\n');
             s.add("             id:" + id); s.add('\n');            
             s.add("     localCount:"); s.add(lc); s.add('\n');
-            s.add("      adopterId: " + adopterId); s.add('\n');
             if (received.size() > 0) {
                 s.add("          received:\n");
                 for (e in received.entries()) {
@@ -716,7 +707,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             s.add("             id:" + id); s.add('\n');
             s.add("      numActive:"); s.add(numActive); s.add('\n');
             s.add("       parentId: " + parentId); s.add('\n');
-            //s.add("      adopterId: " + adopterId); s.add('\n');
             if (transit.size() > 0) {
                 s.add("        transit:\n"); 
                 for (e in transit.entries()) {
@@ -830,6 +820,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (verbose>=1) debug(">>>> Master(id="+id+").transitToCompleted srcId=" + srcId + ", dstId=" + dstId + " called");
                 val e = Edge(srcId, dstId, kind);
                 decrement(transit, e);
+                assert transit.getOrElse(e, 0n) >= 0n : here + " FATAL error, transit reached negative id="+id;
                 //don't decrement 'sent', it holds increasing counts 
                 numActive--;
                 if (t != null) addExceptionUnsafe(t);
@@ -854,6 +845,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (verbose>=1) debug(">>>> Master(id="+id+").transitToCompletedMul srcId=" + srcId + ", dstId=" + dstId + " called");
             val e = Edge(srcId, dstId, kind);
             deduct(transit, e, cnt);
+            assert transit.getOrElse(e, 0n) >= 0n : here + " FATAL error, transit reached negative id="+id;
             //don't decrement 'sent', it holds increasing counts 
             numActive-=cnt;
             if (quiescent()) {
@@ -873,12 +865,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         
         def quiescent():Boolean {
             if (verbose>=2) debug(">>>> Master(id="+id+").quiescent called");
-            /* TODO: revise this
-            if (isAdopted()) {
-                if (verbose>=2) debug("quiescent(id="+id+") returning false, already adopted by adopterId=="+adopterId);
-                return false;
-            }
-            */
             if (numActive < 0) {
                 debug("COUNTING ERROR: Master(id="+id+").quiescent negative numActive!!!");
                 dump();
