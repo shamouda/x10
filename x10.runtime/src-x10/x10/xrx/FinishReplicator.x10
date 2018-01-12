@@ -27,7 +27,7 @@ public final class FinishReplicator {
     private static val fbackups = new HashMap[FinishResilient.Id, FinishBackupState]();
     
     //backup deny list
-    private static val backupDeny = new HashSet[FinishResilient.Id]();
+    private static val backupDeny = new HashSet[BackupDenyId]();
     
     private static val allDead = new HashSet[Int]();
 
@@ -49,6 +49,15 @@ public final class FinishReplicator {
     //default previous place - may be updated in notifyPlaceDeath
     static val prevPlaceId = new AtomicInteger(((here.id -1 + Place.numPlaces())%Place.numPlaces()) as Int);
 
+    //places other than the left place can use this place to create backup
+    //we must deny new buckup creations from the dead source place
+    protected static struct BackupDenyId(parentId:FinishResilient.Id, src:Int) {
+        public def toString() = "<backupDenyId parentId=" + parentId + " src=" + src + ">";
+        def this(parentId:FinishResilient.Id, src:Int) {
+            property(parentId, src);
+        }
+    }
+    
     /**************** Replication Protocol **********************/
     //FIXME: must give parent Id in all cases, because backupGetAdopter may create the backup
     //FIXME: update the backup mapping if master returned a non-default backup value
@@ -329,6 +338,21 @@ public final class FinishReplicator {
         }
     }
     
+    static def updateMyBackupIfDead(newDead:HashSet[Int]) {
+        try {
+            val idHome = here.id as Int;
+            FinishResilient.glock.lock();
+            var b:Int = backupMap.getOrElse(idHome, -1n);
+            if (b == -1n)
+                b = ((idHome+1)%Place.numPlaces()) as Int;
+            if (newDead.contains(b)) {
+                b = ((b+1)%Place.numPlaces()) as Int;
+                backupMap.put(idHome, b);
+            }
+        } finally {
+            FinishResilient.glock.unlock();
+        }
+    }
     static def updateBackupPlace(idHome:Int, backupPlaceId:Int) {
         try {
             FinishResilient.glock.lock();
@@ -349,7 +373,7 @@ public final class FinishReplicator {
         }
     }
     
-    static def countBackups(parentId:FinishResilient.Id) {
+    static def countBackups(parentId:FinishResilient.Id, src:Int) {
         var count:Int = 0n;
         try {
             FinishResilient.glock.lock();
@@ -358,7 +382,7 @@ public final class FinishReplicator {
                     count++;
             }
             //no more backups under this parent should be created
-            backupDeny.add(parentId);
+            backupDeny.add(BackupDenyId(parentId, src));
             if (verbose>=1) debug("<<<< countBackups(parentId="+parentId+") returning, count = " + count + " and parentId added to denyList");
         } finally {
             FinishResilient.glock.unlock();
@@ -450,7 +474,7 @@ public final class FinishReplicator {
         return result;
     }
     
-    static def nominateMasterPlace(deadHome:Int) {
+    /*static def nominateMasterPlace(deadHome:Int) {
         var m:Int;
         try {
             FinishResilient.glock.lock();
@@ -465,22 +489,55 @@ public final class FinishReplicator {
         }
         if (verbose>=1) debug("<<<< nominateMasterPlace(deadHome="+deadHome+") returning m="+m);
         return m;
-    }
+    }*/
     
-    static def nominateBackupPlace(deadHome:Int) {
-        var b:Int;
+    static def nominateMasterPlaceIfDead(idHome:Int) {
+        var m:Int;
+        var maxIter:Int = Place.numPlaces() as Int;
+        var i:Int = 0n;
         try {
             FinishResilient.glock.lock();
-            b = backupMap.getOrElse(deadHome,-1n);
-            if (b == -1n || b == deadHome) {
-                b = ((deadHome + 1)%Place.numPlaces()) as Int;
-                backupMap.put(deadHome, b);
-            }
+            m = masterMap.getOrElse(idHome,-1n);
+            do {
+                if (m == -1n)
+                    m = ((idHome - 1 + Place.numPlaces())%Place.numPlaces()) as Int;
+                else
+                    m = ((m - 1 + Place.numPlaces())%Place.numPlaces()) as Int;
+                i++;
+            } while (allDead.contains(m) && i < maxIter);
             
+            if (allDead.contains(m) || i == maxIter)
+                throw new Exception(here + " Fatal, couldn't nominate a new master place for idHome=" + idHome);
+            masterMap.put(idHome, m);
         } finally {
             FinishResilient.glock.unlock();
         }
-        if (verbose>=1) debug("<<<< nominateBackupPlace(deadHome="+deadHome+") returning b="+b);
+        if (verbose>=1) debug("<<<< nominateMasterPlaceIfDead(idHome="+idHome+") returning m="+m);
+        return m;
+    }
+    
+    static def nominateBackupPlaceIfDead(idHome:Int) {
+        var b:Int;
+        var maxIter:Int = Place.numPlaces() as Int;
+        var i:Int = 0n;
+        try {
+            FinishResilient.glock.lock();
+            b = backupMap.getOrElse(idHome,-1n);
+            do {
+                if (b == -1n)
+                    b = ((idHome + 1)%Place.numPlaces()) as Int;
+                else
+                    b = ((b + 1)%Place.numPlaces()) as Int;
+                i++;
+            } while (allDead.contains(b) && i < maxIter);
+            
+            if (allDead.contains(b) || i == maxIter)
+                throw new Exception(here + " Fatal, couldn't nominate a new backup place for idHome=" + idHome);
+            backupMap.put(idHome, b);
+        } finally {
+            FinishResilient.glock.unlock();
+        }
+        if (verbose>=1) debug("<<<< nominateBackupPlace(idHome="+idHome+") returning b="+b);
         return b;
     }
     
@@ -560,7 +617,7 @@ public final class FinishReplicator {
             FinishResilient.glock.lock();
             var bs:FinishBackupState = fbackups.getOrElse(id, null);
             if (bs == null) {
-                if (backupDeny.contains(parentId)) {
+                if (backupDeny.contains(BackupDenyId(parentId, id.home))) {
                     if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") failed, BackupCreationDenied");
                     throw new BackupCreationDenied();
                     //no need to handle this exception; the caller has died.
@@ -594,7 +651,7 @@ public final class FinishReplicator {
             var bs:FinishBackupState = fbackups.getOrElse(id, null);
             
             if (bs == null) {
-                assert !backupDeny.contains(parentId) : "must not be in denyList";
+                assert !backupDeny.contains(BackupDenyId(parentId,id.home)) : "must not be in denyList";
                 
                 if (OPTIMISTIC)
                     bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, src, optKind, numActive, 
