@@ -240,27 +240,36 @@ public final class FinishReplicator {
         do {
             if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+") called, trying curBackup="+curBackup );
             if (curBackup == here.id as Int) { 
-                 val bFin = findBackup(id);
-                 if (bFin != null) {
-                     req.id = bFin.getNewMasterBlocking();
-                     req.masterPlaceId = bFin.getPlaceOfMaster();
-                     req.toAdopter = true;
-                     break;
-                 }
+            	if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (A1)" );
+                val bFin = findBackup(id);
+                if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (A2)" );
+                if (bFin != null) {
+                	if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (A3.1)" );
+                    req.id = bFin.getNewMasterBlocking();
+                    req.masterPlaceId = bFin.getPlaceOfMaster();
+                    req.toAdopter = true;
+                    break;
+                } else {
+                	if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (A3.2)" );
+                }
             }
             else {
+            	if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (B1)" );
                 val reqGR = new GlobalRef[FinishRequest](req);
                 val backup = Place(curBackup);
+                if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (B2)" );
                 if (!backup.isDead()) {
                     //we cannot use Immediate activities, because this function is blocking
                     val rCond = ResilientCondition.make(backup);
                     val condGR = rCond.gr;
                     val closure = (gr:GlobalRef[Condition]) => {
                         at (backup) @Uncounted async {
+                        	if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (C1)" );
                             var foundVar:Boolean = false;
                             var newMasterIdVar:FinishResilient.Id = FinishResilient.UNASSIGNED;
                             var newMasterPlaceVar:Int = -1n;
                             val bFin = findBackupOrThrow(id);
+                            if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (C2)" );
                             if (bFin != null) {
                                 foundVar = true;
                                 newMasterIdVar = bFin.getNewMasterBlocking();
@@ -281,8 +290,9 @@ public final class FinishReplicator {
                         }
                     };
                     
+                    if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (B3)" );
                     rCond.run(closure);
-                    
+                    if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (B4)" );
                     if (rCond.failed()) {
                         throw new MasterAndBackupDied();
                     }
@@ -290,6 +300,8 @@ public final class FinishReplicator {
                     
                     if (req.toAdopter) {
                         break;
+                    } else {
+                    	if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (B5)" );
                     }
                 }
             }
@@ -642,7 +654,7 @@ public final class FinishReplicator {
     }
     
     static def createBackupOrSync(id:FinishResilient.Id, parentId:FinishResilient.Id, src:Place, optKind:Int, numActive:Long, 
-            transit:HashMap[FinishResilient.Edge,Int],
+            /*transit:HashMap[FinishResilient.Edge,Int],*/
             sent:HashMap[FinishResilient.Edge,Int], 
             excs:GrowableRail[CheckedThrowable], placeOfMaster:Int, markAdopted:Boolean):FinishBackupState {
         if (verbose>=1) debug(">>>> createBackupOrSync(id="+id+", parentId="+parentId+") called ");
@@ -655,7 +667,7 @@ public final class FinishReplicator {
                 
                 if (OPTIMISTIC)
                     bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, src, optKind, numActive, 
-                            transit, sent, excs, placeOfMaster);
+                            /*transit,*/ sent, excs, placeOfMaster);
                 else {
                     bs = new FinishResilientPessimistic.PessimisticBackupState(id, parentId);
                     if (markAdopted)
@@ -664,7 +676,7 @@ public final class FinishReplicator {
                 fbackups.put(id, bs);
                 if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") returning, created bs="+bs);
             } else {
-                bs.sync(numActive, transit, sent, excs, placeOfMaster);
+                bs.sync(numActive, /*transit,*/ sent, excs, placeOfMaster);
                 if (verbose>=1) debug("<<<< createBackupOrSync(id="+id+", parentId="+parentId+") returning from sync");
             }
             return bs;

@@ -1124,7 +1124,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 	        increment(live, Task(id.home, FinishResilient.ASYNC));
 	    }
 	    
-	    def sync(_numActive:Long, _transit:HashMap[FinishResilient.Edge,Int],
+	    def sync(_numActive:Long, /*_transit:HashMap[FinishResilient.Edge,Int],*/
 	            _sent:HashMap[FinishResilient.Edge,Int],
 	            _excs:GrowableRail[CheckedThrowable], _placeOfMaster:Int):void {
 	        //FIXME: implement this
