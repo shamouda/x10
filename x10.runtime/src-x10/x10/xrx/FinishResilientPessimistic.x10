@@ -36,11 +36,16 @@ import x10.util.concurrent.Condition;
 //TODO: handle removeFromStates()
 //TODO: revise the adoption logic of nested local finishes
 //TODO: after recovery, clients have to always remember that they are adopted
+//TODO: child has to add itself to the children of the adopting parent(parent on a different place), not direct root parent
+//TODO: do we adopt exceptions too?
+//TODO: backup GC
+//TODO: delete backup in sync(...) if it quiscent
 /**
  * Distributed Resilient Finish (records transit and live tasks)
  * This version is a corrected implementation of the distributed finish described in PPoPP14,
  * that was released in version 2.4.1
  * Implementation notes: remote objects are not shared and are not persisted in a static hashmap (no special GC needed)
+ * Failure assumptions:  master & backup failure not permitted                         
  */
 class FinishResilientPessimistic extends FinishResilient implements CustomSerialization {
     private static val DUMMY_INT = -1n;
@@ -51,6 +56,16 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
     public def toString():String { 
         return me.toString();
     }
+    
+    
+    /* Recovery related structs*/
+    protected static struct ChildQueryId(id:Id, childId:Id) {
+        public def toString() = "<childQuery id=" + id + " childId=" + childId +">";
+        def this(id:Id, childId:Id) {
+            property(id, childId);
+        }
+    }
+    
     
     def notifySubActivitySpawn(place:Place):void { me.notifySubActivitySpawn(place); }
     def notifyShiftedActivitySpawn(place:Place):void { me.notifyShiftedActivitySpawn(place); }
@@ -107,7 +122,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         if (verbose>=1) debug("<<<< serialize(id="+id+") returning ");
     }
     
-    //makeBackup is true only when a parent finish if forced to be global by its child
+    //makeBackup is true only when a parent finish is forced to be global by its child
     //otherwise, backup is created with the first transit request
     private def globalInit(makeBackup:Boolean) {
         if (me instanceof PessimisticMasterState) {
@@ -154,7 +169,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         val condGR = rCond.gr;
         val closure = (gr:GlobalRef[Condition]) => {
             at (backup) @Immediate("backup_create") async {
-                val bFin = FinishReplicator.findBackupOrCreate(myId, parentId, false, Place(-1), DUMMY_INT);
+                val bFin = FinishReplicator.findBackupOrCreate(myId, parentId, Place(-1), DUMMY_INT);
                 at (condGR) @Immediate("backup_create_response") async {
                     condGR().release();
                 }
@@ -369,7 +384,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         
         //the direct parent finish object (used in globalInit for recursive initializing)
         val parent:FinishState;
-
+    
         //latch for blocking and releasing the host activity
         val latch:SimpleLatch = new SimpleLatch();
 
@@ -377,8 +392,8 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         var numActive:Long;
         val live = new HashMap[Task,Int](); 
         var transit:HashMap[Edge,Int] = null; // lazily allocated
-        var _liveAdopted:HashMap[Task,Int] = null; // lazily allocated 
-        var _transitAdopted:HashMap[Edge,Int] = null; // lazily allocated
+        var liveAdopted:HashMap[Task,Int] = null; // lazily allocated 
+        var transitAdopted:HashMap[Edge,Int] = null; // lazily allocated
         
         //the nested finishes within this finish scope
         var children:HashSet[Id] = null; // lazily allocated
@@ -429,9 +444,141 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             latch.unlock();
         }
         
-        public def isImpactedByDeadPlaces(newDead:HashSet[Int]):Boolean {
+        public def isImpactedByDeadPlaces(newDead:HashSet[Int]) {
+            if (newDead.contains(backupPlaceId))
+                return true;
+            for (e in live.entries()) {
+                val task = e.getKey();
+                if (newDead.contains(task.place))
+                    return true;
+            }
+
+            if (transit != null) {
+                for (e in transit.entries()) {
+                    val edge = e.getKey();
+                    if (newDead.contains(edge.src) || newDead.contains(edge.dst))
+                        return true;
+                }
+            }
+            
+            if (liveAdopted != null) {
+                for (e in liveAdopted.entries()) {
+                    val task = e.getKey();
+                    if (newDead.contains(task.place))
+                        return true;
+                }
+            }
+            
+            if (transitAdopted != null) {
+                for (e in transitAdopted.entries()) {
+                    val edge = e.getKey();
+                    if (newDead.contains(edge.src) || newDead.contains(edge.dst))
+                        return true;
+                }
+            }
+            
+            if (children != null) {
+                for (child in children) {
+                    if (newDead.contains(child.home))
+                        return true;
+                }
+            }
+            
             return false;
         }
+        
+        public def adoptChildren(set:HashSet[ChildAdoptionResponse]) {
+            if (set == null || set.size() == 0)
+                return;
+            for (child in set) {
+                val asla = liveAdopted();
+                for (entry in child.live.entries()) {
+                    val task = entry.getKey();
+                    asla.put(task, asla.getOrElse(task,0n) + entry.getValue());
+                }
+                
+                for (entry in child.liveAdopted.entries()) {
+                    val task = entry.getKey();
+                    asla.put(task, asla.getOrElse(task,0n) + entry.getValue());
+                }
+
+                val asta = transitAdopted();
+                for (entry in child.transit.entries()) {
+                    val edge = entry.getKey();
+                    asta.put(edge, asta.getOrElse(edge,0n) + entry.getValue());
+                }
+                for (entry in child.transitAdopted.entries()) {
+                    val edge = entry.getKey();
+                    asta.put(edge, asta.getOrElse(edge,0n) + entry.getValue());
+                }
+                numActive += child.numActive;
+            }
+        }
+        
+        def convertDeadActivities(newDead:HashSet[Int]) {
+            // NOTE: can't say for (p in Place.places()) because we need to see the dead places
+            for (dead in newDead) {
+                val deadTasks = new HashSet[Task]();
+                for (k in live.keySet()) {
+                    if (k.place == dead) deadTasks.add(k);
+                }
+                
+                for (dt in deadTasks) {
+                    val count = live.remove(dt);
+                    numActive -= count;
+                    if (dt.kind == ASYNC) {
+                        for (1..count) {
+                            if (verbose>=3) debug("adding DPE to "+id+" for live async at "+dead);
+                            addDeadPlaceException(dead);
+                        }
+                    }
+                }
+
+                if (liveAdopted != null) {
+                    val deadWards = new HashSet[Task]();
+                    for (k in liveAdopted.keySet()) {
+                        if (k.place == dead) deadWards.add(k);
+                    }
+                    for (dw in deadWards) {
+                        val count = liveAdopted.remove(dw);
+                        numActive -= count;
+                    }
+                }
+                  
+                if (transit != null) {
+                    val deadEdges = new HashSet[Edge]();
+                    for (k in transit.keySet()) {
+                        if (k.src == dead || k.dst == dead) deadEdges.add(k);
+                    }
+                    for (de in deadEdges) {
+                        val count = transit.remove(de);
+                        numActive -= count;
+                        if (de.kind == ASYNC && de.dst == dead) {
+                            for (1..count) {
+                                if (verbose>=3) debug("adding DPE to "+id+" for transit asyncs("+de.src+","+dead+")");
+                                addDeadPlaceException(dead);
+                            }
+                        }
+                    }
+                }
+
+                if (transitAdopted != null) {
+                    val deadEdges = new HashSet[Edge]();
+                    for (k in transitAdopted.keySet()) {
+                        if (k.src == dead || k.dst == dead) deadEdges.add(k);
+                    }
+                    for (de in deadEdges) {
+                        val count = transitAdopted.remove(de);
+                        numActive -= count;
+                    }
+                }
+            }
+            
+            if (quiescent()) {
+                releaseLatch();
+                FinishReplicator.removeMaster(id);
+            }
+        }        
         
         public def dump() {
             val s = new x10.util.StringBuilder();
@@ -453,9 +600,9 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                     s.add("\t\t"+e.getKey()+" = "+e.getValue()+"\n");
                 }
             }
-            if (_liveAdopted != null && _liveAdopted.size() > 0) {
+            if (liveAdopted != null && liveAdopted.size() > 0) {
                 s.add("    liveAdopted:\n"); 
-                for (e in _liveAdopted.entries()) {
+                for (e in liveAdopted.entries()) {
                     s.add("\t\t"+e.getKey()+" = "+e.getValue()+"\n");
                 }
             }
@@ -465,9 +612,9 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                     s.add("\t\t"+e.getKey()+" = "+e.getValue()+"\n");
                 }
             }
-            if (_transitAdopted != null && _transitAdopted.size() > 0) {
+            if (transitAdopted != null && transitAdopted.size() > 0) {
                 s.add(" transitAdopted:\n"); 
-                for (e in _transitAdopted.entries()) {
+                for (e in transitAdopted.entries()) {
                     s.add("\t\t"+e.getKey()+" = "+e.getValue()+"\n");
                 }
             }
@@ -475,8 +622,8 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         }
         
         def liveAdopted() {
-            if (_liveAdopted == null) _liveAdopted = new HashMap[Task,Int]();
-            return _liveAdopted;
+            if (liveAdopted == null) liveAdopted = new HashMap[Task,Int]();
+            return liveAdopted;
         }
 
         def transit() {
@@ -485,8 +632,8 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         }
 
         def transitAdopted() {
-            if (_transitAdopted == null) _transitAdopted = new HashMap[Edge,Int]();
-            return _transitAdopted;
+            if (transitAdopted == null) transitAdopted = new HashMap[Edge,Int]();
+            return transitAdopted;
         }
         
         def addExceptionUnsafe(t:CheckedThrowable) {
@@ -1083,10 +1230,10 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         
         //resilient finish counter set
         var numActive:Long;
-        val live = new HashMap[FinishResilient.Task,Int] (); // lazily allocated
+        var live = new HashMap[FinishResilient.Task,Int] (); // lazily allocated
         var transit:HashMap[FinishResilient.Edge,Int] = null; // lazily allocated
-        var _liveAdopted:HashMap[FinishResilient.Task,Int] = null; // lazily allocated 
-        var _transitAdopted:HashMap[FinishResilient.Edge,Int] = null; // lazily allocated
+        var liveAdopted:HashMap[FinishResilient.Task,Int] = null; // lazily allocated 
+        var transitAdopted:HashMap[FinishResilient.Edge,Int] = null; // lazily allocated
         
         //the nested finishes within this finish scope
         var children:HashSet[Id] = null; // lazily allocated
@@ -1110,13 +1257,94 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             increment(live, Task(id.home, FinishResilient.ASYNC));
         }
         
+        def this(_id:Id, _parentId:Id, _numActive:Long, _live:HashMap[FinishResilient.Task,Int],
+                _transit:HashMap[FinishResilient.Edge,Int], _liveAdopted:HashMap[FinishResilient.Task,Int],
+                _transitAdopted:HashMap[FinishResilient.Edge,Int], _children:HashSet[Id],
+                _excs:GrowableRail[CheckedThrowable]) {
+            this.id = _id;
+            this.numActive = _numActive;
+            this.parentId = _parentId;
+            this.live = _live;
+            this.transit = _transit;
+            this.liveAdopted = _liveAdopted; 
+            this.transitAdopted = _transitAdopted;
+            this.children = _children;
+            this.excs = _excs;
+        }
+        
         def dump() {
         }
         
-        def sync(_numActive:Long, /*_transit:HashMap[FinishResilient.Edge,Int],*/
-                _sent:HashMap[FinishResilient.Edge,Int],
-                _excs:GrowableRail[CheckedThrowable], _placeOfAdopter:Int):void {
-            //FIXME: implement this
+        def sync(_numActive:Long, _live:HashMap[FinishResilient.Task,Int],
+                _transit:HashMap[FinishResilient.Edge,Int], _liveAdopted:HashMap[FinishResilient.Task,Int],
+                _transitAdopted:HashMap[FinishResilient.Edge,Int], _children:HashSet[Id],
+                _excs:GrowableRail[CheckedThrowable]):void {
+            this.numActive = _numActive;
+            this.live = _live;
+            this.transit = _transit;
+            this.liveAdopted = _liveAdopted; 
+            this.transitAdopted = _transitAdopted;
+            this.children = _children;
+            this.excs = _excs;
+            if (verbose>=3) dump();
+        }
+        
+        def acquire(newDead:HashSet[Int], _adopterId:Id, resp:ChildAdoptionResponse) {
+            try {
+                lock();
+                
+                if (children != null) {
+                    for (child in children) {
+                        if (child.home == id.home) { //local child
+                            val bFin = FinishReplicator.findBackup(child);
+                            if (bFin != null) {
+                                bFin.acquire(newDead, _adopterId, resp);
+                            }
+                        }
+                        else if (newDead.contains(child.home)) { //grandchildren that should be adopted too
+                            resp.children.add(child); 
+                        }
+                    }
+                }
+                
+                if (live.size() > 0) {
+                    for (e in live.entries()) {
+                        resp.live.put(e.getKey(), e.getValue());
+                    }
+                }
+                if (transit != null && transit.size() > 0) {
+                    for (e in transit.entries()) {
+                        resp.transit.put(e.getKey(), e.getValue());
+                    }
+                }
+                if (liveAdopted != null && liveAdopted.size() > 0) {
+                    for (e in liveAdopted.entries()) {
+                        resp.liveAdopted.put(e.getKey(), e.getValue());
+                    }
+                }
+                if (transitAdopted != null && transitAdopted.size() > 0) {
+                    for (e in transitAdopted.entries()) {
+                        resp.transitAdopted.put(e.getKey(), e.getValue());
+                    }
+                }
+                
+                resp.numActive = numActive;
+                
+                adopterId = _adopterId;
+                placeOfAdopter = _adopterId.home;
+                isAdopted = true;
+                migrating = false;
+                
+                live = null;
+                transit = null;
+                liveAdopted = null;
+                transitAdopted = null;
+                numActive = 0;
+                excs = null;
+                children = null;
+            } finally {
+                unlock();
+            }
         }
         
         public def getId() = id;
@@ -1140,15 +1368,6 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             }
         }
         
-        public def markAsAdopted() {
-            try {
-                ilock.lock();
-                isAdopted = true;
-            } finally {
-                ilock.unlock();
-            }
-        }
-        
         //FIXME: make this method non-blocking
         //waits until backup is adopted
         public def getNewMasterBlocking() {
@@ -1167,8 +1386,8 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         }
            
         def liveAdopted() {
-            if (_liveAdopted == null) _liveAdopted = new HashMap[Task,Int]();
-            return _liveAdopted;
+            if (liveAdopted == null) liveAdopted = new HashMap[Task,Int]();
+            return liveAdopted;
         }
 
         def transit() {
@@ -1177,8 +1396,8 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         }
 
         def transitAdopted() {
-            if (_transitAdopted == null) _transitAdopted = new HashMap[Edge,Int]();
-            return _transitAdopted;
+            if (transitAdopted == null) transitAdopted = new HashMap[Edge,Int]();
+            return transitAdopted;
         }
         
         def addExceptionUnsafe(t:CheckedThrowable) {
@@ -1436,14 +1655,276 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         }
     }
     /*************** Adoption Logic ******************/
-    static def notifyPlaceDeath():void {
-        if (verbose>=1) {
-            debug(">>>> notifyPlaceDeath called");
-            var str:String = "";
-            for (p in Place.places()) {
-                str += "place(" + p.id + ")=" + p.isDead() + " "; 
+    static def getChildAdoptionRequests(newDead:HashSet[Int],
+            masters:HashSet[FinishMasterState]) {
+        val reqs = new HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]();
+        if (!masters.isEmpty()) {
+            for (dead in newDead) {
+                val backup = FinishReplicator.getBackupPlace(dead);
+                for (mx in masters) {
+                    val m = mx as OptimisticMasterState; 
+                    m.lock();
+                    for (child in m.children.entries()) {
+                        if (dead == child.home) {
+                            var rreq:HashSet[ChildQueryId] = reqs.getOrElse(backup, null);
+                            if (rreq == null){
+                                rreq = new HashMap[ChildQueryId, Int]]();
+                                reqs.put(backup, rreq);
+                            }
+                            rreq.put(ChildQueryId(m.id /*parent id*/, child), new ChildAdoptionResponse());
+                        } 
+                    }
+                    m.unlock();
+                }
             }
-            debug("<<<< notifyPlaceDeath returning [isDead: "+str+"]");
+        }
+        return reqs;
+    }
+    
+    static def acquireChildrenBackupsRecursively(newDead:HashSet[Int], placeReqs:HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]) {
+        if (verbose>=1) debug(">>>> acquireChildrenBackupsRecursively(size="+reqs.size()+") called");
+        if (placeReqs.size() == 0) {
+            if (verbose>=1) debug("<<<< acquireChildrenBackupsRecursively(size="+reqs.size()+") returning, zero size");
+            return placeReqs;
+        }
+        
+        var reqs:HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]] = placeReqs;
+        val grandChildren = new HashSet[Int]();
+        val fullResult = new HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]();
+        do {
+            acquireChildrenBackups(newDead, reqs);
+            
+            val newChildren = new HashSet[ChildQueryId]();
+            for (placeEntry in reqs.entries()) {
+                //hashmap of children requests and their responses
+                for (childReq in placeEntry.entries) {
+                    val parentId = childReq.getKey().id;
+                    val children = childReq.getValue().children;
+                    for (child in children) {
+                        newChildren.add (new ChildQueryId(parentId, child));
+                    }
+                    childReq.children.clear();
+                }
+                val pl = placeEntry.getKey();
+                var placeResult:HashMap[ChildQueryId, ChildAdoptionResponse] = fullResult.getOrElse(pl, null);
+                if (placeResult == null) {
+                    placeResult = new HashMap[ChildQueryId, ChildAdoptionResponse]();
+                    fullResult.put(pl,placeResult);
+                }
+                placeResult.put(placeEntry.getKey(), placeEntry.getValue());
+            }
+            
+            if (newChildren.size() > 0) {
+                reqs = new HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]();
+                for (childQuery in newChildren) {
+                    val backup = FinishReplicator.getBackupPlace(childQuery.child.home);
+                    var rreq:HashSet[ChildQueryId] = reqs.getOrElse(backup, null);
+                    if (rreq == null){
+                        rreq = new HashMap[ChildQueryId, Int]]();
+                        reqs.put(backup, rreq);
+                    }
+                    rreq.put(childQuery, new ChildAdoptionResponse());
+                }
+            }
+        } while (newChildren.size() > 0);
+        
+        return fullResult;
+    }
+    
+    static def acquireChildrenBackups(newDead:HashSet[Int], reqs:HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]) {
+        if (verbose>=1) debug(">>>> acquireChildrenBackups(size="+reqs.size()+") called");
+        if (reqs.size() == 0) {
+            if (verbose>=1) debug("<<<< acquireChildrenBackups(size="+reqs.size()+") returning, zero size");
+            return;
+        }
+        val places = new Rail[Int](reqs.size());
+        val iter = reqs.keySet().iterator();
+        var i:Long = 0;
+        while (iter.hasNext()) {
+            val pl = iter.next();
+            places(i++) = pl;
+        }
+        val fin = ResilientLowLevelFinish.make(places);
+        val gr = fin.getGr();
+        val outputGr = GlobalRef[HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]](reqs);
+        val closure = (gr:GlobalRef[ResilientLowLevelFinish]) => {
+            for (p in places) {
+                if (verbose>=1) debug("==== acquireChildrenBackups  moving from " + here + " to " + Place(p));
+                if (Place(p).isDead()) {
+                    (gr as GlobalRef[ResilientLowLevelFinish]{self.home == here})().notifyFailure();
+                } else {
+                    val preq = reqs.getOrThrow(p);
+                    at (Place(p)) @Immediate("acquire_child_backup_request") async {
+                        if (verbose>=1) debug("==== acquireChildrenBackups  reached from " + gr.home + " to " + here);
+                        val requests = preq;
+                        if (requests.size() > 0) {
+                            for (e in requests.entries()) {
+                                val query = e.getKey();
+                                val childId = query.childId; //we don't need to deny the backup, no harm if it gets created later on
+                                val resp = e.getValue();
+                                val bFin = FinishReplicator.findBackup(childId) as PessimisticBackupState;
+                                val resp = bFin.acquire(newDead, query.id, resp); // get the counts and the nested children if dead 
+                                requests.put(e.getKey(), resp);   
+                            }
+                        }
+                        
+                        val me = here.id as Int;
+                        if (verbose>=1) debug("==== acquireChildrenBackups  reporting termination to " + gr.home + " from " + here);
+                        at (gr) @Immediate("acquire_child_backup_response") async {
+                            val output = (outputGr as GlobalRef[HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]]{self.home == here})().getOrThrow(me);
+                            
+                            for (x in requests.entries()) {
+                                output.put(x.getKey(), x.getValue());
+                            }
+                            gr().notifyTermination(me);
+                        }
+                    }
+                }
+            }
+        };
+        
+        if (verbose>=1) debug("LOW_LEVEL_FINISH.waiting started");
+        fin.run(closure);
+        if (verbose>=1) debug("LOW_LEVEL_FINISH.waiting ended");
+        
+        if (fin.failed())
+            throw new Exception("FATAL ERROR: another place failed during recovery ...");
+
+        //add grandchildren children to master, and try again
+    }
+    
+    
+    //FIXME: nominate another backup if the nominated one is dead
+    static def createOrSyncBackups(newDead:HashSet[Int], masters:HashSet[FinishMasterState]) {
+        if (verbose>=1) debug(">>>> createOrSyncBackups(size="+masters.size()+") called");
+        if (masters.size() == 0) {
+            FinishReplicator.nominateBackupPlaceIfDead(here.id as Int);
+            if (verbose>=1) debug("<<<< createOrSyncBackups(size="+masters.size()+") returning, zero size");
+            return;
+        }
+        
+        val places = new Rail[Int](masters.size());
+        val iter = masters.iterator();
+        var i:Long = 0;
+        while (iter.hasNext()) {
+            val m = iter.next() as OptimisticMasterState;
+            places(i) = FinishReplicator.nominateBackupPlaceIfDead(m.id.home);
+            m.backupPlaceId = places(i);
+            i++;
+        }
+        val fin = ResilientLowLevelFinish.make(places);
+        val gr = fin.getGr();
+        val placeOfMaster = here.id as Int;
+        val closure = (gr:GlobalRef[ResilientLowLevelFinish]) => {
+            for (mx in masters) {
+                val m = mx as OptimisticMasterState;
+                val backup = Place(m.backupPlaceId);
+                val id = m.id;
+                val parentId = m.parentId;
+                val numActive = m.numActive;
+                val live = m.live;
+                val transit = m.transit;
+                val liveAdopted = m.liveAdopted;
+                val transitAdopted = m.transitAdopted;
+                val children = m.children;
+                val excs = m.excs;
+                
+                if (backup.isDead()) {
+                    (gr as GlobalRef[ResilientLowLevelFinish]{self.home == here})().notifyFailure();
+                } else {
+                    at (backup) @Immediate("create_or_sync_backup") async {
+                        FinishReplicator.createBackupOrSync(id, parentId, numActive, live,
+                                transit, liveAdopted, transitAdopted, children, excs);
+                        val me = here.id as Int;
+                        at (gr) @Immediate("create_or_sync_backup_response") async {
+                            gr().notifyTermination(me);
+                        }
+                    }
+                }
+            }
+        };
+        
+        if (verbose>=1) debug("LOW_LEVEL_FINISH.waiting started");
+        fin.run(closure);
+        if (verbose>=1) debug("LOW_LEVEL_FINISH.waiting ended");
+        
+        if (fin.failed())
+            throw new Exception("FATAL ERROR: another place failed during recovery ...");
+        
+        for (mx in masters) {
+            val m = mx as PessimisticMasterState;
+            m.lock();
+            m.migrating = false;
+            m.unlock();
+        }
+        if (verbose>=1) debug("<<<< createOrSyncBackups(size="+masters.size()+") returning");
+    }
+    
+    static def notifyPlaceDeath():void {
+        if (verbose>=1) debug(">>>> notifyPlaceDeath called");
+        if (Runtime.activity() == null) {
+            if (verbose>=1) debug(">>>> notifyPlaceDeath returning, IGNORED REQUEST FROM IMMEDIATE THREAD");
+            return; 
+        }
+        val newDead = FinishReplicator.getNewDeadPlaces();
+        val masters = FinishReplicator.getImpactedMasters(newDead); //any master who contacted the dead place or whose backup was lost or his child was lost
+        val backups = FinishReplicator.getImpactedBackups(newDead); //any backup who lost its master.
+        
+        //prevent updates on backups since they are based on decisions made by a dead master
+        for (bx in backups) {
+            val b = bx as PessimisticBackupState;
+            b.lock();
+            if (!b.isAdopted)
+                b.migrating = true;
+            b.unlock();
+        }
+        
+        val reqs = getChildAdoptionRequests(newDead, masters); // combine all requests targetted to a specific place
+        val resps = acquireChildrenBackupsRecursively(newDead, reqs); //obtain the counts and disable the backups
+
+        val map = new HashMap[Id, HashSet[ChildAdoptionResponse]]();
+        for (placeEntry in resps.entries()) {
+            val placeMap = placeEntry.getValue();
+            for (e in placeMap.entries()) {
+                val parentId = e.getKey().id;
+                var set:HashSet[ChildAdoptionResponse] = map.getOrElse(parentId);
+                if (set == null) {
+                    set = new HashSet[ChildAdoptionResponse]();
+                    map.put(parentId, set);
+                }
+                set.add(e.getValue());
+            }
+        }
+        
+        
+        //update counts and check if quiecent reached
+        for (m in masters) {
+            val master = m as PessimisticMasterState;
+            
+            master.lock();
+            //convert to dead
+            master.adoptChildren(newDead, map.get(master.id));
+            
+            master.convertDeadActivities();
+            
+            master.migrating = true; //prevent updates to masters as we are copying the data to backup, 
+                                     //and we want to ensure that backup is created before processing new requests
+            master.unlock();
+        }
+        
+        if (masters.size() > 0)
+            createOrSyncBackups(newDead, masters);
+        else {
+            FinishReplicator.nominateBackupPlaceIfDead(here.id as Int);
         }
     }
+}
+
+class ChildAdoptionResponse {
+    val children = new HashSet[Id]();
+    val live = new HashMap[FinishResilient.Task,Int]();
+    val transit = new HashMap[FinishResilient.Edge,Int]();
+    val liveAdopted = new HashMap[FinishResilient.Task,Int]();
+    val transitAdopted = new HashMap[FinishResilient.Edge,Int]();
+    var numActive:Long = 0;
 }

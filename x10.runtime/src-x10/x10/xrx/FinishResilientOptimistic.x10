@@ -37,6 +37,7 @@ import x10.util.concurrent.Condition;
 //FIXME: there is a hang occuring in: X10_RESILIENT_VERBOSE=4 X10_RESILIENT_MODE=14 X10_NPLACES=5 ./t04.o &> outputT4_h2.txt
 //FIXME: getNewMasterBlocking() does not need to be blocking
 //TODO: revise the adoption logic of nested local finishes
+//TODO: delete backup in sync(...) if it quiscent
 /**
  * Distributed Resilient Finish (records transit tasks only)
  * Implementation notes: remote objects are shared and are persisted in a static hashmap (special GC needed)
@@ -195,7 +196,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         val condGR = rCond.gr;
         val closure = (gr:GlobalRef[Condition]) => {
             at (backup) @Immediate("backup_create") async {
-                val bFin = FinishReplicator.findBackupOrCreate(myId, parentId, false, src, optKind);
+                val bFin = FinishReplicator.findBackupOrCreate(myId, parentId, src, optKind);
                 at (condGR) @Immediate("backup_create_response") async {
                     condGR().release();
                 }
@@ -594,10 +595,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         public def isImpactedByDeadPlaces(newDead:HashSet[Int]) {
+            if (newDead.contains(backupPlaceId)) /*needs re-replication*/
+                return true;
             for (e in sent.entries()) {
                 val edge = e.getKey();
-                if (newDead.contains(edge.src) || newDead.contains(edge.dst) || 
-                        newDead.contains(backupPlaceId) /*required re-replication*/)
+                if (newDead.contains(edge.src) || newDead.contains(edge.dst))
                     return true;
             }
             return false;
@@ -1283,6 +1285,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             for (e in _sent.entries()) {
                 this.sent.put(e.getKey(), e.getValue());
             }
+            this.sent = _sent;
             this.placeOfMaster = _placeOfMaster;
             this.excs = _excs;
             if (verbose>=3) dump();
@@ -1306,15 +1309,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 return placeOfMaster;
             } finally {
                 unlock();
-            }
-        }
-        
-        public def markAsAdopted() {
-            try {
-                ilock.lock();
-                isAdopted = true;
-            } finally {
-                ilock.unlock();
             }
         }
         
@@ -1736,7 +1730,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     static def processCountingRequests(resolveReqs:HashMap[Int,ResolveRequest]) {
         if (verbose>=1) debug(">>>> processCountingRequests(size="+resolveReqs.size()+") called");
         if (resolveReqs.size() == 0) {
-            if (verbose>=1) debug(">>>> processCountingRequests(size="+resolveReqs.size()+") returning, zero size");
+            if (verbose>=1) debug("<<<< processCountingRequests(size="+resolveReqs.size()+") returning, zero size");
             return;
         }
         val places = new Rail[Int](resolveReqs.size());
@@ -1920,7 +1914,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 } else {
                     at (backup) @Immediate("create_or_sync_backup") async {
                         val markAdopted = false;
-                        FinishReplicator.createBackupOrSync(id, parentId, optSrc, optKind, numActive, /*transit,*/ 
+                        FinishReplicator.createOptimisticBackupOrSync(id, parentId, optSrc, optKind, numActive, /*transit,*/ 
                                 sent, excs, placeOfMaster, markAdopted);
                         val me = here.id as Int;
                         at (gr) @Immediate("create_or_sync_backup_response") async {

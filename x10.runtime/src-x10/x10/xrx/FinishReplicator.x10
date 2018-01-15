@@ -177,7 +177,7 @@ public final class FinishReplicator {
         if (req.isBackupLocal()) {
             val bFin:FinishBackupState;
             if (createOk)
-                bFin = findBackupOrCreate(req.id, req.parentId, false, Place(req.optFinSrc), req.optFinKind);
+                bFin = findBackupOrCreate(req.id, req.parentId, Place(req.optFinSrc), req.optFinKind);
             else
                 bFin = findBackupOrThrow(req.id);
             val resp = bFin.exec(req);
@@ -198,7 +198,7 @@ public final class FinishReplicator {
             at (backup) @Immediate("backup_exec") async {
                 val bFin:FinishBackupState;
                 if (createOk) // termination of remote messages
-                    bFin = findBackupOrCreate(req.id, req.parentId, false, Place(req.optFinSrc), req.optFinKind); // must find the backup object
+                    bFin = findBackupOrCreate(req.id, req.parentId, Place(req.optFinSrc), req.optFinKind); // must find the backup object
                 else
                     bFin = findBackupOrThrow(req.id);
                 val resp = bFin.exec(req);
@@ -489,23 +489,6 @@ public final class FinishReplicator {
         return result;
     }
     
-    /*static def nominateMasterPlace(deadHome:Int) {
-        var m:Int;
-        try {
-            FinishResilient.glock.lock();
-            m = masterMap.getOrElse(deadHome,-1n);
-            if (m == -1n || m == deadHome) {
-                m = ((deadHome - 1 + Place.numPlaces())%Place.numPlaces()) as Int;
-                masterMap.put(deadHome, m);
-            }
-            
-        } finally {
-            FinishResilient.glock.unlock();
-        }
-        if (verbose>=1) debug("<<<< nominateMasterPlace(deadHome="+deadHome+") returning m="+m);
-        return m;
-    }*/
-    
     static def nominateMasterPlaceIfDead(idHome:Int) {
         var m:Int;
         var maxIter:Int = Place.numPlaces() as Int;
@@ -626,7 +609,7 @@ public final class FinishReplicator {
     }
     
     /*markAdopted is used in cases when the parent attempts to adopt, before the backup creation*/
-    static def findBackupOrCreate(id:FinishResilient.Id, parentId:FinishResilient.Id, markAdopted:Boolean, optSrc:Place, optKind:Int):FinishBackupState {
+    static def findBackupOrCreate(id:FinishResilient.Id, parentId:FinishResilient.Id, optSrc:Place, optKind:Int):FinishBackupState {
         if (verbose>=1) debug(">>>> findOrCreateBackup(id="+id+", parentId="+parentId+") called ");
         try {
             FinishResilient.glock.lock();
@@ -640,11 +623,8 @@ public final class FinishReplicator {
                 
                 if (OPTIMISTIC)
                     bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, optSrc, optKind);
-                else {
+                else
                     bs = new FinishResilientPessimistic.PessimisticBackupState(id, parentId);
-                    if (markAdopted)
-                        bs.markAsAdopted();
-                }
                 fbackups.put(id, bs);
                 if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") returning, created bs="+bs);
             }
@@ -656,31 +636,50 @@ public final class FinishReplicator {
         }
     }
     
-    static def createBackupOrSync(id:FinishResilient.Id, parentId:FinishResilient.Id, src:Place, optKind:Int, numActive:Long, 
+    static def createOptimisticBackupOrSync(id:FinishResilient.Id, parentId:FinishResilient.Id, src:Place, optKind:Int, numActive:Long, 
             /*transit:HashMap[FinishResilient.Edge,Int],*/
             sent:HashMap[FinishResilient.Edge,Int], 
-            excs:GrowableRail[CheckedThrowable], placeOfMaster:Int, markAdopted:Boolean):FinishBackupState {
-        if (verbose>=1) debug(">>>> createBackupOrSync(id="+id+", parentId="+parentId+") called ");
+            excs:GrowableRail[CheckedThrowable], placeOfMaster:Int):FinishBackupState {
+        if (verbose>=1) debug(">>>> createOptimisticBackupOrSync(id="+id+", parentId="+parentId+") called ");
         try {
             FinishResilient.glock.lock();
             var bs:FinishBackupState = fbackups.getOrElse(id, null);
             
             if (bs == null) {
                 assert !backupDeny.contains(BackupDenyId(parentId,id.home)) : "must not be in denyList";
-                
-                if (OPTIMISTIC)
-                    bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, src, optKind, numActive, 
+                bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, src, optKind, numActive, 
                             /*transit,*/ sent, excs, placeOfMaster);
-                else {
-                    bs = new FinishResilientPessimistic.PessimisticBackupState(id, parentId);
-                    if (markAdopted)
-                        bs.markAsAdopted();
-                }
                 fbackups.put(id, bs);
-                if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") returning, created bs="+bs);
+                if (verbose>=1) debug("<<<< createOptimisticBackupOrSync(id="+id+", parentId="+parentId+") returning, created bs="+bs);
             } else {
-                bs.sync(numActive, /*transit,*/ sent, excs, placeOfMaster);
-                if (verbose>=1) debug("<<<< createBackupOrSync(id="+id+", parentId="+parentId+") returning from sync");
+                (bs as FinishResilientOptimistic.OptimisticBackupState).sync(numActive, /*transit,*/ sent, excs, placeOfMaster);
+                if (verbose>=1) debug("<<<< createOptimisticBackupOrSync(id="+id+", parentId="+parentId+") returning from sync");
+            }
+            return bs;
+        } finally {
+            FinishResilient.glock.unlock();
+        }
+    }
+    
+    
+    static def createPessimisticBackupOrSync(id:Id, parentId:FinishResilient.Id, numActive:Long, live:HashMap[FinishResilient.Task,Int],
+            transit:HashMap[FinishResilient.Edge,Int], liveAdopted:HashMap[FinishResilient.Task,Int],
+            transitAdopted:HashMap[FinishResilient.Edge,Int], children:HashSet[FinishResilient.Id],
+            excs:GrowableRail[CheckedThrowable]):FinishBackupState {
+        if (verbose>=1) debug(">>>> createPessimisticBackupOrSync(id="+id+", parentId="+parentId+") called ");
+        try {
+            FinishResilient.glock.lock();
+            var bs:FinishBackupState = fbackups.getOrElse(id, null);
+            
+            if (bs == null) {
+                bs = new FinishResilientPessimistic.PessimisticBackupState(id, parentId, numActive, live,
+                            transit, liveAdopted, transitAdopted, children, excs);
+                fbackups.put(id, bs);
+                if (verbose>=1) debug("<<<< createPessimisticBackupOrSync(id="+id+", parentId="+parentId+") returning, created bs="+bs);
+            } else {
+                (bs as FinishResilientPessimistic.PessimisticBackupState).sync(numActive, live,
+                            transit, liveAdopted, transitAdopted, children, excs);
+                if (verbose>=1) debug("<<<< createPessimisticBackupOrSync(id="+id+", parentId="+parentId+") returning from sync");
             }
             return bs;
         } finally {

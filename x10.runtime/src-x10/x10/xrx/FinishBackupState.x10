@@ -14,7 +14,6 @@ import x10.util.GrowableRail;
 import x10.util.HashMap;
 
 public abstract class FinishBackupState {
-    abstract def markAsAdopted():void;
     abstract def exec(req:FinishRequest):BackupResponse;
     abstract def getNewMasterBlocking():FinishResilient.Id;
     
