@@ -240,36 +240,37 @@ public final class FinishReplicator {
         do {
             if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+") called, trying curBackup="+curBackup );
             if (curBackup == here.id as Int) { 
-            	if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (A1)" );
+                if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (A1)" );
                 val bFin = findBackup(id);
                 if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (A2)" );
                 if (bFin != null) {
-                	if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (A3.1)" );
+                    if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (A3.1)" );
                     req.id = bFin.getNewMasterBlocking();
                     req.masterPlaceId = bFin.getPlaceOfMaster();
                     req.toAdopter = true;
                     break;
                 } else {
-                	if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (A3.2)" );
+                    if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (A3.2)" );
                 }
             }
             else {
-            	if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (B1)" );
+                if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+id+")  (B1)" );
                 val reqGR = new GlobalRef[FinishRequest](req);
                 val backup = Place(curBackup);
-                if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (B2)" );
+                if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+id+")  (B2)" );
+                val me = here;
                 if (!backup.isDead()) {
                     //we cannot use Immediate activities, because this function is blocking
                     val rCond = ResilientCondition.make(backup);
                     val condGR = rCond.gr;
                     val closure = (gr:GlobalRef[Condition]) => {
                         at (backup) @Uncounted async {
-                        	if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (C1)" );
+                            if (verbose>=1) debug("==== prepareRequestForNewMaster(id="+id+") from place "+me+" (C1)" );
                             var foundVar:Boolean = false;
                             var newMasterIdVar:FinishResilient.Id = FinishResilient.UNASSIGNED;
                             var newMasterPlaceVar:Int = -1n;
                             val bFin = findBackupOrThrow(id);
-                            if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (C2)" );
+                            if (verbose>=1) debug("==== prepareRequestForNewMaster(id="+id+") from place "+me+" (C2)" );
                             if (bFin != null) {
                                 foundVar = true;
                                 newMasterIdVar = bFin.getNewMasterBlocking();
@@ -278,7 +279,9 @@ public final class FinishReplicator {
                             val found = foundVar;
                             val newMasterId = newMasterIdVar;
                             val newMasterPlace = newMasterPlaceVar;
+                            if (verbose>=1) debug("==== prepareRequestForNewMaster(id="+id+") going to place "+me+" (C3)" );
                             at (condGR) @Immediate("backup_get_new_master_response") async {
+                                if (verbose>=1) debug("==== prepareRequestForNewMaster(id="+id+") reached back to "+here+" (C4)" );
                                 val req = (reqGR as GlobalRef[FinishRequest]{self.home == here})();
                                 if (found) {
                                     req.id = newMasterId;
@@ -290,9 +293,9 @@ public final class FinishReplicator {
                         }
                     };
                     
-                    if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (B3)" );
+                    if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+id+")  (B3)" );
                     rCond.run(closure);
-                    if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (B4)" );
+                    if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+id+")  (B4)" );
                     if (rCond.failed()) {
                         throw new MasterAndBackupDied();
                     }
@@ -301,7 +304,7 @@ public final class FinishReplicator {
                     if (req.toAdopter) {
                         break;
                     } else {
-                    	if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (B5)" );
+                        if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+id+")  (B5)" );
                     }
                 }
             }
