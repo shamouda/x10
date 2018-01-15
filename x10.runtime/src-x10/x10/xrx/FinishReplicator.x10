@@ -6,7 +6,7 @@
  *  You may obtain a copy of the License at
  *      http://www.opensource.org/licenses/eclipse-1.0.php
  *
- *  (C) Copyright IBM Corporation 2006-2016.
+ *  (C) Sara Salem Hamouda 2017-2018.
  */
 package x10.xrx;
 
