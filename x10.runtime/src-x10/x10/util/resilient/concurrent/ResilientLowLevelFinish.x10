@@ -61,7 +61,7 @@ public class ResilientLowLevelFinish implements Unserializable {
     	try {
     		ilock.lock();
     		for (var i:Long = 0; i < places.size; i++) {
-    			if (status(i) == 0n && Place(places(i)).isDead()) {
+    			if (status(i) == 0n && (places(i) == -1n || Place(places(i)).isDead()) ) {
     				count--;
     				status(i) = -1n;
     			}

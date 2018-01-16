@@ -22,10 +22,6 @@ public abstract class FinishBackupState {
     abstract def unlock():void;
     abstract def getParentId():FinishResilient.Id;
     abstract def getPlaceOfMaster():Int;
-    
-    abstract def sync(_numActive:Long, /*_transit:HashMap[FinishResilient.Edge,Int],*/
-            _sent:HashMap[FinishResilient.Edge,Int],
-            _excs:GrowableRail[CheckedThrowable], _placeOfMaster:Int):void;
 }
 
 class BackupResponse {

@@ -18,6 +18,7 @@ import x10.util.HashMap;
 import x10.util.HashSet;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.GrowableRail;
+import x10.util.resilient.concurrent.ResilientLowLevelFinish;
 
 public final class FinishReplicator {
     //the set of all masters
@@ -33,7 +34,7 @@ public final class FinishReplicator {
 
     private static val verbose = System.getenv("X10_RESILIENT_VERBOSE") == null? 0 : Long.parseLong(System.getenv("X10_RESILIENT_VERBOSE"));
     
-    private static val place0Pending = new AtomicInteger(0n);
+    private static val pending = new AtomicInteger(0n);
     
     private static val OPTIMISTIC = Configuration.resilient_mode() == Configuration.RESILIENT_MODE_DIST_OPTIMISTIC;
     
@@ -61,9 +62,14 @@ public final class FinishReplicator {
     /**************** Replication Protocol **********************/
     //FIXME: must give parent Id in all cases, because backupGetAdopter may create the backup
     //FIXME: update the backup mapping if master returned a non-default backup value
-    public static def exec(req:FinishRequest):Boolean {
+    public static def exec(req:FinishRequest):FinishResilient.ReplicatorResponse {
         if (verbose>=1) debug(">>>> Replicator(id="+req.id+").exec() called");
+        val c = pending.incrementAndGet();
+        if (c < 0n)
+            throw new Exception("Fatal, new finish request posted after main finish<0,0> termination ...");
+        
         var submit:Boolean = false;
+        var adopterId:FinishResilient.Id = FinishResilient.UNASSIGNED; //pessimistic only
         while (true) {
             try {
                 val mresp:MasterResponse = masterExec(req);
@@ -93,11 +99,15 @@ public final class FinishReplicator {
                 break;
             } catch (ex:MasterDied) {
                 prepareRequestForNewMaster(req); // we communicate with backup to ask for the new master location
+                if (!OPTIMISTIC)
+                    adopterId = req.id;
                 if (verbose>=1) debug("==== Replicator(id="+req.id+").exec() threw MasterDied exception, forward to newMaster " + req.id + " @ " + req.masterPlaceId);
             } catch (ex:MasterChanged) { 
                 req.toAdopter = true;
                 req.id = ex.newMasterId;
                 req.masterPlaceId = ex.newMasterPlace;
+                if (!OPTIMISTIC)
+                    adopterId = req.id;
                 if (verbose>=1) debug("==== Replicator(id="+req.id+").exec() threw MasterChanged exception, forward to newMaster " + req.id + " @ " + req.masterPlaceId);
             } catch (ex:MasterMigrating) {
                 if (verbose>=1) debug("==== Replicator(id="+req.id+").exec() threw MasterMigrating exception, retry later");
@@ -108,14 +118,23 @@ public final class FinishReplicator {
                 break; //master should re-replicate
             }
         }
-        return submit;
+        pending.decrementAndGet();
+        FinishRequest.deallocReq(req);
+        return FinishResilient.ReplicatorResponse(submit, adopterId);
     }
     
     public static def masterExec(req:FinishRequest) {
         if (verbose>=1) debug(">>>> Replicator(id="+req.id+").masterExec called [" + req + "]" );
+        
+        /**AT_FINISH HACK**/
+        if (req.id == FinishResilient.Id(0n,0n) && req.toAdopter) {
+            return new MasterResponse();
+        }
+        
         if (req.isMasterLocal()) {
             val parent = findMaster(req.id);
-            assert (parent != null) : "fatal error, parent is null";
+            
+            assert (parent != null) : here + " fatal error, master(id="+req.id+") is null";
             val resp = parent.exec(req);
             if (resp.excp != null) { 
                 throw resp.excp;
@@ -131,7 +150,7 @@ public final class FinishReplicator {
         val closure = (gr:GlobalRef[Condition]) => {
             at (master) @Immediate("master_exec") async {
                 val parent = findMaster(req.id);
-                assert (parent != null) : "fatal error, parent is null";
+                assert (parent != null) : here + " fatal error, master(id="+req.id+") is null";
                 val resp = parent.exec(req);
                 val r_back = resp.backupPlaceId;
                 val r_backChg = resp.backupChanged;
@@ -187,9 +206,6 @@ public final class FinishReplicator {
             if (verbose>=1) debug("<<<< Replicator(id="+req.id+").backupExec returning [" + req + "]" );
             return resp;
         }
-        if (here.id == 0) { //replication requests issued from place0
-            place0Pending.incrementAndGet();
-        }
         val backupRes = new GlobalRef[BackupResponse](new BackupResponse());
         val backup = Place(req.backupPlaceId);
         val rCond = ResilientCondition.make(backup);
@@ -212,10 +228,6 @@ public final class FinishReplicator {
         };
         
         rCond.run(closure);
-        
-        if (here.id == 0) {
-            place0Pending.decrementAndGet();
-        }
         
         if (rCond.failed()) {
             backupRes().excp = new DeadPlaceException(backup);
@@ -246,7 +258,10 @@ public final class FinishReplicator {
                 if (bFin != null) {
                     if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+")  (A3.1)" );
                     req.id = bFin.getNewMasterBlocking();
-                    req.masterPlaceId = bFin.getPlaceOfMaster();
+                    if (req.id == FinishResilient.Id(0n,0n))
+                        req.masterPlaceId = 0n;  /**AT_FINISH HACK**/
+                    else
+                        req.masterPlaceId = bFin.getPlaceOfMaster();
                     req.toAdopter = true;
                     break;
                 } else {
@@ -274,7 +289,10 @@ public final class FinishReplicator {
                             if (bFin != null) {
                                 foundVar = true;
                                 newMasterIdVar = bFin.getNewMasterBlocking();
-                                newMasterPlaceVar = bFin.getPlaceOfMaster();
+                                if (newMasterIdVar == FinishResilient.Id(0n,0n))
+                                    newMasterPlaceVar = 0n; /**AT_FINISH HACK**/
+                                else
+                                    newMasterPlaceVar = bFin.getPlaceOfMaster();
                             }
                             val found = foundVar;
                             val newMasterId = newMasterIdVar;
@@ -316,7 +334,8 @@ public final class FinishReplicator {
         if (verbose>=1) debug("<<<< prepareRequestForNewMaster(id="+id+") returning, curBackup="+curBackup + " newMasterId="+req.id+",newMasterPlace="+req.masterPlaceId+",toAdopter="+req.toAdopter);
         if (curBackup != initBackup)
             updateBackupPlace(id.home, curBackup);
-        updateMasterPlace(req.id.home, req.masterPlaceId);
+        if (OPTIMISTIC) //master place doesn't change for pessimistic finish
+            updateMasterPlace(req.id.home, req.masterPlaceId);
     }
     
     /***************** Utilities *********************************/
@@ -469,10 +488,12 @@ public final class FinishReplicator {
             for (e in fbackups.entries()) {
                 val id = e.getKey();
                 val bFin = e.getValue();
-                if (newDead.contains(bFin.getPlaceOfMaster())) {
+                if ( OPTIMISTIC && newDead.contains(bFin.getPlaceOfMaster()) || 
+                        !OPTIMISTIC && newDead.contains(bFin.getId().home) ) {
                     result.add(bFin);
                 }
             }
+            
             if (verbose>=1) {
                 if (result.size() > 0) {
                     val s = new x10.util.StringBuilder();
@@ -662,9 +683,10 @@ public final class FinishReplicator {
     }
     
     
-    static def createPessimisticBackupOrSync(id:Id, parentId:FinishResilient.Id, numActive:Long, live:HashMap[FinishResilient.Task,Int],
-            transit:HashMap[FinishResilient.Edge,Int], liveAdopted:HashMap[FinishResilient.Task,Int],
-            transitAdopted:HashMap[FinishResilient.Edge,Int], children:HashSet[FinishResilient.Id],
+    static def createPessimisticBackupOrSync(id:FinishResilient.Id, parentId:FinishResilient.Id, numActive:Long, 
+            live:HashMap[FinishResilient.Task,Int], transit:HashMap[FinishResilient.Edge,Int], 
+            liveAdopted:HashMap[FinishResilient.Task,Int], transitAdopted:HashMap[FinishResilient.Edge,Int], 
+            children:HashSet[FinishResilient.Id],
             excs:GrowableRail[CheckedThrowable]):FinishBackupState {
         if (verbose>=1) debug(">>>> createPessimisticBackupOrSync(id="+id+", parentId="+parentId+") called ");
         try {
@@ -690,23 +712,52 @@ public final class FinishReplicator {
     
     //FIXME: doesn't fully fix the final termination problem.
     public static def finalizeReplication() {
-        var c:Long = 0;
         if (verbose>=1) debug("<<<< Replicator.finalizeReplication called " );
-        while (place0Pending.get() != 0n) {
-            System.threadSleep(0); // release the CPU to more productive pursuits
-            if (c++ % 1000 == 0) {
-                if (verbose>=1) debug("<<<< Replicator.finalizeReplication WARNING c="+c + " p0pending="+place0Pending.get());        
+        val numP = Place.numPlaces();
+        val places = new Rail[Int](numP, -1n);
+        var i:Long = 0;
+        for (pl in Place.places())
+            places(i++) = pl.id as Int;
+        val fin = ResilientLowLevelFinish.make(places);
+        val gr = fin.getGr();
+        val closure = (gr:GlobalRef[ResilientLowLevelFinish]) => {
+            for (p in places) {
+                if (verbose>=1) debug("==== Replicator.finalizeReplication  moving from " + here + " to " + Place(p));
+                if (Place(p).isDead() || p == -1n) {
+                    (gr as GlobalRef[ResilientLowLevelFinish]{self.home == here})().notifyFailure();
+                } else {
+                    at (Place(p)) @Uncounted async {
+                        if (verbose>=1) debug("==== Replicator.finalizeReplication  reached from " + gr.home + " to " + here);
+                        waitForZeroPending();
+                        val me = here.id as Int;
+                        if (verbose>=1) debug("==== Replicator.finalizeReplication  reporting termination to " + gr.home + " from " + here);
+                        at (gr) @Immediate("wait_for_zero_pending_done") async {
+                            gr().notifyTermination(me);
+                        }
+                    }
+                }
             }
-        }
+        };
+        
+        if (verbose>=1) debug("LOW_LEVEL_FINISH.waiting started");
+        fin.run(closure);
+        if (verbose>=1) debug("LOW_LEVEL_FINISH.waiting ended");
         if (verbose>=1) debug("<<<< Replicator.finalizeReplication returning" );
+    }
+    
+    static def waitForZeroPending() {
+        if (verbose>=1) debug(">>>> waitForZeroPending called" );
+        while (pending.get() != 0n) {
+            System.threadSleep(10); // release the CPU to more productive pursuits
+        }
+        pending.set(-2n);
+        if (verbose>=1) debug("<<<< waitForZeroPending returning" );
     }
 }
 
 class MasterDied extends Exception {}
 class BackupDied extends Exception {}
 class MasterMigrating extends Exception {}
-
 class MasterChanged(newMasterId:FinishResilient.Id,newMasterPlace:Int)  extends Exception {}
-
 class MasterAndBackupDied extends Exception {}
 class BackupCreationDenied extends Exception {}

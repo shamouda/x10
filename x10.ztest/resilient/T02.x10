@@ -30,7 +30,7 @@ public class T02 {
                     think(1);
                     
                     finish {
-                    	at (Place(4)) async {
+                    	async at (Place(4)) {
                     	    val me = here;
                     	    
                     		at (Place(2)) async {

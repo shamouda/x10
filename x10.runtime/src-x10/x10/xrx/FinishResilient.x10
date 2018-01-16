@@ -81,6 +81,10 @@ abstract class FinishResilient extends FinishState {
         }
     }
     
+    protected static struct ReplicatorResponse(submit:Boolean, adopterId:Id) {
+        public def toString() = "<repResponse submit="+submit+", adopterId="+adopterId+">";
+    }
+    
     protected static val nextId = new AtomicInteger(); // per-place portion of unique id
     
     //a global lock to access static maps used in replicated resilient finish
