@@ -27,4 +27,5 @@ class MasterResponse {
     var submit:Boolean = false;
     var transitSubmitDPE:Boolean = false;
     var backupChanged:Boolean = false;
+    var parentId:FinishResilient.Id; /*used in ADD_CHILD only*/
 }

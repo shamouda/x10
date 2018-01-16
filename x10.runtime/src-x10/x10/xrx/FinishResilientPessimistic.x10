@@ -901,6 +901,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 try{                        
                     addChild(childId, resp);
                     resp.submit = true;
+                    resp.parentId = parentId;
                 } catch (t:Exception) { //fatal
                     t.printStackTrace();
                     resp.backupPlaceId = -1n;
