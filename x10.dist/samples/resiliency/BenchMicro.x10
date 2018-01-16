@@ -31,6 +31,7 @@ public class BenchMicro {
     static native def needsWarmup():Boolean;
 
     public static def main(args:Rail[String]){here==Place.FIRST_PLACE}{
+        val refTime = System.currentTimeMillis();
         if (Place.numPlaces() < 2) {
             Console.ERR.println("Fair evaluation of place-zero based finish requires more than one place, and preferably more than one host.");
             System.setExitCode(1n);
@@ -39,7 +40,7 @@ public class BenchMicro {
 
         val think:Long = args.size == 0 ? 0 : Long.parse(args(0));
 
-	if (Runtime.RESILIENT_MODE == 0n) {
+	    if (Runtime.RESILIENT_MODE == 0n) {
             Console.OUT.println("Configuration: DEFAULT (NON-RESILIENT)");
         } else {
             Console.OUT.println("Configuration: RESILIENT MODE "+Runtime.RESILIENT_MODE);
@@ -51,20 +52,29 @@ public class BenchMicro {
 
         if (needsWarmup()) {
             Console.OUT.println("Doing warmup for ManagedX10 -- expect 1 minute delay");
-            doTest("warmup", think, false, MIN_NANOS/2);
+            doTest(refTime, "warmup", think, false, MIN_NANOS/2);
             Console.OUT.println("Warmup complete");
         }
         
         Console.OUT.println("Test based from place 0");
-        doTest("place 0 -- ", think, true, MIN_NANOS);
+        doTest(refTime, "place 0 -- ", think, true, MIN_NANOS);
         Console.OUT.println();
 
-        Console.OUT.println("Test based from place 1");
-        at (Place(1)) doTest("place 1 -- ", think, true, MIN_NANOS);
-        Console.OUT.println();
+        /*Console.OUT.println("Test based from place 1");
+        at (Place(1)) doTest(refTime, "place 1 -- ", think, true, MIN_NANOS);
+        Console.OUT.println();*/
+    }
+    
+    static def println(time0:Long, message:String) {
+        val time = System.currentTimeMillis();
+        val s = "        " + (time - time0);
+        val s1 = s.substring(s.length() - 9n, s.length() - 3n);
+        val s2 = s.substring(s.length() - 3n, s.length());
+        Console.OUT.println(s1 + "." + s2 + ": " + message);
+        return time;
     }
 
-    public static def doTest(prefix:String, t:Long, print:Boolean, minTime:Long) {
+    public static def doTest(refTime:Long, prefix:String, t:Long, print:Boolean, minTime:Long) {
         var time0:Long, time1:Long;
         var iterCount:Long;
         val home = here;
@@ -81,7 +91,7 @@ public class BenchMicro {
             time1 = System.nanoTime();
         iterCount++;
         } while (time1-time0 < minTime);
-        if (print) Console.OUT.println(prefix+"empty finish: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
+        if (print) println(refTime, prefix+"empty finish: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
 
         iterCount = 0;
         time0 = System.nanoTime();
@@ -96,7 +106,7 @@ public class BenchMicro {
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) Console.OUT.println(prefix+"local termination of "+INNER_ITERS+" activities: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
+        if (print) println(refTime, prefix+"local termination of "+INNER_ITERS+" activities: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
 
         iterCount = 0;
         time0 = System.nanoTime();
@@ -110,7 +120,7 @@ public class BenchMicro {
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) Console.OUT.println(prefix+"single activity: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
+        if (print) println(refTime, prefix+"single activity: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
 
         iterCount = 0;
         time0 = System.nanoTime();
@@ -125,7 +135,7 @@ public class BenchMicro {
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) Console.OUT.println(prefix+"flat fan out: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
+        if (print) println(refTime, prefix+"flat fan out: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
 
         iterCount = 0;
         time0 = System.nanoTime();
@@ -142,7 +152,7 @@ public class BenchMicro {
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) Console.OUT.println(prefix+"flat fan out - message back: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
+        if (print) println(refTime, prefix+"flat fan out - message back: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
 
         iterCount = 0;
         time0 = System.nanoTime();
@@ -163,7 +173,7 @@ public class BenchMicro {
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) Console.OUT.println(prefix+"fan out - internal work "+INNER_ITERS+" activities: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
+        if (print) println(refTime, prefix+"fan out - internal work "+INNER_ITERS+" activities: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
 
         iterCount = 0;
         time0 = System.nanoTime();
@@ -180,7 +190,7 @@ public class BenchMicro {
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) Console.OUT.println(prefix+"fan out - broadcast: "+(time1-time0)/1E9/iterCount+" seconds");
+        if (print) println(refTime, prefix+"fan out - broadcast: "+(time1-time0)/1E9/iterCount+" seconds");
 
         iterCount = 0;
         time0 = System.nanoTime();
@@ -199,7 +209,7 @@ public class BenchMicro {
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) Console.OUT.println(prefix+"fan out - nested finish broadcast: "+(time1-time0)/1E9/iterCount+" seconds");
+        if (print) println(refTime, prefix+"fan out - nested finish broadcast: "+(time1-time0)/1E9/iterCount+" seconds");
 
         iterCount = 0;
         time0 = System.nanoTime();
@@ -208,7 +218,7 @@ public class BenchMicro {
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) Console.OUT.println(prefix+"tree fan out: "+(time1-time0)/1E9/iterCount+" seconds");
+        if (print) println(refTime, prefix+"tree fan out: "+(time1-time0)/1E9/iterCount+" seconds");
 
         iterCount = 0;
         val endPlace = Place.places().prev(here);
@@ -218,7 +228,7 @@ public class BenchMicro {
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) Console.OUT.println(prefix+"ring around via at: "+(time1-time0)/1E9/iterCount+" seconds");
+        if (print) println(refTime, prefix+"ring around via at: "+(time1-time0)/1E9/iterCount+" seconds");
     }
 
     private static def downTree(thinkTime:long):void {
