@@ -85,6 +85,11 @@ abstract class FinishResilient extends FinishState {
         public def toString() = "<repResponse submit="+submit+", adopterId="+adopterId+">";
     }
     
+    /* Recovery related structs to hold query parameters needed to count the number of live tasks */
+    protected static struct ReceivedQueryId(id:Id, src:Int, dst:Int, kind:Int) {
+        public def toString() = "<receivedQuery id=" + id + " src=" + src + " dst="+dst+" kind="+kind+">";
+    }
+    
     protected static val nextId = new AtomicInteger(); // per-place portion of unique id
     
     //a global lock to access static maps used in replicated resilient finish
@@ -221,3 +226,11 @@ abstract class FinishResilient extends FinishState {
         }
     }
 }
+
+class RemoteCreationDenied extends Exception {}
+class MasterDied extends Exception {}
+class BackupDied extends Exception {}
+class MasterMigrating extends Exception {}
+class MasterChanged(newMasterId:FinishResilient.Id,newMasterPlace:Int)  extends Exception {}
+class MasterAndBackupDied extends Exception {}
+class BackupCreationDenied extends Exception {}
