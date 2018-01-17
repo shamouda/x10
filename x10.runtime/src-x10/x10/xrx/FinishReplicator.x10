@@ -418,15 +418,6 @@ public final class FinishReplicator {
                     allDead.add(i);
                 }
             }
-          //NOLOG if (newDead.size() > 0) {
-          //NOLOG         val s = new x10.util.StringBuilder();
-          //NOLOG   for (d in newDead)
-          //NOLOG       s.add(d + " ");
-          //NOLOG   debug("<<<< getNewDeadPlaces returning, newDead= " + s.toString()); 
-          //NOLOG } else {
-          //NOLOG   debug("<<<< getNewDeadPlaces returning, newDead is Empty"); 
-          //NOLOG }
-          //NOLOG }
         } finally {
             FinishResilient.glock.unlock();
         }
@@ -445,16 +436,6 @@ public final class FinishReplicator {
                     result.add(mFin);
                 }
             }
-          //NOLOG if (verbose>=1) {
-              if (result.size() > 0) {
-                  val s = new x10.util.StringBuilder();
-                  for (m in result)
-                      s.add(m.getId() + " ");
-                  debug("<<<< lockAndGetImpactedMasters returning, masters= " + s.toString());    
-              } else {
-                  debug("<<<< lockAndGetImpactedMasters returning, masters is Empty");    
-              }
-          }
         } finally {
             FinishResilient.glock.unlock();
         }
@@ -474,17 +455,6 @@ public final class FinishReplicator {
                     result.add(bFin);
                 }
             }
-            
-          //NOLOG if (verbose>=1) {
-              if (result.size() > 0) {
-                  val s = new x10.util.StringBuilder();
-                  for (b in result)
-                      s.add(b.getId() + " ");
-                  debug("<<<< lockAndGetImpactedBackups returning, backups= " + s.toString());    
-              } else {
-                  debug("<<<< lockAndGetImpactedBackups returning, backups is Empty");    
-              }
-          }
         } finally {
             FinishResilient.glock.unlock();
         }
@@ -615,7 +585,6 @@ public final class FinishReplicator {
         }
     }
     
-    /*markAdopted is used in cases when the parent attempts to adopt, before the backup creation*/
     static def findBackupOrCreate(id:FinishResilient.Id, parentId:FinishResilient.Id, optSrc:Place, optKind:Int):FinishBackupState {
         //NOLOG if (verbose>=1) debug(">>>> findOrCreateBackup(id="+id+", parentId="+parentId+") called ");
         try {
