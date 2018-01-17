@@ -24,7 +24,7 @@ public class BenchMicroIter {
 
     static OUTER_ITERS = 100;
     static INNER_ITERS = 100;
-    static MIN_ITER = 10; 
+    static MIN_ITER = 3;
 
     @Native("c++", "false")
     @Native("java", "true")
@@ -47,7 +47,7 @@ public class BenchMicroIter {
         }
 
         Console.OUT.println("Running with "+Place.numPlaces()+" places.");
-        Console.OUT.println("Min global iterations for each test: "+MIN_ITER+" seconds.");
+        Console.OUT.println("Min global iterations for each test: "+MIN_ITER+" iterations.");
         Console.OUT.println("Think time for each activity: "+think+" nanoseconds.");
 
         if (needsWarmup()) {
