@@ -58,19 +58,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     //remote deny list
     private static val remoteDeny = new HashSet[Id]();
     
-    /* Recovery related structs to hold query parameters needed to count the number of live tasks */
-    protected static struct ReceivedQueryId(id:Id, src:Int, dst:Int, kind:Int) {
-        public def toString() = "<receivedQuery id=" + id + " src=" + src + " dst="+dst+" kind="+kind+">";
-        def this(id:Id, src:Int, dst:Int, kind:Int) {
-            property(id, src, dst, kind);
-        }
-    }
-    
     protected static struct BackupQueryId(parentId:Id, src:Int /*src is only used to be added in the deny list*/) {
         public def toString() = "<BackupQueryId parentId=" + parentId + " src=" + src +">";
-        def this(parentId:Id, src:Int) {
-            property(parentId, src);
-        }
     }
     
     def notifySubActivitySpawn(place:Place):void { me.notifySubActivitySpawn(place); }
@@ -218,18 +207,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     //REMOTE
     public static final class OptimisticRemoteState extends FinishResilient implements x10.io.Unserializable {
         val id:Id; //parent root finish
-
-        //instance level lock
-        val ilock = new Lock();
-        
-        var isAdopted:Boolean = false;
-        
+        val ilock = new Lock(); //instance level lock
         val received = new HashMap[Task,Int](); //increasing counts
-        
         val reported = new HashMap[Task,Int](); //increasing counts
-        
         var taskDeny:HashSet[Int] = null; // lazily allocated
-        
         var lc:Int = 0n; //whenever lc reaches zero, report reported-received to root finish and set reported=received
         
         public def this (val id:Id) {
@@ -320,6 +301,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (verbose>=1) debug(">>>> Remote(id="+id+").notifyReceived called");
             try {
                 ilock.lock();
+                if (taskDeny != null && taskDeny.contains(t.place) )
+                    throw new RemoteCreationDenied();
                 increment(received, t);
                 ++lc;
                 if (verbose>=1) debug("<<<< Remote(id="+id+").notifyReceived returning, lc="+lc);
@@ -348,23 +331,22 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (lc == 0n) {
                     map = getReportMap();
                 }
+                
+                if (verbose>=1) {
+                    if (map == null)
+                        debug("<<<< Remote(id="+id+").notifyTerminationAndGetMap returning null, localCount = " + lc);
+                    else {
+                        val s = new x10.util.StringBuilder();
+                        for (e in map.entries()) {
+                            s.add(e.getKey()+" = "+e.getValue()+", ");
+                        }
+                        debug("<<<< Remote(id="+id+").notifyTerminationAndGetMap returning, MAP = {"+s.toString()+"} ");
+                    }
+                }
+                if (verbose>=3) dump();
             } finally {
                 ilock.unlock();
             }
-            
-            if (verbose>=1) {
-               if (map == null)
-                   debug("<<<< Remote(id="+id+").notifyTerminationAndGetMap returning null, localCount = " + lc);
-               else {
-                   val s = new x10.util.StringBuilder();
-                   for (e in map.entries()) {
-                       s.add(e.getKey()+" = "+e.getValue()+", ");
-                   }
-                   debug("<<<< Remote(id="+id+").notifyTerminationAndGetMap returning, MAP = {"+s.toString()+"} ");
-               }
-            }
-            if (verbose>=3) dump();
-            
             return map;
         }
         
@@ -397,9 +379,14 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
             if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreation(srcId=" + srcId +",dstId="+dstId+",kind="+ASYNC+") called");
-            val lc = notifyReceived(Task(srcId, ASYNC));
-            if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreation(srcId=" + srcId +",dstId="+dstId+",kind="+ASYNC+") returning, localCount = " + lc);
-            return true;    
+            try {
+                val lc = notifyReceived(Task(srcId, ASYNC));
+                if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreation(srcId=" + srcId +",dstId="+dstId+",kind="+ASYNC+") returning, localCount = " + lc);
+                return true;
+            } catch (e:RemoteCreationDenied) {
+                if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreation(srcId=" + srcId +",dstId="+dstId+",kind="+ASYNC+") returning, task denied");
+                return false;
+            }
         }
         
         /*
@@ -409,9 +396,14 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
             if (verbose>=1) debug(">>>> Remote(id="+id+").notifyShiftedActivityCreation(srcId=" + srcId +",dstId="+dstId+",kind="+AT+") called");
-            val lc = notifyReceived(Task(srcId, AT));
-            if (verbose>=1) debug("<<<< Remote(id="+id+").notifyShiftedActivityCreation(srcId=" + srcId +",dstId="+dstId+",kind="+AT+") returning, localCount = " + lc);
-            return true;
+            try {
+                val lc = notifyReceived(Task(srcId, AT));
+                if (verbose>=1) debug("<<<< Remote(id="+id+").notifyShiftedActivityCreation(srcId=" + srcId +",dstId="+dstId+",kind="+AT+") returning, localCount = " + lc);
+                return true;
+            } catch (e:RemoteCreationDenied) {
+                if (verbose>=1) debug("<<<< Remote(id="+id+").notifyShiftedActivityCreation(srcId=" + srcId +",dstId="+dstId+",kind="+AT+") returning, task denied");
+                return false;
+            }
         }
         
         def notifyRemoteContinuationCreated():void { /*noop for remote finish*/ }
@@ -525,7 +517,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         
         val optSrc:Place; //the source place that initiated the task that created this finish
 
-        val optKind:Int;
+        val optKind:Int; //the kind of the task that created the finish
         
         var lc:Int = 1n;
         
@@ -875,7 +867,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 debug("COUNTING ERROR: Master(id="+id+").quiescent negative numActive!!!");
                 dump();
                 assert false : "COUNTING ERROR: Master(id="+id+").quiescent negative numActive!!!";
-                return true; // TODO: This really should be converted to a fatal error....
+                return true; 
             }
         
             val quiet = numActive == 0;
@@ -1257,18 +1249,23 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         def sync(_numActive:Long, /*_transit:HashMap[FinishResilient.Edge,Int],*/
                 _sent:HashMap[FinishResilient.Edge,Int],
                 _excs:GrowableRail[CheckedThrowable], _placeOfMaster:Int) {
-            this.numActive = _numActive;
-            /*this.transit.clear();
-            for (e in _transit.entries()) {
-                this.transit.put(e.getKey(), e.getValue());
-            }*/
-            this.sent.clear();
-            for (e in _sent.entries()) {
-                this.sent.put(e.getKey(), e.getValue());
+            try {
+                lock();
+                this.numActive = _numActive;
+                /*this.transit.clear();
+                for (e in _transit.entries()) {
+                    this.transit.put(e.getKey(), e.getValue());
+                }*/
+                this.sent.clear();
+                for (e in _sent.entries()) {
+                    this.sent.put(e.getKey(), e.getValue());
+                }
+                this.placeOfMaster = _placeOfMaster;
+                this.excs = _excs;
+                if (verbose>=3) dump();
+            } finally {
+                unlock();
             }
-            this.placeOfMaster = _placeOfMaster;
-            this.excs = _excs;
-            if (verbose>=3) dump();
         }
         
         public def getId() = id;
@@ -2033,7 +2030,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     
 }
 
-class RemoteCreationDenied extends Exception {}
 class ResolveRequest {
     val countBackups = new HashMap[FinishResilientOptimistic.BackupQueryId, Int]();
     val countReceived = new HashMap[FinishResilientOptimistic.ReceivedQueryId, Int]();
