@@ -394,7 +394,7 @@ public final class FinishReplicator {
                 if (e.getValue().getParentId() == parentId)
                     count++;
             }
-            //no more backups under this parent should be created
+            //no more backups under this parent from that src place should be created
             backupDeny.add(BackupDenyId(parentId, src));
             if (verbose>=1) debug("<<<< countBackups(parentId="+parentId+") returning, count = " + count + " and parentId added to denyList");
         } finally {
@@ -705,10 +705,3 @@ public final class FinishReplicator {
         if (verbose>=1) debug("<<<< waitForZeroPending returning" );
     }
 }
-
-class MasterDied extends Exception {}
-class BackupDied extends Exception {}
-class MasterMigrating extends Exception {}
-class MasterChanged(newMasterId:FinishResilient.Id,newMasterPlace:Int)  extends Exception {}
-class MasterAndBackupDied extends Exception {}
-class BackupCreationDenied extends Exception {}
