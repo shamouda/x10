@@ -34,10 +34,9 @@ import x10.util.concurrent.Condition;
 //TODO:  createBackup: repeat if backup place is dead. block until another place is found!!
 //TODO:  test notifyActivityCreationFailed()
 //FIXME: handle RemoteCreationDenied
-//FIXME: there is a hang occuring in: X10_RESILIENT_VERBOSE=4 X10_RESILIENT_MODE=14 X10_NPLACES=5 ./t04.o &> outputT4_h2.txt
 //FIXME: getNewMasterBlocking() does not need to be blocking
 //TODO: revise the adoption logic of nested local finishes
-//TODO: delete backup in sync(...) if it quiscent
+//TODO: delete backup in sync(...) if it quiescent
 /**
  * Distributed Resilient Finish (records transit tasks only)
  * Implementation notes: remote objects are shared and are persisted in a static hashmap (special GC needed)
@@ -145,6 +144,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         if (me instanceof OptimisticMasterState) {
             val rootState = me as OptimisticMasterState;
             rootState.latch.lock();
+            rootState.strictFinish = true;
             if (!rootState.isGlobal) {
                 if (verbose>=1) debug(">>>> globalInit(id="+id+") called");
                 val parent = rootState.parent;
@@ -155,7 +155,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (makeBackup)
                     createBackup(rootState.backupPlaceId);
                 rootState.isGlobal = true;
-                rootState.strictFinish = true;
                 if (verbose>=1) debug("<<<< globalInit(id="+id+") returning");
             }
             rootState.latch.unlock();
