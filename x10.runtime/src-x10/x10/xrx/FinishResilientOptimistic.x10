@@ -158,17 +158,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             rootState.latch.lock();
             if (!rootState.isGlobal) {
                 //NOLOG if (verbose>=1) debug(">>>> globalInit(id="+id+") called");
-                if (id != TOP_FINISH) {
-                    val parent = rootState.parent;
-                    if (parent instanceof FinishResilientOptimistic) {
-                        val frParent = parent as FinishResilientOptimistic;
-                        if (frParent.me instanceof OptimisticMasterState) (frParent as FinishResilientOptimistic).globalInit(true);
-                    }
-                    if (makeBackup)
-                        createBackup(rootState.backupPlaceId);
-                } else {
-                    //NOLOG if (verbose>=1) debug("=== globalInit(id="+id+") replication not required for top finish");    
+                val parent = rootState.parent;
+                if (parent instanceof FinishResilientOptimistic) {
+                    val frParent = parent as FinishResilientOptimistic;
+                    if (frParent.me instanceof OptimisticMasterState) (frParent as FinishResilientOptimistic).globalInit(true);
                 }
+                if (makeBackup)
+                    createBackup(rootState.backupPlaceId);
                 rootState.isGlobal = true;
                 rootState.strictFinish = true;
                 //NOLOG if (verbose>=1) debug("<<<< globalInit(id="+id+") returning");
@@ -844,8 +840,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     notifyParent();
                     FinishReplicator.removeMaster(id);
                 }
-                //NOLOG if (verbose>=3) debug("==== Master(id="+id+").transitToCompleted srcId=" + srcId + ", dstId=" + dstId + " dumping after update");
-                //NOLOG if (verbose>=3) dump();
                 //NOLOG if (verbose>=1) debug("<<<< Master(id="+id+").transitToCompleted returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
                 resp.backupPlaceId = backupPlaceId;
                 resp.backupChanged = backupChanged;
@@ -869,8 +863,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 notifyParent();
                 FinishReplicator.removeMaster(id);
             }
-            //NOLOG if (verbose>=3) debug("==== Master(id="+id+").transitToCompletedMul srcId=" + srcId + ", dstId=" + dstId + " dumping after update");
-            //NOLOG if (verbose>=3) dump();
             //NOLOG if (verbose>=1) debug("<<<< Master(id="+id+").transitToCompletedMul returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
             resp.backupPlaceId = backupPlaceId;
             resp.backupChanged = backupChanged;
@@ -1951,6 +1943,9 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             return; 
         }
         val newDead = FinishReplicator.getNewDeadPlaces();
+        if (newDead == null || newDead.size() == 0) //occurs at program termination
+            return;
+        
         val masters = FinishReplicator.getImpactedMasters(newDead); //any master who contacted the dead place or whose backup was lost
         val backups = FinishReplicator.getImpactedBackups(newDead); //any backup who lost its master.
         

@@ -129,22 +129,17 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             rootState.latch.lock();
             if (!rootState.isGlobal) {
                 //NOLOG if (verbose>=1) debug(">>>> globalInit(id="+id+") called");
-                if (id != TOP_FINISH) {
-                    val parent = rootState.parent;
-                    if (parent instanceof FinishResilientPessimistic) {
-                        val frParent = parent as FinishResilientPessimistic;
-                        if (frParent.me instanceof PessimisticMasterState) (frParent as FinishResilientPessimistic).globalInit(true);
-                    }
-                    if (rootState.parentId != UNASSIGNED) {
-                        val req = FinishRequest.makeAddChildRequest(rootState.parentId /*id*/, id /*child_id*/);
-                        FinishReplicator.exec(req);
-                    }
-                    if (makeBackup)
-                        createBackup(rootState.backupPlaceId);
-                } else {
-                    //NOLOG if (verbose>=1) debug("=== globalInit(id="+id+") replication not required for top finish");    
+                val parent = rootState.parent;
+                if (parent instanceof FinishResilientPessimistic) {
+                    val frParent = parent as FinishResilientPessimistic;
+                    if (frParent.me instanceof PessimisticMasterState) (frParent as FinishResilientPessimistic).globalInit(true);
                 }
-                
+                if (rootState.parentId != UNASSIGNED) {
+                    val req = FinishRequest.makeAddChildRequest(rootState.parentId /*id*/, id /*child_id*/);
+                    FinishReplicator.exec(req);
+                }
+                if (makeBackup)
+                    createBackup(rootState.backupPlaceId);
                 rootState.isGlobal = true;
                 rootState.strictFinish = true;
                 //NOLOG if (verbose>=1) debug("<<<< globalInit(id="+id+") returning");
@@ -1932,6 +1927,9 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             return; 
         }
         val newDead = FinishReplicator.getNewDeadPlaces();
+        if (newDead == null || newDead.size() == 0) //occurs at program termination
+            return;
+        
         val masters = FinishReplicator.getImpactedMasters(newDead); //any master who contacted the dead place or whose backup was lost or his child was lost
         val backups = FinishReplicator.getImpactedBackups(newDead); //any backup who lost its master.
         

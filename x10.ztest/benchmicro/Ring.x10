@@ -1,4 +1,4 @@
-public class T10Ring {
+public class Ring {
     static OUTER_ITERS = 100;
     static INNER_ITERS = 100;
     static MIN_NANOS = (10*1e9) as long; // require each test to run for at least 10 seconds (reduce jitter)
