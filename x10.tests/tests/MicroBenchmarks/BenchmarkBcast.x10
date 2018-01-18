@@ -17,14 +17,17 @@ import x10.util.Team;
  */
 public class BenchmarkBcast extends x10Test {
     private static ITERS = 10;
-    private static MAX_SIZE = 2<<19;
-
+    //private static MAX_SIZE = 2<<19;
+    private static MAX_SIZE = 2<<15; //32768 = 32K
+    
 	public def run(): Boolean {
         val root = Place(Place.numPlaces()-1);
         finish for (place in Place.places()) at (place) async {
             val warmup = new Rail[Double](1);
             Team.WORLD.bcast(root, warmup, 0, warmup, 0, 1); // warm up comms layer
-            for (var s:Long= 1; s <= MAX_SIZE; s *= 2) {
+            //for (var s:Long= 1; s <= MAX_SIZE; s *= 2) 
+            val s = MAX_SIZE;
+            {
                 val src = new Rail[Double](s, (i:Long) => i as Double);
                 val dst = new Rail[Double](s);
                 val start = System.nanoTime();

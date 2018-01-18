@@ -17,12 +17,15 @@ import x10.util.Team;
  */
 public class BenchmarkAllreduce extends x10Test {
     private static ITERS = 10;
-    private static MAX_SIZE = 2<<19;
-
+    //private static MAX_SIZE = 2<<19;
+    private static MAX_SIZE = 2<<15; //32768 = 32K
+    
 	public def run(): Boolean {
         finish for (place in Place.places()) at (place) async {
             Team.WORLD.allreduce(1.0, Team.ADD); // warm up comms layer
-            for (var s:Long= 1; s <= MAX_SIZE; s *= 2) {
+            //for (var s:Long= 1; s <= MAX_SIZE; s *= 2) 
+            val s = MAX_SIZE;
+            {
                 val src = new Rail[Double](s, (i:Long) => i as Double);
                 val dst = new Rail[Double](s);
                 val start = System.nanoTime();
