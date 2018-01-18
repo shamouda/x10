@@ -22,7 +22,7 @@ import x10.compiler.Native;
  */
 public class BenchMicro {
 
-    static OUTER_ITERS = 100;
+    static OUTER_ITERS = 50;
     static INNER_ITERS = 100;
     static MIN_NANOS = (10*1e9) as long; // require each test to run for at least 10 seconds (reduce jitter)
 
@@ -56,13 +56,23 @@ public class BenchMicro {
             Console.OUT.println("Warmup complete");
         }
         
-        Console.OUT.println("Test based from place 0");
-        doTest(refTime, "place 0 -- ", think, true, MIN_NANOS);
+        val basePlace = System.getenv("TEST_BASED_FROM") == null ? 0 : Long.parseLong(System.getenv("TEST_BASED_FROM"));
+        if (basePlace >= Place.numPlaces()) {
+            Console.ERR.println("invalid base place value");
+            System.setExitCode(1n);
+            return;
+        }
+        
+        var t0:Long = System.nanoTime();
+        if (basePlace == 0) {
+            Console.OUT.println("Test based from place 0");
+            doTest(refTime, "place 0 -- ", think, true, MIN_NANOS);
+        } else {
+            Console.OUT.println("Test based from place " + basePlace);
+            at (Place(basePlace)) doTest(refTime, "place "+basePlace+" -- ", think, true, MIN_NANOS);
+        }
+        Console.OUT.printf("Test based from place "+basePlace+" completed in %f seconds\n", (System.nanoTime()-t0)/1e9);
         Console.OUT.println();
-
-        /*Console.OUT.println("Test based from place 1");
-        at (Place(1)) doTest(refTime, "place 1 -- ", think, true, MIN_NANOS);
-        Console.OUT.println();*/
     }
     
     static def println(time0:Long, message:String) {

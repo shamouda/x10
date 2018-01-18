@@ -112,6 +112,7 @@ final class Configuration {
     static val RESILIENT_MODE_NONE = 0n;
     static val RESILIENT_MODE_DEFAULT     = 1n;  // Most stable implementation of resilient finish (see FinishResilient.x10)
     static val RESILIENT_MODE_PLACE0      = 11n; // FinishResilientPlace0
+    static val RESILIENT_MODE_PLACE0_OPTIMISTIC = 2n; // FinishResilientPlace0Optimistic
     static val RESILIENT_MODE_HC          = 12n; // FinishResilientHC
     static val RESILIENT_MODE_DIST_PESSIMISTIC = 13n; // Distributed finish implementation that tracks transit and live tasks
     static val RESILIENT_MODE_DIST_OPTIMISTIC = 14n;  // Distributed finish implementation that tracks transit tasks only

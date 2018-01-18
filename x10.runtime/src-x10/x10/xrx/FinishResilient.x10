@@ -45,12 +45,16 @@ abstract class FinishResilient extends FinishState {
     //       Initially I am picking a size that will make it very likely
     //       that we will use a mix of both direct and indirect protocols
     //       for a large number of test cases to shake out mixed-mode problems.
-    protected static val ASYNC_SIZE_THRESHOLD = Long.parse(Runtime.env.getOrElse("X10_RESILIENT_FINISH_SMALL_ASYNC_SIZE", "100"));
+    protected static val ASYNC_SIZE_THRESHOLD = Long.parse(Runtime.env.getOrElse("X10_RESILIENT_FINISH_SMALL_ASYNC_SIZE", "0"));
     
     public static struct Id(home:int,id:int) {
         public def toString() = "<"+home+","+id+">";
     }
 
+    public static struct OptimisticRootId(id:Id, parentId:Id, src:Int, kind:Int) {
+        public def toString() = "<"+id.home+","+id.id+">";
+    }
+    
     public static val UNASSIGNED = Id(-1n,-1n);
     
     /* The implicit top finish is not replicated in the replication-based implementations.
@@ -64,7 +68,8 @@ abstract class FinishResilient extends FinishState {
        
     protected static struct Task(place:Int, kind:Int) {
         public def toString() {
-            if (Runtime.RESILIENT_MODE == Configuration.RESILIENT_MODE_DIST_OPTIMISTIC)
+            if (Runtime.RESILIENT_MODE == Configuration.RESILIENT_MODE_DIST_OPTIMISTIC ||
+                Runtime.RESILIENT_MODE == Configuration.RESILIENT_MODE_PLACE0_OPTIMISTIC )
                 return "<"+(kind == AT ? "at" : "async")+" from "+place+">";
             else return "<"+(kind == AT ? "at" : "async")+" live @ "+place+">";
         }
@@ -92,8 +97,8 @@ abstract class FinishResilient extends FinishState {
     
     protected static val nextId = new AtomicInteger(); // per-place portion of unique id
     
-    //a global lock to access static maps used in replicated resilient finish
-    public static glock = Configuration.resilient_replicated_finish()? new Lock() : null;
+    //a global lock to for static lists used in resilient finish implementations
+    public static glock = new Lock();
 
     /*
      * Static methods to be implemented in subclasses
@@ -137,13 +142,6 @@ abstract class FinishResilient extends FinishState {
             fs = FinishResilientPlace0.make(p);
             break;
         }
-        case Configuration.RESILIENT_MODE_DIST_PESSIMISTIC:
-        {
-            val p = (parent!=null) ? parent : getCurrentFS();
-            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
-            fs = FinishResilientPessimistic.make(p);
-            break;
-        }
         case Configuration.RESILIENT_MODE_DIST_OPTIMISTIC:
         {
             val p = (parent!=null) ? parent : getCurrentFS();
@@ -151,6 +149,22 @@ abstract class FinishResilient extends FinishState {
             val kind = Runtime.activity().atFinishState() instanceof FinishResilientOptimistic ? AT : ASYNC ;
             if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p + " src=" + src);
             fs = FinishResilientOptimistic.make(p, src, kind);
+            break;
+        }
+        case Configuration.RESILIENT_MODE_DIST_PESSIMISTIC:
+        {
+            val p = (parent!=null) ? parent : getCurrentFS();
+            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
+            fs = FinishResilientPessimistic.make(p);
+            break;
+        }
+        case Configuration.RESILIENT_MODE_PLACE0_OPTIMISTIC:
+        {
+            val p = (parent!=null) ? parent : getCurrentFS();
+            val src = Runtime.activity().srcPlace;
+            val kind = Runtime.activity().atFinishState() instanceof FinishResilientOptimistic ? AT : ASYNC ;
+            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p + " src=" + src);
+            fs = FinishResilientPlace0Optimistic.make(p, src, kind);
             break;
         }
         case Configuration.RESILIENT_MODE_HC:
@@ -180,6 +194,9 @@ abstract class FinishResilient extends FinishState {
         case Configuration.RESILIENT_MODE_DEFAULT:
         case Configuration.RESILIENT_MODE_PLACE0:
             FinishResilientPlace0.notifyPlaceDeath();
+            break;
+        case Configuration.RESILIENT_MODE_PLACE0_OPTIMISTIC:
+            FinishResilientPlace0Optimistic.notifyPlaceDeath();
             break;
         case Configuration.RESILIENT_MODE_HC:
             notifyPlaceDeath_HC();
