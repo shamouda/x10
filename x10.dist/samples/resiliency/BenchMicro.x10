@@ -154,23 +154,6 @@ public class BenchMicro {
                 finish {
                     for (p in Place.places()) {
                         at (p) async {
-                            at (home) async { think(t); }
-                        }
-                    }
-                }
-            }
-            time1 = System.nanoTime();
-            iterCount++;
-        } while (time1-time0 < minTime);
-        if (print) println(refTime, prefix+"flat fan out - message back: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
-
-        iterCount = 0;
-        time0 = System.nanoTime();
-        do {
-            for (i in 1..OUTER_ITERS) {
-                finish {
-                    for (p in Place.places()) {
-                        at (p) async {
                             finish {
                                 for (j in 1..INNER_ITERS) {
                                     async { think(t); };
@@ -239,6 +222,23 @@ public class BenchMicro {
             iterCount++;
         } while (time1-time0 < minTime);
         if (print) println(refTime, prefix+"ring around via at: "+(time1-time0)/1E9/iterCount+" seconds");
+    
+        iterCount = 0;
+        time0 = System.nanoTime();
+        do {
+            for (i in 1..OUTER_ITERS) {
+                finish {
+                    for (p in Place.places()) {
+                        at (p) async {
+                            at (home) async { think(t); }
+                        }
+                    }
+                }
+            }
+            time1 = System.nanoTime();
+            iterCount++;
+        } while (time1-time0 < minTime);
+        if (print) println(refTime, prefix+"flat fan out - message back: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
     }
 
     private static def downTree(thinkTime:long):void {
