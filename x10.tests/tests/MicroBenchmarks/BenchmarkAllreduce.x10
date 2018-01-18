@@ -16,7 +16,7 @@ import x10.util.Team;
  * Benchmarks performance of Team.allreduce for varying data size
  */
 public class BenchmarkAllreduce extends x10Test {
-    private static ITERS = 10;
+    private static ITERS = 30;
     //private static MAX_SIZE = 2<<19;
     private static MAX_SIZE = 2<<15; //32768 = 32K
     
