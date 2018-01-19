@@ -133,14 +133,15 @@ public final class FinishReplicator {
         val condGR = rCond.gr;
         val closure = (gr:GlobalRef[Condition]) => {
             at (master) @Immediate("master_exec") async {
-                val parent = findMaster(req.id);
-                assert (parent != null) : here + " fatal error, master(id="+req.id+") is null";
-                val resp = parent.exec(req);
+                val mFin = findMaster(req.id);
+                assert (mFin != null) : here + " fatal error, master(id="+req.id+") is null";
+                val resp = mFin.exec(req);
                 val r_back = resp.backupPlaceId;
                 val r_backChg = resp.backupChanged;
                 val r_submit = resp.submit;
                 val r_submitDPE = resp.transitSubmitDPE;
                 val r_exp = resp.excp;
+                val r_parentId = resp.parentId;
                 at (condGR) @Immediate("master_exec_response") async {
                     val mRes = (masterRes as GlobalRef[MasterResponse]{self.home == here})();
                     mRes.backupPlaceId = r_back;
@@ -148,6 +149,7 @@ public final class FinishReplicator {
                     mRes.submit = r_submit;
                     mRes.transitSubmitDPE = r_submitDPE;
                     mRes.excp = r_exp;
+                    mRes.parentId = r_parentId;
                     condGR().release();
                 }
             }
@@ -330,7 +332,6 @@ public final class FinishReplicator {
         }
     }
     
-    //FIXME: check if the place is alive, if not, search all places for backup
     static def getBackupPlace(idHome:Int) {
         try {
             glock.lock();
