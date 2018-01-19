@@ -129,13 +129,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
          val myId = id; //don't copy this
          val home = here;
          val parentId = rootState.parentId;
-         val src = rootState.optSrc;
-         val optKind = rootState.optKind;
+         val src = rootState.finSrc;
+         val finKind = rootState.finKind;
         val rCond = ResilientCondition.make(backup);
         val condGR = rCond.gr;
         val closure = (gr:GlobalRef[Condition]) => {
             at (backup) @Immediate("backup_create") async {
-                val bFin = FinishReplicator.findBackupOrCreate(myId, parentId, src, optKind);
+                val bFin = FinishReplicator.findBackupOrCreate(myId, parentId, src, finKind);
                 at (condGR) @Immediate("backup_create_response") async {
                     condGR().release();
                 }
@@ -495,15 +495,15 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         var backupPlaceId:Int = FinishReplicator.getBackupPlace(here.id as Int);  //may be updated in notifyPlaceDeath
         var backupChanged:Boolean = false;
         var excs:GrowableRail[CheckedThrowable]; 
-        val optSrc:Place; //the source place that initiated the task that created this finish
-        val optKind:Int; //the kind of the task that created the finish
+        val finSrc:Place; //the source place that initiated the task that created this finish
+        val finKind:Int; //the kind of the task that created the finish
         var lc:Int = 1n;
         var isAdopted:Boolean = false; //set to true when backup recreates a master
         var migrating:Boolean = false; //used to stop updates to the object during recovery
     
         //initialize from backup values
         def this(_id:Id, _parentId:Id, _numActive:Long, _sent:HashMap[Edge,Int],
-                _excs:GrowableRail[CheckedThrowable], _optSrc:Place, _optKind:Int,
+                _excs:GrowableRail[CheckedThrowable], _finSrc:Place, _finKind:Int,
                 _backupPlaceId:Int) {
             this.id = _id;
             this.parentId = _parentId;
@@ -511,8 +511,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             this.sent = _sent;
             this.backupPlaceId = _backupPlaceId;
             this.excs = _excs;
-            this.optSrc = _optSrc;
-            this.optKind = _optKind;
+            this.finSrc = _finSrc;
+            this.finKind = _finKind;
             this.strictFinish = false;
             this.parent = null;
             this.latch = new SimpleLatch();
@@ -527,8 +527,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             this.id = id;
             this.numActive = 1;
             this.parent = parent;
-            this.optSrc = src;
-            this.optKind = kind;
+            this.finSrc = src;
+            this.finKind = kind;
             sent = new HashMap[Edge,Int]();
             increment(sent, Edge(id.home, id.home, FinishResilient.ASYNC));
             if (parent instanceof FinishResilientOptimistic) {
@@ -754,21 +754,21 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 //NOLOG if (verbose>=1) debug("<<< Master(id="+id+").notifyParent returning, not adopted or parent["+parentId+"] does not exist");
                 return;
             }
-            val srcId = optSrc.id as Int;
+            val srcId = finSrc.id as Int;
             val dstId = id.home;
             val dpe:CheckedThrowable;
-            if (optKind == FinishResilient.ASYNC) {
+            if (finKind == FinishResilient.ASYNC) {
                 dpe = new DeadPlaceException(Place(dstId));
                 dpe.fillInStackTrace();
             } else {
                 dpe = null;
             }
             Runtime.submitUncounted( ()=>{
-                //NOLOG if (verbose>=1) debug(">>>> Master(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+optKind+") called");
-                val req = FinishRequest.makeTermRequest(parentId, FinishResilient.UNASSIGNED, FinishResilient.UNASSIGNED, DUMMY_INT, DUMMY_INT, srcId, dstId, optKind);
+                //NOLOG if (verbose>=1) debug(">>>> Master(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+finKind+") called");
+                val req = FinishRequest.makeTermRequest(parentId, FinishResilient.UNASSIGNED, FinishResilient.UNASSIGNED, DUMMY_INT, DUMMY_INT, srcId, dstId, finKind);
                 req.ex = dpe;
                 val resp = FinishReplicator.exec(req);
-                //NOLOG if (verbose>=1) debug("<<<< Master(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+optKind+") returning");
+                //NOLOG if (verbose>=1) debug("<<<< Master(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+finKind+") returning");
             });
         }
         
@@ -885,7 +885,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 //NOLOG if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called locally, localCount now "+lc);
             } else {
                 //NOLOG if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
-                val req = FinishRequest.makeTransitRequest(id, parentId, UNASSIGNED, optSrc.id as Int, optKind, srcId, dstId, kind);
+                val req = FinishRequest.makeTransitRequest(id, parentId, UNASSIGNED, finSrc.id as Int, finKind, srcId, dstId, kind);
                 FinishReplicator.exec(req);
                 //NOLOG if (verbose>=1) debug("<<<< Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
             }
@@ -925,7 +925,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val dstId = here.id as Int;
             Runtime.submitUncounted( ()=>{
                 //NOLOG if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
-                val req = FinishRequest.makeTermRequest(id, parentId, UNASSIGNED, optSrc.id as Int, optKind, srcId, dstId, kind);
+                val req = FinishRequest.makeTermRequest(id, parentId, UNASSIGNED, finSrc.id as Int, finKind, srcId, dstId, kind);
                 req.ex = t;
                 val resp = FinishReplicator.exec(req);
                 //NOLOG if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
@@ -949,7 +949,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 return;
             }
             //NOLOG if (verbose>=1) debug(">>>> Root(id="+id+").pushException(t="+t.getMessage()+") called");
-            val req = FinishRequest.makeExcpRequest(id, parentId, UNASSIGNED, optSrc.id as Int, optKind, t);
+            val req = FinishRequest.makeExcpRequest(id, parentId, UNASSIGNED, finSrc.id as Int, finKind, t);
             val resp = FinishReplicator.exec(req);
             //NOLOG if (verbose>=1) debug("<<<< Root(id="+id+").pushException(t="+t.getMessage()+") returning");
         }
@@ -977,7 +977,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 return;
             }
             //NOLOG if (verbose>=1) debug("==== Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
-            val req = FinishRequest.makeTermRequest(id, parentId, UNASSIGNED, optSrc.id as Int, optKind, srcId, dstId, kind);
+            val req = FinishRequest.makeTermRequest(id, parentId, UNASSIGNED, finSrc.id as Int, finKind, srcId, dstId, kind);
             val resp = FinishReplicator.exec(req);
             //NOLOG if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
         }
@@ -1120,8 +1120,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         var isAdopted:Boolean = false;
         var migrating:Boolean = false;
         var placeOfMaster:Int = -1n; //will be updated during adoption
-        val optSrc:Place;
-        val optKind:Int;
+        val finSrc:Place;
+        val finKind:Int;
         var isReleased:Boolean = false;
         
         def this(id:FinishResilient.Id, parentId:FinishResilient.Id, src:Place, kind:Int) {
@@ -1130,8 +1130,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             this.parentId = parentId;
             FinishResilient.increment(sent, FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC));
             this.placeOfMaster = id.home;
-            this.optSrc = src;
-            this.optKind = kind;
+            this.finSrc = src;
+            this.finKind = kind;
         }        
         
         def this(id:FinishResilient.Id, _parentId:FinishResilient.Id, src:Place, kind:Int, _numActive:Long, 
@@ -1145,8 +1145,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }
             this.placeOfMaster = _placeOfMaster;
             this.excs = _excs;
-            this.optSrc = src;
-            this.optKind = kind;
+            this.finSrc = src;
+            this.finKind = kind;
         }
         
         def dump() {
@@ -1304,20 +1304,20 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def notifyParent() {
-            val srcId = optSrc.id as Int;
+            val srcId = finSrc.id as Int;
             val dstId = id.home;
             val dpe:CheckedThrowable;
-            if (optKind == FinishResilient.ASYNC) {
+            if (finKind == FinishResilient.ASYNC) {
                 dpe = new DeadPlaceException(Place(dstId));
                 dpe.fillInStackTrace();
             } else 
                 dpe = null;
             Runtime.submitUncounted( ()=>{
-                //NOLOG if (verbose>=1) debug(">>>> Backup(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+optKind+") called");
-                val req = FinishRequest.makeTermRequest(parentId, FinishResilient.UNASSIGNED, FinishResilient.UNASSIGNED, DUMMY_INT, DUMMY_INT, srcId, dstId, optKind);
+                //NOLOG if (verbose>=1) debug(">>>> Backup(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+finKind+") called");
+                val req = FinishRequest.makeTermRequest(parentId, FinishResilient.UNASSIGNED, FinishResilient.UNASSIGNED, DUMMY_INT, DUMMY_INT, srcId, dstId, finKind);
                 req.ex = dpe;
                 val resp = FinishReplicator.exec(req);
-                //NOLOG if (verbose>=1) debug("<<<< Backup(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+optKind+") returning");
+                //NOLOG if (verbose>=1) debug("<<<< Backup(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+finKind+") returning");
             });
         }
 
@@ -1703,8 +1703,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 val _numActive = b.numActive;
                 val _sent = b.sent;
                 val _excs = b.excs;
-                val _optSrc = b.optSrc;
-                val _optKind = b.optKind;
+                val _finSrc = b.finSrc;
+                val _finKind = b.finKind;
                 
                 val master = Place(places(i));
                 if (master.isDead()) {
@@ -1712,7 +1712,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 } else {
                     at (master) @Immediate("create_masters") async {
                         val newM = new OptimisticMasterState(_id, _parentId, _numActive, _sent,
-                                _excs, _optSrc, _optKind, _backupPlaceId);
+                                _excs, _finSrc, _finKind, _backupPlaceId);
                         FinishReplicator.addMaster(_id, newM);
                         val me = here.id as Int;
                         at (gr) @Immediate("create_masters_response") async {
@@ -1771,8 +1771,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 val backup = Place(m.backupPlaceId);
                 val id = m.id;
                 val parentId = m.parentId;
-                val optSrc = m.optSrc;
-                val optKind = m.optKind;
+                val finSrc = m.finSrc;
+                val finKind = m.finKind;
                 val numActive = m.numActive;
                 val sent = m.sent;
                 val excs = m.excs;
@@ -1780,7 +1780,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     (gr as GlobalRef[ResilientLowLevelFinish]{self.home == here})().notifyFailure();
                 } else {
                     at (backup) @Immediate("create_or_sync_backup") async {
-                        FinishReplicator.createOptimisticBackupOrSync(id, parentId, optSrc, optKind, numActive, 
+                        FinishReplicator.createOptimisticBackupOrSync(id, parentId, finSrc, finKind, numActive, 
                                 sent, excs, placeOfMaster);
                         val me = here.id as Int;
                         at (gr) @Immediate("create_or_sync_backup_response") async {

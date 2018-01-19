@@ -19,46 +19,39 @@ import x10.util.HashSet;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.GrowableRail;
 import x10.util.resilient.concurrent.ResilientLowLevelFinish;
+import x10.util.concurrent.Lock;
 
 public final class FinishReplicator {
-    //the set of all masters
-    private static val fmasters = new HashMap[FinishResilient.Id, FinishMasterState]();
     
-    //the set of all backups
-    private static val fbackups = new HashMap[FinishResilient.Id, FinishBackupState]();
-    
-    //backup deny list
-    private static val backupDeny = new HashSet[BackupDenyId]();
-    
-    private static val allDead = new HashSet[Int]();
+    public static glock = new Lock(); //global lock for accessing all the static values below
+    private static val fmasters = new HashMap[FinishResilient.Id, FinishMasterState](); //the set of all masters
+    private static val fbackups = new HashMap[FinishResilient.Id, FinishBackupState](); //the set of all backups
+    private static val backupDeny = new HashSet[BackupDenyId](); //backup deny list
+    private static val allDead = new HashSet[Int](); //all discovered dead places
+    private static val pending = new AtomicInteger(0n); //pending replication requests, used for final program termination
+    private static val backupMap = new HashMap[Int, Int](); //backup place mapping
+    private static val masterMap = new HashMap[Int, Int](); //master place mapping
 
     private static val verbose = System.getenv("X10_RESILIENT_VERBOSE") == null? 0 : Long.parseLong(System.getenv("X10_RESILIENT_VERBOSE"));
-    
-    private static val pending = new AtomicInteger(0n);
-    
     private static val OPTIMISTIC = Configuration.resilient_mode() == Configuration.RESILIENT_MODE_DIST_OPTIMISTIC;
     
-    //backup place mapping
-    private static val backupMap = new HashMap[Int, Int]();
-    
-    //master place mapping
-    private static val masterMap = new HashMap[Int, Int]();
-    
-    //places other than the left place can use this place to create backup
     //we must deny new buckup creations from the dead source place
+    //places other than the given src can use this place to create a backup
     protected static struct BackupDenyId(parentId:FinishResilient.Id, src:Int) {
         public def toString() = "<backupDenyId parentId=" + parentId + " src=" + src + ">";
-        def this(parentId:FinishResilient.Id, src:Int) {
-            property(parentId, src);
-        }
+    }
+    
+    //raises a fatal error if new replication requests were received after main finish terminated
+    static def checkMainTermination() {
+        val c = pending.incrementAndGet();
+        if (c < 0n)
+            throw new Exception("Fatal, new finish request posted after main finish<0,0> termination ...");
     }
     
     /**************** Replication Protocol **********************/
     public static def exec(req:FinishRequest):FinishResilient.ReplicatorResponse {
         //NOLOG if (verbose>=1) debug(">>>> Replicator(id="+req.id+").exec() called");
-        val c = pending.incrementAndGet();
-        if (c < 0n)
-            throw new Exception("Fatal, new finish request posted after main finish<0,0> termination ...");
+        checkMainTermination(); 
         
         var submit:Boolean = false;
         var adopterId:FinishResilient.Id = FinishResilient.UNASSIGNED; //pessimistic only
@@ -68,7 +61,6 @@ public final class FinishReplicator {
                 submit = mresp.submit;
                 //NOLOG if (verbose>=1) debug(">>>> Replicator(id="+req.id+").exec() masterDone =>" + " backupPlaceId = " + mresp.backupPlaceId + " submit = " + submit );
                 if (mresp.backupPlaceId == -1n) {
-                    debug("==== Replicator(id="+req.id+").exec() FATAL ERROR Backup = -1 ");
                     assert false : "fatal error, backup -1 means master had a fatal error before reporting its backup value";
                 }
                 
@@ -78,8 +70,8 @@ public final class FinishReplicator {
                 
                 val backupGo = ( submit || (mresp.transitSubmitDPE && req.reqType == FinishRequest.TRANSIT));
                 if (backupGo) {
-                    if (req.reqType == FinishRequest.ADD_CHILD)
-                        req.parentId = mresp.parentId;
+                    if (req.reqType == FinishRequest.ADD_CHILD) /*in some cases, the parent may be transiting at the same time as its child, */ 
+                        req.parentId = mresp.parentId;          /*the child may not find the parent's backup during globalInit, so it needs to create it*/
                     req.backupPlaceId = mresp.backupPlaceId;
                     req.transitSubmitDPE = mresp.transitSubmitDPE;
                     backupExec(req);
@@ -111,7 +103,7 @@ public final class FinishReplicator {
             }
         }
         pending.decrementAndGet();
-        FinishRequest.deallocReq(req);
+        FinishRequest.deallocReq(req); //reuse the finish request object
         return FinishResilient.ReplicatorResponse(submit, adopterId);
     }
     
@@ -181,7 +173,8 @@ public final class FinishReplicator {
     }
     
     public static def backupExec(req:FinishRequest) {
-        val createOk = req.reqType == FinishRequest.ADD_CHILD || /*in some cases, the parent may be transiting at the same time as its child, the child may not find the parent's backup during globalInit*/
+        val createOk = req.reqType == FinishRequest.ADD_CHILD || /*in some cases, the parent may be transiting at the same time as its child, 
+                                                                   the child may not find the parent's backup during globalInit, so it needs to create it*/
                        req.reqType == FinishRequest.TRANSIT ||
                        req.reqType == FinishRequest.EXCP ||
                        (req.reqType == FinishRequest.TERM && req.id.home == here.id as Int);
@@ -189,7 +182,7 @@ public final class FinishReplicator {
         if (req.isBackupLocal()) {
             val bFin:FinishBackupState;
             if (createOk)
-                bFin = findBackupOrCreate(req.id, req.parentId, Place(req.optFinSrc), req.optFinKind);
+                bFin = findBackupOrCreate(req.id, req.parentId, Place(req.finSrc), req.finKind);
             else
                 bFin = findBackupOrThrow(req.id);
             val resp = bFin.exec(req);
@@ -207,7 +200,7 @@ public final class FinishReplicator {
             at (backup) @Immediate("backup_exec") async {
                 val bFin:FinishBackupState;
                 if (createOk)
-                    bFin = findBackupOrCreate(req.id, req.parentId, Place(req.optFinSrc), req.optFinKind);
+                    bFin = findBackupOrCreate(req.id, req.parentId, Place(req.finSrc), req.finKind);
                 else
                     bFin = findBackupOrThrow(req.id);
                 val resp = bFin.exec(req);
@@ -326,35 +319,35 @@ public final class FinishReplicator {
     
     static def getMasterPlace(idHome:Int) {
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             val m = masterMap.getOrElse(idHome, -1n);
             if (m == -1n)
                 return idHome;
             else
                 return m;
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
     }
     
     //FIXME: check if the place is alive, if not, search all places for backup
     static def getBackupPlace(idHome:Int) {
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             val b = backupMap.getOrElse(idHome, -1n);
             if (b == -1n)
                 return ((idHome+1)%Place.numPlaces()) as Int;
             else
                 return b;
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
     }
     
     static def updateMyBackupIfDead(newDead:HashSet[Int]) {
         try {
             val idHome = here.id as Int;
-            FinishResilient.glock.lock();
+            glock.lock();
             var b:Int = backupMap.getOrElse(idHome, -1n);
             if (b == -1n)
                 b = ((idHome+1)%Place.numPlaces()) as Int;
@@ -363,33 +356,33 @@ public final class FinishReplicator {
                 backupMap.put(idHome, b);
             }
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
     }
     static def updateBackupPlace(idHome:Int, backupPlaceId:Int) {
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             backupMap.put(idHome, backupPlaceId);
             //NOLOG if (verbose>=1) debug("<<<< updateBackupPlace(idHome="+idHome+",newPlace="+backupPlaceId+") returning");
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
     }
     
     static def updateMasterPlace(idHome:Int, masterPlaceId:Int) {
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             masterMap.put(idHome, masterPlaceId);
             //NOLOG if (verbose>=1) debug("<<<< updateMasterPlace(idHome="+idHome+",newPlace="+masterPlaceId+") returning");
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
     }
     
     static def countBackups(parentId:FinishResilient.Id, src:Int) {
         var count:Int = 0n;
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             for (e in fbackups.entries()) {
                 if (e.getValue().getParentId() == parentId)
                     count++;
@@ -398,7 +391,7 @@ public final class FinishReplicator {
             backupDeny.add(BackupDenyId(parentId, src));
             //NOLOG if (verbose>=1) debug("<<<< countBackups(parentId="+parentId+") returning, count = " + count + " and parentId added to denyList");
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
         return count;
     }
@@ -411,7 +404,7 @@ public final class FinishReplicator {
             return newDead;
         }
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             for (i in 0n..((Place.numPlaces() as Int) - 1n)) {
                 if (Place.isDead(i) && !allDead.contains(i)) {
                     newDead.add(i);
@@ -419,7 +412,7 @@ public final class FinishReplicator {
                 }
             }
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
         return newDead;
     }
@@ -428,7 +421,7 @@ public final class FinishReplicator {
         //NOLOG if (verbose>=1) debug(">>>> lockAndGetImpactedMasters called");
         val result = new HashSet[FinishMasterState]();
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             for (e in fmasters.entries()) {
                 val id = e.getKey();
                 val mFin = e.getValue();
@@ -437,7 +430,7 @@ public final class FinishReplicator {
                 }
             }
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
         return result;
     }
@@ -446,7 +439,7 @@ public final class FinishReplicator {
         //NOLOG if (verbose>=1) debug(">>>> lockAndGetImpactedBackups called");
         val result = new HashSet[FinishBackupState]();
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             for (e in fbackups.entries()) {
                 val id = e.getKey();
                 val bFin = e.getValue();
@@ -456,7 +449,7 @@ public final class FinishReplicator {
                 }
             }
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
         return result;
     }
@@ -466,7 +459,7 @@ public final class FinishReplicator {
         var maxIter:Int = Place.numPlaces() as Int;
         var i:Int = 0n;
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             m = masterMap.getOrElse(idHome,-1n);
             do {
                 if (m == -1n)
@@ -480,7 +473,7 @@ public final class FinishReplicator {
                 throw new Exception(here + " Fatal, couldn't nominate a new master place for idHome=" + idHome);
             masterMap.put(idHome, m);
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
         //NOLOG if (verbose>=1) debug("<<<< nominateMasterPlaceIfDead(idHome="+idHome+") returning m="+m);
         return m;
@@ -491,7 +484,7 @@ public final class FinishReplicator {
         var maxIter:Int = Place.numPlaces() as Int;
         var i:Int = 0n;
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             b = backupMap.getOrElse(idHome,-1n);
             do {
                 if (b == -1n)
@@ -505,7 +498,7 @@ public final class FinishReplicator {
                 throw new Exception(here + " Fatal, couldn't nominate a new backup place for idHome=" + idHome);
             backupMap.put(idHome, b);
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
         //NOLOG if (verbose>=1) debug("<<<< nominateBackupPlace(idHome="+idHome+") returning b="+b);
         return b;
@@ -513,45 +506,45 @@ public final class FinishReplicator {
     
     static def removeMaster(id:FinishResilient.Id) {
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             fmasters.delete(id);
             //NOLOG if (verbose>=1) debug("<<<< removeMaster(id="+id+") returning");
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
     }
     
     static def removeBackup(id:FinishResilient.Id) {
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             fbackups.delete(id);
             //NOLOG if (verbose>=1) debug("<<<< removeBackup(id="+id+") returning");
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
     }
     
     static def addMaster(id:FinishResilient.Id, fs:FinishMasterState) {
         //NOLOG if (verbose>=1) debug(">>>> addMaster(id="+id+") called");
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             fmasters.put(id, fs);
             //NOLOG if (verbose>=3) fs.dump();
             //NOLOG if (verbose>=1) debug("<<<< addMaster(id="+id+") returning");
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
     }
     
     static def findMaster(id:FinishResilient.Id):FinishMasterState {
         //NOLOG if (verbose>=1) debug(">>>> findMaster(id="+id+") called");
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             val fs = fmasters.getOrElse(id, null);
             //NOLOG if (verbose>=1) debug("<<<< findMaster(id="+id+") returning");
             return fs;
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
     }
     
@@ -559,7 +552,7 @@ public final class FinishReplicator {
     static def findBackupOrThrow(id:FinishResilient.Id):FinishBackupState {
         //NOLOG if (verbose>=1) debug(">>>> findBackupOrThrow(id="+id+") called");
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             val bs = fbackups.getOrElse(id, null);
             if (bs == null) {
                 throw new Exception(here + "Fatal error: backup(id="+id+" not found here");
@@ -569,26 +562,26 @@ public final class FinishReplicator {
                 return bs;
             }
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
     }
     
     static def findBackup(id:FinishResilient.Id):FinishBackupState {
         //NOLOG if (verbose>=1) debug(">>>> findBackup(id="+id+") called");
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             val bs = fbackups.getOrElse(id, null);
             //NOLOG if (verbose>=1) debug("<<<< findBackup(id="+id+") returning, bs = " + bs);
             return bs;
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
     }
     
-    static def findBackupOrCreate(id:FinishResilient.Id, parentId:FinishResilient.Id, optSrc:Place, optKind:Int):FinishBackupState {
+    static def findBackupOrCreate(id:FinishResilient.Id, parentId:FinishResilient.Id, finSrc:Place, finKind:Int):FinishBackupState {
         //NOLOG if (verbose>=1) debug(">>>> findOrCreateBackup(id="+id+", parentId="+parentId+") called ");
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             var bs:FinishBackupState = fbackups.getOrElse(id, null);
             if (bs == null) {
                 if (backupDeny.contains(BackupDenyId(parentId, id.home))) {
@@ -598,7 +591,7 @@ public final class FinishReplicator {
                 }
                 
                 if (OPTIMISTIC)
-                    bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, optSrc, optKind);
+                    bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, finSrc, finKind);
                 else
                     bs = new FinishResilientPessimistic.PessimisticBackupState(id, parentId);
                 fbackups.put(id, bs);
@@ -606,22 +599,22 @@ public final class FinishReplicator {
             }
             return bs;
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
     }
     
-    static def createOptimisticBackupOrSync(id:FinishResilient.Id, parentId:FinishResilient.Id, src:Place, optKind:Int, numActive:Long, 
+    static def createOptimisticBackupOrSync(id:FinishResilient.Id, parentId:FinishResilient.Id, src:Place, finKind:Int, numActive:Long, 
             /*transit:HashMap[FinishResilient.Edge,Int],*/
             sent:HashMap[FinishResilient.Edge,Int], 
             excs:GrowableRail[CheckedThrowable], placeOfMaster:Int):FinishBackupState {
         //NOLOG if (verbose>=1) debug(">>>> createOptimisticBackupOrSync(id="+id+", parentId="+parentId+") called ");
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             var bs:FinishBackupState = fbackups.getOrElse(id, null);
             
             if (bs == null) {
                 assert !backupDeny.contains(BackupDenyId(parentId,id.home)) : "must not be in denyList";
-                bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, src, optKind, numActive, 
+                bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, src, finKind, numActive, 
                             /*transit,*/ sent, excs, placeOfMaster);
                 fbackups.put(id, bs);
                 //NOLOG if (verbose>=1) debug("<<<< createOptimisticBackupOrSync(id="+id+", parentId="+parentId+") returning, created bs="+bs);
@@ -631,7 +624,7 @@ public final class FinishReplicator {
             }
             return bs;
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
     }
     
@@ -643,7 +636,7 @@ public final class FinishReplicator {
             excs:GrowableRail[CheckedThrowable]):FinishBackupState {
         //NOLOG if (verbose>=1) debug(">>>> createPessimisticBackupOrSync(id="+id+", parentId="+parentId+") called ");
         try {
-            FinishResilient.glock.lock();
+            glock.lock();
             var bs:FinishBackupState = fbackups.getOrElse(id, null);
             
             if (bs == null) {
@@ -658,10 +651,11 @@ public final class FinishReplicator {
             }
             return bs;
         } finally {
-            FinishResilient.glock.unlock();
+            glock.unlock();
         }
     }
     
+    //a very slow hack to terminate replication at all places before shutting down
     public static def finalizeReplication() {
         //NOLOG if (verbose>=1) debug("<<<< Replicator.finalizeReplication called " );
         val numP = Place.numPlaces();
@@ -701,7 +695,7 @@ public final class FinishReplicator {
         while (pending.get() != 0n) {
             System.threadSleep(10); // release the CPU to more productive pursuits
         }
-        pending.set(-2000n);
+        pending.set(-2000n); //this means the main finish has completed its work
         //NOLOG if (verbose>=1) debug("<<<< waitForZeroPending returning" );
     }
 }

@@ -15,7 +15,6 @@ import x10.util.concurrent.SimpleLatch;
 import x10.util.concurrent.AtomicBoolean;
 import x10.util.concurrent.Condition;
 import x10.util.concurrent.AtomicInteger;
-import x10.util.concurrent.Lock;
 import x10.util.HashMap;
 
 /*
@@ -59,8 +58,9 @@ abstract class FinishResilient extends FinishState {
     
     /* The implicit top finish is not replicated in the replication-based implementations.
      * Place 0 starts the shutdown procedure when that finish is released, and sometimes, shutting down
-     * occurs while place 0 is exchanging the final replication
-     * messages with place 1 for the top finish. This behaviour caused the programs to hang while shutting down.*/
+     * occurs while places are exchanging final replication messages. 
+     * This behaviour caused the programs to hang while shutting down. Therefore special termination logic
+     * is added for the TOP_FINISH in replication-based implementations */
     public static val TOP_FINISH = Id(0n,0n);
     
     public static val AT = 0n;
@@ -97,9 +97,6 @@ abstract class FinishResilient extends FinishState {
     
     protected static val nextId = new AtomicInteger(); // per-place portion of unique id
     
-    //a global lock to for static lists used in resilient finish implementations
-    public static glock = new Lock();
-
     /*
      * Static methods to be implemented in subclasses
      */
@@ -131,6 +128,7 @@ abstract class FinishResilient extends FinishState {
         val a = Runtime.activity();
         return (a!=null) ? a.finishState() : null;
     }
+    
     static def make(parent:FinishState):FinishState { // parent may be null
         var fs:FinishState;
         switch (Runtime.RESILIENT_MODE) {

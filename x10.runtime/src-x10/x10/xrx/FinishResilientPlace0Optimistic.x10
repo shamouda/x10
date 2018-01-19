@@ -34,8 +34,7 @@ import x10.util.concurrent.Condition;
 class FinishResilientPlace0Optimistic extends FinishResilient implements CustomSerialization {
     protected transient var me:FinishResilient; // local finish object
     val id:Id;
-    private static val remotes = new HashMap[Id, P0OptimisticRemoteState](); //a cache for remote finish objects
-    private static val remoteDeny = new HashSet[Id](); //remote deny list
+
     
     public def toString():String {
         return me.toString();
@@ -63,7 +62,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
     //create remote finish
     private def this(deser:Deserializer) {
         id = deser.readAny() as Id;
-        me = getRemote(id);
+        me = P0OptimisticRemoteState.getOrCreateRemote(id);
     }
     
     //make root finish    
@@ -79,42 +78,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         //NOLOG if (verbose>=1) debug("<<<< serialize(id="+id+") returning ");
     }
 
-    private static def countReceived(id:Id, src:Int, kind:Int) {
-        //NOLOG if (verbose>=1) debug(">>>> countReceived(id="+id+", src="+src+", kind="+kind+") called");
-        var count:Int = 0n;
-        try {
-            FinishResilient.glock.lock();
-            val remote = remotes.getOrElse(id, null);
-            if (remote != null) {
-                count = remote.countReceived(src, kind);
-            } else {
-                //no remote finish for this id should be created here
-                remoteDeny.add(id);
-            }
-        } finally {
-            FinishResilient.glock.unlock();
-        }
-        //NOLOG if (verbose>=1) debug("<<<< countReceived(id="+id+", src="+src+", kind="+kind+") returning, count="+count);
-        return count;
-    }
-    
-    private static def getRemote(id:Id) {
-        try {
-            FinishResilient.glock.lock();
-            var remoteState:P0OptimisticRemoteState = remotes.getOrElse(id, null);
-            if (remoteState == null) {
-                if (remoteDeny.contains(id)) {
-                    throw new RemoteCreationDenied();
-                }
-                remoteState = new P0OptimisticRemoteState(id);
-                remotes.put(id, remoteState);
-            }
-            return remoteState;
-        } finally {
-            FinishResilient.glock.unlock();
-        }
-    }
-    
     private def globalInit(createState:Boolean) {
         if (me instanceof P0OptimisticMasterState) {
             val rootState = me as P0OptimisticMasterState;
@@ -144,8 +107,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         val gfs:GlobalRef[P0OptimisticMasterState]; // root finish state
         val id:Id;
         val parentId:Id; // id of parent (UNASSIGNED means no parent / parent is UNCOUNTED)
-    	val optSrc:Int; //the source place that initiated the task that created this finish
-		val optKind:Int; //the kind of the task that created the finish
+    	val finSrc:Int; //the source place that initiated the task that created this finish
+		val finKind:Int; //the kind of the task that created the finish
     
         var numActive:Long = 0;
         var excs:GrowableRail[CheckedThrowable] = null;  // lazily allocated in addException
@@ -163,8 +126,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             this.id = optId.id;
             this.parentId = optId.parentId; 
             this.gfs = gfs;
-            this.optSrc = optId.src;
-            this.optKind = optId.kind;
+            this.finSrc = optId.src;
+            this.finKind = optId.kind;
             this.numActive = 1;
             FinishResilient.increment(sent, FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC));
         }
@@ -430,19 +393,19 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 //NOLOG if (verbose>=1) debug("<<< State(id="+id+").notifyParent returning, not adopted or parent["+parentId+"] does not exist");
                 return;
             }
-            val srcId = optSrc;
+            val srcId = finSrc;
             val dstId = id.home;
             val dpe:CheckedThrowable;
-            if (optKind == FinishResilient.ASYNC) {
+            if (finKind == FinishResilient.ASYNC) {
                 dpe = new DeadPlaceException(Place(dstId));
                 dpe.fillInStackTrace();
             } else {
                 dpe = null;
             }
-            //NOLOG if (verbose>=1) debug(">>>> State(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+optKind+") called");
+            //NOLOG if (verbose>=1) debug(">>>> State(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+finKind+") called");
             val parentState = states(parentId);
-            parentState.transitToCompleted(srcId, dstId, optKind, dpe);
-            //NOLOG if (verbose>=1) debug("<<<< State(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+optKind+") returning");
+            parentState.transitToCompleted(srcId, dstId, finKind, dpe);
+            //NOLOG if (verbose>=1) debug("<<<< State(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+finKind+") returning");
         }
 
         def removeFromStates() {
@@ -699,11 +662,51 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         var taskDeny:HashSet[Int] = null; // lazily allocated
         var lc:Int = 0n; //whenever lc reaches zero, report reported-received to root finish and set reported=received
         
+        private static val remoteLock = new Lock();
+        private static val remotes = new HashMap[Id, P0OptimisticRemoteState](); //a cache for remote finish objects
+        private static val remoteDeny = new HashSet[Id](); //remote deny list
+        
         public def this (val id:Id) {
             this.id = id;
         }
         
-        public def countReceived(src:Int, kind:Int) {
+        public static def countReceived(id:Id, src:Int, kind:Int) {
+            //NOLOG if (verbose>=1) debug(">>>> countReceived(id="+id+", src="+src+", kind="+kind+") called");
+            var count:Int = 0n;
+            try {
+                remoteLock.lock();
+                val remote = remotes.getOrElse(id, null);
+                if (remote != null) {
+                    count = remote.receivedFrom(src, kind);
+                } else {
+                    //no remote finish for this id should be created here
+                    remoteDeny.add(id);
+                }
+            } finally {
+                remoteLock.unlock();
+            }
+            //NOLOG if (verbose>=1) debug("<<<< countReceived(id="+id+", src="+src+", kind="+kind+") returning, count="+count);
+            return count;
+        }
+        
+        public static def getOrCreateRemote(id:Id) {
+            try {
+                remoteLock.lock();
+                var remoteState:P0OptimisticRemoteState = remotes.getOrElse(id, null);
+                if (remoteState == null) {
+                    if (remoteDeny.contains(id)) {
+                        throw new RemoteCreationDenied();
+                    }
+                    remoteState = new P0OptimisticRemoteState(id);
+                    remotes.put(id, remoteState);
+                }
+                return remoteState;
+            } finally {
+                remoteLock.unlock();
+            }
+        }
+        
+        private def receivedFrom(src:Int, kind:Int) {
             var count:Int = 0n;
             try {
                 ilock.lock();
@@ -1383,8 +1386,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 //val _transit = b.transit;
                 val _sent = b.sent;
                 val _excs = b.excs;
-                val _optSrc = b.optSrc;
-                val _optKind = b.optKind;
+                val _finSrc = b.finSrc;
+                val _finKind = b.finKind;
                 
                 val master = Place(places(i));
                 if (master.isDead()) {
@@ -1392,7 +1395,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 } else {
                     at (master) @Immediate("create_masters") async {
                         val newM = new P0OptimisticMasterState(_id, _parentId, _numActive, _sent,
-                                _excs, _optSrc, _optKind, _backupPlaceId);
+                                _excs, _finSrc, _finKind, _backupPlaceId);
                         FinishReplicator.addMaster(_id, newM);
                         val me = here.id as Int;
                         at (gr) @Immediate("create_masters_response") async {
@@ -1451,8 +1454,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 val backup = Place(m.backupPlaceId);
                 val id = m.id;
                 val parentId = m.parentId;
-                val optSrc = m.optSrc;
-                val optKind = m.optKind;
+                val finSrc = m.finSrc;
+                val finKind = m.finKind;
                 val numActive = m.numActive;
                 //val transit = m.transit;
                 val sent = m.sent;
@@ -1461,7 +1464,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     (gr as GlobalRef[ResilientLowLevelFinish]{self.home == here})().notifyFailure();
                 } else {
                     at (backup) @Immediate("create_or_sync_backup") async {
-                        FinishReplicator.createOptimisticBackupOrSync(id, parentId, optSrc, optKind, numActive, //transit, 
+                        FinishReplicator.createOptimisticBackupOrSync(id, parentId, finSrc, finKind, numActive, //transit, 
                                 sent, excs, placeOfMaster);
                         val me = here.id as Int;
                         at (gr) @Immediate("create_or_sync_backup_response") async {
