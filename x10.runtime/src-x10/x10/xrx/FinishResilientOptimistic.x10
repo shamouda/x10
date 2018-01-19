@@ -50,12 +50,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         return me.toString();
     }
     
-    //a cache for remote finish objects
-    private static val remotes = new HashMap[Id, OptimisticRemoteState]() ;
-    
-    //remote deny list
-    private static val remoteDeny = new HashSet[Id]();
-    
     protected static struct BackupQueryId(parentId:Id, src:Int /*src is only used to be added in the deny list*/) {
         public def toString() = "<BackupQueryId parentId=" + parentId + " src=" + src +">";
     }
@@ -82,7 +76,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     //create remote finish
     private def this(deser:Deserializer) {
         id = deser.readAny() as Id;
-        me = getRemote(id);
+        me = OptimisticRemoteState.getOrCreateRemote(id);
     }
     
     //make root finish    
@@ -99,42 +93,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                            // false means don't create a backup
         ser.writeAny(id);
         //NOLOG if (verbose>=1) debug("<<<< serialize(id="+id+") returning ");
-    }
-
-    private static def countReceived(id:Id, src:Int, kind:Int) {
-        //NOLOG if (verbose>=1) debug(">>>> countReceived(id="+id+", src="+src+", kind="+kind+") called");
-        var count:Int = 0n;
-        try {
-            FinishResilient.glock.lock();
-            val remote = remotes.getOrElse(id, null);
-            if (remote != null) {
-                count = remote.countReceived(src, kind);
-            } else {
-                //no remote finish for this id should be created here
-                remoteDeny.add(id);
-            }
-        } finally {
-            FinishResilient.glock.unlock();
-        }
-        //NOLOG if (verbose>=1) debug("<<<< countReceived(id="+id+", src="+src+", kind="+kind+") returning, count="+count);
-        return count;
-    }
-    
-    private static def getRemote(id:Id) {
-        try {
-            FinishResilient.glock.lock();
-            var remoteState:OptimisticRemoteState = remotes.getOrElse(id, null);
-            if (remoteState == null) {
-                if (remoteDeny.contains(id)) {
-                    throw new RemoteCreationDenied();
-                }
-                remoteState = new OptimisticRemoteState(id);
-                remotes.put(id, remoteState);
-            }
-            return remoteState;
-        } finally {
-            FinishResilient.glock.unlock();
-        }
     }
     
     //makeBackup is true only when a parent finish if forced to be global by its child
@@ -210,6 +168,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         val reported = new HashMap[Task,Int](); //increasing counts
         var taskDeny:HashSet[Int] = null; // lazily allocated
         var lc:Int = 0n; //whenever lc reaches zero, report reported-received to root finish and set reported=received
+
+        private static val remoteLock = new Lock();
+        private static val remotes = new HashMap[Id, OptimisticRemoteState]() ; //a cache for remote finish objects
+        private static val remoteDeny = new HashSet[Id](); //remote deny list
         
         public def this (val id:Id) {
             this.id = id;
@@ -236,7 +198,43 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             debug(s.toString());
         }
         
-        public def countReceived(src:Int, kind:Int) {
+        public static def getOrCreateRemote(id:Id) {
+            try {
+                remoteLock.lock();
+                var remoteState:OptimisticRemoteState = remotes.getOrElse(id, null);
+                if (remoteState == null) {
+                    if (remoteDeny.contains(id)) {
+                        throw new RemoteCreationDenied();
+                    }
+                    remoteState = new OptimisticRemoteState(id);
+                    remotes.put(id, remoteState);
+                }
+                return remoteState;
+            } finally {
+                remoteLock.unlock();
+            }
+        }
+
+        public static def countReceived(id:Id, src:Int, kind:Int) {
+            //NOLOG if (verbose>=1) debug(">>>> countReceived(id="+id+", src="+src+", kind="+kind+") called");
+            var count:Int = 0n;
+            try {
+                remoteLock.lock();
+                val remote = remotes.getOrElse(id, null);
+                if (remote != null) {
+                    count = remote.receivedFrom(src, kind);
+                } else {
+                    //deny future remote finishes from that id 
+                    remoteDeny.add(id);
+                }
+            } finally {
+                remoteLock.unlock();
+            }
+            //NOLOG if (verbose>=1) debug("<<<< countReceived(id="+id+", src="+src+", kind="+kind+") returning, count="+count);
+            return count;
+        }
+        
+        private def receivedFrom(src:Int, kind:Int) {
             var count:Int = 0n;
             try {
                 ilock.lock();
@@ -270,28 +268,28 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         //Calculated the delta between received and reported
-        private def getReportMap() {
-            //NOLOG if (verbose>=1) debug(">>>> Remote(id="+id+").getReportMap called");
+        private def getReportMapUnsafe() {
+            //NOLOG if (verbose>=1) debug(">>>> Remote(id="+id+").getReportMapUnsafe called");
             
             val map = new HashMap[Task,Int]();
             val iter = received.keySet().iterator();
             while (iter.hasNext()) {
                 val t = iter.next();
                 if (t.place == here.id as Int) {
-                    //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").getReportMap Task["+t+"] ignored");
+                    //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").getReportMapUnsafe Task["+t+"] ignored");
                     continue;
                 }
                 val rep = reported.getOrElse(t, 0n);
                 val rec = received.getOrThrow(t);
                 
-                //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").getReportMap Task["+t+"] rep="+rep + " rec = " + rec);
+                //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").getReportMapUnsafe Task["+t+"] rep="+rep + " rec = " + rec);
                 if ( rep < rec) {
                     map.put(t, rec - rep);
                     reported.put (t, rec);
-                    //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").getReportMap Task["+t+"] reported.put("+t+","+(rec-rep)+")");
+                    //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").getReportMapUnsafe Task["+t+"] reported.put("+t+","+(rec-rep)+")");
                 }
             }
-            //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").getReportMap returning");
+            //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").getReportMapUnsafe returning");
             //NOLOG if (verbose>=3) dump();
             return map;
         }
@@ -328,7 +326,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 }
                 
                 if (lc == 0n) {
-                    map = getReportMap();
+                    map = getReportMapUnsafe();
                 }
                 
                 //NOLOG if (verbose>=1) printMap(map);
@@ -1710,7 +1708,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                         if (countReceived.size() > 0) {
                             for (r in countReceived.entries()) {
                                 val key = r.getKey();
-                                val count = countReceived(key.id, key.src, key.kind);
+                                val count = OptimisticRemoteState.countReceived(key.id, key.src, key.kind);
                                 countReceived.put(key, count);
                             }
                         }
