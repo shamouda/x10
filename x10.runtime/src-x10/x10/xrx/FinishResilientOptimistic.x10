@@ -494,7 +494,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         //resilient finish counter set
         var numActive:Long;
         val sent:HashMap[Edge,Int]; //increasing counts    
-        /*val transit:HashMap[Edge,Int];*/ // increases and decreases - not needed except for debugging
         var isGlobal:Boolean = false;//flag to indicate whether finish has been resiliently replicated or not
         var strictFinish:Boolean = false;
         var backupPlaceId:Int = FinishReplicator.getBackupPlace(here.id as Int);  //may be updated in notifyPlaceDeath
@@ -507,14 +506,12 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         var migrating:Boolean = false; //used to stop updates to the object during recovery
     
         //initialize from backup values
-        def this(_id:Id, _parentId:Id, _numActive:Long, /*_transit:HashMap[Edge,Int],*/
-                _sent:HashMap[Edge,Int],
+        def this(_id:Id, _parentId:Id, _numActive:Long, _sent:HashMap[Edge,Int],
                 _excs:GrowableRail[CheckedThrowable], _optSrc:Place, _optKind:Int,
                 _backupPlaceId:Int) {
             this.id = _id;
             this.parentId = _parentId;
             this.numActive = _numActive;
-            /*this.transit = _transit;*/
             this.sent = _sent;
             this.backupPlaceId = _backupPlaceId;
             this.excs = _excs;
@@ -536,15 +533,12 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             this.parent = parent;
             this.optSrc = src;
             this.optKind = kind;
-            /*transit = new HashMap[Edge,Int]();*/
-            /*increment(transit, Edge(id.home, id.home, FinishResilient.ASYNC));*/
             sent = new HashMap[Edge,Int]();
             increment(sent, Edge(id.home, id.home, FinishResilient.ASYNC));
             if (parent instanceof FinishResilientOptimistic) {
                 parentId = (parent as FinishResilientOptimistic).id;
             }
             else {
-                //NOLOG if (verbose>=1) debug("FinishResilientOptimistic(id="+id+") foreign parent found of type " + parent);
                 parentId = UNASSIGNED;
             }
         }
@@ -566,12 +560,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             s.add("             id:" + id); s.add('\n');
             s.add("      numActive:"); s.add(numActive); s.add('\n');
             s.add("       parentId: " + parentId); s.add('\n');
-            /*if (transit.size() > 0) {
-                s.add("        transit:\n"); 
-                for (e in transit.entries()) {
-                    s.add("\t\t"+e.getKey()+" = "+e.getValue()+"\n");
-                }
-            }*/
             if (sent.size() > 0) {
                 s.add("        sent:\n"); 
                 for (e in sent.entries()) {
@@ -683,7 +671,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             try {
                 latch.lock();
                 val e = Edge(srcId, dstId, kind);
-                //increment(transit, e);
                 increment(sent, e);
                 numActive++;
                 //NOLOG if (verbose>=3) debug("==== Master(id="+id+").inTransit srcId=" + srcId + ", dstId=" + dstId + " dumping after update");
@@ -702,8 +689,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 latch.lock();
                 //NOLOG if (verbose>=1) debug(">>>> Master(id="+id+").transitToCompleted srcId=" + srcId + ", dstId=" + dstId + " called");
                 val e = Edge(srcId, dstId, kind);
-                /*decrement(transit, e);
-                assert transit.getOrElse(e, 0n) >= 0n : here + " FATAL error, transit reached negative id="+id;*/
                 //don't decrement 'sent' unless src=dst
                 if (srcId == dstId) /*signalling the termination of the root finish task, needed for correct counting of localChildren*/
                     decrement(sent, e);
@@ -727,8 +712,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         def transitToCompletedUnsafe(srcId:Long, dstId:Long, kind:Int, cnt:Int, tag:String, resp:MasterResponse) {
             //NOLOG if (verbose>=1) debug(">>>> Master(id="+id+").transitToCompletedMul srcId=" + srcId + ", dstId=" + dstId + " called");
             val e = Edge(srcId, dstId, kind);
-            /*deduct(transit, e, cnt);
-            assert transit.getOrElse(e, 0n) >= 0n : here + " FATAL error, transit reached negative id="+id;*/
             //don't decrement 'sent' unless srcId = dstId
             if (srcId == dstId) /*signalling the termination of the root finish task*/
                 deduct(sent, e, cnt);
@@ -743,7 +726,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             resp.backupPlaceId = backupPlaceId;
             resp.backupChanged = backupChanged;
         }
-        
         
         def quiescent():Boolean {
             //NOLOG if (verbose>=2) debug(">>>> Master(id="+id+").quiescent called");
@@ -1070,11 +1052,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                         
                         //NOLOG if (verbose>=1) debug("==== Master(id="+id+").convertToDead t1["+t1+"] t2["+t2+"] numActive["+oldActive+"] changing numActive to " + numActive);
                         
-                        /*if (t2 == 0n)
-                            toRemove.add(edge);                            
-                        else
-                            transit.put(edge, t2);*/
-                        
                         assert numActive >= 0 : here + " Master(id="+id+").convertToDead FATAL error, numActive must not be negative";
                         if (edge.kind == ASYNC) {
                             for (1..count) {
@@ -1089,9 +1066,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 }
             }
             
-            /*for (e in toRemove)
-                transit.remove(e);*/
-                    
             if (quiescent()) {
                 releaseLatch();
                 notifyParent();
@@ -1118,17 +1092,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     trns -= dropedMsgs;
                     //NOLOG if (verbose>=1) debug("==== Master(id="+id+").convertFromDead src="+edge.src+" dst="+edge.dst+" transit["+trns+"] sent["+sent+"] received["+received+"] numActive["+oldActive+"] dropedMsgs["+dropedMsgs+"] changing numActive to " + numActive);
                     
-                    /*if (trns == 0n)
-                        toRemove.add(edge);
-                    else
-                        transit.put(edge, trns);*/
-                    
                     assert numActive >= 0 : here + " Master(id="+id+").convertFromDead FATAL error, numActive must not be negative";
                     // we don't add DPE when src is dead; we can assume that the message was not sent as long as it was not received.
                 }
             }
-            /*for (e in toRemove)
-                transit.remove(e);*/
+            
             if (quiescent()) {
                 releaseLatch();
                 notifyParent();
@@ -1155,7 +1123,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         //resilient finish counter set
         var numActive:Long;
         val sent = new HashMap[FinishResilient.Edge,Int](); //always increasing        
-        /*val transit = new HashMap[FinishResilient.Edge,Int]();*/ // increases and decreases - not needed except for debugging
         var excs:GrowableRail[CheckedThrowable]; 
         var isAdopted:Boolean = false;
         var migrating:Boolean = false;
@@ -1168,7 +1135,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             this.id = id;
             this.numActive = 1;
             this.parentId = parentId;
-            /*FinishResilient.increment(transit, FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC));*/
             FinishResilient.increment(sent, FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC));
             this.placeOfMaster = id.home;
             this.optSrc = src;
@@ -1176,15 +1142,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }        
         
         def this(id:FinishResilient.Id, _parentId:FinishResilient.Id, src:Place, kind:Int, _numActive:Long, 
-                /*_transit:HashMap[FinishResilient.Edge,Int],*/
                 _sent:HashMap[FinishResilient.Edge,Int],
                 _excs:GrowableRail[CheckedThrowable], _placeOfMaster:Int) {
             this.id = id;
             this.numActive = _numActive;
             this.parentId = _parentId;
-            /*for (e in _transit.entries()) {
-                this.transit.put(e.getKey(), e.getValue());
-            }*/
             for (e in _sent.entries()) {
                 this.sent.put(e.getKey(), e.getValue());
             }
@@ -1200,12 +1162,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             s.add("             id:" + id); s.add('\n');
             s.add("      numActive:"); s.add(numActive); s.add('\n');
             s.add("       parentId: " + parentId); s.add('\n');
-            /*if (transit.size() > 0) {
-                s.add("        transit:\n"); 
-                for (e in transit.entries()) {
-                    s.add("\t\t"+e.getKey()+" = "+e.getValue()+"\n");
-                }
-            }*/
             if (sent.size() > 0) {
                 s.add("        sent:\n"); 
                 for (e in sent.entries()) {
@@ -1215,16 +1171,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             debug(s.toString());
         }
         
-        def sync(_numActive:Long, /*_transit:HashMap[FinishResilient.Edge,Int],*/
-                _sent:HashMap[FinishResilient.Edge,Int],
+        def sync(_numActive:Long, _sent:HashMap[FinishResilient.Edge,Int],
                 _excs:GrowableRail[CheckedThrowable], _placeOfMaster:Int) {
             try {
                 lock();
                 this.numActive = _numActive;
-                /*this.transit.clear();
-                for (e in _transit.entries()) {
-                    this.transit.put(e.getKey(), e.getValue());
-                }*/
                 this.sent.clear();
                 for (e in _sent.entries()) {
                     this.sent.put(e.getKey(), e.getValue());
@@ -1288,7 +1239,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 ilock.lock();
                 //NOLOG if (verbose>=1) debug(">>>> Backup(id="+id+").inTransit called (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ") ");
                 val e = FinishResilient.Edge(srcId, dstId, kind);
-                /*FinishResilient.increment(transit, e);*/
                 FinishResilient.increment(sent, e);
                 numActive++;
                 
@@ -1307,7 +1257,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 //NOLOG if (verbose>=1) debug(">>>> Backup(id="+id+").transitToCompleted called (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ") ");
                 val e = FinishResilient.Edge(srcId, dstId, kind);
                 val t = FinishResilient.Task(dstId, kind);
-                /*FinishResilient.decrement(transit, e);*/
                 //don't decrement 'sent', it holds increasing counts
                 if (srcId == dstId)
                     FinishResilient.decrement(sent, e);
@@ -1331,7 +1280,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 //NOLOG if (verbose>=1) debug(">>>> Backup(id="+id+").transitToCompletedMul called (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ", cnt="+cnt+") ");
                 val e = FinishResilient.Edge(srcId, dstId, kind);
                 val t = FinishResilient.Task(dstId, kind);
-                /*FinishResilient.deduct(transit, e, cnt);*/
                 //don't decrement 'sent' unless src=dst
                 if (srcId == dstId)
                     FinishResilient.deduct(sent, e, cnt);
@@ -1485,10 +1433,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                         val oldActive = numActive;
                         numActive -= count;
                         //NOLOG if (verbose>=1) debug("==== Backup(id="+id+").convertToDead t1["+t1+"] t2["+t2+"] numActive["+oldActive+"] changing numActive to " + numActive);
-                        /*if (t2 == 0n)
-                            toRemove.add(edge);
-                        else
-                            transit.put(edge, t2);*/
+                        
                         assert numActive >= 0 : here + " Backup(id="+id+").convertToDead FATAL error, numActive must not be negative";
                         if (edge.kind == ASYNC) {
                             for (1..count) {
@@ -1502,8 +1447,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     else assert false: here + " Backup(id="+id+").convertToDead FATAL error, t1 >= t2 condition not met";
                 }
             }
-            /*for (e in toRemove)
-                transit.remove(e);*/
             
             if (quiescent()) {
                 isReleased = true;
@@ -1531,17 +1474,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     trns -= dropedMsgs;
                     //NOLOG if (verbose>=1) debug("==== Backup(id="+id+").convertFromDead src="+edge.src+" dst="+edge.dst+" transit["+trns+"] sent["+sent+"] received["+received+"] numActive["+oldActive+"] dropedMsgs["+dropedMsgs+"] changing numActive to " + numActive);
                     
-                    /*if (trns == 0n)
-                        toRemove.add(edge);
-                    else
-                        transit.put(edge, trns);*/
-                    
                     assert numActive >= 0 : here + " Master(id="+id+").convertFromDead FATAL error, numActive must not be negative";
                     // we don't add DPE when src is dead; we can assume that the message was not sent as long as it was not received.
                 }
             }
-            /*for (e in toRemove)
-                transit.remove(e);*/
             
             if (quiescent()) {
                 isReleased = true;
@@ -1555,10 +1491,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             //NOLOG if (verbose>=1) debug(">>>> Backup(id="+id+").setLocalTaskCount called, localChildrenCount = " + localChildrenCount);
             val edge = FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC);
             val old = sent.getOrElse(edge, 0n);
-            /*if (localChildrenCount == 0n)
-                transit.remove(edge);
-            else
-                transit.put(edge, localChildrenCount);*/
+            
             if (localChildrenCount == 0n)
                 sent.remove(edge);
             else
@@ -1775,7 +1708,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 val _id = b.id;
                 val _parentId = b.parentId;
                 val _numActive = b.numActive;
-                /*val _transit = b.transit;*/
                 val _sent = b.sent;
                 val _excs = b.excs;
                 val _optSrc = b.optSrc;
@@ -1786,7 +1718,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     (gr as GlobalRef[ResilientLowLevelFinish]{self.home == here})().notifyFailure();
                 } else {
                     at (master) @Immediate("create_masters") async {
-                        val newM = new OptimisticMasterState(_id, _parentId, _numActive, /*_transit,*/ _sent,
+                        val newM = new OptimisticMasterState(_id, _parentId, _numActive, _sent,
                                 _excs, _optSrc, _optKind, _backupPlaceId);
                         FinishReplicator.addMaster(_id, newM);
                         val me = here.id as Int;
@@ -1849,14 +1781,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 val optSrc = m.optSrc;
                 val optKind = m.optKind;
                 val numActive = m.numActive;
-                /*val transit = m.transit;*/
                 val sent = m.sent;
                 val excs = m.excs;
                 if (backup.isDead()) {
                     (gr as GlobalRef[ResilientLowLevelFinish]{self.home == here})().notifyFailure();
                 } else {
                     at (backup) @Immediate("create_or_sync_backup") async {
-                        FinishReplicator.createOptimisticBackupOrSync(id, parentId, optSrc, optKind, numActive, /*transit,*/ 
+                        FinishReplicator.createOptimisticBackupOrSync(id, parentId, optSrc, optKind, numActive, 
                                 sent, excs, placeOfMaster);
                         val me = here.id as Int;
                         at (gr) @Immediate("create_or_sync_backup_response") async {
