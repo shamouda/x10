@@ -319,10 +319,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 lc--;
                 
                 if (lc < 0) {
-                    for (var i:Long = 0 ; i < 100; i++) {
-                        debug("FATAL ERROR: notifyTerminationAndGetMap(id="+id+") reached a negative local count");
-                        assert false: here + " FATAL ERROR: notifyTerminationAndGetMap(id="+id+") reached a negative local count";
-                    }
+                    assert false: here + " FATAL ERROR: notifyTerminationAndGetMap(id="+id+") reached a negative local count";
                 }
                 
                 if (lc == 0n) {
@@ -732,7 +729,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (numActive < 0) {
                 debug("COUNTING ERROR: Master(id="+id+").quiescent negative numActive!!!");
                 dump();
-                assert false : "COUNTING ERROR: Master(id="+id+").quiescent negative numActive!!!";
+                assert false : here + " COUNTING ERROR: Master(id="+id+").quiescent negative numActive!!!";
                 return true; 
             }
         
@@ -974,10 +971,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 return;
             }
             if (lc < 0) {
-                for (var i:Long = 0 ; i < 100; i++) {
-                    debug("FATAL ERROR: Root(id="+id+").notifyActivityTermination reached a negative local count");
-                    assert false: here + " FATAL ERROR: Root(id="+id+").notifyActivityTermination reached a negative local count";
-                }
+                assert false: here + " FATAL ERROR: Root(id="+id+").notifyActivityTermination reached a negative local count";
             }
             if (localFinishReleased()) {
                 //NOLOG if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(srcId="+srcId + " dstId="+dstId+",kind="+kind+") returning");
