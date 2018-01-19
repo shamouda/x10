@@ -22,11 +22,11 @@ import x10.compiler.Native;
  */
 public class BenchMicro {
 
-    static OUTER_ITERS = 50;
+    static OUTER_ITERS = 30;
     static INNER_ITERS = 100;
     static MIN_NANOS = (10*1e9) as long; // require each test to run for at least 10 seconds (reduce jitter)
 
-    @Native("c++", "false")
+    @Native("c++", "true")
     @Native("java", "true")
     static native def needsWarmup():Boolean;
 
@@ -51,12 +51,12 @@ public class BenchMicro {
         Console.OUT.println("Think time for each activity: "+think+" nanoseconds.");
 
         if (needsWarmup()) {
-            Console.OUT.println("Doing warmup for ManagedX10 -- expect 1 minute delay");
-            doTest(refTime, "warmup", think, false, MIN_NANOS/2);
+            Console.OUT.println("Doing warmup");
+            warmpUp(refTime, "warmup", think, false, MIN_NANOS/2);
             Console.OUT.println("Warmup complete");
         }
         
-        val basePlace = System.getenv("TEST_BASED_FROM") == null ? 0 : Long.parseLong(System.getenv("TEST_BASED_FROM"));
+        val basePlace = System.getenv("TEST_BASED_FROM") == null ? Place.numPlaces()/2 : Long.parseLong(System.getenv("TEST_BASED_FROM"));
         if (basePlace >= Place.numPlaces()) {
             Console.ERR.println("invalid base place value");
             System.setExitCode(1n);
@@ -82,6 +82,28 @@ public class BenchMicro {
         val s2 = s.substring(s.length() - 3n, s.length());
         Console.OUT.println(s1 + "." + s2 + ": " + message);
         return time;
+    }
+    
+    public static def warmpUp(refTime:Long, prefix:String, t:Long, print:Boolean, minTime:Long) {
+        var time0:Long, time1:Long;
+        var iterCount:Long;
+
+        iterCount = 0;
+        time0 = System.nanoTime();
+        do {
+            finish {
+                for (p in Place.places()) {
+                    at (p) async {
+                        for (q in Place.places()) at (q) async {
+                            think(t);
+                        }
+                    }
+                }
+            }
+            time1 = System.nanoTime();
+            iterCount++;
+        } while (time1-time0 < minTime);
+        if (print) println(refTime, prefix+"fan out - broadcast: "+(time1-time0)/1E9/iterCount+" seconds");
     }
 
     public static def doTest(refTime:Long, prefix:String, t:Long, print:Boolean, minTime:Long) {
