@@ -35,7 +35,7 @@ import x10.util.concurrent.Condition;
 //TODO: handle RemoteCreationDenied
 //TODO: getNewMasterBlocking() does not need to be blocking
 //TODO: revise the adoption logic of nested local finishes
-//TODO: delete backup in sync(...) if quiescent
+//TODO: delete backup in sync(...) if quiescent reached
 /**
  * Distributed Resilient Finish (records transit tasks only)
  * Implementation notes: remote objects are shared and are persisted in a static hashmap (special GC needed)
@@ -81,9 +81,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     
     //make root finish    
     static def make(parent:FinishState, src:Place, kind:Int) {
-        val fs = new FinishResilientOptimistic(parent, src, kind);
-        FinishReplicator.addMaster(fs.id, fs.me as OptimisticMasterState);
-        return fs;
+        return new FinishResilientOptimistic(parent, src, kind);
     }
     
     //serialize a root finish
@@ -112,6 +110,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (makeBackup)
                     createBackup(rootState.backupPlaceId);
                 rootState.isGlobal = true;
+                FinishReplicator.addMaster(id, rootState);
                 //NOLOG if (verbose>=1) debug("<<<< globalInit(id="+id+") returning");
             }
             rootState.latch.unlock();
