@@ -530,7 +530,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             this.finSrc = src;
             this.finKind = kind;
             sent = new HashMap[Edge,Int]();
-            increment(sent, Edge(id.home, id.home, FinishResilient.ASYNC));
+            sent.put(Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
             if (parent instanceof FinishResilientOptimistic) {
                 parentId = (parent as FinishResilientOptimistic).id;
             }
@@ -544,7 +544,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         public def lock() {
             latch.lock();
         }
-        
         
         public def unlock() {
             latch.unlock();
@@ -1128,7 +1127,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             this.id = id;
             this.numActive = 1;
             this.parentId = parentId;
-            FinishResilient.increment(sent, FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC));
+            sent.put(FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
             this.placeOfMaster = id.home;
             this.finSrc = src;
             this.finKind = kind;

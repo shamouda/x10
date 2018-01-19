@@ -24,7 +24,6 @@ import x10.util.GrowableRail;
 import x10.util.HashMap;
 import x10.util.HashSet;
 import x10.util.concurrent.Lock;
-import x10.util.resilient.concurrent.ResilientCondition;
 import x10.util.resilient.concurrent.ResilientLowLevelFinish;
 import x10.util.concurrent.Condition;
 
@@ -129,7 +128,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             this.finSrc = optId.src;
             this.finKind = optId.kind;
             this.numActive = 1;
-            FinishResilient.increment(sent, FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC));
+            sent.put(FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
         }
         
         //P0FUNC
@@ -985,7 +984,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             latch.lock();
         }
         
-        
         public def unlock() {
             latch.unlock();
         }
@@ -1099,7 +1097,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
          */
         def notifyActivityCreation(srcPlace:Place, activity:Activity):Boolean {
             val srcId = srcPlace.id as Int;
-            val dstId = here.id as Int;
             //NOLOG if (verbose>=1) debug("<<<< Root(id="+optId.id+").notifyActivityCreation(srcId=" + srcId +") returning");
             return true;
         }
@@ -1109,7 +1106,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
          */
         def notifyShiftedActivityCreation(srcPlace:Place):Boolean {
             val srcId = srcPlace.id as Int;
-            val dstId = here.id as Int;
             //NOLOG if (verbose>=1) debug("<<<< Root(id="+optId.id+").notifyShiftedActivityCreation(srcId=" + srcId +") returning");
             return true;
         }

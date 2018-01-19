@@ -405,7 +405,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             this.numActive = 1;
             this.parent = parent;
             this.grlc = grlc;
-            increment(live, Task(id.home, FinishResilient.ASYNC));
+            live.put(Task(id.home, ASYNC), 1n);
             if (parent instanceof FinishResilientPessimistic) {
                 parentId = (parent as FinishResilientPessimistic).id;
             } else {
@@ -732,7 +732,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                     if (Place(srcId).isDead()) {
                         //NOLOG if (verbose>=1) debug("==== notifySubActivitySpawn(id="+id+") src "+srcId + "is dead; dropping async");
                     } else if (Place(dstId).isDead()) {
-                        if (kind == FinishResilient.ASYNC) {
+                        if (kind == ASYNC) {
                             //NOLOG if (verbose>=1) debug("==== notifySubActivitySpawn(id="+id+") destination "+dstId + "is dead; pushed DPE for async");
                             addDeadPlaceException(dstId, resp);
                             resp.transitSubmitDPE = true;
@@ -757,7 +757,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 resp.submit = false;
                 //NOLOG if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=LIVE, srcId=" + srcId + ", dstId=" + dstId + ", kind=" + kind + " ] called");
                 try{
-                    var msg:String = kind == FinishResilient.ASYNC ? "notifyActivityCreation":"notifyShiftedActivityCreation";
+                    var msg:String = kind == ASYNC ? "notifyActivityCreation":"notifyShiftedActivityCreation";
                     if (Place(srcId).isDead() || Place(dstId).isDead()) {
                         // NOTE: no state updates or DPE processing here.
                         //       Must happen exactly once and is done
@@ -863,7 +863,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         def notifyActivityCreation(srcPlace:Place, activity:Activity):Boolean {
             val srcId = srcPlace.id as Int; 
             val dstId = here.id as Int;
-            val kind = FinishResilient.ASYNC;
+            val kind = ASYNC;
             if (srcId == dstId) {
                 //NOLOG if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreation(srcId="+srcId+",dstId="+dstId+",kind="+kind+") called locally. no action required");
                 return true;
@@ -889,7 +889,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         def notifyShiftedActivityCreation(srcPlace:Place):Boolean {
             val srcId = srcPlace.id as Int; 
             val dstId = here.id as Int;
-            val kind = FinishResilient.AT;
+            val kind = AT;
             //NOLOG if (verbose>=1) debug(">>>> Root(id="+id+").notifyShiftedActivityCreation(srcId="+srcId+",dstId="+dstId+",kind="+kind+") called");
             val req = FinishRequest.makeLiveRequest(id, parentId, UNASSIGNED, DUMMY_INT, DUMMY_INT, srcId, dstId, kind);
             val resp = FinishReplicator.exec(req);
