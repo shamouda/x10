@@ -955,7 +955,7 @@ public final class Runtime {
      * Unlike the fully-general runAt, the argument closure must
      * comply with the restrictions of @Immediate asyncs and
      * parallelism will not be increased in the source place.
-     * This method must not be call from an Immediate worker.
+     * This method must not be called from an Immediate worker.
      * The activity/worker calling runImmediateAt will be 'paused'
      * until the remote execution of the argument closure completes
      * (either normally or with an exception which will be thrown again).
@@ -975,37 +975,35 @@ public final class Runtime {
             if (verbose>=4) debug("---- runImmediateAt locally executed, returning true");
         } else {
             // remote call
-            val cond = new Condition();
-            val condGR = GlobalRef[Condition](cond); 
             val exc = GlobalRef(new Cell[CheckedThrowable](null));
-            if (verbose>=4) debug("---- runImmediateAt initiating remote execution");
-            at (dst) @Immediate("finish_resilient_low_level_at_out") async {
-                try {
-                    if (verbose>=4) debug("---- runImmediateAt(remote) from "+condGR.home+" calling cl()");
-                    cl();
-                    if (verbose>=4) debug("---- runImmediateAt(remote) from "+condGR.home+" returned from cl()");
-                    at (condGR) @Immediate("finish_resilient_low_level_at_back") async {
-                        if (verbose>=4) debug("---- runImmediateAt(home) releasing cond");
-                        condGR().release();
+            val rCond = ResilientCondition.make(dst);
+            val closure = (gr:GlobalRef[Condition]) => {
+                at (dst) @Immediate("finish_resilient_low_level_at_out") async {
+                    try {
+                        if (verbose>=4) debug("---- runImmediateAt(remote) from "+gr.home+" calling cl()");
+                        cl();
+                        if (verbose>=4) debug("---- runImmediateAt(remote) from "+gr.home+" returned from cl()");
+                        at (gr) @Immediate("finish_resilient_low_level_at_back") async {
+                            if (verbose>=4) debug("---- runImmediateAt(home) releasing cond");
+                            gr().release();
+                        }
+                    } catch (t:Exception) {
+                        if (verbose>=4) debug("---- runImmediateAt(remote) from "+gr.home+" caught exception="+t);
+                        at (gr) @Immediate("finish_resilient_low_level_at_back_exc") async {
+                            if (verbose>=4) debug("---- runImmediateAt(home) setting exc and releasing cond");
+                            val ref = (exc as GlobalRef[Cell[CheckedThrowable]{self!=null}]{self.home == here});
+                            ref()(t);
+                            gr().release();
+                        };
                     }
-                } catch (t:Exception) {
-                    if (verbose>=4) debug("---- runImmediateAt(remote) from "+condGR.home+" caught exception="+t);
-                    at (condGR) @Immediate("finish_resilient_low_level_at_back_exc") async {
-                        if (verbose>=4) debug("---- runImmediateAt(home) setting exc and releasing cond");
-                        exc()(t);
-                        condGR().release();
-                    };
+                    if (verbose>=4) debug("---- runImmediateAt(remote) from "+gr.home+" finished");
                 }
-                if (verbose>=4) debug("---- runImmediateAt(remote) from "+condGR.home+" finished");
             };
-        
+            
             if (verbose>=4) debug("---- runImmediateAt waiting for cond");
-            if (NUM_IMMEDIATE_THREADS == 0n) increaseParallelism();
-            cond.await();
-            if (NUM_IMMEDIATE_THREADS == 0n) decreaseParallelism(1n);
+            rCond.run(closure);
             if (verbose>=4) debug("---- runImmediateAt released from cond");
-	        // Unglobalize objects
-	        condGR.forget();
+            rCond.forget();
             exc.forget();
 
             val t = exc()();
@@ -1248,45 +1246,46 @@ public final class Runtime {
             if (verbose>=4) debug("---- evalImmediateAt locally executed, returning "+res);
             return res;
         }
-        
         // remote call
-        val cond = new Condition();
-        val condGR = GlobalRef[Condition](cond); 
         val exc = GlobalRef(new Cell[CheckedThrowable](null));
         val result = new Cell[Any](null);
         val gresult = GlobalRef(result);
-        if (verbose>=4) debug("---- evalImmediateAt remote execution");
-        at (dst) @Immediate("finish_resilient_low_level_fetch_out") async {
-            try {
-                if (verbose>=4) debug("---- evalImmediateAt(remote) calling cl()");
-                val r = cl();
-                if (verbose>=4) debug("---- evalImmediateAt(remote) returned from cl()");
-                at (condGR) @Immediate("finish_resilient_low_level_fetch_back") async {
-                    if (verbose>=4) debug("---- evalImmediateAt(home) setting the result and done-flag");
-                    gresult()(r); // set the result
-                    condGR().release();
-                };
-            } catch (t:Exception) {
-                at (condGR) @Immediate("finish_resilient_low_level_fetch_back_exc") async {
-                    if (verbose>=4) debug("---- evalImmediateAt(home) setting exc and relasing cond");
-                    exc()(t);
-                    condGR().release();
-                };
+        val rCond = ResilientCondition.make(dst);
+        val closure = (gr:GlobalRef[Condition]) => {
+            if (verbose>=4) debug("---- evalImmediateAt remote execution");
+            at (dst) @Immediate("finish_resilient_low_level_fetch_out") async {
+                try {
+                    if (verbose>=4) debug("---- evalImmediateAt(remote) calling cl()");
+                    val r = cl();
+                    if (verbose>=4) debug("---- evalImmediateAt(remote) returned from cl()");
+                    at (gr) @Immediate("finish_resilient_low_level_fetch_back") async {
+                        if (verbose>=4) debug("---- evalImmediateAt(home) setting the result and done-flag");
+                        val ref = (gresult as GlobalRef[Cell[Any]{self==result, result!=null}]{self==gresult, gresult.home==here, result!=null}); 
+                        ref()(r);// set the result
+                        gr().release();
+                    };
+                } catch (t:Exception) {
+                    at (gr) @Immediate("finish_resilient_low_level_fetch_back_exc") async {
+                        if (verbose>=4) debug("---- evalImmediateAt(home) setting exc and relasing cond");
+                        val ref = (exc as GlobalRef[Cell[CheckedThrowable]{self!=null}]{self.home == here}); 
+                        ref()(t);
+                        gr().release();
+                    };
+                }
+                if (verbose>=4) debug("---- evalImmediateAt(remote) finished");
             }
-            if (verbose>=4) debug("---- evalImmediateAt(remote) finished");
         };
         
         if (verbose>=4) debug("---- evalImmediateAt waiting for cond");
-        if (NUM_IMMEDIATE_THREADS == 0n) increaseParallelism();
-        cond.await();
-        if (NUM_IMMEDIATE_THREADS == 0n) decreaseParallelism(1n);
+        rCond.run(closure);
         if (verbose>=4) debug("---- evalImmediateAt released from cond");
+        
         val t = exc()();
 
-	// Unglobalize objects
-	condGR.forget();
+        // Unglobalize objects
+        rCond.forget();
         exc.forget();
-	gresult.forget();
+        gresult.forget();
 
         if (t != null) {
             if (verbose>=4) debug("---- evalImmediateAt throwing exception " + t);
