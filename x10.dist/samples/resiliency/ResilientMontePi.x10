@@ -53,8 +53,8 @@ public class ResilientMontePi {
                         if (x*x + y*y <= 1.0) hits++;
                     }
                     val myPiece = new Result(hits, N);
-                    if (here.id == 4)
-                        System.killHere();
+                    /*if (here.id == 4)
+                        System.killHere();*/
                     Console.OUT.println("Work done at: "+here);
                     at (result) atomic {
                         result().accumulate(myPiece);
