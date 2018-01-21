@@ -132,12 +132,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
          val src = rootState.finSrc;
          val finKind = rootState.finKind;
         val rCond = ResilientCondition.make(backup);
-        val condGR = rCond.gr;
         val closure = (gr:GlobalRef[Condition]) => {
             at (backup) @Immediate("backup_create") async {
                 val bFin = FinishReplicator.findBackupOrCreate(myId, parentId, src, finKind);
-                at (condGR) @Immediate("backup_create_response") async {
-                    condGR().release();
+                at (gr) @Immediate("backup_create_response") async {
+                    gr().release();
                 }
             }; 
         };

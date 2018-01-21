@@ -130,7 +130,6 @@ public final class FinishReplicator {
         val masterRes = new GlobalRef[MasterResponse](new MasterResponse());
         val master = Place(req.masterPlaceId);
         val rCond = ResilientCondition.make(master);
-        val condGR = rCond.gr;
         val closure = (gr:GlobalRef[Condition]) => {
             at (master) @Immediate("master_exec") async {
                 val mFin = findMaster(req.id);
@@ -142,7 +141,7 @@ public final class FinishReplicator {
                 val r_submitDPE = resp.transitSubmitDPE;
                 val r_exp = resp.excp;
                 val r_parentId = resp.parentId;
-                at (condGR) @Immediate("master_exec_response") async {
+                at (gr) @Immediate("master_exec_response") async {
                     val mRes = (masterRes as GlobalRef[MasterResponse]{self.home == here})();
                     mRes.backupPlaceId = r_back;
                     mRes.backupChanged = r_backChg;
@@ -150,7 +149,7 @@ public final class FinishReplicator {
                     mRes.transitSubmitDPE = r_submitDPE;
                     mRes.excp = r_exp;
                     mRes.parentId = r_parentId;
-                    condGR().release();
+                    gr().release();
                 }
             }
         };
@@ -197,7 +196,6 @@ public final class FinishReplicator {
         val backupRes = new GlobalRef[BackupResponse](new BackupResponse());
         val backup = Place(req.backupPlaceId);
         val rCond = ResilientCondition.make(backup);
-        val condGR = rCond.gr;
         val closure = (gr:GlobalRef[Condition]) => {
             at (backup) @Immediate("backup_exec") async {
                 val bFin:FinishBackupState;
@@ -207,10 +205,10 @@ public final class FinishReplicator {
                     bFin = findBackupOrThrow(req.id);
                 val resp = bFin.exec(req);
                 val r_excp = resp.excp;
-                at (condGR) @Immediate("backup_exec_response") async {
+                at (gr) @Immediate("backup_exec_response") async {
                     val bRes = (backupRes as GlobalRef[BackupResponse]{self.home == here})();
                     bRes.excp = r_excp;
-                    condGR().release();
+                    gr().release();
                 }
             }
         };
@@ -259,7 +257,6 @@ public final class FinishReplicator {
                 if (!backup.isDead()) {
                     //we cannot use Immediate activities, because this function is blocking
                     val rCond = ResilientCondition.make(backup);
-                    val condGR = rCond.gr;
                     val closure = (gr:GlobalRef[Condition]) => {
                         at (backup) @Uncounted async {
                             var foundVar:Boolean = false;
@@ -277,14 +274,14 @@ public final class FinishReplicator {
                             val found = foundVar;
                             val newMasterId = newMasterIdVar;
                             val newMasterPlace = newMasterPlaceVar;
-                            at (condGR) @Immediate("backup_get_new_master_response") async {
+                            at (gr) @Immediate("backup_get_new_master_response") async {
                                 val req = (reqGR as GlobalRef[FinishRequest]{self.home == here})();
                                 if (found) {
                                     req.id = newMasterId;
                                     req.masterPlaceId = newMasterPlace;
                                     req.toAdopter = true;
                                 }
-                                condGR().release();
+                                gr().release();
                             }
                         }
                     };
