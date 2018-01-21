@@ -47,7 +47,8 @@ public class BenchMicro {
         }
 
         Console.OUT.println("Running with "+Place.numPlaces()+" places.");
-        Console.OUT.println("OUTER_ITERS= "+OUTER_ITERS);
+        Console.OUT.println("OUTER_ITERS: "+OUTER_ITERS);
+        CONSOLE.OUT.println("FORCE_INCR_PAR: " +System.getenv("FORCE_INCR_PAR"));
         Console.OUT.println("Min elapsed time for each test: "+MIN_NANOS/1e9+" seconds.");
         Console.OUT.println("Think time for each activity: "+think+" nanoseconds.");
 
@@ -111,7 +112,7 @@ public class BenchMicro {
         var time0:Long, time1:Long;
         var iterCount:Long;
         val home = here;
-
+/*
         iterCount = 0;
         time0 = System.nanoTime();
         do {
@@ -154,7 +155,7 @@ public class BenchMicro {
             iterCount++;
         } while (time1-time0 < minTime);
         if (print) println(refTime, prefix+"single activity: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
-/*
+*/
         iterCount = 0;
         time0 = System.nanoTime();
         do {
@@ -207,7 +208,7 @@ public class BenchMicro {
             iterCount++;
         } while (time1-time0 < minTime);
         if (print) println(refTime, prefix+"fan out - broadcast: "+(time1-time0)/1E9/iterCount+" seconds");
-
+/*
         iterCount = 0;
         time0 = System.nanoTime();
         do {
