@@ -60,9 +60,8 @@ public final class FinishReplicator {
                 val mresp:MasterResponse = masterExec(req);
                 submit = mresp.submit;
                 //NOLOG if (verbose>=1) debug(">>>> Replicator(id="+req.id+").exec() masterDone =>" + " backupPlaceId = " + mresp.backupPlaceId + " submit = " + submit );
-                if (mresp.backupPlaceId == -1n) {
-                    assert false : "fatal error, backup -1 means master had a fatal error before reporting its backup value";
-                }
+                
+                assert mresp.backupPlaceId != -1n : here + " fatal error ["+req+"], backup -1 means master had a fatal error before reporting its backup value";
                 
                 if (mresp.backupChanged) {
                     updateBackupPlace(req.id.home, mresp.backupPlaceId);

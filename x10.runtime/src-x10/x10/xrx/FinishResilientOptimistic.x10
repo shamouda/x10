@@ -247,35 +247,49 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             return count;
         }
         
-        //Calculated the delta between received and reported
+        //Calculates the delta between received and reported
         private def getReportMap() {
-        	try {
+            try {
                 ilock.lock();
-	            //NOLOG if (verbose>=1) debug(">>>> Remote(id="+id+").getReportMapUnsafe called");
-	            val map = new HashMap[Task,Int]();
-	            val iter = received.keySet().iterator();
-	            while (iter.hasNext()) {
-	                val t = iter.next();
-	                if (t.place == here.id as Int) {
-	                    //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").getReportMapUnsafe Task["+t+"] ignored");
-	                    continue;
-	                }
-	                val rep = reported.getOrElse(t, 0n);
-	                val rec = received.getOrThrow(t);
-	                
-	                //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").getReportMapUnsafe Task["+t+"] rep="+rep + " rec = " + rec);
-	                if ( rep < rec) {
-	                    map.put(t, rec - rep);
-	                    reported.put (t, rec);
-	                    //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").getReportMapUnsafe Task["+t+"] reported.put("+t+","+(rec-rep)+")");
-	                }
-	            }
-	            //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").getReportMapUnsafe returning");
-	            //NOLOG if (verbose>=3) dump();
-	            return map;
-        	} finally {
-        		ilock.unlock();
-        	}
+                //NOLOG if (verbose>=1) debug(">>>> Remote(id="+id+").getReportMap called");
+                var map:HashMap[Task,Int] = new HashMap[Task,Int]();
+                val iter = received.keySet().iterator();
+                while (iter.hasNext()) {
+                    val t = iter.next();
+                    if (t.place == here.id as Int) {
+                        //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").getReportMap Task["+t+"] ignored");
+                        continue;
+                    }
+                    val rep = reported.getOrElse(t, 0n);
+                    val rec = received.getOrThrow(t);
+                    
+                    //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").getReportMap Task["+t+"] rep="+rep + " rec = " + rec);
+                    if ( rep < rec) {
+                        map.put(t, rec - rep);
+                        reported.put (t, rec);
+                        //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").getReportMap Task["+t+"] reported.put("+t+","+(rec-rep)+")");
+                    }
+                }
+                if (map.size() == 0) /*because notifyTerminationAndGetMap doesn't decrement lc and get the map as a one atomic action, */ 
+                    map=null;        /*it is possible that two activities reach zero lc and then one of them reports all of the activities, while the other finds no activity to report */
+                //NOLOG if (verbose>=1) printMap(map);
+                //NOLOG if (verbose>=3) dump();
+                //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").getReportMap returning");
+                return map;
+            } finally {
+                ilock.unlock();
+            }
+        }
+        
+        public def notifyTerminationAndGetMap(t:Task) {
+            var map:HashMap[Task,Int] = null;
+            val count = lc.decrementAndGet();
+            //NOLOG if (verbose>=1) debug(">>>> Remote(id="+id+").notifyTerminationAndGetMap called, taskFrom["+t.place+"] lc="+count);
+            if (count == 0n) {
+                map = getReportMap();
+            }
+            else assert count > 0: here + " FATAL ERROR: notifyTerminationAndGetMap(id="+id+") reached a negative local count";
+            return map;
         }
         
         public def notifyReceived(t:Task) {
@@ -288,19 +302,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 ilock.unlock();
             }
             return lc.incrementAndGet();
-        }
-        
-        public def notifyTerminationAndGetMap(t:Task) {
-            //NOLOG if (verbose>=1) debug(">>>> Remote(id="+id+").notifyTerminationAndGetMap called");
-            var map:HashMap[Task,Int] = null;
-            val count = lc.decrementAndGet();
-            if (count == 0n) {
-                map = getReportMap();
-            }
-            else assert count > 0: here + " FATAL ERROR: notifyTerminationAndGetMap(id="+id+") reached a negative local count";
-            //NOLOG if (verbose>=1) printMap(map);
-            //NOLOG if (verbose>=3) dump();
-            return map;
         }
         
         def printMap(map:HashMap[Task,Int]) {
@@ -646,9 +647,9 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 notifyParent();
                 FinishReplicator.removeMaster(id);
             }
-            //NOLOG if (verbose>=1) debug("<<<< Master(id="+id+").transitToCompletedMul returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
             resp.backupPlaceId = backupPlaceId;
             resp.backupChanged = backupChanged;
+            //NOLOG if (verbose>=1) debug("<<<< Master(id="+id+").transitToCompletedMul returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId + " set backup="+resp.backupPlaceId+ " set backupChanged="+resp.backupChanged);
         }
         
         def quiescent():Boolean {
@@ -792,7 +793,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     resp.backupPlaceId = -1n;
                     resp.excp = t;
                 }
-                //NOLOG if (verbose>=1) debug("<<<< Master(id="+id+").exec [req=TERM_MUL, dstId=" + dstId +", mapSz="+map.size()+" ] returning");
+                //NOLOG if (verbose>=1) debug("<<<< Master(id="+id+").exec [req=TERM_MUL, dstId=" + dstId +", mapSz="+map.size()+" ] returning, backup="+resp.backupPlaceId+", exception="+resp.excp);
             }
             return resp;
         }
@@ -1493,7 +1494,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         return countingReqs;
     }
     
-    def printResolveReqs(countingReqs:HashMap[Int,ResolveRequest]) {
+    static def printResolveReqs(countingReqs:HashMap[Int,ResolveRequest]) {
         val s = new x10.util.StringBuilder();
         if (countingReqs.size() > 0) {
             for (e in countingReqs.entries()) {
