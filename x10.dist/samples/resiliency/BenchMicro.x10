@@ -112,7 +112,7 @@ public class BenchMicro {
         var time0:Long, time1:Long;
         var iterCount:Long;
         val home = here;
-/*
+
         iterCount = 0;
         time0 = System.nanoTime();
         do {
@@ -155,7 +155,7 @@ public class BenchMicro {
             iterCount++;
         } while (time1-time0 < minTime);
         if (print) println(refTime, prefix+"single activity: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
-*/
+
         iterCount = 0;
         time0 = System.nanoTime();
         do {
