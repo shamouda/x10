@@ -22,7 +22,7 @@ import x10.compiler.Native;
  */
 public class BenchMicro {
 
-    static OUTER_ITERS = 30;
+    static OUTER_ITERS = 10;
     static INNER_ITERS = 100;
     static MIN_NANOS = (10*1e9) as long; // require each test to run for at least 10 seconds (reduce jitter)
 
@@ -47,6 +47,7 @@ public class BenchMicro {
         }
 
         Console.OUT.println("Running with "+Place.numPlaces()+" places.");
+        Console.OUT.println("OUTER_ITERS= "+OUTER_ITERS);
         Console.OUT.println("Min elapsed time for each test: "+MIN_NANOS/1e9+" seconds.");
         Console.OUT.println("Think time for each activity: "+think+" nanoseconds.");
 
