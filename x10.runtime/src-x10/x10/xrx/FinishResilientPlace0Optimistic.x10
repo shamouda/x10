@@ -659,7 +659,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         val received = new HashMap[Task,Int](); //increasing counts
         val reported = new HashMap[Task,Int](); //increasing counts
         var taskDeny:HashSet[Int] = null; // lazily allocated
-        var lc:Int = 0n; //whenever lc reaches zero, report reported-received to root finish and set reported=received
+        val lc = new AtomicInteger(0n);//each time lc reaches zero, we report reported-received to root finish and set reported=received
         
         private static val remoteLock = new Lock();
         private static val remotes = new HashMap[Id, P0OptimisticRemoteState](); //a cache for remote finish objects
@@ -742,69 +742,56 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         private def getReportMap() {
-            //NOLOG if (verbose>=1) debug(">>>> Remote(id="+id+").getReportMap called");
-            
-            val map = new HashMap[Task,Int]();
-            val iter = received.keySet().iterator();
-            while (iter.hasNext()) {
-                val t = iter.next();
-                if (t.place == here.id as Int) {
-                    //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").getReportMap Task["+t+"] ignored");
-                    continue;
-                }
-                val rep = reported.getOrElse(t, 0n);
-                val rec = received.getOrThrow(t);
-                
-                if ( rep < rec) {
-                    map.put(t, rec - rep);
-                    reported.put (t, rec);
-                    //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").getReportMap Task["+t+"] reported.put("+t+","+(rec-rep)+")");
-                }
-            }
-            //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").getReportMap returning");
-            //NOLOG if (verbose>=3) dump();
-            return map;
+        	try {
+                ilock.lock();
+	            //NOLOG if (verbose>=1) debug(">>>> Remote(id="+id+").getReportMap called");
+	            val map = new HashMap[Task,Int]();
+	            val iter = received.keySet().iterator();
+	            while (iter.hasNext()) {
+	                val t = iter.next();
+	                if (t.place == here.id as Int) {
+	                    //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").getReportMap Task["+t+"] ignored");
+	                    continue;
+	                }
+	                val rep = reported.getOrElse(t, 0n);
+	                val rec = received.getOrThrow(t);
+	                
+	                if ( rep < rec) {
+	                    map.put(t, rec - rep);
+	                    reported.put (t, rec);
+	                    //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").getReportMap Task["+t+"] reported.put("+t+","+(rec-rep)+")");
+	                }
+	            }
+	            //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").getReportMap returning");
+	            //NOLOG if (verbose>=3) dump();
+	            return map;
+        	} finally {
+                ilock.unlock();
+        	}
         }
         
         public def notifyReceived(t:Task) {
-            //NOLOG if (verbose>=1) debug(">>>> Remote(id="+id+").notifyReceived called");
             try {
                 ilock.lock();
                 if (taskDeny != null && taskDeny.contains(t.place) )
                     throw new RemoteCreationDenied();
                 increment(received, t);
-                ++lc;
-                //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").notifyReceived returning, lc="+lc);
-                //NOLOG if (verbose >= 3) dump();
-                return lc;
             } finally {
                 ilock.unlock();
             }
+            return lc.incrementAndGet();
         }
         
         public def notifyTerminationAndGetMap(t:Task) {
             //NOLOG if (verbose>=1) debug(">>>> Remote(id="+id+").notifyTerminationAndGetMap called");
             var map:HashMap[Task,Int] = null;
-            try {
-                ilock.lock();
-                lc--;
-                
-                if (lc < 0) {
-                    for (var i:Long = 0 ; i < 100; i++) {
-                        debug("FATAL ERROR: notifyTerminationAndGetMap(id="+id+") reached a negative local count");
-                        assert false: here + " FATAL ERROR: notifyTerminationAndGetMap(id="+id+") reached a negative local count";
-                    }
-                }
-                
-                if (lc == 0n) {
-                    map = getReportMap();
-                }
-                
-                //NOLOG if (verbose>=1) printMap(map);
-                //NOLOG if (verbose>=3) dump();
-            } finally {
-                ilock.unlock();
+            val count = lc.decrementAndGet();
+            if (count == 0n) {
+                map = getReportMap();
             }
+            else assert count > 0: here + " FATAL ERROR: notifyTerminationAndGetMap(id="+id+") reached a negative local count";
+            //NOLOG if (verbose>=1) printMap(map);
+            //NOLOG if (verbose>=3) dump();
             return map;
         }
         
@@ -848,8 +835,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             val dstId = here.id as Int;
             //NOLOG if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreation(srcId=" + srcId +",dstId="+dstId+",kind="+ASYNC+") called");
             try {
-                val lc = notifyReceived(Task(srcId, ASYNC));
-                //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreation(srcId=" + srcId +",dstId="+dstId+",kind="+ASYNC+") returning, localCount = " + lc);
+                val count = notifyReceived(Task(srcId, ASYNC));
+                //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreation(srcId=" + srcId +",dstId="+dstId+",kind="+ASYNC+") returning, localCount = " + count);
                 return true;
             } catch (e:RemoteCreationDenied) {
                 //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreation(srcId=" + srcId +",dstId="+dstId+",kind="+ASYNC+") returning, task denied");
@@ -865,8 +852,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             val dstId = here.id as Int;
             //NOLOG if (verbose>=1) debug(">>>> Remote(id="+id+").notifyShiftedActivityCreation(srcId=" + srcId +",dstId="+dstId+",kind="+AT+") called");
             try {
-                val lc = notifyReceived(Task(srcId, AT));
-                //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").notifyShiftedActivityCreation(srcId=" + srcId +",dstId="+dstId+",kind="+AT+") returning, localCount = " + lc);
+                val count = notifyReceived(Task(srcId, AT));
+                //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").notifyShiftedActivityCreation(srcId=" + srcId +",dstId="+dstId+",kind="+AT+") returning, localCount = " + count);
                 return true;
             } catch (e:RemoteCreationDenied) {
                 //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").notifyShiftedActivityCreation(srcId=" + srcId +",dstId="+dstId+",kind="+AT+") returning, task denied");
@@ -896,8 +883,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             val dstId = here.id as Int;
             val parentId = UNASSIGNED;
             //NOLOG if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId +",dstId="+dstId+",kind="+ASYNC+") called");
-            val lc = notifyReceived(Task(srcId, ASYNC));
-            //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId +",dstId="+dstId+",kind="+ASYNC+") returning, localCount = " + lc);
+            val count = notifyReceived(Task(srcId, ASYNC));
+            //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId +",dstId="+dstId+",kind="+ASYNC+") returning, localCount = " + count);
             
             val map = notifyTerminationAndGetMap(Task(srcId, kind));
             if (map == null) {
@@ -950,7 +937,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         var isGlobal:Boolean = false;//flag to indicate whether finish has been resiliently replicated or not
         var strictFinish:Boolean = false;
         var excs:GrowableRail[CheckedThrowable]; 
-        var lc:Int = 1n;
+        val lc = new AtomicInteger(1n);
         
         def this(id:Id, parent:FinishState, src:Place, kind:Int) {
             this.parent = parent;
@@ -970,33 +957,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             latch.unlock();
         }
                 
-        public def lc_Get() {
-            try {
-                latch.lock();
-                return lc;
-            } finally {
-                latch.unlock();
-            }
-        }
-        
-        public def lc_incrementAndGet() {
-            try {
-                latch.lock();
-                return ++lc;
-            } finally {
-                latch.unlock();
-            }
-        }
-        
-        public def lc_decrementAndGet() {
-            try {
-                latch.lock();
-                return --lc;
-            } finally {
-                latch.unlock();
-            }
-        }
-            
         def addExceptionUnsafe(t:CheckedThrowable) {
             if (excs == null) excs = new GrowableRail[CheckedThrowable]();
             excs.add(t);
@@ -1050,8 +1010,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
             if (srcId == dstId) {
-                val lc = lc_incrementAndGet();
-                //NOLOG if (verbose>=1) debug(">>>> Root(id="+optId.id+").notifySubActivitySpawn(parentId="+optId.parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called locally, localCount now "+lc);
+                val count = lc.incrementAndGet();
+                //NOLOG if (verbose>=1) debug(">>>> Root(id="+optId.id+").notifySubActivitySpawn(parentId="+optId.parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called locally, localCount now "+count);
             } else {
                 //NOLOG if (verbose>=1) debug(">>>> Root(id="+optId.id+").notifySubActivitySpawn(parentId="+optId.parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
                 State.p0Transit(optId, ref, srcId, dstId, kind);
@@ -1123,17 +1083,13 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         def notifyActivityTermination(srcPlace:Place, kind:Int):void {
             val srcId = srcPlace.id as Int; 
             val dstId = here.id as Int;
-            val lc = lc_decrementAndGet();
-            //NOLOG if (verbose>=1) debug(">>>> Root(id="+optId.id+").notifyActivityTermination(srcId="+srcId + " dstId="+dstId+",kind="+kind+") called, decremented localCount to "+lc);
-            if (lc > 0) {
+            val count = lc.decrementAndGet();
+            //NOLOG if (verbose>=1) debug(">>>> Root(id="+optId.id+").notifyActivityTermination(srcId="+srcId + " dstId="+dstId+",kind="+kind+") called, decremented localCount to "+count);
+            if (count > 0) {
                 return;
             }
-            if (lc < 0) {
-                for (var i:Long = 0 ; i < 100; i++) {
-                    debug("FATAL ERROR: Root(id="+optId.id+").notifyActivityTermination reached a negative local count");
-                    assert false: here + " FATAL ERROR: Root(id="+optId.id+").notifyActivityTermination reached a negative local count";
-                }
-            }
+            assert count == 0n : here + " FATAL ERROR: Root(id="+optId.id+").notifyActivityTermination reached a negative local count";
+
             if (!isGlobal) { //only one activity is here, no need to lock/unlock latch
                 //NOLOG if (verbose>=1) debug("<<<< Root(id="+optId.id+").notifyActivityTermination(srcId="+srcId + " dstId="+dstId+",kind="+kind+") returning");
                 latch.release();
@@ -1149,7 +1105,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         def waitForFinish():void {
-            //NOLOG if (verbose>=1) debug(">>>> Root(id="+optId.id+").waitForFinish called, lc = " + lc_Get() );
+            //NOLOG if (verbose>=1) debug(">>>> Root(id="+optId.id+").waitForFinish called, lc = " + lc );
 
             // terminate myself
             notifyActivityTermination(here, ASYNC);
