@@ -48,7 +48,7 @@ public class BenchMicro {
 
         Console.OUT.println("Running with "+Place.numPlaces()+" places.");
         Console.OUT.println("OUTER_ITERS: "+OUTER_ITERS);
-        CONSOLE.OUT.println("FORCE_INCR_PAR: " +System.getenv("FORCE_INCR_PAR"));
+        Console.OUT.println("FORCE_INCR_PAR: " +System.getenv("FORCE_INCR_PAR"));
         Console.OUT.println("Min elapsed time for each test: "+MIN_NANOS/1e9+" seconds.");
         Console.OUT.println("Think time for each activity: "+think+" nanoseconds.");
 
