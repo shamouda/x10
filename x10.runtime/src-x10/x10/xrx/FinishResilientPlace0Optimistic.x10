@@ -741,24 +741,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             debug(s.toString());
         }
         
-        public def lc_incrementAndGet() {
-            try {
-                ilock.lock();
-                return ++lc;
-            } finally {
-                ilock.unlock();
-            }
-        }
-        
-        public def lc_decrementAndGet() {
-            try {
-                ilock.lock();
-                return --lc;
-            } finally {
-                ilock.unlock();
-            }
-        }
-        
         private def getReportMap() {
             //NOLOG if (verbose>=1) debug(">>>> Remote(id="+id+").getReportMap called");
             
@@ -1041,22 +1023,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             }
         }
         
-        def localFinishReleased() {
-            try { 
-                latch.lock();
-                if (!isGlobal) {
-                    //NOLOG if (verbose>=1) debug(">>>> localFinishReleased(id="+optId.id+") true: zero localCount on local finish; releasing latch");
-                    latch.release();
-                    return true;
-                } 
-                //NOLOG if (verbose>=1) debug("<<<< localFinishReleased(id="+optId.id+") false: global finish");
-                return false;
-            } finally {
-                latch.unlock();
-            }
-        }
-        
-       def localFinishExceptionPushed(t:CheckedThrowable) {
+        def localFinishExceptionPushed(t:CheckedThrowable) {
             try { 
                 latch.lock();
                 if (!isGlobal) {
@@ -1167,8 +1134,9 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     assert false: here + " FATAL ERROR: Root(id="+optId.id+").notifyActivityTermination reached a negative local count";
                 }
             }
-            if (localFinishReleased()) {
+            if (!isGlobal) { //only one activity is here, no need to lock/unlock latch
                 //NOLOG if (verbose>=1) debug("<<<< Root(id="+optId.id+").notifyActivityTermination(srcId="+srcId + " dstId="+dstId+",kind="+kind+") returning");
+                latch.release();
                 return;
             }
             //NOLOG if (verbose>=1) debug("==== Root(id="+optId.id+").notifyActivityTermination(parentId="+optId.parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");

@@ -518,21 +518,6 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             }
         }
         
-        def localFinishReleased() {
-            try { 
-                latch.lock();
-                if (!isGlobal) {
-                    //NOLOG if (verbose>=1) debug(">>>> localFinishReleased(id="+id+") true: zero localCount on local finish; releasing latch");
-                    latch.release();
-                    return true;
-                } 
-                //NOLOG if (verbose>=1) debug("<<<< localFinishReleased(id="+id+") false: global finish");
-                return false;
-            } finally {
-                latch.unlock();
-            }
-        }
-        
         def localFinishExceptionPushed(t:CheckedThrowable) {
             try { 
                 latch.lock();
@@ -942,8 +927,9 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 // is an instance method and it is on the stack of some activity.
                 forgetGlobalRefs();
                 
-                if (localFinishReleased()) {
+                if (!isGlobal) { //only one activity is here, no need to lock/unlock latch
                     //NOLOG if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreatedAndTerminated() returning");
+                    latch.release();
                     return;
                 }
             }
@@ -991,10 +977,12 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             // is an instance method and it is on the stack of some activity.
             forgetGlobalRefs();
             
-            if (localFinishReleased()) {
-                //NOLOG if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination() returning");
+            if (!isGlobal) { //only one activity is here, no need to lock/unlock latch
+                //NOLOG if (verbose>=1) debug(">>>> notifyActivityTermination(id="+myId+") zero localCount on local finish; releasing latch");
+                latch.release();
                 return;
             }
+            
             val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
             //NOLOG if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityTermination(srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");

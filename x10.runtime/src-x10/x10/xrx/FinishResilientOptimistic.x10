@@ -248,24 +248,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             return count;
         }
         
-        public def lc_incrementAndGet() {
-            try {
-                ilock.lock();
-                return ++lc;
-            } finally {
-                ilock.unlock();
-            }
-        }
-        
-        public def lc_decrementAndGet() {
-            try {
-                ilock.lock();
-                return --lc;
-            } finally {
-                ilock.unlock();
-            }
-        }
-        
         //Calculated the delta between received and reported
         private def getReportMapUnsafe() {
             //NOLOG if (verbose>=1) debug(">>>> Remote(id="+id+").getReportMapUnsafe called");
@@ -590,7 +572,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 latch.unlock();
             }
         }
-            
+
         def addExceptionUnsafe(t:CheckedThrowable) {
             if (excs == null) excs = new GrowableRail[CheckedThrowable]();
             excs.add(t);
@@ -626,21 +608,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             try {
                 latch.lock();
                 backupPlaceId = newBackup;
-            } finally {
-                latch.unlock();
-            }
-        }
-        
-        def localFinishReleased() {
-            try { 
-                latch.lock();
-                if (!isGlobal) {
-                    //NOLOG if (verbose>=1) debug(">>>> localFinishReleased(id="+id+") true: zero localCount on local finish; releasing latch");
-                    latch.release();
-                    return true;
-                } 
-                //NOLOG if (verbose>=1) debug("<<<< localFinishReleased(id="+id+") false: global finish");
-                return false;
             } finally {
                 latch.unlock();
             }
@@ -971,8 +938,9 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (lc < 0) {
                 assert false: here + " FATAL ERROR: Root(id="+id+").notifyActivityTermination reached a negative local count";
             }
-            if (localFinishReleased()) {
-                //NOLOG if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(srcId="+srcId + " dstId="+dstId+",kind="+kind+") returning");
+            if (!isGlobal) { //only one activity is here, no need to lock/unlock latch
+              //NOLOG if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(srcId="+srcId + " dstId="+dstId+",kind="+kind+") returning");
+                latch.release();
                 return;
             }
             //NOLOG if (verbose>=1) debug("==== Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
