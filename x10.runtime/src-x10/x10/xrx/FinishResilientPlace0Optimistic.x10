@@ -252,7 +252,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 } finally {
                     statesLock.unlock();
                 }
-           };
+            }
         }
         
         static def p0TransitToCompleted(optId:OptimisticRootId, gfs:GlobalRef[P0OptimisticMasterState], srcId:Int, dstId:Int, kind:Int, t:CheckedThrowable) {
@@ -267,7 +267,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 } finally {
                     statesLock.unlock();
                 }
-           };
+           }
         }
         
         static def p0TermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int]) {
@@ -288,7 +288,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     statesLock.unlock();
                 }
                 //NOLOG if (verbose>=1) debug("<<<< State(id="+id+").p0TermMultiple [dstId=" + dstId +", mapSz="+map.size()+" ] returning");
-           };
+           }
         }
         
         def addException(t:CheckedThrowable) {
@@ -378,7 +378,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                             fs.latch.unlock();
                         }
                         fs.latch.release();
-                     }
+                    }
                 } catch (dpe:DeadPlaceException) {
                     // can ignore; if the place is dead there is no need to unlatch a waiting activity there
                     //NOLOG if (verbose>=2) debug("caught and suppressed DPE when attempting to release latch for "+id);

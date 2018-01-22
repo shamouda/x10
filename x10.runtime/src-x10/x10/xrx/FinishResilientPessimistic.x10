@@ -967,9 +967,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 return;
             }
             
-            if (lc < 0) {
-                assert false: "FATAL ERROR: Root(id="+id+").notifyActivityTermination() reached a negative local count";
-            }
+            assert lc == 0: "FATAL ERROR: Root(id="+id+").notifyActivityTermination() reached a negative local count";
             
             // If this is not the root finish, we are done with the finish state.
             // If this is the root finish, it will be kept alive because waitForFinish

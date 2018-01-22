@@ -720,7 +720,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                     lock.unlock();
                 }
             }
-       };
+       }
 
        //NOLOG if (verbose>=1) debug("<<<< notifyActivityCreationFailed(id="+myId+") returning, srcId="+srcId + " dstId="+dstId);
     }
@@ -801,7 +801,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                     lock.unlock();
                 }
             }
-       };
+       }
     }
 
     def notifyActivityTermination(srcPlace:Place):void {
