@@ -40,6 +40,9 @@ public class BenchMicro {
 
         val think:Long = args.size == 0 ? 0 : Long.parse(args(0));
 
+        Console.OUT.println("================================================");
+        Console.OUT.println("================================================");
+        
 	    if (Runtime.RESILIENT_MODE == 0n) {
             Console.OUT.println("Configuration: DEFAULT (NON-RESILIENT)");
         } else {
