@@ -268,7 +268,7 @@ public class BenchMicro {
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) println(refTime, prefix+"tree fan out: "+(time1-time0)/1E9/iterCount+" seconds");
+        if (print) println(refTime, prefix+"tree fan out correct: "+(time1-time0)/1E9/iterCount+" seconds");
     }
     
     private static def downTree(thinkTime:long):void {
