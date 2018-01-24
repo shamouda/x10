@@ -99,8 +99,8 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 increment(adopterState.transitAdopted(), e);
                 adopterState.numActive++;
             }
-            if (verbose>=3) debug("==== "+tag+"(id="+id+") after update for: "+srcId + " ==> "+dstId+" kind="+kind);
-            if (verbose>=3) if (!isAdopted()) dump(); else states(adopterId).dump();
+            //NOLOG if (verbose>=3) debug("==== "+tag+"(id="+id+") after update for: "+srcId + " ==> "+dstId+" kind="+kind);
+            //NOLOG if (verbose>=3) if (!isAdopted()) dump(); else states(adopterId).dump();
         }
 
         def transitToLive(srcId:Long, dstId:Long, kind:Int, tag:String) {
@@ -114,8 +114,8 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 increment(adopterState.liveAdopted(), t);
                 decrement(adopterState.transitAdopted(), e);
             }
-            if (verbose>=3) debug("==== "+tag+"(id="+id+") after update for: "+srcId + " ==> "+dstId+" kind="+kind);
-            if (verbose>=3) if (!isAdopted()) dump(); else states(adopterId).dump();
+            //NOLOG if (verbose>=3) debug("==== "+tag+"(id="+id+") after update for: "+srcId + " ==> "+dstId+" kind="+kind);
+            //NOLOG if (verbose>=3) if (!isAdopted()) dump(); else states(adopterId).dump();
         }
 
         def addLive(srcId:Long, dstId:Long, kind:Int, tag:String) {
@@ -128,8 +128,8 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 increment(adopterState.liveAdopted(), t);
                 adopterState.numActive++;
             }
-            if (verbose>=3) debug("==== "+tag+"(id="+id+") after update for: "+srcId + " ==> "+dstId+" kind="+kind);
-            if (verbose>=3) if (!isAdopted()) dump(); else states(adopterId).dump();
+            //NOLOG if (verbose>=3) debug("==== "+tag+"(id="+id+") after update for: "+srcId + " ==> "+dstId+" kind="+kind);
+            //NOLOG if (verbose>=3) if (!isAdopted()) dump(); else states(adopterId).dump();
         }
 
         def transitToCompleted(srcId:Long, dstId:Long, kind:Int, t:CheckedThrowable) {
@@ -176,16 +176,16 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
 
         def releaseLatch() {
             if (isAdopted()) {
-                if (verbose>=1) debug("releaseLatch(id="+id+") called on adopted finish; not releasing latch");
+                //NOLOG if (verbose>=1) debug("releaseLatch(id="+id+") called on adopted finish; not releasing latch");
             } else {
                 val exceptions = (excs == null || excs.isEmpty()) ?  null : excs.toRail();
-                if (verbose>=2) debug("releasing latch id="+id+(exceptions == null ? " no exceptions" : " with exceptions"));
+                //NOLOG if (verbose>=2) debug("releasing latch id="+id+(exceptions == null ? " no exceptions" : " with exceptions"));
 
                 val mygfs = gfs;
                 try {
                     at (mygfs.home) @Immediate("releaseLatch_gfs_home") async {
                         val fs = mygfs();
-                        if (verbose>=2) debug("performing release for "+fs.id+" at "+here);
+                        //NOLOG if (verbose>=2) debug("performing release for "+fs.id+" at "+here);
                         if (exceptions != null) {
                             fs.latch.lock();
                             if (fs.excs == null) fs.excs = new GrowableRail[CheckedThrowable](exceptions.size);
@@ -196,17 +196,17 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                      }
                 } catch (dpe:DeadPlaceException) {
                     // can ignore; if the place is dead there is no need to unlatch a waiting activity there
-                    if (verbose>=2) debug("caught and suppressed DPE when attempting to release latch for "+id);
+                    //NOLOG if (verbose>=2) debug("caught and suppressed DPE when attempting to release latch for "+id);
                 }
             }
-            if (verbose>=2) debug("releaseLatch(id="+id+") returning");
+            //NOLOG if (verbose>=2) debug("releaseLatch(id="+id+") returning");
         }
 
         def quiescent():Boolean {
-            if (verbose>=2) debug("quiescent(id="+id+") called");
+            //NOLOG if (verbose>=2) debug("quiescent(id="+id+") called");
 
             if (isAdopted()) {
-                if (verbose>=2) debug("quiescent(id="+id+") returning false, already adopted by adopterId=="+adopterId);
+                //NOLOG if (verbose>=2) debug("quiescent(id="+id+") returning false, already adopted by adopterId=="+adopterId);
                 return false;
             }
         
@@ -217,8 +217,8 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
             }
         
             val quiet = numActive == 0;
-            if (verbose>=3) dump();
-            if (verbose>=2 || (verbose>=1 && quiet)) debug("quiescent(id="+id+") returning " + quiet);
+            //NOLOG if (verbose>=3) dump();
+            //NOLOG if (verbose>=2 || (verbose>=1 && quiet)) debug("quiescent(id="+id+") returning " + quiet);
             return quiet;
         }
 
@@ -247,14 +247,14 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
             }
 
             if (adopterState == null) {
-                if (verbose>=1) debug ("==== seekAdoption "+id+" is becoming an orphan; no live ancestor");
+                //NOLOG if (verbose>=1) debug ("==== seekAdoption "+id+" is becoming an orphan; no live ancestor");
                 return;
             }
 
-            if (verbose>=1) debug ("==== seekAdoption "+id+" will be adopted by "+adopterState.id);
-            if (verbose>=3) debug("==== seekAdoption: dumping states before adoption");
-            if (verbose>=3) dump();
-            if (verbose>=3) adopterState.dump();
+            //NOLOG if (verbose>=1) debug ("==== seekAdoption "+id+" will be adopted by "+adopterState.id);
+            //NOLOG if (verbose>=3) debug("==== seekAdoption: dumping states before adoption");
+            //NOLOG if (verbose>=3) dump();
+            //NOLOG if (verbose>=3) adopterState.dump();
 
             val asla = adopterState.liveAdopted();
             for (entry in live.entries()) {
@@ -295,13 +295,13 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 for (w in adoptees.toRail()) {
                     adopterState.adoptees.add(w);
                     states(w).adopterId = adopterState.id;
-                    if (verbose>=2) debug ("==== seekAdoption "+id+" transfered ward "+w+" to "+adopterState.id);
+                    //NOLOG if (verbose>=2) debug ("==== seekAdoption "+id+" transfered ward "+w+" to "+adopterState.id);
                 }
                 adoptees = null;
             }
     
-            if (verbose>=3) debug("==== seekAdoption: dumping adopter state after adoption");
-            if (verbose>=3) adopterState.dump();
+            //NOLOG if (verbose>=3) debug("==== seekAdoption: dumping adopter state after adoption");
+            //NOLOG if (verbose>=3) adopterState.dump();
         }
 
         def convertDeadActivities() {
@@ -320,7 +320,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                     numActive -= count;
                     if (dt.kind == ASYNC) {
                         for (1..count) {
-                            if (verbose>=3) debug("adding DPE to "+id+" for live async at "+i);
+                            //NOLOG if (verbose>=3) debug("adding DPE to "+id+" for live async at "+i);
                             addDeadPlaceException(i);
                         }
                     }
@@ -347,7 +347,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                         numActive -= count;
                         if (de.kind == ASYNC && de.dst == i) {
                             for (1..count) {
-                                if (verbose>=3) debug("adding DPE to "+id+" for transit asyncs("+de.src+","+i+")");
+                                //NOLOG if (verbose>=3) debug("adding DPE to "+id+" for transit asyncs("+de.src+","+i+")");
                                 addDeadPlaceException(i);
                             }
                         }
@@ -439,7 +439,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
             val frParent = parent as FinishResilientPlace0;
             pId = frParent.id;
         } else {
-        	if (verbose>=1) debug("FinishResilientPlace0(id="+id+") foreign parent found of type " + parent);
+        	//NOLOG if (verbose>=1) debug("FinishResilientPlace0(id="+id+") foreign parent found of type " + parent);
             pId = UNASSIGNED;
         }
     }
@@ -451,7 +451,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         isGlobal = true;
         strictFinish = true;
         pId = id;
-        if (verbose>=1) debug("<<<< ResilientPlace0Remote(rootId="+id+") created");
+        //NOLOG if (verbose>=1) debug("<<<< ResilientPlace0Remote(rootId="+id+") created");
     }
 
     public def serialize(ser:Serializer) {
@@ -465,14 +465,14 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         latch.lock();
         strictFinish = true;
         if (!isGlobal) {
-            if (verbose>=1) debug(">>>> doing globalInit for id="+id);
+            //NOLOG if (verbose>=1) debug(">>>> doing globalInit for id="+id);
             val parentId:Id;
             if (parent instanceof FinishResilientPlace0) {
                 val frParent = parent as FinishResilientPlace0;
                 if (!frParent.isGlobal) frParent.globalInit();
                 parentId = frParent.id;
             } else {
-            	if (verbose>=1) debug(">>>> FinishP0 globalInit id="+ id + " foriegn parent of type: " + parent);
+            	//NOLOG if (verbose>=1) debug(">>>> FinishP0 globalInit id="+ id + " foriegn parent of type: " + parent);
                 parentId = UNASSIGNED;
             }
             val gfs = this.ref;
@@ -481,7 +481,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 try {
                     lock.lock();
                     val state = new State(myId, parentId, gfs);
-                    if (verbose>=1) debug(">>>> creating new State id="+myId +" parentId="+parentId);
+                    //NOLOG if (verbose>=1) debug(">>>> creating new State id="+myId +" parentId="+parentId);
                     states.put(myId, state);
                     State.increment(state.live, Task(gfs.home.id, ASYNC)); // duplicated from my localCount
                     state.numActive = 1;
@@ -490,7 +490,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 }
             });
             isGlobal = true;
-            if (verbose>=1) debug("<<<< globalInit returning fs="+this);
+            //NOLOG if (verbose>=1) debug("<<<< globalInit returning fs="+this);
         }
         latch.unlock();
     }
@@ -501,9 +501,9 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
     }
 
     static def notifyPlaceDeath():void {
-        if (verbose>=1) debug(">>>> notifyPlaceDeath called");
+        //NOLOG if (verbose>=1) debug(">>>> notifyPlaceDeath called");
         if (here != place0) {
-            if (verbose>=2) debug("not place0, returning");
+            //NOLOG if (verbose>=2) debug("not place0, returning");
             return;
         }
         try {
@@ -528,7 +528,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         } finally {
             lock.unlock();
         }
-        if (verbose>=1) debug("<<<< notifyPlaceDeath returning");
+        //NOLOG if (verbose>=1) debug("<<<< notifyPlaceDeath returning");
     }
 
     private def forgetGlobalRefs():void {
@@ -547,9 +547,9 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         val myId = this.id;
         if (dstId == here.id) {
             val lc = localCount().incrementAndGet();
-            if (verbose>=1) debug(">>>> notifySubActivitySpawn(id="+myId+") called locally, localCount now "+lc);
+            //NOLOG if (verbose>=1) debug(">>>> notifySubActivitySpawn(id="+myId+") called locally, localCount now "+lc);
         } else {
-            if (verbose>=1) debug(">>>> notifySubActivitySpawn(id="+myId+") called, srcId="+here.id + " dstId="+dstId+" kind="+kind);
+            //NOLOG if (verbose>=1) debug(">>>> notifySubActivitySpawn(id="+myId+") called, srcId="+here.id + " dstId="+dstId+" kind="+kind);
             isGlobal = true; // we're about to globalize this activity as part of the message to Place 0
             val gfs = this.ref;
             val parentId:Id;
@@ -567,13 +567,13 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                     val state = getOrCreateState(myId, parentId, gfs);
                     val srcId = gfs.home.id;
                     if (Place(srcId).isDead()) {
-                        if (verbose>=1) debug("==== notifySubActivitySpawn(id="+myId+") src "+srcId + "is dead; dropping async");
+                        //NOLOG if (verbose>=1) debug("==== notifySubActivitySpawn(id="+myId+") src "+srcId + "is dead; dropping async");
                     } else if (Place(dstId).isDead()) {
                         if (kind == ASYNC) {
-                            if (verbose>=1) debug("==== notifySubActivitySpawn(id="+myId+") destination "+dstId + "is dead; pushed DPE for async");
+                            //NOLOG if (verbose>=1) debug("==== notifySubActivitySpawn(id="+myId+") destination "+dstId + "is dead; pushed DPE for async");
                             state.addDeadPlaceException(dstId);
                         } else {
-                            if (verbose>=1) debug("==== notifySubActivitySpawn(id="+myId+") destination "+dstId + "is dead; dropped at");
+                            //NOLOG if (verbose>=1) debug("==== notifySubActivitySpawn(id="+myId+") destination "+dstId + "is dead; dropped at");
                         }
                     } else {
                         state.inTransit(srcId, dstId, kind, "notifySubActivitySpawn");
@@ -583,12 +583,12 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 }
             });
         }
-        if (verbose>=1) debug("<<<< notifySubActivitySpawn(id="+myId+") returning");
+        //NOLOG if (verbose>=1) debug("<<<< notifySubActivitySpawn(id="+myId+") returning");
     }
 
     def notifyRemoteContinuationCreated():void { 
         strictFinish = true;
-        if (verbose>=1) debug("<<<< notifyRemoteContinuationCreated(id="+id+") isGlobal = "+isGlobal);
+        //NOLOG if (verbose>=1) debug("<<<< notifyRemoteContinuationCreated(id="+id+") isGlobal = "+isGlobal);
     }
 
     /*
@@ -608,11 +608,11 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         val dstId = here.id;
         val myId = this.id;
         if (srcId == dstId) {
-            if (verbose>=1) debug(">>>> notifyActivityCreation(id="+myId+") called locally. no action requred");
+            //NOLOG if (verbose>=1) debug(">>>> notifyActivityCreation(id="+myId+") called locally. no action requred");
             return true;
         }
 
-        if (verbose>=1) debug(">>>> notifyActivityCreation(id="+myId+") called, srcId="+srcId + " dstId="+dstId+" kind="+kind);
+        //NOLOG if (verbose>=1) debug(">>>> notifyActivityCreation(id="+myId+") called, srcId="+srcId + " dstId="+dstId+" kind="+kind);
         val pendingActivity = GlobalRef(activity); 
         at (place0) @Immediate("notifyActivityCreation_to_zero") async {
             var shouldSubmit:Boolean = true;
@@ -620,7 +620,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 // NOTE: no state updates or DPE processing here.
                 //       Must happen exactly once and is done
                 //       when Place0 is notified of a dead place.
-                if (verbose>=1) debug("==== notifyActivityCreation(id="+myId+") suppressed: "+srcId + " ==> "+dstId+" kind="+kind);
+                //NOLOG if (verbose>=1) debug("==== notifyActivityCreation(id="+myId+") suppressed: "+srcId + " ==> "+dstId+" kind="+kind);
                 shouldSubmit = false;
             } else {
                 try {
@@ -637,7 +637,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                     at (pendingActivity) @Immediate("notifyActivityCreation_push_activity") async {
                         val pa = pendingActivity();
                         if (pa != null && pa.epoch == Runtime.epoch()) {
-                            if (verbose>=1) debug("<<<< notifyActivityCreation(id="+myId+") finally submitting activity");
+                            //NOLOG if (verbose>=1) debug("<<<< notifyActivityCreation(id="+myId+") finally submitting activity");
                             Runtime.worker().push(pa);
                         }
                         pendingActivity.forget();
@@ -649,7 +649,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 }
             } catch (dpe:DeadPlaceException) {
                 // can ignore; if the place is dead there is no need to worry about the pending activity
-                if (verbose>=2) debug("caught and suppressed DPE when attempting submit pending activity for "+myId);
+                //NOLOG if (verbose>=2) debug("caught and suppressed DPE when attempting submit pending activity for "+myId);
             }
         }
 
@@ -662,7 +662,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         val srcId = srcPlace.id; 
         val dstId = here.id;
         val myId = this.id;
-        if (verbose>=1) debug(">>>> notifyShiftedActivityCreation(id="+myId+") called, srcId="+srcId + " dstId="+dstId+" kind="+kind);
+        //NOLOG if (verbose>=1) debug(">>>> notifyShiftedActivityCreation(id="+myId+") called, srcId="+srcId + " dstId="+dstId+" kind="+kind);
 
         return Runtime.evalImmediateAt[Boolean](place0, ()=> {
             try {
@@ -671,7 +671,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                     // NOTE: no state updates or DPE processing here.
                     //       Must happen exactly once and is done
                     //       when Place0 is notified of a dead place.
-                    if (verbose>=1) debug("==== notifyShiftedActivityCreation(id="+myId+") suppressed: "+srcId + " ==> "+dstId+" kind="+kind);
+                    //NOLOG if (verbose>=1) debug("==== notifyShiftedActivityCreation(id="+myId+") suppressed: "+srcId + " ==> "+dstId+" kind="+kind);
                     return false;
                 }
                 val state = states(myId);
@@ -691,7 +691,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         val dstId = here.id;
         val myId = this.id;
 
-        if (verbose>=1) debug(">>>> notifyActivityCreationFailed(id="+myId+") called, srcId="+srcId + " dstId="+dstId+" kind="+kind);
+        //NOLOG if (verbose>=1) debug(">>>> notifyActivityCreationFailed(id="+myId+") called, srcId="+srcId + " dstId="+dstId+" kind="+kind);
 
         isGlobal = true; // we're about to globalize this activity as part of the message to Place 0
         val gfs = this.ref;
@@ -709,11 +709,11 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 // NOTE: no state updates or DPE processing here.
                 //       Must happen exactly once and is done
                 //       when Place0 is notified of a dead place.
-                if (verbose>=1) debug("==== notifyActivityCreationFailed(id="+myId+") suppressed: "+srcId + " ==> "+dstId+" kind="+kind);
+                //NOLOG if (verbose>=1) debug("==== notifyActivityCreationFailed(id="+myId+") suppressed: "+srcId + " ==> "+dstId+" kind="+kind);
             } else {
                 try {
                     lock.lock();
-                    if (verbose>=1) debug(">>>> notifyActivityCreatedFailed(id="+myId+") message running at place0");
+                    //NOLOG if (verbose>=1) debug(">>>> notifyActivityCreatedFailed(id="+myId+") message running at place0");
                     val state = getOrCreateState(myId, parentId, gfs);
                     state.transitToCompleted(srcId, dstId, kind, t);
                 } finally {
@@ -722,7 +722,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
             }
        }
 
-       if (verbose>=1) debug("<<<< notifyActivityCreationFailed(id="+myId+") returning, srcId="+srcId + " dstId="+dstId);
+       //NOLOG if (verbose>=1) debug("<<<< notifyActivityCreationFailed(id="+myId+") returning, srcId="+srcId + " dstId="+dstId);
     }
 
     def notifyActivityCreatedAndTerminated(srcPlace:Place) {
@@ -735,7 +735,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
 
         if (dstId == srcId) {
             val lc = localCount().decrementAndGet();
-            if (verbose>=1) debug(">>>> notifyActivityCreatedAndTerminated(id="+myId+") called locally, localCount now "+lc);
+            //NOLOG if (verbose>=1) debug(">>>> notifyActivityCreatedAndTerminated(id="+myId+") called locally, localCount now "+lc);
             if (lc > 0) return;
             if (isGlobal) {
                 val gfs = this.ref;
@@ -755,7 +755,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                         // NOTE: no state updates or DPE processing here.
                         //       Must happen exactly once and is done
                         //       when Place0 is notified of a dead place.
-                        if (verbose>=1) debug("==== notifyActivityCreatedAndTerminated(id="+myId+") suppressed: "+srcId + " ==> "+srcId+" kind="+kind);
+                        //NOLOG if (verbose>=1) debug("==== notifyActivityCreatedAndTerminated(id="+myId+") suppressed: "+srcId + " ==> "+srcId+" kind="+kind);
                     } else {
                         try {
                             lock.lock();
@@ -767,14 +767,14 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                     }
                 }
             } else {
-                if (verbose>=1) debug(">>>> notifyActivityCreatedAndTerminated(id="+myId+") quiescent local finish; releasing latch");
+                //NOLOG if (verbose>=1) debug(">>>> notifyActivityCreatedAndTerminated(id="+myId+") quiescent local finish; releasing latch");
                 latch.release();
                 return;
             }
             return; 
         }
 
-        if (verbose>=1) debug(">>>> notifyActivityCreatedAndTerminated(id="+myId+") called, srcId="+srcId + " dstId="+dstId+" kind="+kind);
+        //NOLOG if (verbose>=1) debug(">>>> notifyActivityCreatedAndTerminated(id="+myId+") called, srcId="+srcId + " dstId="+dstId+" kind="+kind);
         isGlobal = true; // we're about to globalize this activity as part of the message to Place 0
         val gfs = this.ref;
         val parentId:Id;
@@ -790,11 +790,11 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 // NOTE: no state updates or DPE processing here.
                 //       Must happen exactly once and is done
                 //       when Place0 is notified of a dead place.
-                if (verbose>=1) debug("==== notifyActivityCreatedAndTerminated(id="+myId+") suppressed: "+srcId + " ==> "+dstId+" kind="+kind);
+                //NOLOG if (verbose>=1) debug("==== notifyActivityCreatedAndTerminated(id="+myId+") suppressed: "+srcId + " ==> "+dstId+" kind="+kind);
             } else {
                 try {
                     lock.lock();
-                    if (verbose>=1) debug(">>>> notifyActivityCreatedAndTerminated(id="+myId+") message running at place0");
+                    //NOLOG if (verbose>=1) debug(">>>> notifyActivityCreatedAndTerminated(id="+myId+") message running at place0");
                     val state = getOrCreateState(myId, parentId, gfs);
                     state.transitToCompleted(srcId, dstId, kind, null);
                 } finally {
@@ -815,7 +815,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         val myId = this.id;
 
         if (lc > 0) {
-            if (verbose>=1) debug(">>>> notifyActivityTermination(id="+myId+") called, decremented localCount to "+lc);
+            //NOLOG if (verbose>=1) debug(">>>> notifyActivityTermination(id="+myId+") called, decremented localCount to "+lc);
             return;
         }
 
@@ -825,7 +825,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         forgetGlobalRefs();
 
         if (!isGlobal) {
-            if (verbose>=1) debug(">>>> notifyActivityTermination(id="+myId+") zero localCount on local finish; releasing latch");
+            //NOLOG if (verbose>=1) debug(">>>> notifyActivityTermination(id="+myId+") zero localCount on local finish; releasing latch");
             latch.release();
             return;
         } 
@@ -841,17 +841,17 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
             parentId = UNASSIGNED;
         }
  
-        if (verbose>=1) debug(">>>> notifyActivityTermination(id="+myId+") called, dstId="+dstId+" kind="+kind);
+        //NOLOG if (verbose>=1) debug(">>>> notifyActivityTermination(id="+myId+") called, dstId="+dstId+" kind="+kind);
         at (place0) @Immediate("notifyActivityTermination_to_zero") async {
             if (Place(dstId).isDead()) {
                 // NOTE: no state updates or DPE processing here.
                 //       Must happen exactly once and is done
                 //       when Place0 is notified of a dead place.
-                if (verbose>=1) debug("==== notifyActivityTermination(id="+myId+") suppressed: "+dstId+" kind="+kind);
+                //NOLOG if (verbose>=1) debug("==== notifyActivityTermination(id="+myId+") suppressed: "+dstId+" kind="+kind);
             } else {
                 try {
                     lock.lock();
-                    if (verbose>=1) debug("<<<< notifyActivityTermination(id="+myId+") message running at place0");
+                    //NOLOG if (verbose>=1) debug("<<<< notifyActivityTermination(id="+myId+") message running at place0");
                     val state = getOrCreateState(myId, parentId, gfs);
                     state.liveToCompleted(dstId, kind);
                 } finally {
@@ -866,12 +866,12 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
   
         if (!isGlobal) {
             latch.lock();
-            if (verbose>=1) debug(">>>> pushException(id="+myId+") locally pushing exception "+t);
+            //NOLOG if (verbose>=1) debug(">>>> pushException(id="+myId+") locally pushing exception "+t);
             if (excs == null) excs = new GrowableRail[CheckedThrowable]();
             excs.add(t);
             latch.unlock();
         } else {
-            if (verbose>=1) debug(">>>> pushException(id="+myId+") called, t="+t);
+            //NOLOG if (verbose>=1) debug(">>>> pushException(id="+myId+") called, t="+t);
             val gfs = this.ref;
             val parentId:Id;
             if (parent instanceof FinishResilientPlace0) {
@@ -892,12 +892,12 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                     lock.unlock();
                 }
             });
-            if (verbose>=1) debug("<<<< pushException(id="+myId+") returning");
+            //NOLOG if (verbose>=1) debug("<<<< pushException(id="+myId+") returning");
         }
     }
 
     def waitForFinish():void {
-        if (verbose>=1) debug(">>>> waitForFinish(id="+id+") called");
+        //NOLOG if (verbose>=1) debug(">>>> waitForFinish(id="+id+") called");
 
         // terminate myself
         notifyActivityTermination(here);
@@ -905,14 +905,14 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         // If we haven't gone remote with this finish yet, see if this worker
         // can execute other asyncs that are governed by the finish before waiting on the latch.
         if ((!Runtime.STRICT_FINISH) && (Runtime.STATIC_THREADS || !strictFinish)) {
-            if (verbose>=2) debug("calling worker.join for id="+id);
+            //NOLOG if (verbose>=2) debug("calling worker.join for id="+id);
             Runtime.worker().join(this.latch);
         }
 
         // wait for the latch release
-        if (verbose>=2) debug("calling latch.await for id="+id);
+        //NOLOG if (verbose>=2) debug("calling latch.await for id="+id);
         latch.await(); // wait for the termination (latch may already be released)
-        if (verbose>=2) debug("returned from latch.await for id="+id);
+        //NOLOG if (verbose>=2) debug("returned from latch.await for id="+id);
 
         // no more messages will come back to this finish state 
         forgetGlobalRefs();
@@ -963,7 +963,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         val myId = this.id;
         
         if (bytes.size >= ASYNC_SIZE_THRESHOLD) {
-            if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") selecting indirect (size="+ bytes.size+") srcId="+here.id + " dstId="+dstId);
+            //NOLOG if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") selecting indirect (size="+ bytes.size+") srcId="+here.id + " dstId="+dstId);
 
             localCount().incrementAndGet();  // synthetic activity to keep finish locally live during async to Place0
             
@@ -978,13 +978,13 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 var markedInTransit:Boolean = false;
                 val srcId = gfs.home.id;
                 if (Place(srcId).isDead()) {
-                    if (verbose>=1) debug("==== spawnRemoteActivity(id="+myId+") src "+srcId + "is dead; dropping async");
+                    //NOLOG if (verbose>=1) debug("==== spawnRemoteActivity(id="+myId+") src "+srcId + "is dead; dropping async");
                 } else {
                     try {
                         lock.lock();
                         val state = getOrCreateState(myId, parentId, gfs);
                         if (Place(dstId).isDead()) {
-                            if (verbose>=1) debug("==== spawnRemoteActivity(id="+myId+") destination "+dstId + "is dead; pushed DPE");
+                            //NOLOG if (verbose>=1) debug("==== spawnRemoteActivity(id="+myId+") destination "+dstId + "is dead; pushed DPE");
                             state.addDeadPlaceException(dstId);
                         } else {
                             state.inTransit(srcId, dstId, ASYNC, "spawnRemoteActivity(large async)");
@@ -1003,29 +1003,29 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                             if (mt) x10.xrx.Runtime.x10rtSendAsync(dstId, wbgr(), fs, null, null);
                         } catch (dpe:DeadPlaceException) {
                             // not relevant to immediate thread; DPE raised in convertDeadActivities
-                            if (verbose>=2) debug("caught and suppressed DPE from x10rtSendAsync from spawnRemoteActivity_big_back_to_spawner for "+myId);
+                            //NOLOG if (verbose>=2) debug("caught and suppressed DPE from x10rtSendAsync from spawnRemoteActivity_big_back_to_spawner for "+myId);
                         }
                         wbgr.forget();
                         fs.notifyActivityTermination(Place(srcId));
                     }
                 } catch (dpe:DeadPlaceException) {
                     // can ignore; if the src place just died there is nothing left to do.
-                    if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_big_back_to_spawner for "+myId);
+                    //NOLOG if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_big_back_to_spawner for "+myId);
                 }
             }
         } else {
-            if (verbose >= 1) debug(">>>>  spawnRemoteActivity(id="+myId+") selecting direct (size="+ bytes.size+") srcId="+here.id + " dstId="+dstId);
+            //NOLOG if (verbose >= 1) debug(">>>>  spawnRemoteActivity(id="+myId+") selecting direct (size="+ bytes.size+") srcId="+here.id + " dstId="+dstId);
 
             at (place0) @Immediate("spawnRemoteActivity_to_zero") async {
                 val srcId = gfs.home.id;
                 if (Place(srcId).isDead()) {
-                    if (verbose>=1) debug("==== spawnRemoteActivity(id="+myId+") src "+srcId + "is dead; dropping async");
+                    //NOLOG if (verbose>=1) debug("==== spawnRemoteActivity(id="+myId+") src "+srcId + "is dead; dropping async");
                 } else {
                     try {
                         lock.lock();
                         val state = getOrCreateState(myId, parentId, gfs);
                         if (Place(dstId).isDead()) {
-                            if (verbose>=1) debug("==== spawnRemoteActivity(id="+myId+") destination "+dstId + "is dead; pushed DPE");
+                            //NOLOG if (verbose>=1) debug("==== spawnRemoteActivity(id="+myId+") destination "+dstId + "is dead; pushed DPE");
                             state.addDeadPlaceException(dstId);
                         } else {
                             state.addLive(srcId, dstId, ASYNC, "spawnRemoteActivity(small async)");
@@ -1037,7 +1037,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                                 
                 try {
                     at (Place(dstId)) @Immediate("spawnRemoteActivity_dstPlace") async {
-                        if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") submitting activity from "+here.id+" at "+dstId);
+                        //NOLOG if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") submitting activity from "+here.id+" at "+dstId);
                         val wrappedBody = ()=> {
                             // defer deserialization to reduce work on immediate thread
                             val deser = new Deserializer(bytes);
@@ -1048,10 +1048,10 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                     }
                 } catch (dpe:DeadPlaceException) {
                     // can ignore; if the place just died there is no need to worry about submitting the activity
-                    if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dstPlace for "+myId);
+                    //NOLOG if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dstPlace for "+myId);
                 }
             }
-            if (verbose>=1) debug("<<<< spawnRemoteActivity(id="+myId+") returning");
+            //NOLOG if (verbose>=1) debug("<<<< spawnRemoteActivity(id="+myId+") returning");
         }
     }
 
@@ -1079,12 +1079,12 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         
         val myId = this.id;
         
-        if (verbose >= 1) debug(">>>>  spawnRemoteActivities(id="+myId+") direct (size="+bytes.size+") srcId="+here.id + " dstPlaces="+destPlaces.size);
+        //NOLOG if (verbose >= 1) debug(">>>>  spawnRemoteActivities(id="+myId+") direct (size="+bytes.size+") srcId="+here.id + " dstPlaces="+destPlaces.size);
         
         at (place0) @Immediate("spawnRemoteActivities_to_zero") async {
             val srcId = gfs.home.id;
             if (Place(srcId).isDead()) {
-                if (verbose>=1) debug("==== spawnRemoteActivities(id="+myId+") src "+srcId + "is dead; dropping async");
+                //NOLOG if (verbose>=1) debug("==== spawnRemoteActivities(id="+myId+") src "+srcId + "is dead; dropping async");
             } 
             else {
                 try {
@@ -1094,7 +1094,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                            if (ignoreDest == dstId)
                             continue;
                         if (Place(dstId).isDead()) {
-                            if (verbose>=1) debug("==== spawnRemoteActivities(id="+myId+") destination "+dstId + "is dead; pushed DPE");
+                            //NOLOG if (verbose>=1) debug("==== spawnRemoteActivities(id="+myId+") destination "+dstId + "is dead; pushed DPE");
                             state.addDeadPlaceException(dstId);
                         } else {
                                 state.addLive(srcId, dstId, ASYNC, "spawnRemoteActivities");
@@ -1111,7 +1111,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 if (!Place(dstId).isDead()) {
                     try {
                         at (Place(dstId)) @Immediate("spawnRemoteActivities_dstPlace") async {
-                            if (verbose >= 1) debug("==== spawnRemoteActivities(id="+myId+") submitting activity from "+here.id+" on behalf of "+gfs.home.id+"  at "+dstId);
+                            //NOLOG if (verbose >= 1) debug("==== spawnRemoteActivities(id="+myId+") submitting activity from "+here.id+" on behalf of "+gfs.home.id+"  at "+dstId);
                             val wrappedBody = ()=> {
                                 // defer deserialization to reduce work on immediate thread
                                 val deser = new Deserializer(bytes);
@@ -1122,20 +1122,20 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                         }
                     } catch (dpe:DeadPlaceException) {
                         // can ignore; if the place just died there is no need to worry about submitting the activity
-                        if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dstPlace for "+id);
+                        //NOLOG if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dstPlace for "+id);
                     }
                 }
             }
         }
-        if (verbose>=1) debug("<<<< spawnRemoteActivities(id="+myId+") returning");
+        //NOLOG if (verbose>=1) debug("<<<< spawnRemoteActivities(id="+myId+") returning");
     }
 
     private static final def getOrCreateState(myId:Id, parentId:Id, gfs:GlobalRef[FinishResilientPlace0]):State {
         var state:State = states(myId);
         if (state == null) {
-            if (verbose>=1) debug(">>>> initializing state for id="+myId);
+            //NOLOG if (verbose>=1) debug(">>>> initializing state for id="+myId);
             state = new State(myId, parentId, gfs);
-            if (verbose>=1) debug(">>>> creating new State id="+myId +" parentId="+parentId);
+            //NOLOG if (verbose>=1) debug(">>>> creating new State id="+myId +" parentId="+parentId);
             states.put(myId, state);
             State.increment(state.live, Task(gfs.home.id, ASYNC)); // duplicated from my localCount
             state.numActive = 1;
