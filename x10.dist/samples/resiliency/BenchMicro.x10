@@ -69,9 +69,11 @@ public class BenchMicro {
         if (basePlace == 0) {
             Console.OUT.println("Test based from place 0");
             doTest(refTime, "place 0 -- ", think, true, MIN_NANOS);
+            doTestTree(refTime, "place 0 -- ", think, true, MIN_NANOS);
         } else {
             Console.OUT.println("Test based from place " + basePlace);
             at (Place(basePlace)) doTest(refTime, "place "+basePlace+" -- ", think, true, MIN_NANOS);
+            doTestTree(refTime, "place 0 -- ", think, true, MIN_NANOS);
         }
         Console.OUT.printf("Test based from place "+basePlace+" completed in %f seconds\n", (System.nanoTime()-t0)/1e9);
         Console.OUT.println();
@@ -246,15 +248,6 @@ public class BenchMicro {
         if (print) println(refTime, prefix+"fan out - nested finish broadcast: "+(time1-time0)/1E9/iterCount+" seconds");
 
         iterCount = 0;
-        time0 = System.nanoTime();
-        do {
-            downTree(t);
-            time1 = System.nanoTime();
-            iterCount++;
-        } while (time1-time0 < minTime);
-        if (print) println(refTime, prefix+"tree fan out: "+(time1-time0)/1E9/iterCount+" seconds");
-
-        iterCount = 0;
         val endPlace = Place.places().prev(here);
         time0 = System.nanoTime();
         do {
@@ -263,9 +256,21 @@ public class BenchMicro {
             iterCount++;
         } while (time1-time0 < minTime);
         if (print) println(refTime, prefix+"ring around via at: "+(time1-time0)/1E9/iterCount+" seconds");
-        
     }
 
+    public static def doTestTree(refTime:Long, prefix:String, t:Long, print:Boolean, minTime:Long) {
+        var time0:Long, time1:Long;
+        var iterCount:Long = 0;
+        val home = here;
+        time0 = System.nanoTime();
+        do {
+            downTree(t);
+            time1 = System.nanoTime();
+            iterCount++;
+        } while (time1-time0 < minTime);
+        if (print) println(refTime, prefix+"tree fan out: "+(time1-time0)/1E9/iterCount+" seconds");
+    }
+    
     private static def downTree(thinkTime:long):void {
         think(thinkTime);
         val parent = here.id;
