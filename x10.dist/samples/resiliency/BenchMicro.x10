@@ -68,11 +68,11 @@ public class BenchMicro {
         var t0:Long = System.nanoTime();
         if (basePlace == 0) {
             Console.OUT.println("Test based from place 0");
-            doTest(refTime, "place 0 -- ", think, true, MIN_NANOS);
+            //doTest(refTime, "place 0 -- ", think, true, MIN_NANOS);
             doTestTree(refTime, "place 0 -- ", think, true, MIN_NANOS);
         } else {
             Console.OUT.println("Test based from place " + basePlace);
-            at (Place(basePlace)) doTest(refTime, "place "+basePlace+" -- ", think, true, MIN_NANOS);
+            //at (Place(basePlace)) doTest(refTime, "place "+basePlace+" -- ", think, true, MIN_NANOS);
             doTestTree(refTime, "place 0 -- ", think, true, MIN_NANOS);
         }
         Console.OUT.printf("Test based from place "+basePlace+" completed in %f seconds\n", (System.nanoTime()-t0)/1e9);
