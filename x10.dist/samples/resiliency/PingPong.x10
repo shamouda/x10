@@ -111,7 +111,7 @@ public class PingPong {
                 time1 = System.nanoTime();
             iterCount++;
             } while (time1-time0 < minTime);
-            if (print) println(refTime, prefix+"ping pong time:"+home.id+":"+other.id+": "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
+            if (print) println(refTime, prefix+"ping pong time:"+home.id+":"+other.id+": "+(time1-time0)/OUTER_ITERS/iterCount+" nanoseconds");
         }
 
     }
