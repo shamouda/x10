@@ -23,13 +23,13 @@ int main(int argc, char *argv[]) {
   if (rank == 0) {
       for (j = 1; j < nprocs; j++) {
           time0 = MPI_Wtime();
-		  for (i=0; i < REPS; i++) {
-			  //sending a 28 byte message to other
-			  MPI_Send(otherBuf, otherLen, MPI_INTEGER, j, 0, MPI_COMM_WORLD);
-			  //sending a 20 byte message to home
-			  MPI_Recv(homeBuf,  homeLen,  MPI_INTEGER, j, 1, MPI_COMM_WORLD, &status);
-		  }
-		  time1 = MPI_Wtime();
+          for (i=0; i < REPS; i++) {
+              //sending a 28 byte message to other
+              MPI_Send(otherBuf, otherLen, MPI_INTEGER, j, 0, MPI_COMM_WORLD);
+              //sending a 20 byte message to home
+              MPI_Recv(homeBuf,  homeLen,  MPI_INTEGER, j, 1, MPI_COMM_WORLD, &status);
+          }
+          time1 = MPI_Wtime();
           printf("ping pong time:%d:%d: %.2e seconds\n", 0, j, ((time1-time0)/REPS));
       }
   } else {
