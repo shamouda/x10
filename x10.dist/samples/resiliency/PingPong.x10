@@ -16,13 +16,7 @@ import x10.util.concurrent.Condition;
 
 public class PingPong {
 
-    static OUTER_ITERS = 10;
-    static INNER_ITERS = 100;
-    static MIN_NANOS = (10*1e9) as long; // require each test to run for at least 10 seconds (reduce jitter)
-
-    @Native("c++", "true")
-    @Native("java", "true")
-    static native def needsWarmup():Boolean;
+    static REPS = 100;
 
     public static def main(args:Rail[String]){here==Place.FIRST_PLACE}{
         val refTime = System.currentTimeMillis();
@@ -32,30 +26,40 @@ public class PingPong {
             return;
         }
 
-        val think:Long = args.size == 0 ? 0 : Long.parse(args(0));
-        
-	    if (Runtime.RESILIENT_MODE == 0n) {
-            Console.OUT.println("Configuration: DEFAULT (NON-RESILIENT)");
-        } else {
-            Console.OUT.println("Configuration: RESILIENT MODE "+Runtime.RESILIENT_MODE);
-        }
-
+        val think = 0;
         Console.OUT.println("Running with "+Place.numPlaces()+" places.");
-        Console.OUT.println("OUTER_ITERS: "+OUTER_ITERS);
-        Console.OUT.println("Min elapsed time for each test: "+MIN_NANOS/1e9+" seconds.");
-        Console.OUT.println("Think time for each activity: "+think+" nanoseconds.");
+        Console.OUT.println("REPS: "+REPS);
 
-        if (needsWarmup()) {
-            Console.OUT.println("Doing warmup");
-            warmpUp(refTime, "warmup", think, false, MIN_NANOS/2);
-            Console.OUT.println("Warmup complete");
-        }
+        Console.OUT.println("Doing warmup");
+        warmpUp(think);
+        Console.OUT.println("Warmup complete");
         
         var t0:Long = System.nanoTime();
         Console.OUT.println("Test based from place 0");
-        doPingPong(refTime, "place 0 -- ", think, true, MIN_NANOS);
+        doPingPong(refTime, "place 0 -- ", think);
         Console.OUT.printf("PingPong completed in %f seconds\n", (System.nanoTime()-t0)/1e9);
         Console.OUT.println();
+    }
+    
+    public static def doPingPong(refTime:Long, prefix:String, t:Long) {
+        var time0:Long, time1:Long;
+        val home = here;
+        for (other in Place.places()) {
+            if (other.id == here.id)
+                continue;
+            time0 = System.nanoTime();
+            for (i in 1..REPS) {
+                val gr = new GlobalRef[Condition](new Condition());
+                at (other) @Immediate("ping_next") async { //sending a 28 byte message to other
+                    at (home) @Immediate("pong_home") async { //sending a 20 byte message to home
+                        gr().release();
+                    }                    
+                }
+                gr().await();
+            }
+            time1 = System.nanoTime();
+            println(refTime, prefix+"ping pong time:"+home.id+":"+other.id+": "+(time1-time0)/1E9/REPS+" seconds");
+        }
     }
     
     static def println(time0:Long, message:String) {
@@ -67,53 +71,16 @@ public class PingPong {
         return time;
     }
     
-    public static def warmpUp(refTime:Long, prefix:String, t:Long, print:Boolean, minTime:Long) {
-        var time0:Long, time1:Long;
-        var iterCount:Long;
-
-        iterCount = 0;
-        time0 = System.nanoTime();
-        do {
-            finish {
-                for (p in Place.places()) {
-                    at (p) async {
-                        for (q in Place.places()) at (q) async {
-                            think(t);
-                        }
+    public static def warmpUp(t:Long) {
+        finish {
+            for (p in Place.places()) {
+                at (p) async {
+                    for (q in Place.places()) at (q) async {
+                        think(t);
                     }
                 }
             }
-            time1 = System.nanoTime();
-            iterCount++;
-        } while (time1-time0 < minTime);
-        if (print) println(refTime, prefix+"fan out - broadcast: "+(time1-time0)/1E9/iterCount+" seconds");
-    }
-
-    public static def doPingPong(refTime:Long, prefix:String, t:Long, print:Boolean, minTime:Long) {
-        var time0:Long, time1:Long;
-        var iterCount:Long;
-        val home = here;
-        for (other in Place.places()) {
-            if (other.id == here.id)
-                continue;
-            iterCount = 0;
-            time0 = System.nanoTime();
-            do {
-                for (i in 1..OUTER_ITERS) {
-                    val gr = new GlobalRef[Condition](new Condition());
-                    at (other) @Immediate("ping_next") async {
-                        at (home) @Immediate("pong_home") async {
-                            gr().release();
-                        }                    
-                    }
-                    gr().await();
-                }
-                time1 = System.nanoTime();
-            iterCount++;
-            } while (time1-time0 < minTime);
-            if (print) println(refTime, prefix+"ping pong time:"+home.id+":"+other.id+": "+(time1-time0)/OUTER_ITERS/iterCount+" nanoseconds");
         }
-
     }
 
     public static def think(think:Long) {
