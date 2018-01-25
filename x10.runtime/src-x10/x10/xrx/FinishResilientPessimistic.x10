@@ -126,8 +126,6 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 if (parent instanceof FinishResilientPessimistic) {
                     val frParent = parent as FinishResilientPessimistic;
                     if (frParent.me instanceof PessimisticMasterState) (frParent as FinishResilientPessimistic).globalInit(true);
-                }
-                if (rootState.parentId != UNASSIGNED) {
                     val req = FinishRequest.makeAddChildRequest(rootState.parentId /*id*/, id /*child_id*/);
                     FinishReplicator.exec(req);
                 }
@@ -833,9 +831,10 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 val lc = localCount().incrementAndGet();
                 //NOLOG if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called locally, localCount now "+lc);
             } else {
+                isGlobal = true;
                 //NOLOG if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
                 val req = FinishRequest.makeTransitRequest(id, parentId, UNASSIGNED, DUMMY_INT, DUMMY_INT, srcId, dstId, kind);
-                FinishReplicator.exec(req);
+                FinishReplicator.exec(req, this);
                 //NOLOG if (verbose>=1) debug("<<<< Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
             }
         }

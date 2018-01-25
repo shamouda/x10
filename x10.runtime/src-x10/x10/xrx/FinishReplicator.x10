@@ -50,6 +50,9 @@ public final class FinishReplicator {
     
     /**************** Replication Protocol **********************/
     public static def exec(req:FinishRequest):FinishResilient.ReplicatorResponse {
+        return exec(req, null);
+    }
+    public static def exec(req:FinishRequest, localMaster:FinishMasterState):FinishResilient.ReplicatorResponse {
         //NOLOG if (verbose>=1) debug(">>>> Replicator(id="+req.id+").exec() called");
         checkMainTermination(); 
         
@@ -57,7 +60,7 @@ public final class FinishReplicator {
         var adopterId:FinishResilient.Id = FinishResilient.UNASSIGNED; //pessimistic only
         while (true) {
             try {
-                val mresp:MasterResponse = masterExec(req);
+                val mresp:MasterResponse = masterExec(req, localMaster);
                 submit = mresp.submit;
                 //NOLOG if (verbose>=1) debug(">>>> Replicator(id="+req.id+").exec() masterDone =>" + " backupPlaceId = " + mresp.backupPlaceId + " submit = " + submit );
                 
@@ -106,7 +109,7 @@ public final class FinishReplicator {
         return FinishResilient.ReplicatorResponse(submit, adopterId);
     }
     
-    public static def masterExec(req:FinishRequest) {
+    public static def masterExec(req:FinishRequest, localMaster:FinishMasterState) {
         //NOLOG if (verbose>=1) debug(">>>> Replicator(id="+req.id+").masterExec called [" + req + "]" );
         
         /**AT_FINISH HACK**/
@@ -115,10 +118,9 @@ public final class FinishReplicator {
         }
         
         if (req.isMasterLocal()) {
-            val parent = findMaster(req.id);
-            
-            assert (parent != null) : here + " fatal error, master(id="+req.id+") is null";
-            val resp = parent.exec(req);
+            val mFin = findMasterOrAdd(req.id, localMaster);
+            assert (mFin != null) : here + " fatal error, master(id="+req.id+") is null";
+            val resp = mFin.exec(req);
             if (resp.excp != null) { 
                 throw resp.excp;
             }
@@ -545,6 +547,22 @@ public final class FinishReplicator {
         }
     }
     
+    static def findMasterOrAdd(id:FinishResilient.Id, mFin:FinishMasterState):FinishMasterState {
+        //NOLOG if (verbose>=1) debug(">>>> findMaster(id="+id+") called");
+        try {
+            glock.lock();
+            var fs:FinishMasterState = fmasters.getOrElse(id, null);
+            if (fs == null) {
+                fs = mFin;
+                fmasters.put(id, mFin);
+            }
+            //NOLOG if (verbose>=1) debug("<<<< findMasterOrAdd(id="+id+") returning");
+            return fs;
+        } finally {
+            glock.unlock();
+        }
+    }
+
     
     static def findBackupOrThrow(id:FinishResilient.Id):FinishBackupState {
         //NOLOG if (verbose>=1) debug(">>>> findBackupOrThrow(id="+id+") called");
