@@ -1162,14 +1162,23 @@ public struct Team {
                     while (!condition() && Team.state(teamidcopy).isValid()) {
                         // look for dead neighboring places
                         if (Team.state(teamidcopy).local_parentIndex > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex).isDead()) {
-                            Team.state(teamidcopy).markInvalid();
-                            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex)+" is dead!");
+                            //sometimes the index is set to -1 while a child is waiting for parent gather, so check again
+                            if (Team.state(teamidcopy).local_parentIndex > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex).isDead()) {
+                                Team.state(teamidcopy).markInvalid();
+                                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex)+" is dead!");
+                            }
                         } else if (Team.state(teamidcopy).local_child1Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index).isDead()) {
-                            Team.state(teamidcopy).markInvalid();
-                            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index)+" is dead!");
+                            //sometimes the index is set to -1 while a child is waiting for parent gather, so check again
+                            if (Team.state(teamidcopy).local_child1Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index).isDead()) {
+                                Team.state(teamidcopy).markInvalid();
+                                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index)+" is dead!");
+                            }
                         } else if (Team.state(teamidcopy).local_child2Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index).isDead()) {
-                            Team.state(teamidcopy).markInvalid();
-                            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index)+" is dead!");
+                            //sometimes the index is set to -1 while a child is waiting for parent gather, so check again
+                            if (Team.state(teamidcopy).local_child2Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index).isDead()) {
+                                Team.state(teamidcopy).markInvalid();
+                                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index)+" is dead!");
+                            }
                         } else {
                             System.threadSleep(0); // release the CPU to more productive pursuits
                         }
