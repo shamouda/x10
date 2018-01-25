@@ -16,7 +16,7 @@ import x10.util.concurrent.Condition;
 
 public class PingPong {
 
-    static REPS = 100;
+    static REPS = 1000;
 
     public static def main(args:Rail[String]){here==Place.FIRST_PLACE}{
         val refTime = System.currentTimeMillis();
