@@ -13,6 +13,7 @@ package x10.xrx;
 import x10.util.HashMap;
 import x10.util.HashSet;
 import x10.util.concurrent.Lock;
+import x10.util.concurrent.AtomicLong;
 
 public class FinishRequest {
     static val ADD_CHILD = 0n;
@@ -24,6 +25,9 @@ public class FinishRequest {
     static val TRANSIT_TERM = 6n;
     
     private static val OPTIMISTIC = Configuration.resilient_mode() == Configuration.RESILIENT_MODE_DIST_OPTIMISTIC;
+    private static val nextReqId = new AtomicLong(0);
+    
+    public val num = nextReqId.incrementAndGet();
     
     //main identification fields
     var id:FinishResilient.Id;  //can be changed to adopter id
