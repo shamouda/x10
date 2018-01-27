@@ -646,7 +646,7 @@ public final class Runtime {
         val state = a.finishState();
         if (place.id == hereLong()) {
             // Synchronous serialization
-	    val start = prof != null ? System.nanoTime() : 0;
+	        val start = prof != null ? System.nanoTime() : 0;
             val ser = new Serializer();
             ser.writeAny(body);
             if (prof != null) {
