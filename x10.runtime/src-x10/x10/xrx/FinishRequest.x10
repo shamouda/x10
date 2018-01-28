@@ -52,6 +52,8 @@ public class FinishRequest {
     var finSrc:Int = -1n;
     var finKind:Int = -1n;
     
+    var submit:Boolean; //request decision
+    
     private static val pool = new HashSet[FinishRequest]();
     private static val poolLock = new Lock();
     
@@ -84,7 +86,7 @@ public class FinishRequest {
     }
     
     public def toString() {
-        return "type=" + typeDesc + ",id="+id+",toAdopter="+toAdopter+",childId="+childId+",srcId="+srcId+",dstId="+dstId+",ex="+(ex == null? "null": ex.getMessage());
+        return "type=" + typeDesc + ",id="+id+",submit="+submit+",toAdopter="+toAdopter+",childId="+childId+",srcId="+srcId+",dstId="+dstId+",ex="+(ex == null? "null": ex.getMessage());
     }
     
     private def this(id:FinishResilient.Id, masterPlaceId:Int,

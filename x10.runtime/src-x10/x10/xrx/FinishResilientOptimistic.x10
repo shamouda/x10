@@ -344,14 +344,29 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
             val parentId = UNASSIGNED;
-            if (verbose>=1) debug(">>>> Remote(id="+id+").notifySubActivitySpawn(srcId="+srcId+",dstId="+dstId+",kind="+kind+") called");
+            
+            val start = prof != null ? System.nanoTime() : 0;
+            val ser = new Serializer();
+            ser.writeAny(body);
+            if (prof != null) {
+                val end = System.nanoTime();
+                prof.serializationNanos += (end-start);
+                prof.bytes += ser.dataBytesWritten();
+            }
+            val bytes = ser.toRail();
+            
+            if (verbose>=1) debug(">>>> Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+",kind="+kind+",bytes="+bytes.size+") called");
             val req = FinishRequest.makeTransitRequest(id, parentId, UNASSIGNED, DUMMY_INT, DUMMY_INT, srcId, dstId, kind);
             val num = req.num;
             val fs = Runtime.activity().finishState(); //the outer finish
-            val preSendAction = ()=>{FinishReplicator.addPendingAct(num, dstId, fs, body, prof);};
-            val postSendAction = ()=>{FinishReplicator.sendPendingAct(num);};
+            val preSendAction = ()=>{FinishReplicator.addPendingAct(id, num, dstId, fs, bytes, prof);};
+            val postSendAction = ()=>{ 
+                fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
+                FinishReplicator.sendPendingAct(id, num);
+            };
+            val count = notifyReceived(Task(srcId, ASYNC)); // synthetic activity to keep finish locally live during async replication
+            if (verbose>=1) debug("<<<< Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+",kind="+kind+") local count after synthetic activity=" + count);
             FinishReplicator.asyncExec(req, null, preSendAction, postSendAction);
-            if (verbose>=1) debug("<<<< Remote(id="+id+").notifySubActivitySpawn(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning");
         }
         
         /*
@@ -397,14 +412,12 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable, kind:Int):void { 
             val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
-            Runtime.submitUncounted( ()=>{
-                if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
-                val parentId = UNASSIGNED;
-                val req = FinishRequest.makeTermRequest(id, parentId, UNASSIGNED, DUMMY_INT,  DUMMY_INT, srcId, dstId, kind);
-                req.ex = t;
-                val resp = FinishReplicator.exec(req);
-                if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
-            });
+            if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
+            val parentId = UNASSIGNED;
+            val req = FinishRequest.makeTermRequest(id, parentId, UNASSIGNED, DUMMY_INT,  DUMMY_INT, srcId, dstId, kind);
+            req.ex = t;
+            FinishReplicator.asyncExec(req, null);
+            if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
         }
 
         def notifyActivityCreatedAndTerminated(srcPlace:Place) {
@@ -424,19 +437,18 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 return;
             }
             
-            Runtime.submitUncounted( ()=>{
-                if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root");
-                val req = FinishRequest.makeTermMulRequest(id, parentId, DUMMY_INT,  DUMMY_INT, dstId, map);
-                val resp = FinishReplicator.exec(req);
-                if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
-            });
+
+            if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root");
+            val req = FinishRequest.makeTermMulRequest(id, parentId, DUMMY_INT,  DUMMY_INT, dstId, map);
+            FinishReplicator.asyncExec(req, null);
+            if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
         }
         
         def pushException(t:CheckedThrowable):void {
             val parentId = UNASSIGNED;
             if (verbose>=1) debug(">>>> Remote(id="+id+").pushException(t="+t.getMessage()+") called");
             val req = FinishRequest.makeExcpRequest(id, parentId, UNASSIGNED, DUMMY_INT,  DUMMY_INT, t);
-            val resp = FinishReplicator.exec(req);
+            FinishReplicator.asyncExec(req, null);
             if (verbose>=1) debug("<<<< Remote(id="+id+").pushException(t="+t.getMessage()+") returning");
         }
 
@@ -458,7 +470,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val parentId = UNASSIGNED;
             if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root");
             val req = FinishRequest.makeTermMulRequest(id, parentId, DUMMY_INT,  DUMMY_INT, dstId, map);
-            val resp = FinishReplicator.exec(req);
+            FinishReplicator.asyncExec(req, null);
             if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning");
         }
 
@@ -541,10 +553,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val s = new x10.util.StringBuilder();
             s.add("Root dump:\n");
             s.add("             id:" + id); s.add('\n');
+            s.add("     localCount:"); s.add(lc.get()); s.add('\n');
             s.add("      numActive:"); s.add(numActive); s.add('\n');
             s.add("       parentId: " + parentId); s.add('\n');
             if (sent.size() > 0) {
-                s.add("        sent:\n"); 
+                s.add("           sent:\n"); 
                 for (e in sent.entries()) {
                     s.add("\t\t"+e.getKey()+" = "+e.getValue()+"\n");
                 }
@@ -708,13 +721,12 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             } else {
                 dpe = null;
             }
-            Runtime.submitUncounted( ()=>{
-                if (verbose>=1) debug(">>>> Master(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+finKind+") called");
-                val req = FinishRequest.makeTermRequest(parentId, FinishResilient.UNASSIGNED, FinishResilient.UNASSIGNED, DUMMY_INT, DUMMY_INT, srcId, dstId, finKind);
-                req.ex = dpe;
-                val resp = FinishReplicator.exec(req);
-                if (verbose>=1) debug("<<<< Master(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+finKind+") returning");
-            });
+            
+            if (verbose>=1) debug(">>>> Master(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+finKind+") called");
+            val req = FinishRequest.makeTermRequest(parentId, FinishResilient.UNASSIGNED, FinishResilient.UNASSIGNED, DUMMY_INT, DUMMY_INT, srcId, dstId, finKind);
+            req.ex = dpe;
+            FinishReplicator.asyncExec(req, null);
+            if (verbose>=1) debug("<<<< Master(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+finKind+") returning");
         }
         
         public def exec(req:FinishRequest) {
@@ -838,17 +850,31 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def spawnRemoteActivity(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
+            isGlobal = true;
             val kind = ASYNC;
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
-            isGlobal = true;
+            
+            val start = prof != null ? System.nanoTime() : 0;
+            val ser = new Serializer();
+            ser.writeAny(body);
+            if (prof != null) {
+                val end = System.nanoTime();
+                prof.serializationNanos += (end-start);
+                prof.bytes += ser.dataBytesWritten();
+            }
+            val bytes = ser.toRail();
+            
             if (verbose>=1) debug(">>>> Root(id="+id+").spawnRemoteActivity(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
             val req = FinishRequest.makeTransitRequest(id, parentId, UNASSIGNED, finSrc.id as Int, finKind, srcId, dstId, kind);
             val num = req.num;
             val fs = Runtime.activity().finishState(); //the outer finish
-            val preSendAction = ()=>{FinishReplicator.addPendingAct(num, dstId, fs, body, prof);};
-            val postSendAction = ()=>{FinishReplicator.sendPendingAct(num);};
+            val preSendAction = ()=>{FinishReplicator.addPendingAct(id, num, dstId, fs, bytes, prof);};
+            val postSendAction = ()=>{ 
+                FinishReplicator.sendPendingAct(id, num);
+            };
             FinishReplicator.asyncExec(req, this, preSendAction, postSendAction);
+            // no need for synthetic activity - the action will be done synchronously on the local master finish before asyncExec returns
             if (verbose>=1) debug("<<<< Root(id="+id+").spawnRemoteActivity(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
         }
         
@@ -884,13 +910,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable, kind:Int):void { 
             val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
-            Runtime.submitUncounted( ()=>{
-                if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
-                val req = FinishRequest.makeTermRequest(id, parentId, UNASSIGNED, finSrc.id as Int, finKind, srcId, dstId, kind);
-                req.ex = t;
-                val resp = FinishReplicator.exec(req);
-                if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
-            });
+            if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
+            val req = FinishRequest.makeTermRequest(id, parentId, UNASSIGNED, finSrc.id as Int, finKind, srcId, dstId, kind);
+            req.ex = t;
+            FinishReplicator.asyncExec(req, this);
+            if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
         }
 
         def notifyActivityCreatedAndTerminated(srcPlace:Place):void {
@@ -898,10 +922,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val dstId = here.id as Int;
             if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") called");
             //no need to call notifyActivityCreation() since it does NOOP in Root finish
-            Runtime.submitUncounted( ()=>{
-                notifyActivityTermination(srcPlace, ASYNC);
-                if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
-            });
+            notifyActivityTermination(srcPlace, ASYNC);
+            if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
         }
         
         def pushException(t:CheckedThrowable):void {
@@ -911,7 +933,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }
             if (verbose>=1) debug(">>>> Root(id="+id+").pushException(t="+t.getMessage()+") called");
             val req = FinishRequest.makeExcpRequest(id, parentId, UNASSIGNED, finSrc.id as Int, finKind, t);
-            val resp = FinishReplicator.exec(req);
+            FinishReplicator.asyncExec(req, this);
             if (verbose>=1) debug("<<<< Root(id="+id+").pushException(t="+t.getMessage()+") returning");
         }
 
@@ -938,7 +960,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }
             if (verbose>=1) debug("==== Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
             val req = FinishRequest.makeTermRequest(id, parentId, UNASSIGNED, finSrc.id as Int, finKind, srcId, dstId, kind);
-            val resp = FinishReplicator.exec(req);
+            val fs = Runtime.activity().finishState(); //the outer finish
+            FinishReplicator.asyncExec(req, this);
             if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
         }
         
@@ -1116,7 +1139,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             s.add("      numActive:"); s.add(numActive); s.add('\n');
             s.add("       parentId: " + parentId); s.add('\n');
             if (sent.size() > 0) {
-                s.add("        sent:\n"); 
+                s.add("           sent:\n"); 
                 for (e in sent.entries()) {
                     s.add("\t\t"+e.getKey()+" = "+e.getValue()+"\n");
                 }
@@ -1858,6 +1881,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (verbose>=1) debug("==== createMasters bypassed ====");
             return;
         }
+        
+        if (verbose>=1) debug("==== handling non-blocking pending requests ====");
+        FinishReplicator.submitDeadBackupPendingRequests(newDead);
+        FinishReplicator.submitDeadMasterPendingRequests(newDead);
         
         if (verbose>=1) debug("<<<< notifyPlaceDeath returning");
     }
