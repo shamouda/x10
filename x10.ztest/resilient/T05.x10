@@ -12,7 +12,9 @@ public class T05 {
     }   
    
     public static def main (args:Rail[String]) {
-        for (i in 0..1000) {
+        //for (i in 0..0) 
+        val i = 1;
+    	{
             val gr = new GlobalRef[AtomicInteger](new AtomicInteger(0n));
             try {
                 finish {

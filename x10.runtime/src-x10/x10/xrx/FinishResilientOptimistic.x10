@@ -870,11 +870,12 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val num = req.num;
             val fs = Runtime.activity().finishState(); //the outer finish
             val preSendAction = ()=>{FinishReplicator.addPendingAct(id, num, dstId, fs, bytes, prof);};
-            val postSendAction = ()=>{ 
+            val postSendAction = ()=>{
+            	fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
                 FinishReplicator.sendPendingAct(id, num);
             };
+            lc.incrementAndGet(); // synthetic activity to keep finish locally live during async replication
             FinishReplicator.asyncExec(req, this, preSendAction, postSendAction);
-            // no need for synthetic activity - the action will be done synchronously on the local master finish before asyncExec returns
             if (verbose>=1) debug("<<<< Root(id="+id+").spawnRemoteActivity(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
         }
         
@@ -960,7 +961,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }
             if (verbose>=1) debug("==== Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
             val req = FinishRequest.makeTermRequest(id, parentId, UNASSIGNED, finSrc.id as Int, finKind, srcId, dstId, kind);
-            val fs = Runtime.activity().finishState(); //the outer finish
             FinishReplicator.asyncExec(req, this);
             if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
         }

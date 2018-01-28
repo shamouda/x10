@@ -150,6 +150,7 @@ public final class FinishReplicator {
             }
             val postSendAction = postActions.remove(req.num); 
             if (req.submit && postSendAction != null) {
+            	if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(id="+req.id+") executing postSendAction()");
                 postSendAction();
             }
             FinishRequest.deallocReq(req);
@@ -170,9 +171,7 @@ public final class FinishReplicator {
         asyncExecInternal(req, localMaster); //we retry this line when needed
     }
     
-    //FIXME: handle notifyPlaceDead -> MasterDied and BackupDied
     //FIXME: return adoptedId for PESSIMISTIC
-    //FIXME: handle local calls
     //FIXME: reduce serialization
     private static def asyncExecInternal(req:FinishRequest, localMaster:FinishMasterState) {
         val caller = here;
@@ -904,6 +903,9 @@ public final class FinishReplicator {
                     bs = new FinishResilientPessimistic.PessimisticBackupState(id, parentId);
                 fbackups.put(id, bs);
                 if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") returning, created bs="+bs);
+            }
+            else {
+            	if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") returning, found bs="+bs); 
             }
             return bs;
         } finally {

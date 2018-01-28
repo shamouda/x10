@@ -18,10 +18,12 @@ public class Tree {
             finish at (Place(0)) async think(thinkTime);
         }
         if (child1 < Place.numPlaces() || child2 < Place.numPlaces()) {
+            Console.OUT.println(here.id + "=> child1:" + child1 + " child2:" + child2 + "  started");
             finish {
                 if (child1 < Place.numPlaces()) at (Place(child1)) async downTree(thinkTime);
                 if (child2 < Place.numPlaces()) at (Place(child2)) async downTree(thinkTime);
             }
+            Console.OUT.println(here.id + "=> child1:" + child1 + " child2:" + child2 + "  ended");
         }
     }
     
