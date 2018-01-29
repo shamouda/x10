@@ -88,66 +88,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     //serialize a root finish
     public def serialize(ser:Serializer) {
         if (verbose>=1) debug(">>>> serialize(id="+id+") called ");
-        globalInit(false); // Once we have more than 1 copy of the finish state, we must go global
-                           // false means don't create a backup
+        if (me instanceof OptimisticMasterState) {
+        	(me as OptimisticMasterState).globalInit(false); 
+        }
         ser.writeAny(id);
         if (verbose>=1) debug("<<<< serialize(id="+id+") returning ");
-    }
-    
-    //makeBackup is true only when a parent finish if forced to be global by its child
-    //otherwise, backup is created with the first transit request
-    private def globalInit(makeBackup:Boolean) {
-        if (me instanceof OptimisticMasterState) {
-            val rootState = me as OptimisticMasterState;
-            rootState.latch.lock();
-            rootState.strictFinish = true;
-            if (!rootState.isGlobal) {
-                if (verbose>=1) debug(">>>> globalInit(id="+id+") called");
-                val parent = rootState.parent;
-                if (parent instanceof FinishResilientOptimistic) {
-                    val frParent = parent as FinishResilientOptimistic;
-                    if (frParent.me instanceof OptimisticMasterState) (frParent as FinishResilientOptimistic).globalInit(true);
-                }
-                if (makeBackup)
-                    createBackup(rootState.backupPlaceId);
-                rootState.isGlobal = true;
-                FinishReplicator.addMaster(id, rootState);
-                if (verbose>=1) debug("<<<< globalInit(id="+id+") returning");
-            }
-            rootState.latch.unlock();
-        }
-    }
-    
-    private def createBackup(backupPlaceId:Int) {
-        val rootState = me as OptimisticMasterState;
-        //TODO: redo if backup dies
-        if (verbose>=1) debug(">>>> createBackup(id="+id+") called fs="+this);
-         val backup = Place(backupPlaceId);
-         if (backup.isDead()) {
-             if (verbose>=1) debug("<<<< createBackup(id="+id+") returning fs="+this + " dead backup");
-             return false;
-         }
-         val myId = id; //don't copy this
-         val home = here;
-         val parentId = rootState.parentId;
-         val src = rootState.finSrc;
-         val finKind = rootState.finKind;
-        val rCond = ResilientCondition.make(backup);
-        val closure = (gr:GlobalRef[Condition]) => {
-            at (backup) @Immediate("backup_create") async {
-                val bFin = FinishReplicator.findBackupOrCreate(myId, parentId, src, finKind);
-                at (gr) @Immediate("backup_create_response") async {
-                    gr().release();
-                }
-            }; 
-        };
-        rCond.run(closure);
-        //TODO: redo if backup is dead
-        if (rCond.failed()) {
-            val excp = new DeadPlaceException(backup);
-        }
-        rCond.forget();
-        return true;
     }
     
     /* Because we record only the transit tasks with src-dst, we must record the
@@ -542,6 +487,57 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         public def getId() = id;
+        
+        //makeBackup is true only when a parent finish if forced to be global by its child
+        //otherwise, backup is created with the first transit request
+        def globalInit(makeBackup:Boolean) {
+            latch.lock();
+            strictFinish = true;
+            if (!isGlobal) {
+                if (verbose>=1) debug(">>>> globalInit(id="+id+") called");
+                if (parent instanceof FinishResilientOptimistic) {
+                    val frParent = parent as FinishResilientOptimistic;
+                    if (frParent.me instanceof OptimisticMasterState) (frParent.me as OptimisticMasterState).globalInit(true);
+                }
+                if (makeBackup)
+                    createBackup(backupPlaceId);
+                isGlobal = true;
+                FinishReplicator.addMaster(id, this);
+                if (verbose>=1) debug("<<<< globalInit(id="+id+") returning");
+            }
+            latch.unlock();
+        }
+        
+        private def createBackup(backupPlaceId:Int) {
+            //TODO: redo if backup dies
+            if (verbose>=1) debug(">>>> createBackup(id="+id+") called fs="+this);
+             val backup = Place(backupPlaceId);
+             if (backup.isDead()) {
+                 if (verbose>=1) debug("<<<< createBackup(id="+id+") returning fs="+this + " dead backup");
+                 return false;
+             }
+             val myId = id; //don't copy this
+             val home = here;
+             val myParentId = parentId;
+             val mySrc = finSrc;
+             val myKind = finKind;
+            val rCond = ResilientCondition.make(backup);
+            val closure = (gr:GlobalRef[Condition]) => {
+                at (backup) @Immediate("backup_create") async {
+                    val bFin = FinishReplicator.findBackupOrCreate(myId, myParentId, mySrc, myKind);
+                    at (gr) @Immediate("backup_create_response") async {
+                        gr().release();
+                    }
+                }; 
+            };
+            rCond.run(closure);
+            //TODO: redo if backup is dead
+            if (rCond.failed()) {
+                val excp = new DeadPlaceException(backup);
+            }
+            rCond.forget();
+            return true;
+        }
         
         public def lock() {
             latch.lock();

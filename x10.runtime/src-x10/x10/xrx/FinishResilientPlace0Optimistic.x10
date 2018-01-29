@@ -34,8 +34,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
     protected transient var me:FinishResilient; // local finish object
     val id:Id;
 
-    
-    public def toString():String {
+	public def toString():String {
         return me.toString();
     }
     
@@ -49,6 +48,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
     def pushException(t:CheckedThrowable):void { me.pushException(t); }
     def notifyActivityTermination(srcPlace:Place):void { me.notifyActivityTermination(srcPlace); }
     def notifyShiftedActivityCompletion(srcPlace:Place):void { me.notifyShiftedActivityCompletion(srcPlace); }
+    def spawnRemoteActivity(place:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void { me.spawnRemoteActivity(place, body, prof); }
     def waitForFinish():void { me.waitForFinish(); }
     
     //create root finish
@@ -72,31 +72,11 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
     //serialize a root finish
     public def serialize(ser:Serializer) {
         //NOLOG if (verbose>=1) debug(">>>> serialize(id="+id+") called ");
-        globalInit(false); // Once we have more than 1 copy of the finish state, we must go global
+    	if (me instanceof P0OptimisticMasterState) {
+    		(me as P0OptimisticMasterState).globalInit(false); // Once we have more than 1 copy of the finish state, we must go global
+    	}
         ser.writeAny(id);
         //NOLOG if (verbose>=1) debug("<<<< serialize(id="+id+") returning ");
-    }
-
-    private def globalInit(createState:Boolean) {
-        if (me instanceof P0OptimisticMasterState) {
-            val rootState = me as P0OptimisticMasterState;
-            rootState.latch.lock();
-            rootState.strictFinish = true;
-            if (!rootState.isGlobal) {
-                //NOLOG if (verbose>=1) debug(">>>> globalInit(id="+id+") called");
-                val parent = rootState.parent;
-                if (parent instanceof FinishResilientPlace0Optimistic) {
-                    val frParent = parent as FinishResilientPlace0Optimistic;
-                    if (frParent.me instanceof P0OptimisticMasterState) (frParent as FinishResilientPlace0Optimistic).globalInit(true);
-                }
-                if (createState){
-                    State.p0CreateState(rootState.optId, rootState.ref);
-                }
-                rootState.isGlobal = true;
-                //NOLOG if (verbose>=1) debug("<<<< globalInit(id="+id+") returning");
-            }
-            rootState.latch.unlock();
-        }
     }
     
     /**
@@ -950,6 +930,25 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             } else {
                 optId = OptimisticRootId(id, UNASSIGNED, src.id as Int, kind);
             }
+        }
+        
+        def globalInit(createState:Boolean) {
+            latch.lock();
+            strictFinish = true;
+            if (!isGlobal) {
+                //NOLOG if (verbose>=1) debug(">>>> globalInit(id="+id+") called");
+                val parent = parent;
+                if (parent instanceof FinishResilientPlace0Optimistic) {
+                    val frParent = parent as FinishResilientPlace0Optimistic;
+                    if (frParent.me instanceof P0OptimisticMasterState) (frParent.me as P0OptimisticMasterState).globalInit(true);
+                }
+                if (createState) {
+                    State.p0CreateState(optId, ref);
+                }
+                isGlobal = true;
+                //NOLOG if (verbose>=1) debug("<<<< globalInit(id="+id+") returning");
+            }
+            latch.unlock();
         }
         
         public def lock() {
