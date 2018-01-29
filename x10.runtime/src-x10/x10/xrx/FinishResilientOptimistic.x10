@@ -1879,7 +1879,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             createMasters(activeBackups);
         } else {
             if (verbose>=1) debug("==== createMasters bypassed ====");
-            return;
         }
         
         if (verbose>=1) debug("==== handling non-blocking pending requests ====");
