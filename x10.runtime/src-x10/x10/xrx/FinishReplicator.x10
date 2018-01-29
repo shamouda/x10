@@ -111,19 +111,23 @@ public final class FinishReplicator {
     }
     
     //we don't insert a backup request if backup is dead
-    private static def masterToBackupPending(num:Long, masterPlaceId:Long, submit:Boolean) {
+    private static def masterToBackupPending(num:Long, masterPlaceId:Long, submit:Boolean, backupPlaceId:Long) {
         try {
             glock.lock();
             val req = pendingMaster.remove(num);
             req.submit = submit;
+            
             if (req != null) {
-                if (Place(req.backupPlaceId).isDead())
+                if (verbose>=1) debug(">>>> Replicator.masterToBackupPending(id="+req.id+", num="+num+", submit="+submit+") called, req found");
+                if (Place(backupPlaceId).isDead()) {
+                    if (verbose>=1) debug("<<<< Replicator.masterToBackupPending(id="+req.id+", num="+num+", submit="+submit+") returned TARGET_DEAD");
                     return TARGET_DEAD;
+                }
                 pendingBackup.put(num, req);
-                if (verbose>=1) debug("<<<< Replicator.masterToBackupPending(id="+req.id+", num="+num+", submit="+submit+") returned");
+                if (verbose>=1) debug("<<<< Replicator.masterToBackupPending(id="+req.id+", num="+num+", submit="+submit+") returned SUCCESS");
                 return SUCCESS;
             } else {
-                if (verbose>=1) debug("<<<< Replicator.masterToBackupPending(id="+req.id+", num="+num+", submit="+submit+") req not found, masterDead? " + Place(masterPlaceId).isDead());
+                if (verbose>=1) debug("<<<< Replicator.masterToBackupPending(num="+num+", submit="+submit+") req not found, masterDead? " + Place(masterPlaceId).isDead());
                 assert Place(masterPlaceId).isDead() : here + " FATAL ERROR, pending master request not found although master is alive";
             }
             return LEGAL_ABSENCE;
@@ -237,7 +241,7 @@ public final class FinishReplicator {
                 req.parentId = mresp.parentId;          /*the child may not find the parent's backup during globalInit, so it needs to create it*/
             req.backupPlaceId = mresp.backupPlaceId;
             req.transitSubmitDPE = mresp.transitSubmitDPE;
-            val rc = masterToBackupPending(req.num, req.masterPlaceId, submit);
+            val rc = masterToBackupPending(req.num, req.masterPlaceId, submit, mresp.backupPlaceId);
             if (rc == TARGET_DEAD) {
                 //ignore backup and go ahead with post processing
                 handleBackupDied(req);
