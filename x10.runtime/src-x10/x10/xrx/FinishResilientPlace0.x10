@@ -439,7 +439,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
             val frParent = parent as FinishResilientPlace0;
             pId = frParent.id;
         } else {
-        	//NOLOG if (verbose>=1) debug("FinishResilientPlace0(id="+id+") foreign parent found of type " + parent);
+            //NOLOG if (verbose>=1) debug("FinishResilientPlace0(id="+id+") foreign parent found of type " + parent);
             pId = UNASSIGNED;
         }
     }
@@ -472,7 +472,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
                 if (!frParent.isGlobal) frParent.globalInit();
                 parentId = frParent.id;
             } else {
-            	//NOLOG if (verbose>=1) debug(">>>> FinishP0 globalInit id="+ id + " foriegn parent of type: " + parent);
+                //NOLOG if (verbose>=1) debug(">>>> FinishP0 globalInit id="+ id + " foriegn parent of type: " + parent);
                 parentId = UNASSIGNED;
             }
             val gfs = this.ref;

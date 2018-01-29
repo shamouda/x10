@@ -871,7 +871,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val fs = Runtime.activity().finishState(); //the outer finish
             val preSendAction = ()=>{FinishReplicator.addPendingAct(id, num, dstId, fs, bytes, prof);};
             val postSendAction = ()=>{
-            	fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
+                fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
                 FinishReplicator.sendPendingAct(id, num);
             };
             lc.incrementAndGet(); // synthetic activity to keep finish locally live during async replication

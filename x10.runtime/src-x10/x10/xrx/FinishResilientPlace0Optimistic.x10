@@ -106,8 +106,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         val gfs:GlobalRef[P0OptimisticMasterState]; // root finish state
         val id:Id;
         val parentId:Id; // id of parent (UNASSIGNED means no parent / parent is UNCOUNTED)
-    	val finSrc:Int; //the source place that initiated the task that created this finish
-		val finKind:Int; //the kind of the task that created the finish
+        val finSrc:Int; //the source place that initiated the task that created this finish
+        val finKind:Int; //the kind of the task that created the finish
     
         var numActive:Long = 0;
         var excs:GrowableRail[CheckedThrowable] = null;  // lazily allocated in addException
