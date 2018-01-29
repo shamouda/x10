@@ -54,8 +54,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         public def toString() = "<BackupQueryId parentId=" + parentId + " src=" + src +">";
     }
     
-    def notifySubActivitySpawn(place:Place):void { me.notifySubActivitySpawn(place); }
-    def notifyShiftedActivitySpawn(place:Place):void { me.notifyShiftedActivitySpawn(place); }
+    def notifySubActivitySpawn(place:Place):void { me.notifySubActivitySpawn(place); }  /*Blocking replication*/
+    def notifyShiftedActivitySpawn(place:Place):void { me.notifyShiftedActivitySpawn(place); }  /*Blocking replication*/
     def notifyActivityCreation(srcPlace:Place, activity:Activity):Boolean { return me.notifyActivityCreation(srcPlace, activity); }
     def notifyShiftedActivityCreation(srcPlace:Place):Boolean { return me.notifyShiftedActivityCreation(srcPlace); }
     def notifyRemoteContinuationCreated():void { me.notifyRemoteContinuationCreated(); }
@@ -360,9 +360,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val num = req.num;
             val fs = Runtime.activity().finishState(); //the outer finish
             val preSendAction = ()=>{FinishReplicator.addPendingAct(id, num, dstId, fs, bytes, prof);};
-            val postSendAction = ()=>{ 
-                fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
-                FinishReplicator.sendPendingAct(id, num);
+            val postSendAction = (submit:Boolean, adopterId:Id)=>{
+                if (submit) {
+                    fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
+                    FinishReplicator.sendPendingAct(id, num);
+                }
             };
             val count = notifyReceived(Task(srcId, ASYNC)); // synthetic activity to keep finish locally live during async replication
             if (verbose>=1) debug("<<<< Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+",kind="+kind+") local count after synthetic activity=" + count);
@@ -870,9 +872,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val num = req.num;
             val fs = Runtime.activity().finishState(); //the outer finish
             val preSendAction = ()=>{FinishReplicator.addPendingAct(id, num, dstId, fs, bytes, prof);};
-            val postSendAction = ()=>{
-                fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
-                FinishReplicator.sendPendingAct(id, num);
+            val postSendAction = (submit:Boolean, adopterId:Id)=>{
+                if (submit) {
+                    fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
+                    FinishReplicator.sendPendingAct(id, num);
+                }
             };
             lc.incrementAndGet(); // synthetic activity to keep finish locally live during async replication
             FinishReplicator.asyncExec(req, this, preSendAction, postSendAction);
