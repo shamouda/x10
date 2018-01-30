@@ -95,7 +95,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         /*val transit:HashMap[Edge,Int];*/ // increases and decreases - not needed except for debugging
         var isAdopted:Boolean = false;//set to true when backup recreates a master
         
-        
         /**Place0 states**/
         private static val states = (here.id==0) ? new HashMap[Id, State]() : null;
         private static val statesLock = (here.id==0) ? new Lock() : null;
@@ -161,6 +160,178 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     }
                 }
             });
+        }
+        
+        static def p0RemoteSpawnSmallGlobal(id:Id, srcId:Int, dstId:Int, bytes:Rail[Byte],
+        		gfs:GlobalRef[FinishState]) {
+            at (place0) @Immediate("p0opt_spawnRemoteActivity_to_zero") async {
+                if (Place(srcId).isDead()) {
+                    //NOLOG if (verbose>=1) debug("==== spawnRemoteActivity(id="+myId+") src "+srcId + "is dead; dropping async");
+                } else {
+                    try {
+                    	statesLock.lock();
+                        val state = states(id);
+                        if (Place(dstId).isDead()) {
+                            //NOLOG if (verbose>=1) debug("==== spawnRemoteActivity(id="+myId+") destination "+dstId + "is dead; pushed DPE");
+                            state.addDeadPlaceException(dstId);
+                        } else {
+                            state.inTransit(srcId, dstId, ASYNC, "spawnRemoteActivity(small async)");
+                        }
+                    } finally {
+                    	statesLock.unlock();
+                    }
+                }
+                                
+                try {
+                    at (Place(dstId)) @Immediate("p0opt_spawnRemoteActivity_dstPlace") async {
+                        //NOLOG if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") submitting activity from "+here.id+" at "+dstId);
+                        val wrappedBody = ()=> {
+                            // defer deserialization to reduce work on immediate thread
+                            val deser = new Deserializer(bytes);
+                            val bodyPrime = deser.readAny() as ()=>void;
+                            bodyPrime();
+                        };
+                        val fs = (gfs as GlobalRef[FinishState]{self.home == here})();
+                        Runtime.worker().push(new Activity(42, wrappedBody, fs, Place(srcId)));
+                    }
+                } catch (dpe:DeadPlaceException) {
+                    // can ignore; if the place just died there is no need to worry about submitting the activity
+                    //NOLOG if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dstPlace for "+myId);
+                }
+            }
+        }
+        
+        static def p0RemoteSpawnBigGlobal(id:Id, srcId:Int, dstId:Int, bytes:Rail[Byte],
+        		gfs:GlobalRef[FinishState]) {
+            val wrappedBody = ()=> @AsyncClosure {
+                val deser = new Deserializer(bytes);
+                val bodyPrime = deser.readAny() as ()=>void;
+                bodyPrime();
+            };
+            val wbgr = GlobalRef(wrappedBody);
+            at (place0) @Immediate("p0opt_spawnRemoteActivity_big_async_to_zero") async {
+                var markedInTransit:Boolean = false;
+                if (Place(srcId).isDead()) {
+                    //NOLOG if (verbose>=1) debug("==== spawnRemoteActivity(id="+myId+") src "+srcId + "is dead; dropping async");
+                } else {
+                    try {
+                    	statesLock.lock();
+                        val state = states(id);
+                        if (Place(dstId).isDead()) {
+                            //NOLOG if (verbose>=1) debug("==== spawnRemoteActivity(id="+myId+") destination "+dstId + "is dead; pushed DPE");
+                            state.addDeadPlaceException(dstId);
+                        } else {
+                            state.inTransit(srcId, dstId, ASYNC, "spawnRemoteActivity(large async)");
+                            markedInTransit = true;
+                        }
+                    } finally {
+                    	statesLock.unlock();
+                    }
+                }
+                try {
+                    val mt = markedInTransit;
+                    at (wbgr) @Immediate("p0opt_spawnRemoteActivity_big_back_to_spawner") async {
+                        val fs = (gfs as GlobalRef[FinishState]{self.home == here})();
+                        try {
+                            if (mt) x10.xrx.Runtime.x10rtSendAsync(dstId, wbgr(), fs, null, null);
+                        } catch (dpe:DeadPlaceException) {
+                            // not relevant to immediate thread; DPE raised in convertDeadActivities
+                            //NOLOG if (verbose>=2) debug("caught and suppressed DPE from x10rtSendAsync from spawnRemoteActivity_big_back_to_spawner for "+myId);
+                        }
+                        wbgr.forget();
+                        fs.notifyActivityTermination(Place(srcId));
+                    }
+                } catch (dpe:DeadPlaceException) {
+                    // can ignore; if the src place just died there is nothing left to do.
+                    //NOLOG if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_big_back_to_spawner for "+myId);
+                }
+            }
+        }
+        
+        static def p0RemoteSpawnSmall(optId:OptimisticRootId, gfs:GlobalRef[P0OptimisticMasterState], srcId:Int, dstId:Int, bytes:Rail[Byte],
+        		ref:GlobalRef[FinishState]) {
+            at (place0) @Immediate("p0opt_spawnRemoteActivity_to_zero") async {
+                if (Place(srcId).isDead()) {
+                    //NOLOG if (verbose>=1) debug("==== spawnRemoteActivity(id="+myId+") src "+srcId + "is dead; dropping async");
+                } else {
+                    try {
+                    	statesLock.lock();
+                    	val state = getOrCreateState(optId, gfs);
+                        if (Place(dstId).isDead()) {
+                            //NOLOG if (verbose>=1) debug("==== spawnRemoteActivity(id="+myId+") destination "+dstId + "is dead; pushed DPE");
+                            state.addDeadPlaceException(dstId);
+                        } else {
+                            state.inTransit(srcId, dstId, ASYNC, "spawnRemoteActivity(small async)");
+                        }
+                    } finally {
+                    	statesLock.unlock();
+                    }
+                }
+                                
+                try {
+                    at (Place(dstId)) @Immediate("p0opt_spawnRemoteActivity_dstPlace") async {
+                        //NOLOG if (verbose >= 1) debug("==== spawnRemoteActivity(id="+myId+") submitting activity from "+here.id+" at "+dstId);
+                        val wrappedBody = ()=> {
+                            // defer deserialization to reduce work on immediate thread
+                            val deser = new Deserializer(bytes);
+                            val bodyPrime = deser.readAny() as ()=>void;
+                            bodyPrime();
+                        };
+                        val fs = (ref as GlobalRef[FinishState]{self.home == here})();
+                        Runtime.worker().push(new Activity(42, wrappedBody, fs, Place(srcId)));
+                    }
+                } catch (dpe:DeadPlaceException) {
+                    // can ignore; if the place just died there is no need to worry about submitting the activity
+                    //NOLOG if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_dstPlace for "+myId);
+                }
+            }
+        }
+        
+        static def p0RemoteSpawnBig(optId:OptimisticRootId, gfs:GlobalRef[P0OptimisticMasterState], srcId:Int, dstId:Int, bytes:Rail[Byte],
+        		ref:GlobalRef[FinishState]) {
+            val wrappedBody = ()=> @AsyncClosure {
+                val deser = new Deserializer(bytes);
+                val bodyPrime = deser.readAny() as ()=>void;
+                bodyPrime();
+            };
+            val wbgr = GlobalRef(wrappedBody);
+            at (place0) @Immediate("p0opt_spawnRemoteActivity_big_async_to_zero") async {
+                var markedInTransit:Boolean = false;
+                if (Place(srcId).isDead()) {
+                    //NOLOG if (verbose>=1) debug("==== spawnRemoteActivity(id="+myId+") src "+srcId + "is dead; dropping async");
+                } else {
+                    try {
+                    	statesLock.lock();
+                    	val state = getOrCreateState(optId, gfs);
+                        if (Place(dstId).isDead()) {
+                            //NOLOG if (verbose>=1) debug("==== spawnRemoteActivity(id="+myId+") destination "+dstId + "is dead; pushed DPE");
+                            state.addDeadPlaceException(dstId);
+                        } else {
+                            state.inTransit(srcId, dstId, ASYNC, "spawnRemoteActivity(large async)");
+                            markedInTransit = true;
+                        }
+                    } finally {
+                    	statesLock.unlock();
+                    }
+                }
+                try {
+                    val mt = markedInTransit;
+                    at (wbgr) @Immediate("p0opt_spawnRemoteActivity_big_back_to_spawner") async {
+                        val fs = (ref as GlobalRef[FinishState]{self.home == here})();
+                        try {
+                            if (mt) x10.xrx.Runtime.x10rtSendAsync(dstId, wbgr(), fs, null, null);
+                        } catch (dpe:DeadPlaceException) {
+                            // not relevant to immediate thread; DPE raised in convertDeadActivities
+                            //NOLOG if (verbose>=2) debug("caught and suppressed DPE from x10rtSendAsync from spawnRemoteActivity_big_back_to_spawner for "+myId);
+                        }
+                        wbgr.forget();
+                        fs.notifyActivityTermination(Place(srcId));
+                    }
+                } catch (dpe:DeadPlaceException) {
+                    // can ignore; if the src place just died there is nothing left to do.
+                    //NOLOG if (verbose>=2) debug("caught and suppressed DPE when attempting spawnRemoteActivity_big_back_to_spawner for "+myId);
+                }
+            }
         }
         
         //called by root finish - may need to create the State object
@@ -810,6 +981,33 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             }
         }
         
+        def spawnRemoteActivity(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
+            val srcId = here.id as Int;
+            val dstId = dstPlace.id as Int;
+            //NOLOG if (verbose>=1) debug(">>>> Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+") called");
+            val start = prof != null ? System.nanoTime() : 0;
+            val ser = new Serializer();
+            ser.writeAny(body);
+            if (prof != null) {
+                val end = System.nanoTime();
+                prof.serializationNanos += (end-start);
+                prof.bytes += ser.dataBytesWritten();
+            }
+            val bytes = ser.toRail();
+            val fs = Runtime.activity().finishState();
+            val gfs = new GlobalRef[FinishState](fs);
+            
+            if (bytes.size >= ASYNC_SIZE_THRESHOLD) {
+                //NOLOG if (verbose >= 1) debug("==== Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting indirect (size="+ bytes.size+") ");
+            	val count = notifyReceived(Task(srcId, ASYNC)); // synthetic activity to keep finish locally live during async to Place0
+            	State.p0RemoteSpawnBigGlobal(id, srcId, dstId, bytes, gfs);
+            } else {
+                //NOLOG if (verbose >= 1) debug("====  Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting direct (size="+ bytes.size+") ");
+            	State.p0RemoteSpawnSmallGlobal(id, srcId, dstId, bytes, gfs);
+            }
+            //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+") returning");
+        }
+        
         /*
          * This method can't block because it may run on an @Immediate worker.  
          */
@@ -1016,9 +1214,37 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 //NOLOG if (verbose>=1) debug(">>>> Root(id="+optId.id+").notifySubActivitySpawn(parentId="+optId.parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called locally, localCount now "+count);
             } else {
                 //NOLOG if (verbose>=1) debug(">>>> Root(id="+optId.id+").notifySubActivitySpawn(parentId="+optId.parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
-                State.p0Transit(optId, ref, srcId, dstId, kind);
+            	isGlobal = true;
+            	State.p0Transit(optId, ref, srcId, dstId, kind);
                 //NOLOG if (verbose>=1) debug("<<<< Root(id="+optId.id+").notifySubActivitySpawn(parentId="+optId.parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
             }
+        }
+        
+        def spawnRemoteActivity(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
+            val srcId = here.id as Int;
+            val dstId = dstPlace.id as Int;
+            //NOLOG if (verbose>=1) debug(">>>> Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+") called");
+            val start = prof != null ? System.nanoTime() : 0;
+            val ser = new Serializer();
+            ser.writeAny(body);
+            if (prof != null) {
+                val end = System.nanoTime();
+                prof.serializationNanos += (end-start);
+                prof.bytes += ser.dataBytesWritten();
+            }
+            val bytes = ser.toRail();
+            val fs = Runtime.activity().finishState();
+            val gfs = new GlobalRef[FinishState](fs);
+            isGlobal = true;
+            if (bytes.size >= ASYNC_SIZE_THRESHOLD) {
+                //NOLOG if (verbose >= 1) debug("==== Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting indirect (size="+ bytes.size+") ");
+            	val count = lc.incrementAndGet(); // synthetic activity to keep finish locally live during async to Place0
+            	State.p0RemoteSpawnBig(optId, ref, srcId, dstId, bytes, gfs);
+            } else {
+                //NOLOG if (verbose >= 1) debug("====  Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting direct (size="+ bytes.size+") ");
+            	State.p0RemoteSpawnSmall(optId, ref, srcId, dstId, bytes, gfs);
+            }
+            //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+") returning");
         }
         
         /*
@@ -1052,6 +1278,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
             //NOLOG if (verbose>=1) debug(">>>> Root(id="+optId.id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
+            isGlobal = true;
             State.p0TransitToCompleted(optId, ref, srcId, dstId, kind, t);
             //NOLOG if (verbose>=1) debug("<<<< Root(id="+optId.id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
         }
@@ -1071,6 +1298,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 return;
             }
             //NOLOG if (verbose>=1) debug(">>>> Root(id="+optId.id+").pushException(t="+t.getMessage()+") called");
+            isGlobal = true;
             State.p0PushException(optId, ref, t);
             //NOLOG if (verbose>=1) debug("<<<< Root(id="+optId.id+").pushException(t="+t.getMessage()+") returning");
         }
