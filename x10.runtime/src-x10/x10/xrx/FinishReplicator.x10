@@ -49,13 +49,13 @@ public final class FinishReplicator {
     private static val SUCCESS = 0n;
     private static val TARGET_DEAD = 1n;
     private static val LEGAL_ABSENCE = 2n;
-    
+
     //we must deny new buckup creations from the dead source place
     //places other than the given src can use this place to create a backup
     protected static struct BackupDenyId(parentId:FinishResilient.Id, src:Int) {
         public def toString() = "<backupDenyId parentId=" + parentId + " src=" + src + ">";
     }
-    
+
     //raises a fatal error if new replication requests were received after main finish terminated
     static def checkMainTermination() {
         val c = pending.incrementAndGet();
@@ -725,7 +725,7 @@ public final class FinishReplicator {
         }
     }
     
-    static def countBackups(parentId:FinishResilient.Id, src:Int) {
+    static def countChildrenBackups(parentId:FinishResilient.Id, src:Int) {
         var count:Int = 0n;
         try {
             glock.lock();
@@ -735,7 +735,7 @@ public final class FinishReplicator {
             }
             //no more backups under this parent from that src place should be created
             backupDeny.add(BackupDenyId(parentId, src));
-            if (verbose>=1) debug("<<<< countBackups(parentId="+parentId+") returning, count = " + count + " and parentId added to denyList");
+            if (verbose>=1) debug("<<<< countChildrenBackups(parentId="+parentId+") returning, count = " + count + " and parentId added to denyList");
         } finally {
             glock.unlock();
         }

@@ -95,6 +95,10 @@ abstract class FinishResilient extends FinishState {
         public def toString() = "<receivedQuery id=" + id + " src=" + src + " dst="+dst+" kind="+kind+">";
     }
     
+    protected static struct ChildrenQueryId(parentId:Id, src:Int /*src is only used to be added in the deny list*/) {
+        public def toString() = "<ChildrenQueryId parentId=" + parentId + " src=" + src +">";
+    }
+    
     protected static val nextId = new AtomicInteger(); // per-place portion of unique id
     
     /*
@@ -240,6 +244,35 @@ abstract class FinishResilient extends FinishState {
              map(k) = oldCount-cnt;
         }
     }
+    
+    static def printResolveReqs(countingReqs:HashMap[Int,OptResolveRequest]) {
+        val s = new x10.util.StringBuilder();
+        if (countingReqs.size() > 0) {
+            for (e in countingReqs.entries()) {
+                val pl = e.getKey();
+                val reqs = e.getValue();
+                val bkps = reqs.countChildren ;
+                val recvs = reqs.countReceived;
+                s.add("\nRecovery requests:\n");
+                s.add("   To place: " + pl + "\n");
+                if (bkps.size() > 0) {
+                    s.add("  countChildren :{ ");
+                    for (b in bkps.entries()) {
+                        s.add(b.getKey() + " ");
+                    }
+                    s.add("}\n");
+                }
+                if (recvs.size() > 0) {
+                    s.add("  countReceives:{");
+                    for (r in recvs.entries()) {
+                        s.add("<id="+r.getKey().id+",src="+r.getKey().src + ">, ");
+                    }
+                    s.add("}\n");
+                }
+            }
+        }
+        debug(s.toString());
+    }
 }
 
 class RemoteCreationDenied extends Exception {}
@@ -249,3 +282,7 @@ class MasterMigrating extends Exception {}
 class MasterChanged(newMasterId:FinishResilient.Id,newMasterPlace:Int)  extends Exception {}
 class MasterAndBackupDied extends Exception {}
 class BackupCreationDenied extends Exception {}
+class OptResolveRequest { //used in optimistic protocols only
+    val countChildren  = new HashMap[FinishResilient.ChildrenQueryId, Int]();
+    val countReceived = new HashMap[FinishResilient.ReceivedQueryId, Int]();
+}
