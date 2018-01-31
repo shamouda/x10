@@ -103,7 +103,7 @@ public final class FinishReplicator {
             pendingMaster.put(req.num, req);
             if (postSendAction != null)
                 postActions.put(req.num, postSendAction);
-            if (verbose>=1) debug("<<<< Replicator.addMasterPending(id="+req.id+", num="+req.num+") returned");
+            if (verbose>=1) debug("<<<< Replicator.addMasterPending(id="+req.id+", num="+req.num+") returned SUCCESS");
             return SUCCESS;
         } finally {
             glock.unlock();
@@ -210,25 +210,34 @@ public final class FinishReplicator {
         val caller = here;
         val master = Place(req.masterPlaceId);
         if (master.id == here.id) {
+            if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal local" );
             val mFin = localMaster != null ? findMasterOrAdd(req.id, localMaster) : findMaster(req.id);
-            assert (mFin != null) : here + " fatal error, master(id="+req.id+") is null";
+            assert (mFin != null) : here + " fatal error, master(id="+req.id+") is null1 while processing req["+req+"]";
             val mresp = mFin.exec(req);
             if (mresp.excp instanceof MasterMigrating) {
-                System.threadSleep(10);
-                asyncExecInternal(req, null);
+                if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal MasterMigrating1, try again after 10ms" );
+                Runtime.submitUncounted( ()=>{
+                    System.threadSleep(10);
+                    asyncExecInternal(req, null);
+                });
             }
             else {
                 asyncMasterToBackup(caller, req, mresp);
             }
         } else {
+            if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal remote" );
             at (master) @Immediate("async_master_exec") async {
                 val mFin = findMaster(req.id);
-                assert (mFin != null) : here + " fatal error, master(id="+req.id+") is null";
+                assert (mFin != null) : here + " fatal error, master(id="+req.id+") is null2 while processing req["+req+"]";
                 val mresp = mFin.exec(req);
                 at (caller) @Immediate("async_master_exec_response") async {
                     if (mresp.excp instanceof MasterMigrating) {
-                        System.threadSleep(10);
-                        asyncExecInternal(req, null);
+                        if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal MasterMigrating2, try again after 10ms" );
+                        //we cannot block within an immediate thread
+                        Runtime.submitUncounted( ()=>{
+                            System.threadSleep(10); 
+                            asyncExecInternal(req, null);
+                        });
                     }
                     else {
                         asyncMasterToBackup(caller, req, mresp);
@@ -754,12 +763,14 @@ public final class FinishReplicator {
             for (i in 0n..((Place.numPlaces() as Int) - 1n)) {
                 if (Place.isDead(i) && !allDead.contains(i)) {
                     newDead.add(i);
+                    if (verbose>=1) debug("==== getNewDeadPlaces newDead=Place("+i+")");
                     allDead.add(i);
                 }
             }
         } finally {
             glock.unlock();
         }
+        if (verbose>=1) debug("<<<< getNewDeadPlaces returning");
         return newDead;
     }
     
@@ -1023,6 +1034,7 @@ public final class FinishReplicator {
     //a very slow hack to terminate replication at all places before shutting down
     public static def finalizeReplication() {
         if (verbose>=1) debug("<<<< Replicator.finalizeReplication called " );
+        
         val numP = Place.numPlaces();
         val places = new Rail[Int](numP, -1n);
         var i:Long = 0;
@@ -1055,10 +1067,19 @@ public final class FinishReplicator {
         if (verbose>=1) debug("<<<< Replicator.finalizeReplication returning" );
     }
     
+    static def pendingAsyncRequestsExists() {
+        try {
+            glock.lock();
+            return pendingMaster.size() != 0 || pendingBackup.size() != 0;
+        } finally {
+            glock.unlock();
+        }
+    }
+    
     static def waitForZeroPending() {
         if (verbose>=1) debug(">>>> waitForZeroPending called" );
-        while (pending.get() != 0n) {
-            System.threadSleep(10); // release the CPU to more productive pursuits
+        while (pending.get() != 0n || pendingAsyncRequestsExists() ) {
+            System.threadSleep(100); // release the CPU to more productive pursuits
         }
         pending.set(-2000n); //this means the main finish has completed its work
         if (verbose>=1) debug("<<<< waitForZeroPending returning" );

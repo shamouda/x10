@@ -33,7 +33,6 @@ import x10.util.resilient.concurrent.ResilientLowLevelFinish;
 //TODO: does the backup need to keep the exceptions list???
 //TODO: test notifyActivityCreationFailed()
 //TODO: revise the adoption logic of nested local finishes
-//TODO: after recovery, clients have to always remember that they are adopted
 //TODO: backup GC
 //TODO: delete backup in sync(...) if quiescent reached
 /**
@@ -883,7 +882,6 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 val lc = localCount().incrementAndGet();
                 if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called locally, localCount now "+lc);
             } else {
-                isGlobal = true;
                 if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
                 val req = FinishRequest.makeTransitRequest(id, parentId, UNASSIGNED, DUMMY_INT, DUMMY_INT, srcId, dstId, kind);
                 FinishReplicator.exec(req, this);

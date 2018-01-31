@@ -82,6 +82,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         return new FinishResilientOptimistic(parent, src, kind);
     }
     
+    def getSource():Place {
+        if (me instanceof OptimisticMasterState)
+            return here;
+        else
+            return Runtime.activity().srcPlace;
+    }
+    
     //serialize a root finish
     public def serialize(ser:Serializer) {
         if (verbose>=1) debug(">>>> serialize(id="+id+") called ");
@@ -836,7 +843,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 lc.incrementAndGet();
                 if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called locally, localCount now "+lc);
             } else {
-                isGlobal = true;
                 if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
                 val req = FinishRequest.makeTransitRequest(id, parentId, UNASSIGNED, finSrc.id as Int, finKind, srcId, dstId, kind);
                 FinishReplicator.exec(req, this);
@@ -845,11 +851,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def spawnRemoteActivity(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
-            isGlobal = true;
             val kind = ASYNC;
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
-            
+            globalInit(false);//globalize parent if not global - cannot postpone this till sendPendingAct because it is called in an immediate thread and globalInit is blocking
             val start = prof != null ? System.nanoTime() : 0;
             val ser = new Serializer();
             ser.writeAny(body);
@@ -871,9 +876,9 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     FinishReplicator.sendPendingAct(id, num);
                 }
             };
-            lc.incrementAndGet(); // synthetic activity to keep finish locally live during async replication
+            val count = lc.incrementAndGet(); // synthetic activity to keep finish locally live during async replication
             FinishReplicator.asyncExec(req, this, preSendAction, postSendAction);
-            if (verbose>=1) debug("<<<< Root(id="+id+").spawnRemoteActivity(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
+            if (verbose>=1) debug("<<<< Root(id="+id+").spawnRemoteActivity(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning, localCount now=" + count);
         }
         
         /*
@@ -1475,6 +1480,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 count = old - localChildrenCount;
             val oldActive = numActive;
             numActive -= count;
+            if (quiescent()) {
+                isReleased = true;
+                notifyParent();
+                FinishReplicator.removeBackup(id);
+            }
             if (verbose>=1) debug("<<<< Backup(id="+id+").setLocalTaskCount returning, old["+old+"] new["+localChildrenCount+"] numActive="+oldActive +" changing numActive to " + numActive);
         }
         
@@ -1826,20 +1836,19 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             backup.lock();
             
             val localChildren = countLocalChildren(backup.id, backups);
-                     
             backup.setLocalTaskCount(localChildren);
-            
-            //convert to dead
-            backup.convertToDead(newDead, countChildrenBackups);
-            
             if (!backup.isReleased) {
-                //convert from dead
-                backup.convertFromDead(newDead, countReceived);
+                //convert to dead
+                backup.convertToDead(newDead, countChildrenBackups);
+                if (!backup.isReleased) {
+                    //convert from dead
+                    backup.convertFromDead(newDead, countReceived);
+                    if (!backup.isReleased){
+                        activeBackups.add(backup);
+                    }
+                }
             }
             
-            if (!backup.isReleased){
-                activeBackups.add(backup);
-            }
             backup.unlock(); //as long as we keep migrating = true, no changes will be permitted on backup
         }
         

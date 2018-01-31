@@ -159,6 +159,13 @@ abstract class FinishState {
         x10.xrx.Runtime.x10rtSendAsync(place.id, body, fs, prof, preSendAction);
     }
 
+    /***
+     * Relevant only in optimistic counting
+     */
+    def getSource():Place {
+        return Place(-1);
+    }
+    
     static def deref[T](root:GlobalRef[FinishState]) = (root as GlobalRef[FinishState]{home==here})() as T;
 
     // a finish with local asyncs only
