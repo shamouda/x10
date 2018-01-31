@@ -734,16 +734,19 @@ public final class FinishReplicator {
         }
     }
     
-    static def countChildrenBackups(parentId:FinishResilient.Id, src:Int) {
+    static def countChildrenBackups(parentId:FinishResilient.Id, dead:Int, src:Int) {
         var count:Int = 0n;
         try {
             glock.lock();
             for (e in fbackups.entries()) {
-                if (e.getValue().getParentId() == parentId)
+                val backup = e.getValue() as FinishResilientOptimistic.OptimisticBackupState;
+                if (backup.getParentId() == parentId && backup.finSrc.id as Int == src) {
+                    if (verbose>=1) debug("== countChildrenBackups(parentId="+parentId+", src="+src+") found state " + backup.id);
                     count++;
+                }
             }
             //no more backups under this parent from that src place should be created
-            backupDeny.add(BackupDenyId(parentId, src));
+            backupDeny.add(BackupDenyId(parentId, dead));
             if (verbose>=1) debug("<<<< countChildrenBackups(parentId="+parentId+") returning, count = " + count + " and parentId added to denyList");
         } finally {
             glock.unlock();

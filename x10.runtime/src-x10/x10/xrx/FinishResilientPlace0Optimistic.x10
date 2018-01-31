@@ -247,17 +247,17 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         
         def isImpactedByDeadPlacesUnsafe(newDead:HashSet[Int]) {
             if (newDead.contains(id.home)) {
-                if (verbose>=1) debug("<<<< isImpactedByDeadPlacesUnsafe(id="+id+") true");
+                if (verbose>=1) debug("<<<< isImpactedByDeadPlacesUnsafe(id="+id+",parentId="+parentId+") true");
                 return true;
             }
             for (e in sent.entries()) {
                 val edge = e.getKey();
                 if (newDead.contains(edge.src) || newDead.contains(edge.dst)) {
-                    if (verbose>=1) debug("<<<< isImpactedByDeadPlacesUnsafe(id="+id+") true");
+                    if (verbose>=1) debug("<<<< isImpactedByDeadPlacesUnsafe(id="+id+",parentId="+parentId+") true");
                     return true;
                 }
             }
-            if (verbose>=1) debug("<<<< isImpactedByDeadPlacesUnsafe(id="+id+") false");
+            if (verbose>=1) debug("<<<< isImpactedByDeadPlacesUnsafe(id="+id+",parentId="+parentId+") false");
             return false;
         }
         
@@ -294,7 +294,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                                         rreq = new OptResolveRequest();
                                         countingReqs.put(place0, rreq);
                                     }
-                                    rreq.countChildren.put(ChildrenQueryId(s.id /*parent id*/, dead), -1n);
+                                    rreq.countChildren.put(ChildrenQueryId(s.id /*parent id*/, dead, edge.src ), -1n);
                                 } else if (dead == edge.src) {
                                     var rreq:OptResolveRequest = countingReqs.getOrElse(edge.dst, null);
                                     if (rreq == null){
@@ -314,16 +314,20 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             return countingReqs;
         }
         
-        static def countChildren(parentId:Id, src:Int) {
+        /*count number of remote children created under a given parent (acting as adopter)*/
+        static def countChildren(parentId:Id, dead:Int, src:Int) {
             var count:Int = 0n;
             try {
                 statesLock.lock();
                 for (e in states.entries()) {
-                    if (e.getValue().parentId == parentId)
+                    val state = e.getValue(); 
+                    if (state.id.home == dead && state.parentId == parentId && state.finSrc == src) {
+                        if (verbose>=1) debug("== countChildren(parentId="+parentId+",dead="+dead+", src="+src+") found state " + state.id);
                         count++;
+                    }
                 }
                 //no more states under this parent from that src should be created
-                if (verbose>=1) debug("<<<< countChildren(parentId="+parentId+") returning, count = " + count + " and parentId added to denyList");
+                if (verbose>=1) debug("<<<< countChildren(parentId="+parentId+",dead="+dead+", src="+src+") returning, count = " + count + " and parentId added to denyList");
             } finally {
                 statesLock.unlock();
             }
@@ -1400,7 +1404,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                             for (b in countChildren.entries()) {
                                 val parentId = b.getKey().parentId;
                                 val src = b.getKey().src;
-                                val count = State.countChildren(parentId, src);
+                                val dead = b.getKey().dead;
+                                val count = State.countChildren(parentId, dead, src);
                                 countChildren.put(b.getKey(), count);   
                             }
                         }

@@ -95,8 +95,8 @@ abstract class FinishResilient extends FinishState {
         public def toString() = "<receivedQuery id=" + id + " src=" + src + " dst="+dst+" kind="+kind+">";
     }
     
-    protected static struct ChildrenQueryId(parentId:Id, src:Int /*src is only used to be added in the deny list*/) {
-        public def toString() = "<ChildrenQueryId parentId=" + parentId + " src=" + src +">";
+    protected static struct ChildrenQueryId(parentId:Id, dead:Int, src:Int) {
+        public def toString() = "<ChildrenQueryId parentId=" + parentId + " dead="+dead+" src=" + src +">";
     }
     
     protected static val nextId = new AtomicInteger(); // per-place portion of unique id

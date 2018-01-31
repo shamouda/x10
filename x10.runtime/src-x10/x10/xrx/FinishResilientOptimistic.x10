@@ -1510,7 +1510,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                                 rreq = new OptResolveRequest();
                                 countingReqs.put(backup, rreq);
                             }
-                            rreq.countChildren .put(ChildrenQueryId(m.id /*parent id*/, dead), -1n);
+                            rreq.countChildren .put(ChildrenQueryId(m.id /*parent id*/, dead, edge.src ), -1n);
                         } else if (dead == edge.src) {
                             var rreq:OptResolveRequest = countingReqs.getOrElse(edge.dst, null);
                             if (rreq == null){
@@ -1538,7 +1538,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                                 rreq = new OptResolveRequest();
                                 countingReqs.put(backup, rreq);
                             }
-                            rreq.countChildren .put(ChildrenQueryId(b.id, dead), -1n);
+                            rreq.countChildren .put(ChildrenQueryId(b.id, dead, edge.src), -1n);
                         } else if (dead == edge.src) {
                             var rreq:OptResolveRequest = countingReqs.getOrElse(edge.dst, null);
                             if (rreq == null){
@@ -1585,9 +1585,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                         val countReceived = requests.countReceived;
                         if (countChildrenBackups.size() > 0) {
                             for (b in countChildrenBackups.entries()) {
-                                val parentId = b.getKey().parentId;
-                                val src = b.getKey().src;
-                                val count = FinishReplicator.countChildrenBackups(parentId, src);
+                                val rec = b.getKey();
+                                val count = FinishReplicator.countChildrenBackups(rec.parentId, rec.dead, rec.src);
                                 countChildrenBackups.put(b.getKey(), count);   
                             }
                         }
