@@ -35,6 +35,7 @@ import x10.util.resilient.concurrent.ResilientLowLevelFinish;
 //TODO: revise the adoption logic of nested local finishes
 //TODO: backup GC
 //TODO: delete backup in sync(...) if quiescent reached
+//TODO: remove children upon adoption
 /**
  * Distributed Resilient Finish (records transit and live tasks)
  * This version is a corrected implementation of the distributed finish described in PPoPP14,
@@ -1364,9 +1365,9 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 if (children != null) {
                     for (child in children) {
                         if (child.home == id.home) { //local child
-                            val bFin = FinishReplicator.findBackup(child) as PessimisticBackupState;
+                            val bFin = FinishReplicator.findBackup(child);
                             if (bFin != null) {
-                                bFin.acquire(newDead, _adopterId, resp);
+                                (bFin as PessimisticBackupState).acquire(newDead, _adopterId, resp);
                             }
                         }
                         else if (newDead.contains(child.home)) { //grandchildren that should be adopted too
@@ -1831,9 +1832,11 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                                 val query = e.getKey();
                                 val childId = query.childId; //we don't need to deny the backup, no harm if it gets created later on
                                 val acquireResp = e.getValue();
-                                val bFin = FinishReplicator.findBackup(childId) as PessimisticBackupState;
-                                bFin.acquire(newDead, query.id, acquireResp); // get the counts and the nested children if dead 
-                                requests.put(e.getKey(), acquireResp);
+                                val bFin = FinishReplicator.findBackup(childId);
+                                if (bFin != null) {//null means bFin was released
+                                	(bFin as as PessimisticBackupState).acquire(newDead, query.id, acquireResp); // get the counts and the nested children if dead 
+                                	requests.put(e.getKey(), acquireResp);
+                                }
                             }
                         }
                         
@@ -2008,4 +2011,5 @@ class ChildAdoptionResponse {
     val liveAdopted = new HashMap[FinishResilient.Task,Int]();
     val transitAdopted = new HashMap[FinishResilient.Edge,Int]();
     var numActive:Long = 0;
+    var found:Boolean = false;
 }
