@@ -1153,6 +1153,11 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             if (set == null || set.size() == 0)
                 return;
             for (child in set) {
+            	if (!child.found) {
+            		if (verbose>=1) debug("Root(id="+id+") ignore released child ["+child+"]");
+            		continue;
+            	}
+            	if (verbose>=1) debug("Root(id="+id+") adopting child ["+child+"]");
                 val asla = liveAdopted();
                 for (entry in child.live.entries()) {
                     val task = entry.getKey();
@@ -1361,7 +1366,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 lock();
                 if (verbose>=3) debug("==== Backup(id="+id+").acquire (adopterId=" + _adopterId + ") dumping state");
                 if (verbose>=3) dump();
-                
+                resp.found = true;
                 if (children != null) {
                     for (child in children) {
                         if (child.home == id.home) { //local child
@@ -1715,7 +1720,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
     static def getChildAdoptionRequests(newDead:HashSet[Int],
             masters:HashSet[FinishMasterState]) {
         if (verbose>=1) debug(">>>> getChildAdoptionRequests(masters="+masters.size()+") called");
-        val reqs = new HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]();
+        val reqs_resps = new HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]();
         if (!masters.isEmpty()) {
             for (dead in newDead) {
                 val backup = FinishReplicator.getBackupPlace(dead);
@@ -1725,12 +1730,12 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                     if (m.children != null) {
                         for (child in m.children) {
                             if (dead == child.home) {
-                                var rreq:HashMap[ChildQueryId, ChildAdoptionResponse] = reqs.getOrElse(backup, null);
+                                var rreq:HashMap[ChildQueryId, ChildAdoptionResponse] = reqs_resps.getOrElse(backup, null);
                                 if (rreq == null){
                                     rreq = new HashMap[ChildQueryId, ChildAdoptionResponse]();
-                                    reqs.put(backup, rreq);
+                                    reqs_resps.put(backup, rreq);
                                 }
-                                rreq.put(ChildQueryId(m.id /*parent id*/, child), new ChildAdoptionResponse());
+                                rreq.put(ChildQueryId(m.id /*parent id*/, child), new ChildAdoptionResponse(child));
                                 if (verbose>=1) debug("==== getChildAdoptionRequests masterId["+m.id+"] has dead childId["+child+"]");
                             }
                         }
@@ -1742,7 +1747,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             }
         }
         if (verbose>=1) debug("<<<< getChildAdoptionRequests(masters="+masters.size()+") returning");
-        return reqs;
+        return reqs_resps;
     }
     
     static def acquireChildrenBackupsRecursively(newDead:HashSet[Int], placeReqs:HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]) {
@@ -1752,15 +1757,16 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             return placeReqs;
         }
         
-        var reqs:HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]] = placeReqs;
+        var reqs_resps:HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]] = placeReqs;
 
         val fullResult = new HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]();
-        var newChildren:HashSet[ChildQueryId];
+        var grandChildren:HashSet[ChildQueryId];
         
         do {
-            acquireChildrenBackups(newDead, reqs);
-            newChildren = new HashSet[ChildQueryId]();
-            for (placeEntry in reqs.entries()) {
+            acquireChildrenBackups(newDead, reqs_resps);
+            grandChildren = new HashSet[ChildQueryId]();
+            //check if orghan grand children exist
+            for (placeEntry in reqs_resps.entries()) {
                 //hashmap of children requests and their responses
                 val childReqRes = placeEntry.getValue();
                 for (e in childReqRes.entries()) {
@@ -1769,7 +1775,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                     val parentId = query.id;
                     val children = resp.children;
                     for (child in children) {
-                        newChildren.add (new ChildQueryId(parentId, child));
+                        grandChildren.add (new ChildQueryId(parentId, child));
                     }
                     resp.children.clear();
                     
@@ -1784,31 +1790,31 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 }
             }
             
-            if (newChildren.size() > 0) {
-                reqs = new HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]();
-                for (childQuery in newChildren) {
+            if (grandChildren.size() > 0) {
+                reqs_resps = new HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]();
+                for (childQuery in grandChildren) {
                     val backup = FinishReplicator.getBackupPlace(childQuery.childId.home);
-                    var rreq:HashMap[ChildQueryId, ChildAdoptionResponse] = reqs.getOrElse(backup, null);
+                    var rreq:HashMap[ChildQueryId, ChildAdoptionResponse] = reqs_resps.getOrElse(backup, null);
                     if (rreq == null){
                         rreq = new HashMap[ChildQueryId, ChildAdoptionResponse]();
-                        reqs.put(backup, rreq);
+                        reqs_resps.put(backup, rreq);
                     }
-                    rreq.put(childQuery, new ChildAdoptionResponse());
+                    rreq.put(childQuery, new ChildAdoptionResponse(childQuery.childId));
                 }
             }
-        } while (newChildren.size() > 0);
+        } while (grandChildren.size() > 0);
         
         return fullResult;
     }
     
-    static def acquireChildrenBackups(newDead:HashSet[Int], reqs:HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]) {
-        if (verbose>=1) debug(">>>> acquireChildrenBackups(size="+reqs.size()+") called");
-        if (reqs.size() == 0) {
-            if (verbose>=1) debug("<<<< acquireChildrenBackups(size="+reqs.size()+") returning, zero size");
+    static def acquireChildrenBackups(newDead:HashSet[Int], reqs_resps:HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]) {
+        if (verbose>=1) debug(">>>> acquireChildrenBackups(size="+reqs_resps.size()+") called");
+        if (reqs_resps.size() == 0) {
+            if (verbose>=1) debug("<<<< acquireChildrenBackups(size="+reqs_resps.size()+") returning, zero size");
             return;
         }
-        val places = new Rail[Int](reqs.size());
-        val iter = reqs.keySet().iterator();
+        val places = new Rail[Int](reqs_resps.size());
+        val iter = reqs_resps.keySet().iterator();
         var i:Long = 0;
         while (iter.hasNext()) {
             val pl = iter.next();
@@ -1816,14 +1822,14 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         }
         val fin = ResilientLowLevelFinish.make(places);
         val gr = fin.getGr();
-        val outputGr = GlobalRef[HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]](reqs);
+        val outputGr = GlobalRef[HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]](reqs_resps);
         val closure = (gr:GlobalRef[ResilientLowLevelFinish]) => {
             for (p in places) {
                 if (verbose>=1) debug("==== acquireChildrenBackups  moving from " + here + " to " + Place(p));
                 if (Place(p).isDead()) {
                     (gr as GlobalRef[ResilientLowLevelFinish]{self.home == here})().notifyFailure();
                 } else {
-                    val preq = reqs.getOrThrow(p);
+                    val preq = reqs_resps.getOrThrow(p);
                     at (Place(p)) @Immediate("acquire_child_backup_request") async {
                         if (verbose>=1) debug("==== acquireChildrenBackups  reached from " + gr.home + " to " + here);
                         val requests = preq;
@@ -1834,8 +1840,12 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                                 val acquireResp = e.getValue();
                                 val bFin = FinishReplicator.findBackup(childId);
                                 if (bFin != null) {//null means bFin was released
-                                	(bFin as as PessimisticBackupState).acquire(newDead, query.id, acquireResp); // get the counts and the nested children if dead 
+                                	if (verbose>=1) debug("==== acquireChildrenBackups  childId["+childId+"] found");
+                                	(bFin as PessimisticBackupState).acquire(newDead, query.id, acquireResp); // get the counts and the nested children if dead 
                                 	requests.put(e.getKey(), acquireResp);
+                                }
+                                else {
+                                	if (verbose>=1) debug("==== acquireChildrenBackups  childId["+childId+"] is null (was released)");
                                 }
                             }
                         }
@@ -1954,14 +1964,14 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             b.unlock();
         }
         
-        val reqs = getChildAdoptionRequests(newDead, masters); // combine all requests targetted to a specific place
+        val reqs_resps = getChildAdoptionRequests(newDead, masters); // combine all requests targetted to a specific place
         
         for (m in masters) {
             val master = m as PessimisticMasterState;
             master.migrating = true; //to avoid processing forwarded requests for an adopted child, before we adjust our counters
         }
         
-        val resps = acquireChildrenBackupsRecursively(newDead, reqs); //obtain the counts and disable the backups
+        val resps = acquireChildrenBackupsRecursively(newDead, reqs_resps); //obtain the counts and disable the backups
 
         val map = new HashMap[Id, HashSet[ChildAdoptionResponse]]();
         for (placeEntry in resps.entries()) {
@@ -2004,7 +2014,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
     }
 }
 
-class ChildAdoptionResponse {
+class ChildAdoptionResponse(childId:FinishResilient.Id) {
     val children = new HashSet[FinishResilient.Id]();
     val live = new HashMap[FinishResilient.Task,Int]();
     val transit = new HashMap[FinishResilient.Edge,Int]();
@@ -2012,4 +2022,5 @@ class ChildAdoptionResponse {
     val transitAdopted = new HashMap[FinishResilient.Edge,Int]();
     var numActive:Long = 0;
     var found:Boolean = false;
+    public def toString() = "childId="+childId+", found="+found;
 }
