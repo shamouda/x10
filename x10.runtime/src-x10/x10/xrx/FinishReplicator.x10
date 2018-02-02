@@ -1067,8 +1067,8 @@ public final class FinishReplicator {
     
     
     static def createOptimisticBackupOrSync(id:FinishResilient.Id, parentId:FinishResilient.Id, src:Place, finKind:Int, numActive:Long, 
-            /*transit:HashMap[FinishResilient.Edge,Int],*/
             sent:HashMap[FinishResilient.Edge,Int], 
+            transit:HashMap[FinishResilient.Edge,Int],
             excs:GrowableRail[CheckedThrowable], placeOfMaster:Int):FinishBackupState {
         if (verbose>=1) debug(">>>> createOptimisticBackupOrSync(id="+id+", parentId="+parentId+") called ");
         try {
@@ -1078,11 +1078,11 @@ public final class FinishReplicator {
             if (bs == null) {
                 assert !backupDeny.contains(BackupDenyId(parentId,id.home)) : "must not be in denyList";
                 bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, src, finKind, numActive, 
-                            /*transit,*/ sent, excs, placeOfMaster);
+                		sent, transit, excs, placeOfMaster);
                 fbackups.put(id, bs);
                 if (verbose>=1) debug("<<<< createOptimisticBackupOrSync(id="+id+", parentId="+parentId+") returning, created bs="+bs);
             } else {
-                (bs as FinishResilientOptimistic.OptimisticBackupState).sync(numActive, /*transit,*/ sent, excs, placeOfMaster);
+                (bs as FinishResilientOptimistic.OptimisticBackupState).sync(numActive, sent, transit, excs, placeOfMaster);
                 if (verbose>=1) debug("<<<< createOptimisticBackupOrSync(id="+id+", parentId="+parentId+") returning from sync");
             }
             return bs;
