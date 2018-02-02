@@ -98,7 +98,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
     
         var numActive:Long = 0;
         var excs:GrowableRail[CheckedThrowable] = null;  // lazily allocated in addException
-        val sent = new HashMap[Edge,Int](); //always increasing    
+        val sent = new HashMap[Edge,Int](); //always increasing 
+        val transit = new HashMap[Edge,Int]();
         var isAdopted:Boolean = false;//set to true when backup recreates a master
         
         /**Place0 states**/
@@ -114,6 +115,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             this.finKind = optId.kind;
             this.numActive = 1;
             sent.put(FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
+            transit.put(FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
         }
         
         /*********************************************************************/
@@ -122,12 +124,12 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         public def setLocalTaskCount(localChildrenCount:Int) {
             if (verbose>=1) debug(">>>> State(id="+id+").setLocalTaskCount called, localChildrenCount = " + localChildrenCount);
             val edge = Edge(id.home, id.home, FinishResilient.ASYNC);
-            val old = sent.getOrElse(edge, 0n);
+            val old = transit.getOrElse(edge, 0n);
             
             if (localChildrenCount == 0n)
-                sent.remove(edge);
+            	transit.remove(edge);
             else
-                sent.put(edge, localChildrenCount);
+            	transit.put(edge, localChildrenCount);
             if (verbose>=3) dump();
             var count:Long = 0;
             if (old != localChildrenCount)
@@ -145,8 +147,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         
         public def convertToDead(newDead:HashSet[Int], countChildren:HashMap[Id, Int]) {
             if (verbose>=1) debug(">>>> State(id="+id+").convertToDead called");
-            /*val toRemove = new HashSet[Edge]();*/
-            for (e in sent.entries()) {
+            val toRemove = new HashSet[Edge]();
+            for (e in transit.entries()) {
                 val edge = e.getKey();
                 if (newDead.contains(edge.dst) && edge.dst != edge.src ) {
                     val t1 = e.getValue();
@@ -159,6 +161,11 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                         
                         if (verbose>=1) debug("==== State(id="+id+").convertToDead t1["+t1+"] t2["+t2+"] numActive["+oldActive+"] changing numActive to " + numActive);
                         
+                        if (t2 == 0n)
+                        	toRemove.add(edge);
+ 						else
+ 						    transit.put(edge, t2);
+ 						    
                         assert numActive >= 0 : here + " State(id="+id+").convertToDead FATAL error, numActive must not be negative";
                         if (edge.kind == ASYNC) {
                             for (1..count) {
@@ -173,6 +180,9 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 }
             }
             
+            for (e in toRemove)
+                transit.remove(e);
+
             if (quiescent()) {
                 releaseLatch();
                 notifyParent();
@@ -183,8 +193,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         
         def convertFromDead(newDead:HashSet[Int], countReceived:HashMap[ReceivedQueryId, Int]) {
             if (verbose>=1) debug(">>>> State(id="+id+").convertFromDead called");
-            /*val toRemove = new HashSet[Edge]();*/
-            for (e in sent.entries()) {
+            val toRemove = new HashSet[Edge]();
+            for (e in transit.entries()) {
                 val edge = e.getKey();
                 var trns:Int = e.getValue();
                 if (newDead.contains(edge.src) && edge.src != edge.dst ) {
@@ -199,11 +209,19 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     trns -= dropedMsgs;
                     if (verbose>=1) debug("==== State(id="+id+").convertFromDead src="+edge.src+" dst="+edge.dst+" transit["+trns+"] sent["+sent+"] received["+received+"] numActive["+oldActive+"] dropedMsgs["+dropedMsgs+"] changing numActive to " + numActive);
                     
+                    if (trns == 0n)
+                        toRemove.add(edge);
+                    else
+                        transit.put(edge, trns);
+ 
                     assert numActive >= 0 : here + " State(id="+id+").convertFromDead FATAL error, numActive must not be negative";
                     // we don't add DPE when src is dead; we can assume that the message was not sent as long as it was not received.
                 }
             }
             
+            for (e in toRemove)
+                transit.remove(e);
+ 
             if (quiescent()) {
                 releaseLatch();
                 notifyParent();
@@ -250,7 +268,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 if (verbose>=1) debug("<<<< isImpactedByDeadPlacesUnsafe(id="+id+",parentId="+parentId+") true");
                 return true;
             }
-            for (e in sent.entries()) {
+            for (e in transit.entries()) {
                 val edge = e.getKey();
                 if (newDead.contains(edge.src) || newDead.contains(edge.dst)) {
                     if (verbose>=1) debug("<<<< isImpactedByDeadPlacesUnsafe(id="+id+",parentId="+parentId+") true");
@@ -286,7 +304,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     statesLock.lock();
                     for (dead in newDead) {
                         for (s in states) {
-                            for (entry in s.sent.entries()) {
+                            for (entry in s.transit.entries()) {
                                 val edge = entry.getKey();
                                 if (dead == edge.dst) {
                                     var rreq:OptResolveRequest = countingReqs.getOrElse(place0, null);
@@ -681,7 +699,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         def inTransit(srcId:Long, dstId:Long, kind:Int, tag:String) {
             if (verbose>=1) debug(">>>> State(id="+id+").inTransit srcId=" + srcId + ", dstId=" + dstId + " called");
             val e = Edge(srcId, dstId, kind);
-            //increment(transit, e);
+            increment(transit, e);
             increment(sent, e);
             numActive++;
             if (verbose>=3) debug("==== State(id="+id+").inTransit srcId=" + srcId + ", dstId=" + dstId + " dumping after update");
@@ -692,11 +710,9 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         def transitToCompleted(srcId:Long, dstId:Long, kind:Int, t:CheckedThrowable) {
             if (verbose>=1) debug(">>>> State(id="+id+").transitToCompleted srcId=" + srcId + ", dstId=" + dstId + " called");
             val e = Edge(srcId, dstId, kind);
-            /*decrement(transit, e);
-            assert transit.getOrElse(e, 0n) >= 0n : here + " FATAL error, transit reached negative id="+id;*/
-            //don't decrement 'sent' unless src=dst
-            if (srcId == dstId) /*signalling the termination of the root finish task, needed for correct counting of localChildren*/
-                decrement(sent, e);
+            decrement(transit, e);
+            assert transit.getOrElse(e, 0n) >= 0n : here + " ["+Runtime.activity()+"] FATAL error, transit reached negative id="+id;
+            //don't decrement 'sent'
             numActive--;
             assert numActive>=0 : here + " FATAL error, State(id="+id+").numActive reached -ve value";
             if (t != null) addException(t);
@@ -711,11 +727,9 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         def transitToCompletedMul(srcId:Long, dstId:Long, kind:Int, cnt:Int) {
             if (verbose>=1) debug(">>>> State(id="+id+").transitToCompletedMul srcId=" + srcId + ", dstId=" + dstId + " called");
             val e = Edge(srcId, dstId, kind);
-            /*deduct(transit, e, cnt);
-            assert transit.getOrElse(e, 0n) >= 0n : here + " FATAL error, transit reached negative id="+id;*/
-            //don't decrement 'sent' unless srcId = dstId
-            if (srcId == dstId) /*signalling the termination of the root finish task*/
-                deduct(sent, e, cnt);
+            deduct(transit, e, cnt);
+            assert transit.getOrElse(e, 0n) >= 0n : here + " FATAL error, transit reached negative id="+id;
+            //don't decrement 'sent'
             numActive-=cnt;
             assert numActive>=0 : here + " FATAL error, State(id="+id+").numActive reached -ve value";
             if (quiescent()) {
@@ -806,9 +820,9 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             s.add("      numActive:"); s.add(numActive); s.add('\n');
             s.add("       parentId: " + parentId); s.add('\n');
             if (sent.size() > 0) {
-                s.add("        sent:\n"); 
+                s.add("   sent-transit:\n"); 
                 for (e in sent.entries()) {
-                    s.add("\t\t"+e.getKey()+" = "+e.getValue()+"\n");
+                    s.add("\t\t"+e.getKey()+" = "+e.getValue()+" - "+transit.getOrElse(e.getKey(),0n)+"\n");
                 }
             }
             debug(s.toString());
