@@ -25,7 +25,8 @@ import x10.compiler.AsyncClosure;
 
 public final class FinishReplicator {
     
-    public static glock = new Lock(); //global lock for accessing all the static values below
+    public static glock = new Lock(); //global lock for accessing all the static values below\\
+    private static val NUM_PLACES = Place.numPlaces() as Int;
     private static val fmasters = new HashMap[FinishResilient.Id, FinishMasterState](); //the set of all masters
     private static val fbackups = new HashMap[FinishResilient.Id, FinishBackupState](); //the set of all backups
     private static val backupDeny = new HashSet[BackupDenyId](); //backup deny list
@@ -60,7 +61,7 @@ public final class FinishReplicator {
     static def checkMainTermination() {
         val c = pending.incrementAndGet();
         if (c < 0n)
-            throw new Exception("Fatal, new finish request posted after main finish<0,0> termination ...");
+            throw new Exception(here + " ["+Runtime.activity()+"] FATAL ERROR new finish request posted after main finish<0,0> termination ...");
     }
     
     /************ Non-blocking Replication Protocol ***********************/
@@ -654,10 +655,10 @@ public final class FinishReplicator {
                     }
                 }
             }
-            curBackup = ((curBackup + 1) % Place.numPlaces()) as Int;
+            curBackup = ((curBackup + 1) % NUM_PLACES) as Int;
         } while (initBackup != curBackup);
         if (!req.toAdopter)
-            throw new Exception("Fatal exception, cannot find backup for id=" + id);
+            throw new Exception(here + " ["+Runtime.activity()+"] FATAL exception, cannot find backup for id=" + id);
         
         if (verbose>=1) debug("<<<< prepareRequestForNewMaster(id="+id+") returning, curBackup="+curBackup + " newMasterId="+req.id+",newMasterPlace="+req.masterPlaceId+",toAdopter="+req.toAdopter);
         if (curBackup != initBackup)
@@ -699,17 +700,84 @@ public final class FinishReplicator {
         }
     }
     
+    
+    static def isBackupOf(idHome:Int) {
+        try {
+            glock.lock();
+            for ( e in fbackups.entries()) {
+                if (e.getKey().home == idHome)
+                    return true;
+            }
+            return false;
+        } finally {
+            glock.unlock();
+        }
+    }
+    
+    static def searchBackup(idHome:Int, deadBackup:Int) {
+        if (verbose>=1) debug(">>>> searchBackup(idHome="+idHome+", deadBackup="+deadBackup+") called ");
+        var b:Int = deadBackup;
+        for (var c:Int = 1n; c < NUM_PLACES; c++) {
+            val nextPlace = Place((deadBackup + c) % NUM_PLACES);
+            if (verbose>=1) debug("==== searchBackup(idHome="+idHome+", deadBackup="+deadBackup+") nextPlace is " + nextPlace + "  dead?" + nextPlace.isDead());
+            if (nextPlace.isDead())
+                continue;
+            val searchResp = new GlobalRef[SearchBackupResponse](new SearchBackupResponse());
+            val rCond = ResilientCondition.make(nextPlace);
+            val closure = (gr:GlobalRef[Condition]) => {
+                at (nextPlace) @Immediate("search_backup") async {
+                    val found = FinishReplicator.isBackupOf(idHome);
+                    if (verbose>=1) debug("==== searchBackup(idHome="+idHome+", deadBackup="+deadBackup+") found="+found);
+                    at (gr) @Immediate("search_backup_response") async {
+                        val resp = (searchResp as GlobalRef[SearchBackupResponse]{self.home == here})();
+                        resp.found = found;
+                        gr().release();
+                    }
+                }
+            };
+            rCond.run(closure);
+            
+            if (rCond.failed()) {
+                Console.OUT.println(here + " WARNING - another place["+nextPlace+"] failed while searching for backup");
+                rCond.forget();
+                searchResp.forget();
+            }
+            else {
+                val resp = searchResp();
+                rCond.forget();
+                searchResp.forget();
+                if (resp.found) {
+                    b = nextPlace.id as Int;
+                    if (verbose>=1) debug("==== searchBackup(idHome="+idHome+", deadBackup="+deadBackup+") result b="+b);
+                    updateBackupPlace(idHome, b);
+                    break;
+                }
+            }
+        }
+        if (Place(b).isDead())
+            throw new Exception(here + " ["+Runtime.activity()+"] FATAL ERROR could not find backup for idHome = " + idHome);
+        if (verbose>=1) debug("<<<< searchBackup(idHome="+idHome+", deadBackup="+deadBackup+") returning b=" + b);
+        return b;
+    }
+    
+    
+    
     static def updateMyBackupIfDead(newDead:HashSet[Int]) {
         try {
             val idHome = here.id as Int;
+            if (verbose>=1) debug(">>>> updateMyBackupIfDead(idHome="+idHome+") called");
             glock.lock();
             var b:Int = backupMap.getOrElse(idHome, -1n);
-            if (b == -1n)
-                b = ((idHome+1)%Place.numPlaces()) as Int;
-            if (newDead.contains(b)) {
-                b = ((b+1)%Place.numPlaces()) as Int;
-                backupMap.put(idHome, b);
+            if (b == -1n) {
+                b = ((idHome+1)%NUM_PLACES) as Int;
+                if (verbose>=1) debug("==== updateMyBackupIfDead(idHome="+idHome+") not in backupMap, b="+b);
             }
+            if (newDead.contains(b)) {
+                b = ((b+1)%NUM_PLACES) as Int;
+                backupMap.put(idHome, b);
+                if (verbose>=1) debug("==== updateMyBackupIfDead(idHome="+idHome+") b died, newb="+b);
+            }
+            if (verbose>=1) debug("<<<< updateMyBackupIfDead(idHome="+idHome+") returning myBackup=" + b);
         } finally {
             glock.unlock();
         }
@@ -763,7 +831,7 @@ public final class FinishReplicator {
         }
         try {
             glock.lock();
-            for (i in 0n..((Place.numPlaces() as Int) - 1n)) {
+            for (i in 0n..(NUM_PLACES - 1n)) {
                 if (Place.isDead(i) && !allDead.contains(i)) {
                     newDead.add(i);
                     if (verbose>=1) debug("==== getNewDeadPlaces newDead=Place("+i+")");
@@ -816,21 +884,21 @@ public final class FinishReplicator {
     
     static def nominateMasterPlaceIfDead(idHome:Int) {
         var m:Int;
-        var maxIter:Int = Place.numPlaces() as Int;
+        var maxIter:Int = NUM_PLACES;
         var i:Int = 0n;
         try {
             glock.lock();
             m = masterMap.getOrElse(idHome,-1n);
             do {
                 if (m == -1n)
-                    m = ((idHome - 1 + Place.numPlaces())%Place.numPlaces()) as Int;
+                    m = ((idHome - 1 + NUM_PLACES)%NUM_PLACES) as Int;
                 else
-                    m = ((m - 1 + Place.numPlaces())%Place.numPlaces()) as Int;
+                    m = ((m - 1 + NUM_PLACES)%NUM_PLACES) as Int;
                 i++;
             } while (allDead.contains(m) && i < maxIter);
             
             if (allDead.contains(m) || i == maxIter)
-                throw new Exception(here + " Fatal, couldn't nominate a new master place for idHome=" + idHome);
+                throw new Exception(here + " ["+Runtime.activity()+"] FATAL ERROR couldn't nominate a new master place for idHome=" + idHome);
             masterMap.put(idHome, m);
         } finally {
             glock.unlock();
@@ -841,21 +909,19 @@ public final class FinishReplicator {
     
     static def nominateBackupPlaceIfDead(idHome:Int) {
         var b:Int;
-        var maxIter:Int = Place.numPlaces() as Int;
+        var maxIter:Int = NUM_PLACES;
         var i:Int = 0n;
         try {
             glock.lock();
             b = backupMap.getOrElse(idHome,-1n);
-            do {
-                if (b == -1n)
-                    b = ((idHome + 1)%Place.numPlaces()) as Int;
-                else
-                    b = ((b + 1)%Place.numPlaces()) as Int;
+            if (b == -1n)
+                b = ((idHome + 1)%NUM_PLACES) as Int;
+            while(allDead.contains(b) && i < maxIter) {
+                b = ((b + 1)%NUM_PLACES) as Int;
                 i++;
-            } while (allDead.contains(b) && i < maxIter);
-            
+            }
             if (allDead.contains(b) || i == maxIter)
-                throw new Exception(here + " Fatal, couldn't nominate a new backup place for idHome=" + idHome);
+                throw new Exception(here + " ["+Runtime.activity()+"] FATAL ERROR couldn't nominate a new backup place for idHome=" + idHome);
             backupMap.put(idHome, b);
         } finally {
             glock.unlock();
@@ -931,7 +997,7 @@ public final class FinishReplicator {
             glock.lock();
             val bs = fbackups.getOrElse(id, null);
             if (bs == null) {
-                throw new Exception(here + "Fatal error: backup(id="+id+" not found here");
+                throw new Exception(here + " ["+Runtime.activity()+"] FATAL ERROR backup(id="+id+" not found here");
             }
             else {
                 if (verbose>=1) debug("<<<< findBackupOrThrow(id="+id+") returning, bs = " + bs);
@@ -981,6 +1047,24 @@ public final class FinishReplicator {
             glock.unlock();
         }
     }
+    
+    //added to mark a place as a new backup when no backups are there yet
+    static def createDummyBackup(idHome:Int) {
+        if (verbose>=1) debug(">>>> createDummyBackup called");
+        try {
+            glock.lock();
+            val id = FinishResilient.Id(idHome, -5555n);
+            if (OPTIMISTIC)
+                fbackups.put(id, new FinishResilientOptimistic.OptimisticBackupState(id, id, Place(-1), -1n));
+            else
+                fbackups.put(id, new FinishResilientPessimistic.PessimisticBackupState(id, id));
+            
+            if (verbose>=1) debug("<<<< createDummyBackup returning");
+        } finally {
+            glock.unlock();
+        }
+    }
+    
     
     static def createOptimisticBackupOrSync(id:FinishResilient.Id, parentId:FinishResilient.Id, src:Place, finKind:Int, numActive:Long, 
             /*transit:HashMap[FinishResilient.Edge,Int],*/
@@ -1038,7 +1122,7 @@ public final class FinishReplicator {
     public static def finalizeReplication() {
         if (verbose>=1) debug("<<<< Replicator.finalizeReplication called " );
         
-        val numP = Place.numPlaces();
+        val numP = NUM_PLACES;
         val places = new Rail[Int](numP, -1n);
         var i:Long = 0;
         for (pl in Place.places())

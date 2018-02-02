@@ -58,7 +58,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     def notifyRemoteContinuationCreated():void { me.notifyRemoteContinuationCreated(); }
     def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void { me.notifyActivityCreationFailed(srcPlace, t); }
     def notifyActivityCreatedAndTerminated(srcPlace:Place):void { me.notifyActivityCreatedAndTerminated(srcPlace); }
-    def pushException(t:CheckedThrowable):void { me.pushException(t); }
+    def pushException(t:CheckedThrowable):void { me.pushException(t); } /*Blocking replication*/
     def notifyActivityTermination(srcPlace:Place):void { me.notifyActivityTermination(srcPlace); }
     def notifyShiftedActivityCompletion(srcPlace:Place):void { me.notifyShiftedActivityCompletion(srcPlace); }
     def waitForFinish():void { me.waitForFinish(); }
@@ -234,7 +234,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         public def notifyTerminationAndGetMap(t:Task) {
             var map:HashMap[Task,Int] = null;
             val count = lc.decrementAndGet();
-            if (verbose>=1) debug(">>>> Remote(id="+id+").notifyTerminationAndGetMap called, taskFrom["+t.place+"] lc="+count);
+            if (verbose>=1) debug(">>>> Remote(id="+id+").notifyTerminationAndGetMap called, taskFrom["+t.place+"] decremented localCount to "+count);
             if (count == 0n) {
                 map = getReportMap();
             }
@@ -310,13 +310,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val fs = Runtime.activity().finishState(); //the outer finish
             val preSendAction = ()=>{FinishReplicator.addPendingAct(id, num, dstId, fs, bytes, prof);};
             val postSendAction = (submit:Boolean, adopterId:Id)=>{
+                fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
                 if (submit) {
-                    fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
                     FinishReplicator.sendPendingAct(id, num);
                 }
             };
             val count = notifyReceived(Task(srcId, ASYNC)); // synthetic activity to keep finish locally live during async replication
-            if (verbose>=1) debug("<<<< Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+",kind="+kind+") local count after synthetic activity=" + count);
+            if (verbose>=1) debug("<<<< Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+",kind="+kind+") incremented localCount to " + count);
             FinishReplicator.asyncExec(req, null, preSendAction, postSendAction);
         }
         
@@ -396,10 +396,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def pushException(t:CheckedThrowable):void {
+            assert (Runtime.activity() != null) : here + " >>>> Remote(id="+id+").pushException(t="+t.getMessage()+") blocking method called within an immediate thread";
             val parentId = UNASSIGNED;
             if (verbose>=1) debug(">>>> Remote(id="+id+").pushException(t="+t.getMessage()+") called");
             val req = FinishRequest.makeExcpRequest(id, parentId, UNASSIGNED, DUMMY_INT,  DUMMY_INT, t);
-            FinishReplicator.asyncExec(req, null);
+            FinishReplicator.exec(req, null);
             if (verbose>=1) debug("<<<< Remote(id="+id+").pushException(t="+t.getMessage()+") returning");
         }
 
@@ -871,14 +872,14 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val fs = Runtime.activity().finishState(); //the outer finish
             val preSendAction = ()=>{FinishReplicator.addPendingAct(id, num, dstId, fs, bytes, prof);};
             val postSendAction = (submit:Boolean, adopterId:Id)=>{
+                fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
                 if (submit) {
-                    fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
                     FinishReplicator.sendPendingAct(id, num);
                 }
             };
             val count = lc.incrementAndGet(); // synthetic activity to keep finish locally live during async replication
             FinishReplicator.asyncExec(req, this, preSendAction, postSendAction);
-            if (verbose>=1) debug("<<<< Root(id="+id+").spawnRemoteActivity(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning, localCount now=" + count);
+            if (verbose>=1) debug("<<<< Root(id="+id+").spawnRemoteActivity(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning, incremented localCount to " + count);
         }
         
         /*
@@ -934,9 +935,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (verbose>=1) debug("<<<< Root(id="+id+").pushException(t="+t.getMessage()+") returning");
                 return;
             }
+            assert (Runtime.activity() != null) : here + " >>>> Root(id="+id+").pushException(t="+t.getMessage()+") blocking method called within an immediate thread";
             if (verbose>=1) debug(">>>> Root(id="+id+").pushException(t="+t.getMessage()+") called");
             val req = FinishRequest.makeExcpRequest(id, parentId, UNASSIGNED, finSrc.id as Int, finKind, t);
-            FinishReplicator.asyncExec(req, this);
+            FinishReplicator.exec(req, this);
             if (verbose>=1) debug("<<<< Root(id="+id+").pushException(t="+t.getMessage()+") returning");
         }
 
@@ -1498,7 +1500,9 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         val countingReqs = new HashMap[Int,OptResolveRequest]();
         if (!masters.isEmpty()) {
             for (dead in newDead) {
-                val backup = FinishReplicator.getBackupPlace(dead);
+                var backup:Int = FinishReplicator.getBackupPlace(dead);
+                if (Place(backup).isDead())
+                    backup = FinishReplicator.searchBackup(dead, backup);
                 for (mx in masters) {
                     val m = mx as OptimisticMasterState; 
                     m.lock();
@@ -1622,7 +1626,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         if (verbose>=1) debug("LOW_LEVEL_FINISH.waiting ended");
         
         if (fin.failed())
-            throw new Exception("FATAL ERROR: another place failed during recovery ...");
+            throw new Exception(here + " FATAL ERROR: another place failed during recovery ...");
     }
     
     static def countLocalChildren(id:Id, backups:HashSet[FinishBackupState]) {
@@ -1706,11 +1710,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     //FIXME: nominate another backup if the nominated one is dead
     static def createOrSyncBackups(newDead:HashSet[Int], masters:HashSet[FinishMasterState]) {
         if (verbose>=1) debug(">>>> createOrSyncBackups(size="+masters.size()+") called");
-        if (masters.size() == 0) {
-            FinishReplicator.nominateBackupPlaceIfDead(here.id as Int);
-            if (verbose>=1) debug("<<<< createOrSyncBackups(size="+masters.size()+") returning, zero size");
-            return;
-        }
         
         val places = new Rail[Int](masters.size());
         val iter = masters.iterator();
@@ -1823,7 +1822,18 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         if (masters.size() > 0)
             createOrSyncBackups(newDead, masters);
         else {
-            FinishReplicator.nominateBackupPlaceIfDead(here.id as Int);
+            val hereId = here.id as Int;
+            val newBackup = Place(FinishReplicator.nominateBackupPlaceIfDead(hereId));
+            val rCond = ResilientCondition.make(newBackup);
+            val closure = (gr:GlobalRef[Condition]) => {
+                at (newBackup) @Immediate("dummy_backup") async {
+                    FinishReplicator.createDummyBackup(hereId);
+                    at (gr) @Immediate("dummy_backup_response") async {
+                        gr().release();
+                    }
+                }
+            };
+            rCond.run(closure);
         }
 
         val newMasters = new HashSet[FinishMasterState]();

@@ -68,7 +68,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
     def notifyRemoteContinuationCreated():void { me.notifyRemoteContinuationCreated(); }
     def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void { me.notifyActivityCreationFailed(srcPlace, t); }
     def notifyActivityCreatedAndTerminated(srcPlace:Place):void { me.notifyActivityCreatedAndTerminated(srcPlace); }
-    def pushException(t:CheckedThrowable):void { me.pushException(t); }
+    def pushException(t:CheckedThrowable):void { me.pushException(t); } /*Blocking replication*/
     def notifyActivityTermination(srcPlace:Place):void { me.notifyActivityTermination(srcPlace); }
     def notifyShiftedActivityCompletion(srcPlace:Place):void { me.notifyShiftedActivityCompletion(srcPlace); }
     def spawnRemoteActivity(place:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void { me.spawnRemoteActivity(place, body, prof); }
@@ -189,15 +189,15 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             val fs = Runtime.activity().finishState(); //the outer finish
             val preSendAction = ()=>{FinishReplicator.addPendingAct(id, num, dstId, fs, bytes, prof);};
             val postSendAction = (submit:Boolean, adopterId:Id)=>{
+                fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
                 if (submit) {
-                    fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
                     FinishReplicator.sendPendingAct(id, num);
                 }
                 if (adopterId != UNASSIGNED)
                     this.setAdopter(adopterId);
             };
             val lc = localCount().incrementAndGet();// synthetic activity to keep finish locally live during async replication
-            if (verbose>=1) debug("<<<< Remote(id="+id+").spawnRemoteActivity(parentId="+parentId+",adopterId="+adopterId+",srcId="+srcId+",dstId="+dstId+",kind="+kind+") local count after synthetic activity=" + lc);
+            if (verbose>=1) debug("<<<< Remote(id="+id+").spawnRemoteActivity(parentId="+parentId+",adopterId="+adopterId+",srcId="+srcId+",dstId="+dstId+",kind="+kind+") incremented localCount to " + lc);
             FinishReplicator.asyncExec(req, null, preSendAction, postSendAction);
         }
         
@@ -313,15 +313,13 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         }
         
         def pushException(t:CheckedThrowable):void {
+            assert (Runtime.activity() != null) : here + " >>>> Remote(id="+id+").pushException(t="+t.getMessage()+") blocking method called within an immediate thread";
             val parentId = UNASSIGNED;
             if (verbose>=1) debug(">>>> Remote(id="+id+").pushException(t="+t.getMessage()+",adopterId="+adopterId+") called");
             val req = FinishRequest.makeExcpRequest(id, parentId, adopterId, DUMMY_INT, DUMMY_INT, t);
-            val preSendAction = ()=>{};
-            val postSendAction = (submit:Boolean, adopterId:Id)=>{
-                if (adopterId != UNASSIGNED)
-                    this.setAdopter(adopterId);
-            };
-            FinishReplicator.asyncExec(req, null, preSendAction, postSendAction);
+            val resp = FinishReplicator.exec(req, null);
+            if (resp.adopterId != UNASSIGNED)
+                this.setAdopter(resp.adopterId);
             if (verbose>=1) debug("<<<< Remote(id="+id+").pushException(t="+t.getMessage()+",adopterId="+adopterId+") returning");
         }
 
@@ -409,6 +407,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             } else {
                 parentId = UNASSIGNED;
             }
+            if (verbose>=1) debug("<<<< Root(id="+id+") constructor returning, backupPlaceId="+backupPlaceId);
         }
         
         /**
@@ -912,14 +911,14 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             val fs = Runtime.activity().finishState(); //the outer finish
             val preSendAction = ()=>{FinishReplicator.addPendingAct(id, num, dstId, fs, bytes, prof);};
             val postSendAction = (submit:Boolean, adopterId:Id)=>{
+                fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
                 if (submit) {
-                    fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
                     FinishReplicator.sendPendingAct(id, num);
                 }
             };
             val lc = localCount().incrementAndGet(); // synthetic activity to keep finish locally live during async replication
             FinishReplicator.asyncExec(req, this, preSendAction, postSendAction);
-            if (verbose>=1) debug("<<<< Root(id="+id+").spawnRemoteActivity(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
+            if (verbose>=1) debug("<<<< Root(id="+id+").spawnRemoteActivity(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning, incremented localCount to " + lc);
         }
         
         /*
@@ -1027,10 +1026,10 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 if (verbose>=1) debug("<<<< Root(id="+id+").pushException(t="+t.getMessage()+") returning");
                 return;
             }
-            
+            assert (Runtime.activity() != null) : here + " >>>> Root(id="+id+").pushException(t="+t.getMessage()+") blocking method called within an immediate thread";
             if (verbose>=1) debug(">>>> Root(id="+id+").pushException(t="+t.getMessage()+") called");
             val req = FinishRequest.makeExcpRequest(id, parentId, UNASSIGNED, DUMMY_INT, DUMMY_INT, t);
-            FinishReplicator.asyncExec(req, this);
+            FinishReplicator.exec(req, this);
             if (verbose>=1) debug("<<<< Root(id="+id+").pushException(t="+t.getMessage()+") returning");
         }
 
@@ -1584,9 +1583,10 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         def liveToCompleted(srcId:Long, dstId:Long, kind:Int, tag:String, toAdopter:Boolean) {
             try {
                 ilock.lock();
-                if (verbose>=1) debug(">>>> Backup(id="+id+").liveToCompleted called (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ") ");
+                if (verbose>=1) debug(">>>> Backup(id="+id+").liveToCompleted(numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ") called");
                 val t = Task(dstId, kind);
                 if (!toAdopter) {
+                    assert live.keySet().contains(t) : here + " ["+Runtime.activity()+"] FATAL ERROR Backup(id="+id+").liveToCompleted(numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ") live doesn't contain task@" + dstId;
                     decrement(live, t);
                     numActive--;
                     if (quiescent()) {
@@ -1594,6 +1594,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                         FinishReplicator.removeBackup(id);
                     }
                 } else {
+                    assert liveAdopted().keySet().contains(t) : here + " ["+Runtime.activity()+"] FATAL ERROR Backup(id="+id+").liveToCompleted(numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ") liveAdopted doesn't contain task@" + dstId;
                     decrement(liveAdopted(), t);
                     numActive--;
                     if (quiescent()) {
@@ -1723,7 +1724,9 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         val reqs_resps = new HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]();
         if (!masters.isEmpty()) {
             for (dead in newDead) {
-                val backup = FinishReplicator.getBackupPlace(dead);
+                var backup:Int = FinishReplicator.getBackupPlace(dead);
+                if (Place(backup).isDead())
+                    backup = FinishReplicator.searchBackup(dead, backup);
                 for (mx in masters) {
                     val m = mx as PessimisticMasterState; 
                     m.lock();
@@ -1793,7 +1796,9 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             if (grandChildren.size() > 0) {
                 reqs_resps = new HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]();
                 for (childQuery in grandChildren) {
-                    val backup = FinishReplicator.getBackupPlace(childQuery.childId.home);
+                    var backup:Int = FinishReplicator.getBackupPlace(childQuery.childId.home);
+                    if (Place(backup).isDead())
+                        backup = FinishReplicator.searchBackup(childQuery.childId.home, backup);
                     var rreq:HashMap[ChildQueryId, ChildAdoptionResponse] = reqs_resps.getOrElse(backup, null);
                     if (rreq == null){
                         rreq = new HashMap[ChildQueryId, ChildAdoptionResponse]();
@@ -1878,12 +1883,6 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
     //FIXME: should nominate another backup if the nominated one is dead
     static def createOrSyncBackups(newDead:HashSet[Int], masters:HashSet[FinishMasterState]) {
         if (verbose>=1) debug(">>>> createOrSyncBackups(size="+masters.size()+") called");
-        if (masters.size() == 0) {
-            FinishReplicator.nominateBackupPlaceIfDead(here.id as Int);
-            if (verbose>=1) debug("<<<< createOrSyncBackups(size="+masters.size()+") returning, zero size");
-            return;
-        }
-        
         val places = new Rail[Int](masters.size());
         val iter = masters.iterator();
         var i:Long = 0;
@@ -2004,7 +2003,18 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         if (masters.size() > 0)
             createOrSyncBackups(newDead, masters);
         else {
-            FinishReplicator.nominateBackupPlaceIfDead(here.id as Int);
+            val hereId = here.id as Int;
+            val newBackup = Place(FinishReplicator.nominateBackupPlaceIfDead(hereId));
+            val rCond = ResilientCondition.make(newBackup);
+            val closure = (gr:GlobalRef[Condition]) => {
+                at (newBackup) @Immediate("dummy_backup") async {
+                    FinishReplicator.createDummyBackup(hereId);
+                    at (gr) @Immediate("dummy_backup_response") async {
+                        gr().release();
+                    }
+                }
+            };
+            rCond.run(closure);
         }
         
         if (verbose>=1) debug("==== handling non-blocking pending requests ====");

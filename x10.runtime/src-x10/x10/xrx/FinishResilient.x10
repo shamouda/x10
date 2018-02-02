@@ -286,3 +286,6 @@ class OptResolveRequest { //used in optimistic protocols only
     val countChildren  = new HashMap[FinishResilient.ChildrenQueryId, Int]();
     val countReceived = new HashMap[FinishResilient.ReceivedQueryId, Int]();
 }
+class SearchBackupResponse {
+    var found:Boolean = false;
+}

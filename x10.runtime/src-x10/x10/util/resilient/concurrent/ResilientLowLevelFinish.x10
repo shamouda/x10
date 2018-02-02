@@ -76,11 +76,14 @@ public class ResilientLowLevelFinish implements Unserializable {
     }
     
     public def failed() {
+        var f:Boolean = false;
     	for (var i:Long = 0; i < status.size; i++) {
-    		if (status(i) == -1n)
-    			return true;
+    		if (status(i) == -1n) {
+    		    Console.OUT.println(here + " low_level_finish failed, Place("+places(i)+") is dead");
+    			f = true;
+    		}
     	}
-    	return false;
+    	return f;
     }
     
     public def forget() {
