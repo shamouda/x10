@@ -802,19 +802,19 @@ public final class FinishReplicator {
         }
     }
     
-    static def countChildrenBackups(parentId:FinishResilient.Id, dead:Int, src:Int) {
+    static def countChildrenBackups(parentId:FinishResilient.Id, deadDst:Int, src:Int) {
         var count:Int = 0n;
         try {
             glock.lock();
             for (e in fbackups.entries()) {
                 val backup = e.getValue() as FinishResilientOptimistic.OptimisticBackupState;
-                if (backup.getParentId() == parentId && backup.finSrc.id as Int == src) {
+                if (backup.getParentId() == parentId && backup.finSrc.id as Int == src && backup.getId().home == deadDst) {
                     if (verbose>=1) debug("== countChildrenBackups(parentId="+parentId+", src="+src+") found state " + backup.id);
                     count++;
                 }
             }
             //no more backups under this parent from that src place should be created
-            backupDeny.add(BackupDenyId(parentId, dead));
+            backupDeny.add(BackupDenyId(parentId, deadDst));
             if (verbose>=1) debug("<<<< countChildrenBackups(parentId="+parentId+") returning, count = " + count + " and parentId added to denyList");
         } finally {
             glock.unlock();
@@ -871,8 +871,8 @@ public final class FinishReplicator {
             for (e in fbackups.entries()) {
                 val id = e.getKey();
                 val bFin = e.getValue();
-                if ( OPTIMISTIC && newDead.contains(bFin.getPlaceOfMaster()) || 
-                        !OPTIMISTIC && newDead.contains(bFin.getId().home) ) {
+                if ( bFin.getId().id != -5555n && ( OPTIMISTIC && newDead.contains(bFin.getPlaceOfMaster()) || 
+                    !OPTIMISTIC && newDead.contains(bFin.getId().home) ) ) {
                     result.add(bFin);
                 }
             }
