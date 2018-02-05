@@ -674,7 +674,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         def transitToCompletedUnsafe(srcId:Long, dstId:Long, kind:Int, cnt:Int, tag:String, resp:MasterResponse) {
             if (verbose>=1) debug(">>>> Master(id="+id+").transitToCompletedMul srcId=" + srcId + ", dstId=" + dstId + " called");
             val e = Edge(srcId, dstId, kind);
-            deduct(sent, e, cnt);
+            deduct(transit, e, cnt);
             //don't decrement 'sent' 
             
             numActive-=cnt;
@@ -964,7 +964,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }
             assert count == 0n: here + " FATAL ERROR: Root(id="+id+").notifyActivityTermination reached a negative local count";
             if (!isGlobal) { //only one activity is here, no need to lock/unlock latch
-              if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(srcId="+srcId + " dstId="+dstId+",kind="+kind+") returning");
+                if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(srcId="+srcId + " dstId="+dstId+",kind="+kind+") returning");
                 latch.release();
                 return;
             }
@@ -1029,6 +1029,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (newDead.contains(edge.dst) && edge.dst != edge.src ) {
                     val t1 = e.getValue();
                     val t2 = countChildrenBackups.get(id);
+                    if (verbose>=1) debug("==== Master(id="+id+").convertToDead("+id+") t1=" + t1 + " t2=" + t2);
                     assert t1 > 0 : here + " Master(id="+id+").convertToDead FATAL error, t1 must be positive";
                     if (t1 >= t2) {
                         val count = t1-t2;
@@ -1052,7 +1053,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                             }
                         }
                     }
-                    else assert false: here + " Master(id="+id+").convertToDead FATAL error, t1 >= t2 condition not met";
+                    else assert false: here + "["+Runtime.activity()+"] Master(id="+id+").convertToDead FATAL error, t1 >= t2 condition not met, t1="+t1+" and t2=" + t2;
                 }
             }
             
@@ -1435,6 +1436,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (newDead.contains(edge.dst) && edge.src != edge.dst ) {
                     val t1 = e.getValue();
                     val t2 = countChildrenBackups.get(id);
+                    if (verbose>=1) debug("==== Backup(id="+id+").convertToDead("+id+") t1=" + t1 + " t2=" + t2);
                     assert t1 > 0 : here + " Backup(id="+id+").convertToDead FATAL error, t1 must be positive";
                     if (t1 >= t2) {
                         val count = t1-t2;
@@ -1457,7 +1459,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                             }
                         }
                     }
-                    else assert false: here + " Backup(id="+id+").convertToDead FATAL error, t1 >= t2 condition not met";
+                    else assert false: here + "["+Runtime.activity()+"] Backup(id="+id+").convertToDead FATAL error, t1 >= t2 condition not met, t1="+t1+" t2=" + t2;
                 }
             }
             
