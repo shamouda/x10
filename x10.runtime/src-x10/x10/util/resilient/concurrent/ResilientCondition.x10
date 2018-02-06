@@ -11,7 +11,6 @@ import x10.xrx.Runtime;
  * that releases the condition when the releasing place dies.
  */
 public class ResilientCondition implements Unserializable {
-    public static val FORCE_INCR_PARALLELISM = System.getenv("FORCE_INCR_PAR") == null ? false : Long.parseLong(System.getenv("FORCE_INCR_PAR")) == 1;
     private transient var place:Place;
     public val gr = new GlobalRef[Condition](new Condition());
 
@@ -48,10 +47,10 @@ public class ResilientCondition implements Unserializable {
         }
         
         try {
-        	if (Runtime.NUM_IMMEDIATE_THREADS == 0n || FORCE_INCR_PARALLELISM) Runtime.increaseParallelism();
+        	if (Runtime.NUM_IMMEDIATE_THREADS == 0n) Runtime.increaseParallelism();
             (gr as GlobalRef[Condition]{self.home == here})().await();
         } finally {
-        	if (Runtime.NUM_IMMEDIATE_THREADS == 0n || FORCE_INCR_PARALLELISM) Runtime.decreaseParallelism(1n);
+        	if (Runtime.NUM_IMMEDIATE_THREADS == 0n) Runtime.decreaseParallelism(1n);
         }
     }
     
