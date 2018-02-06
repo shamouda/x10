@@ -48,7 +48,6 @@ public class BenchMicro {
 
         Console.OUT.println("Running with "+Place.numPlaces()+" places.");
         Console.OUT.println("OUTER_ITERS: "+OUTER_ITERS);
-        Console.OUT.println("FORCE_INCR_PAR: " +System.getenv("FORCE_INCR_PAR"));
         Console.OUT.println("Min elapsed time for each test: "+MIN_NANOS/1e9+" seconds.");
         Console.OUT.println("Think time for each activity: "+think+" nanoseconds.");
 
@@ -268,7 +267,7 @@ public class BenchMicro {
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) println(refTime, prefix+"tree fan out correct: "+(time1-time0)/1E9/iterCount+" seconds");
+        if (print) println(refTime, prefix+"tree fan out: "+(time1-time0)/1E9/iterCount+" seconds");
     }
     
     private static def downTree(thinkTime:long):void {
