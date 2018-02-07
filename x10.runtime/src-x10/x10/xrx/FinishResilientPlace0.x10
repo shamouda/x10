@@ -480,11 +480,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
             Runtime.runImmediateAt(place0, ()=>{ 
                 try {
                     lock.lock();
-                    val state = new State(myId, parentId, gfs);
-                    //NOLOG if (verbose>=1) debug(">>>> creating new State id="+myId +" parentId="+parentId);
-                    states.put(myId, state);
-                    State.increment(state.live, Task(gfs.home.id, ASYNC)); // duplicated from my localCount
-                    state.numActive = 1;
+                    getOrCreateState(myId, parentId, gfs);
                 } finally {
                     lock.unlock();
                 }

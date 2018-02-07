@@ -373,8 +373,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             Runtime.runImmediateAt(place0, ()=>{ 
                 try {
                     statesLock.lock();
-                    if (verbose>=1) debug(">>>> creating new State id="+optId.id +" parentId="+optId.parentId);
-                    states.put(optId.id, new State(optId, gfs));
+                    getOrCreateState(optId, gfs);
                 } finally {
                     statesLock.unlock();
                 }
