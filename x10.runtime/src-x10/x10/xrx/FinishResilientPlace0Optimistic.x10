@@ -724,13 +724,20 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         def transitToCompletedMul(srcId:Long, dstId:Long, kind:Int, cnt:Int) {
-            if (verbose>=1) debug(">>>> State(id="+id+").transitToCompletedMul srcId=" + srcId + ", dstId=" + dstId + " called");
+            if (verbose>=1) debug(">>>> State(id="+id+").transitToCompletedMul srcId=" + srcId + ", dstId=" + dstId + ", kind="+kind +" called");
+            if (verbose>=3) dump();
             val e = Edge(srcId, dstId, kind);
             deduct(transit, e, cnt);
-            assert transit.getOrElse(e, 0n) >= 0n : here + " FATAL error, transit reached negative id="+id;
+            
+            if (transit.getOrElse(e, 0n) < 0n)
+                throw new Exception(here + " FATAL error, transit reached negative id="+id);
+            
             //don't decrement 'sent'
             numActive-=cnt;
-            assert numActive>=0 : here + " FATAL error, State(id="+id+").numActive reached -ve value";
+            
+            if ( numActive < 0 )
+                throw new Exception(here + " FATAL error, State(id="+id+").numActive reached -ve value");
+            
             if (quiescent()) {
                 releaseLatch();
                 notifyParent();
@@ -804,6 +811,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
 
         def removeFromStates() {
             states.remove(id);
+            if (verbose>=1) debug("<<<< State(id="+id+").removeFromStates() returning");
         }
 
         def addDeadPlaceException(placeId:Long) {
