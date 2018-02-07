@@ -215,7 +215,7 @@ public final class FinishReplicator {
             val mFin = localMaster != null ? findMasterOrAdd(req.id, localMaster) : findMaster(req.id);
             assert (mFin != null) : here + " fatal error, master(id="+req.id+") is null1 while processing req["+req+"]";
             val mresp = mFin.exec(req);
-            if (mresp.excp instanceof MasterMigrating) {
+            if (mresp.excp != null && mresp.excp instanceof MasterMigrating) {
                 if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal MasterMigrating1, try again after 10ms" );
                 Runtime.submitUncounted( ()=>{
                     System.threadSleep(10);
@@ -232,7 +232,7 @@ public final class FinishReplicator {
                 assert (mFin != null) : here + " fatal error, master(id="+req.id+") is null2 while processing req["+req+"]";
                 val mresp = mFin.exec(req);
                 at (caller) @Immediate("async_master_exec_response") async {
-                    if (mresp.excp instanceof MasterMigrating) {
+                    if (mresp.excp != null && mresp.excp instanceof MasterMigrating) {
                         if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal MasterMigrating2, try again after 10ms" );
                         //we cannot block within an immediate thread
                         Runtime.submitUncounted( ()=>{
