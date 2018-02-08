@@ -27,6 +27,7 @@ import x10.util.concurrent.Lock;
 import x10.util.resilient.concurrent.ResilientLowLevelFinish;
 import x10.util.concurrent.Condition;
 
+//FIXME: return a dummy remote rather than a fatal RemoteCreationDenied
 /**
  * Place0-based Resilient Finish using the optimistic counting protocol
  */
@@ -699,6 +700,28 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
            }
         }
         
+        static def p0HereTermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int]) {
+            if (map == null)
+                throw new Exception(here + " FATAL ERROR p0HereTermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is NULL");
+            
+            //NOLOG if (verbose>=1) debug(">>>> State(id="+id+").p0HereTermMultiple [dstId=" + dstId +", mapSz="+map.size()+" ] called");
+            //Unlike place0 finish, we don't suppress termination notifications whose dst is dead.
+            //Because we expect termination messages from these tasks to be notified if the tasks were recieved by a dead dst
+            try {
+                statesLock.lock();
+                val state = states(id);
+                for (e in map.entries()) {
+                    val srcId = e.getKey().place;
+                    val kind = e.getKey().kind;
+                    val cnt = e.getValue();
+                    state.transitToCompletedMul(srcId, dstId, kind, cnt);
+                }
+            } finally {
+                statesLock.unlock();
+            }
+            //NOLOG if (verbose>=1) debug("<<<< State(id="+id+").p0HereTermMultiple [dstId=" + dstId +", mapSz="+map.size()+" ] returning");
+        }
+        
         def addException(t:CheckedThrowable) {
             if (excs == null) excs = new GrowableRail[CheckedThrowable]();
             excs.add(t);
@@ -887,6 +910,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 remoteLock.lock();
                 var remoteState:P0OptimisticRemoteState = remotes.getOrElse(id, null);
                 if (remoteState == null) {
+                    //FIXME: return a dummy remote rather than a fatal RemoteCreationDenied
                     if (remoteDeny.contains(id)) {
                         throw new RemoteCreationDenied();
                     }
@@ -1113,20 +1137,25 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 return;
             }
             
-            //manual serialization because serialization of hashmap is proplematic
-            val size = map.size();
-            val tasks = new Rail[Int](size);
-            val kinds = new Rail[Int](size);
-            val counts = new Rail[Int](size);
-            var i:Long = 0;
-            for (e in map.entries()) {
-                tasks(i) = e.getKey().place;
-                kinds(i) = e.getKey().kind;
-                counts(i) = e.getValue();
-                i++;
-            }
             //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root, mapSize=" + map.size());
-            State.p0TermMultiple(id, dstId, tasks, kinds, counts);
+            if (here.id == 0)
+                State.p0HereTermMultiple(id, dstId, map);
+            else {
+                //manual serialization because serialization of hashmap is problematic
+                val size = map.size();
+                val tasks = new Rail[Int](size);
+                val kinds = new Rail[Int](size);
+                val counts = new Rail[Int](size);
+                var i:Long = 0;
+                for (e in map.entries()) {
+                    tasks(i) = e.getKey().place;
+                    kinds(i) = e.getKey().kind;
+                    counts(i) = e.getValue();
+                    i++;
+                }
+                map.clear();
+                State.p0TermMultiple(id, dstId, tasks, kinds, counts);
+            }
             //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
         }
         
@@ -1151,20 +1180,26 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             val map = notifyTerminationAndGetMap(Task(srcId, kind));
             if (map == null)
                 return;
-           //manual serialization because serialization of hashmap is proplematic
-            val size = map.size();
-            val tasks = new Rail[Int](size);
-            val kinds = new Rail[Int](size);
-            val counts = new Rail[Int](size);
-            var i:Long = 0;
-            for (e in map.entries()) {
-                tasks(i) = e.getKey().place;
-                kinds(i) = e.getKey().kind;
-                counts(i) = e.getValue();
-                i++;
-            }
+           
             //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root, mapSize=" + map.size());
-            State.p0TermMultiple(id, dstId, tasks, kinds, counts);
+            if (here.id == 0)
+                State.p0HereTermMultiple(id, dstId, map);
+            else {
+                //manual serialization because serialization of hashmap is problematic
+                val size = map.size();
+                val tasks = new Rail[Int](size);
+                val kinds = new Rail[Int](size);
+                val counts = new Rail[Int](size);
+                var i:Long = 0;
+                for (e in map.entries()) {
+                    tasks(i) = e.getKey().place;
+                    kinds(i) = e.getKey().kind;
+                    counts(i) = e.getValue();
+                    i++;
+                }
+                map.clear();
+                State.p0TermMultiple(id, dstId, tasks, kinds, counts);
+            }
             //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning");
         }
 
