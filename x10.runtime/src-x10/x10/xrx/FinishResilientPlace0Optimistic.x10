@@ -671,11 +671,13 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         
         static def p0TermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int]) {
             if (map == null)
-                throw new Exception(here + " FATAL ERROR p0TermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is NULL");
+                throw new Exception(here + " FATAL ERROR-1 p0TermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is NULL");
+            
+            val size = map.size();
             
             at (place0) @Immediate("p0Opt_notifyTermMul_to_zero") async {
                 if (map == null)
-                    throw new Exception(here + " FATAL ERROR p0TermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is NULL");
+                    throw new Exception(here + " FATAL ERROR-2 p0TermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is NULL, although size was " + size);
                 
                 if (verbose>=1) debug(">>>> State(id="+id+").p0TermMultiple [dstId=" + dstId +", mapSz="+map.size()+" ] called");
                 //Unlike place0 finish, we don't suppress termination notifications whose dst is dead.
@@ -1260,6 +1262,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         def spawnRemoteActivity(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
+            globalInit(false);//globalize parent if not global
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
             if (verbose>=1) debug(">>>> Root(id="+optId.id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+") called");
