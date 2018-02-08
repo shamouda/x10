@@ -670,7 +670,13 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         static def p0TermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int]) {
+            if (map == null)
+                throw new Exception(here + " FATAL ERROR p0TermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is NULL");
+            
             at (place0) @Immediate("p0Opt_notifyTermMul_to_zero") async {
+                if (map == null)
+                    throw new Exception(here + " FATAL ERROR p0TermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is NULL");
+                
                 if (verbose>=1) debug(">>>> State(id="+id+").p0TermMultiple [dstId=" + dstId +", mapSz="+map.size()+" ] called");
                 //Unlike place0 finish, we don't suppress termination notifications whose dst is dead.
                 //Because we expect termination messages from these tasks to be notified if the tasks were recieved by a dead dst
