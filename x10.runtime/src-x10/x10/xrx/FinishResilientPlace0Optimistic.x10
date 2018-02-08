@@ -328,7 +328,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     statesLock.unlock();
                 }
             }
-            if (verbose >=1) printResolveReqs(countingReqs); 
+            //NOLOG if (verbose >=1) printResolveReqs(countingReqs); 
             return countingReqs;
         }
         
@@ -430,7 +430,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                                 
                 try {
                     at (Place(dstId)) @Immediate("p0optGlobal_spawnRemoteActivity_dstPlace") async {
-                        if (verbose >= 1) debug("==== spawnRemoteActivity(id="+id+") submitting activity from "+here.id+" at "+dstId);
+                        //NOLOG if (verbose >= 1) debug("==== spawnRemoteActivity(id="+id+") submitting activity from "+here.id+" at "+dstId);
                         val wrappedBody = ()=> {
                             // defer deserialization to reduce work on immediate thread
                             val deser = new Deserializer(bytes);
@@ -516,7 +516,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                                 
                 try {
                     at (Place(dstId)) @Immediate("p0opt_spawnRemoteActivity_dstPlace") async {
-                        if (verbose >= 1) debug("==== spawnRemoteActivity(id="+optId.id+") submitting activity from "+here.id+" at "+dstId);
+                        //NOLOG if (verbose >= 1) debug("==== spawnRemoteActivity(id="+optId.id+") submitting activity from "+here.id+" at "+dstId);
                         val wrappedBody = ()=> {
                             // defer deserialization to reduce work on immediate thread
                             val deser = new Deserializer(bytes);
@@ -669,37 +669,33 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
            }
         }
         
-        static def p0TermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int]) {
-            if (map == null || map.size() == 0)
-                throw new Exception(here + " FATAL ERROR-1 p0TermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is NULL, or size = 0");
+        static def p0TermMultiple(id:Id, dstId:Int, tasks:Rail[Int], kinds:Rail[Int], counts:Rail[Int]) {
+            if (tasks == null || tasks.size == 0 || kinds == null || kinds.size == 0 || 
+                counts == null || counts.size == 0 )
+                throw new Exception(here + " FATAL ERROR-1 p0TermMultiple(id="+id+", dstId="+dstId+", tasks="+tasks+", kinds="+kinds+", counts="+counts+") something is null or zero size");
             
-            // pre-serialize the hashmap here
-            val serializer = new x10.io.Serializer();
-            serializer.writeAny(map);
-            val serializedMap:Rail[Byte] = serializer.toRail();
-            map.clear();
-            
+            //NOLOG if (verbose>=1) debug(">>>> State(id="+id+").p0TermMultiple [dstId=" + dstId +", size="+tasks.size+" ] called");
             at (place0) @Immediate("p0Opt_notifyTermMul_to_zero") async {
-                val remoteMap:HashMap[Task,Int] = new x10.io.Deserializer(serializedMap).readAny() as HashMap[Task,Int]; 
-                if (remoteMap == null || remoteMap.size() == 0)
-                    throw new Exception(here + " FATAL ERROR-2 p0TermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is NULL, or size=0");
+                if (tasks == null || tasks.size == 0 || kinds == null || kinds.size == 0 || 
+                        counts == null || counts.size == 0 )
+                        throw new Exception(here + " FATAL ERROR-2 p0TermMultiple(id="+id+", dstId="+dstId+", tasks="+tasks+", kinds="+kinds+", counts="+counts+") something is null or zero size");
                 
-                //NOLOG if (verbose>=1) debug(">>>> State(id="+id+").p0TermMultiple [dstId=" + dstId +", mapSz="+map.size()+" ] called");
+                //NOLOG if (verbose>=1) debug("==== State(id="+id+").p0TermMultiple [dstId=" + dstId +", tasksSize="+tasks.size+", kindsSize="+kinds.size+", countsSize="+counts.size+" ] called");
                 //Unlike place0 finish, we don't suppress termination notifications whose dst is dead.
                 //Because we expect termination messages from these tasks to be notified if the tasks were recieved by a dead dst
                 try {
                     statesLock.lock();
                     val state = states(id);
-                    for (e in remoteMap.entries()) {
-                        val srcId = e.getKey().place;
-                        val kind = e.getKey().kind;
-                        val cnt = e.getValue();
+                    for (var i:Long = 0; i < tasks.size; i++) {
+                        val srcId = tasks(i);
+                        val kind = kinds(i);
+                        val cnt = counts(i);
                         state.transitToCompletedMul(srcId, dstId, kind, cnt);
                     }
                 } finally {
                     statesLock.unlock();
                 }
-                //NOLOG if (verbose>=1) debug("<<<< State(id="+id+").p0TermMultiple [dstId=" + dstId +", mapSz="+map.size()+" ] returning");
+                //NOLOG if (verbose>=1) debug("<<<< State(id="+id+").p0TermMultiple [dstId=" + dstId +", size="+tasks.size+" ] returning");
            }
         }
         
@@ -1042,11 +1038,11 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             val gfs = new GlobalRef[FinishState](fs);
             
             if (bytes.size >= ASYNC_SIZE_THRESHOLD) {
-                if (verbose >= 1) debug("==== Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting indirect (size="+ bytes.size+") ");
+                //NOLOG if (verbose >= 1) debug("==== Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting indirect (size="+ bytes.size+") ");
             	val count = notifyReceived(Task(srcId, ASYNC)); // synthetic activity to keep finish locally live during async to Place0
             	State.p0RemoteSpawnBigGlobal(id, srcId, dstId, bytes, gfs);
             } else {
-                if (verbose >= 1) debug("====  Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting direct (size="+ bytes.size+") ");
+                //NOLOG if (verbose >= 1) debug("====  Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting direct (size="+ bytes.size+") ");
             	State.p0RemoteSpawnSmallGlobal(id, srcId, dstId, bytes, gfs);
             }
             //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+") returning");
@@ -1117,8 +1113,20 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 return;
             }
             
+            //manual serialization because serialization of hashmap is proplematic
+            val size = map.size();
+            val tasks = new Rail[Int](size);
+            val kinds = new Rail[Int](size);
+            val counts = new Rail[Int](size);
+            var i:Long = 0;
+            for (e in map.entries()) {
+                tasks(i) = e.getKey().place;
+                kinds(i) = e.getKey().kind;
+                counts(i) = e.getValue();
+                i++;
+            }
             //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root, mapSize=" + map.size());
-            State.p0TermMultiple(id, dstId, map);
+            State.p0TermMultiple(id, dstId, tasks, kinds, counts);
             //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
         }
         
@@ -1143,8 +1151,20 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             val map = notifyTerminationAndGetMap(Task(srcId, kind));
             if (map == null)
                 return;
+           //manual serialization because serialization of hashmap is proplematic
+            val size = map.size();
+            val tasks = new Rail[Int](size);
+            val kinds = new Rail[Int](size);
+            val counts = new Rail[Int](size);
+            var i:Long = 0;
+            for (e in map.entries()) {
+                tasks(i) = e.getKey().place;
+                kinds(i) = e.getKey().kind;
+                counts(i) = e.getValue();
+                i++;
+            }
             //NOLOG if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root, mapSize=" + map.size());
-            State.p0TermMultiple(id, dstId, map);
+            State.p0TermMultiple(id, dstId, tasks, kinds, counts);
             //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning");
         }
 
@@ -1281,10 +1301,10 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             val gfs = new GlobalRef[FinishState](fs);
             if (bytes.size >= ASYNC_SIZE_THRESHOLD) {
             	val count = lc.incrementAndGet(); // synthetic activity to keep finish locally live during async to Place0
-            	if (verbose >= 1) debug("==== Root(id="+optId.id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting indirect (size="+ bytes.size+") localCount now " + count);
+            	//NOLOG if (verbose >= 1) debug("==== Root(id="+optId.id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting indirect (size="+ bytes.size+") localCount now " + count);
             	State.p0RemoteSpawnBig(optId, ref, srcId, dstId, bytes, gfs);
             } else {
-                if (verbose >= 1) debug("====  Root(id="+optId.id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting direct (size="+ bytes.size+") ");
+                //NOLOG if (verbose >= 1) debug("====  Root(id="+optId.id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting direct (size="+ bytes.size+") ");
             	State.p0RemoteSpawnSmall(optId, ref, srcId, dstId, bytes, gfs);
             }
             //NOLOG if (verbose>=1) debug("<<<< Root(id="+optId.id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+") returning");
