@@ -670,14 +670,19 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         static def p0TermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int]) {
-            if (map == null)
-                throw new Exception(here + " FATAL ERROR-1 p0TermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is NULL");
+            if (map == null || map.size() == 0)
+                throw new Exception(here + " FATAL ERROR-1 p0TermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is NULL, or size = 0");
             
-            val size = map.size();
+            // pre-serialize the hashmap here
+            val serializer = new x10.io.Serializer();
+            serializer.writeAny(map);
+            val serializedMap:Rail[Byte] = serializer.toRail();
+            map.clear();
             
             at (place0) @Immediate("p0Opt_notifyTermMul_to_zero") async {
-                if (map == null)
-                    throw new Exception(here + " FATAL ERROR-2 p0TermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is NULL, although size was " + size);
+                val remoteMap:HashMap[Task,Int] = new x10.io.Deserializer(serializedMap).readAny() as HashMap[Task,Int]; 
+                if (remoteMap == null || remoteMap.size() == 0)
+                    throw new Exception(here + " FATAL ERROR-2 p0TermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is NULL, or size=0");
                 
                 //NOLOG if (verbose>=1) debug(">>>> State(id="+id+").p0TermMultiple [dstId=" + dstId +", mapSz="+map.size()+" ] called");
                 //Unlike place0 finish, we don't suppress termination notifications whose dst is dead.
@@ -685,7 +690,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 try {
                     statesLock.lock();
                     val state = states(id);
-                    for (e in map.entries()) {
+                    for (e in remoteMap.entries()) {
                         val srcId = e.getKey().place;
                         val kind = e.getKey().kind;
                         val cnt = e.getValue();
