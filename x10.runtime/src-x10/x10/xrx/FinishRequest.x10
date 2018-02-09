@@ -14,8 +14,11 @@ import x10.util.HashMap;
 import x10.util.HashSet;
 import x10.util.concurrent.Lock;
 import x10.util.concurrent.AtomicLong;
+import x10.io.CustomSerialization;
+import x10.io.Deserializer;
+import x10.io.Serializer;
 
-public class FinishRequest {
+public class FinishRequest implements CustomSerialization {
     static val ADD_CHILD = 0n;
     static val TRANSIT = 1n;
     static val LIVE = 2n;
@@ -27,7 +30,10 @@ public class FinishRequest {
     private static val OPTIMISTIC = Configuration.resilient_mode() == Configuration.RESILIENT_MODE_DIST_OPTIMISTIC;
     private static val nextReqId = new AtomicLong(0);
     
-    public val num = nextReqId.incrementAndGet();
+    private static val pool = new HashSet[FinishRequest]();
+    private static val poolLock = new Lock();
+    
+    public val num:Long;
     
     //main identification fields
     var id:FinishResilient.Id;  //can be changed to adopter id
@@ -47,20 +53,100 @@ public class FinishRequest {
     var kind:Int;
     var ex:CheckedThrowable;     //excp
     
-    //special backup parameters
-    var backupPlaceId:Int = -1n;
-    var transitSubmitDPE:Boolean = false;
-    
     //optimistic finish source
     var finSrc:Int = -1n;
     var finKind:Int = -1n;
+    
+    //special backup parameters
+    var backupPlaceId:Int = -1n;
+    var transitSubmitDPE:Boolean = false;
     
     //output variables for non-blocking replication
     var outSubmit:Boolean; 
     var outAdopterId:FinishResilient.Id = FinishResilient.UNASSIGNED;
     
-    private static val pool = new HashSet[FinishRequest]();
-    private static val poolLock = new Lock();
+    /*
+     * Custom deserialization
+     */
+    public def this(ds:Deserializer) {
+        this.num = ds.readAny() as Long;
+        this.id = FinishResilient.Id(ds.readAny() as Int, ds.readAny() as Int);
+        this.masterPlaceId = ds.readAny() as Int;
+        this.reqType = ds.readAny() as Int;
+        this.typeDesc = ds.readAny() as String;
+        this.parentId = FinishResilient.Id(ds.readAny() as Int, ds.readAny() as Int);
+        this.finSrc = ds.readAny() as Int;
+        this.finKind = ds.readAny() as Int;
+        this.toAdopter = ds.readAny() as Boolean;
+        val size = ds.readAny() as Long; 
+        if (size > 0 ) {
+        	this.tasks = new Rail[Int](size);
+        	this.kinds = new Rail[Int](size);
+        	this.counts = new Rail[Int](size);
+        	for (i in 0..(size-1)) {
+        	    this.tasks(i) = ds.readAny() as Int;
+        	}
+        	for (i in 0..(size-1)) {
+        	    this.kinds(i) = ds.readAny() as Int;
+        	}
+        	for (i in 0..(size-1)) {
+        	    this.counts(i) = ds.readAny() as Int;
+        	}
+        }
+        this.childId = FinishResilient.Id(ds.readAny() as Int, ds.readAny() as Int);
+        this.srcId = ds.readAny() as Int;
+        this.dstId = ds.readAny() as Int;
+        this.kind = ds.readAny() as Int;
+        this.ex = ds.readAny() as CheckedThrowable;
+        
+        this.backupPlaceId = ds.readAny() as Int;
+        this.transitSubmitDPE = ds.readAny() as Boolean;
+        this.outSubmit = ds.readAny() as Boolean;
+        this.outAdopterId = FinishResilient.Id(ds.readAny() as Int, ds.readAny() as Int);
+    }
+
+    /*
+     * Custom serialization
+     */
+    public def serialize(s:Serializer) {
+        s.writeAny(this.num);
+        s.writeAny(this.id.home);
+        s.writeAny(this.id.id);
+        s.writeAny(this.masterPlaceId);
+        s.writeAny(this.reqType);
+        s.writeAny(this.typeDesc);
+        s.writeAny(this.parentId.home);
+        s.writeAny(this.parentId.id);
+        s.writeAny(this.finSrc);
+        s.writeAny(this.finKind);
+        s.writeAny(this.toAdopter);
+        val size = this.tasks == null? 0 : this.tasks.size;
+        s.writeAny(size);
+        if (size > 0 ) {
+        	for (i in 0..(size-1)) {
+        	    s.writeAny(this.tasks(i));
+        	}
+        	for (i in 0..(size-1)) {
+        	    s.writeAny(this.kinds(i));
+        	}
+        	for (i in 0..(size-1)) {
+        	    s.writeAny(this.counts(i));
+        	}
+        }
+        s.writeAny(this.childId.home);
+        s.writeAny(this.childId.id);
+        s.writeAny(this.srcId);
+        s.writeAny(this.dstId);
+        s.writeAny(this.kind);
+        s.writeAny(this.ex);
+        
+        s.writeAny(this.backupPlaceId);
+        s.writeAny(this.transitSubmitDPE);
+        s.writeAny(this.outSubmit);
+        s.writeAny(this.outAdopterId.home);
+        s.writeAny(this.outAdopterId.id);
+        
+    }
     
     private static def allocReq(id:FinishResilient.Id, masterPlaceId:Int,
             reqType:Int, typeDesc:String, parentId:FinishResilient.Id, finSrc:Int, finKind:Int,
@@ -100,7 +186,8 @@ public class FinishRequest {
             reqType:Int, typeDesc:String, parentId:FinishResilient.Id, finSrc:Int, finKind:Int,
             tasks:Rail[Int], kinds:Rail[Int], counts:Rail[Int],
             childId:FinishResilient.Id, srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable, toAdopter:Boolean) {
-        this.id = id;
+    	this.num = nextReqId.incrementAndGet();
+    	this.id = id;
         this.masterPlaceId = masterPlaceId;
         this.reqType = reqType;
         this.typeDesc = typeDesc;     
