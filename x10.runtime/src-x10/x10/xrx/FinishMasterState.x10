@@ -31,7 +31,10 @@ class MasterResponse implements CustomSerialization {
     var transitSubmitDPE:Boolean = false;
     var backupChanged:Boolean = false;
     var parentId:FinishResilient.Id; /*used in ADD_CHILD only*/
-
+	
+	public def this() {
+		
+	}
 	/*
 	 * Custom serialization
 	 */
