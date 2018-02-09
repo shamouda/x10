@@ -1369,22 +1369,20 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             });
         }
 
-        public def exec(req:FinishRequest) {
-            val resp = new BackupResponse();
+        public def exec(req:FinishRequest):Exception {
             val reqMaster = req.masterPlaceId;
             try {
                 lock();
                 if (migrating) {
-                    resp.excp = new MasterDied();
-                    return resp;
+                    return new MasterDied();
                 }
                 if (reqMaster != placeOfMaster) {
-                    resp.excp = new MasterChanged(id, placeOfMaster);
-                    return resp;
+                    return new MasterChanged(id, placeOfMaster);
                 }
             } finally {
                 unlock();
             }
+            var bexcp:Exception = null;
             if (req.reqType == FinishRequest.TRANSIT) {
                 val srcId = req.srcId;
                 val dstId = req.dstId;
@@ -1393,7 +1391,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 try{
                     inTransit(srcId, dstId, kind, "notifySubActivitySpawn");
                 } catch (t:Exception) {
-                    resp.excp = t;
+                	bexcp = t;
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=TRANSIT, srcId=" + srcId + ", dstId="+ dstId + ",kind=" + kind + " ] returning");
             } else if (req.reqType == FinishRequest.TERM) {
@@ -1405,7 +1403,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 try{
                     transitToCompleted(srcId, dstId, kind, ex, "notifyActivityTermination");
                 } catch (t:Exception) {
-                    resp.excp = t;
+                	bexcp = t;
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=TERM, srcId=" + srcId + ", dstId="+ dstId + ", kind=" + kind + ", ex=" + ex + " ] returning");
             } else if (req.reqType == FinishRequest.EXCP) {
@@ -1414,7 +1412,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 try{
                     addException(ex);
                 } catch (t:Exception) {
-                    resp.excp = t;
+                	bexcp = t;
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=EXCP, ex="+ex+" ] returning");
             } else if (req.reqType == FinishRequest.TERM_MUL) {
@@ -1437,11 +1435,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                         ilock.unlock();
                     }
                 } catch (t:Exception) {
-                    resp.excp = t;
+                	bexcp = t;
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=TERM_MUL, dstId=" + dstId +", mapSz="+tasks.size+" ] returning");
             }
-            return resp;
+            return bexcp;
         }
         
         /*********************************************************************/

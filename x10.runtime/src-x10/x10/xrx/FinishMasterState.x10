@@ -11,6 +11,9 @@
 package x10.xrx;
 
 import x10.util.HashSet;
+import x10.io.CustomSerialization;
+import x10.io.Deserializer;
+import x10.io.Serializer;
 
 public abstract class FinishMasterState extends FinishResilient {
     abstract def exec(req:FinishRequest):MasterResponse;
@@ -21,11 +24,36 @@ public abstract class FinishMasterState extends FinishResilient {
     abstract def dump():void;
 }
 
-class MasterResponse {
+class MasterResponse implements CustomSerialization {
     var backupPlaceId:Int;
     var excp:Exception;
     var submit:Boolean = false;
     var transitSubmitDPE:Boolean = false;
     var backupChanged:Boolean = false;
     var parentId:FinishResilient.Id; /*used in ADD_CHILD only*/
+
+	/*
+	 * Custom serialization
+	 */
+	public def serialize(s:Serializer) {
+    	s.writeAny(backupPlaceId);
+    	s.writeAny(excp);
+    	s.writeAny(submit);
+    	s.writeAny(transitSubmitDPE);
+    	s.writeAny(backupChanged);
+    	s.writeAny(parentId.home);
+    	s.writeAny(parentId.id);
+	}
+	
+    /*
+     * Custom deserialization
+     */
+    public def this(ds:Deserializer) {
+        this.backupPlaceId = ds.readAny() as Int;
+        this.excp = ds.readAny() as Exception;
+        this.submit = ds.readAny() as Boolean;
+        this.transitSubmitDPE = ds.readAny() as Boolean;
+        this.backupChanged = ds.readAny() as Boolean;
+        this.parentId = FinishResilient.Id( ds.readAny() as Int, ds.readAny() as Int);
+    }
 }

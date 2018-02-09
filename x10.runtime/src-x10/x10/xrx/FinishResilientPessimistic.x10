@@ -1621,18 +1621,17 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             return quiet;
         }
         
-        public def exec(req:FinishRequest) {
-            val resp = new BackupResponse();
+        public def exec(req:FinishRequest):Exception {
             val reqMaster = req.masterPlaceId;
             try {
                 lock();
                 if (migrating) {
-                    resp.excp = new MasterDied();
-                    return resp;
+                    return new MasterDied();
                 }
             } finally {
                 unlock();
             }
+            var bexcp:Exception = null;
             if (req.reqType == FinishRequest.ADD_CHILD) {
                 val childId = req.childId;
                 if (verbose>=1) debug(">>>> Backup(id="+id+").exec [req=ADD_CHILD, childId="+childId+"] called");
@@ -1640,7 +1639,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                     addChild(childId);
                 } catch (t:Exception) {
                     t.printStackTrace();
-                    resp.excp = t;
+                    bexcp = t;
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").exec returning [req=ADD_CHILD, childId="+childId+"]");
             } else if (req.reqType == FinishRequest.TRANSIT) {
@@ -1656,7 +1655,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                         inTransit(srcId, dstId, kind, "notifySubActivitySpawn", toAdopter);
                 } catch (t:Exception) {
                     t.printStackTrace();
-                    resp.excp = t;
+                    bexcp = t;
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=TRANSIT, srcId=" + srcId + ", dstId=" + dstId + ",kind=" + kind + " ] returning");
             } else if (req.reqType == FinishRequest.LIVE) {
@@ -1670,7 +1669,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                     transitToLive(srcId, dstId, kind, msg , toAdopter);
                 } catch (t:Exception) {
                     t.printStackTrace();
-                    resp.excp = t;
+                    bexcp = t;
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=LIVE, srcId=" + srcId + ", dstId=" + dstId + ",kind=" + kind + " ] returning");
             } else if (req.reqType == FinishRequest.TERM) {
@@ -1683,7 +1682,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                     liveToCompleted(srcId, dstId, kind, "notifyActivityTermination", toAdopter);
                 } catch (t:Exception) {
                     t.printStackTrace();
-                    resp.excp = t;
+                    bexcp = t;
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=TERM, srcId=" + srcId + ", dstId="+ dstId + ", kind=" + kind + " ] returning");
             } else if (req.reqType == FinishRequest.EXCP) {
@@ -1693,7 +1692,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                     addException(ex);
                 } catch (t:Exception) {
                     t.printStackTrace();
-                    resp.excp = t;
+                    bexcp = t;
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=EXCP, ex="+ex+" ] returning");
             } else if (req.reqType == FinishRequest.TRANSIT_TERM) {
@@ -1707,11 +1706,11 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                     transitToCompleted(srcId, dstId, kind, ex, toAdopter);
                 } catch (t:Exception) {
                     t.printStackTrace();
-                    resp.excp = t;
+                    bexcp = t;
                 }
                 if (verbose>=1) debug(">>>> Backup(id="+id+").exec [req=TRANSIT_TERM, srcId=" + srcId + ", dstId=" + dstId + ", kind=" + kind + ", ex="+ex+" ] returning");
             }
-            return resp;
+            return bexcp;
         }
     }
     
@@ -1781,7 +1780,6 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                         grandChildren.add (new ChildQueryId(parentId, child));
                     }
                     resp.children.clear();
-                    
                     
                     val pl = placeEntry.getKey();
                     var placeResult:HashMap[ChildQueryId, ChildAdoptionResponse] = fullResult.getOrElse(pl, null);

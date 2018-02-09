@@ -279,8 +279,8 @@ public final class FinishReplicator {
                         bFin = findBackupOrCreate(req.id, req.parentId, Place(req.finSrc), req.finKind);
                     else
                         bFin = findBackupOrThrow(req.id);
-                    val bresp = bFin.exec(req);
-                    processBackupResponse(bresp, req.num);
+                    val bexcp = bFin.exec(req);
+                    processBackupResponse(bexcp, req.num);
                 }
                 else {
                     val id = req.id;
@@ -295,11 +295,11 @@ public final class FinishReplicator {
                             bFin = findBackupOrCreate(req.id, req.parentId, Place(req.finSrc), req.finKind);
                         else
                             bFin = findBackupOrThrow(req.id);
-                        val bresp = bFin.exec(req);
+                        val bexcp = bFin.exec(req);
                         if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup moving to caller " + caller);
                         val num = req.num;
                         at (caller) @Immediate("async_backup_exec_response") async {
-                            processBackupResponse(bresp, num);
+                            processBackupResponse(bexcp, num);
                         }
                     }
                 }                
@@ -310,11 +310,11 @@ public final class FinishReplicator {
         }
     }
     
-    static def processBackupResponse(bresp:BackupResponse, num:Long) {
+    static def processBackupResponse(bexcp:Exception, num:Long) {
         if (verbose>=1) debug(">>>> Replicator(num="+num+").processBackupResponse called" );
-        if (bresp.excp instanceof MasterChanged) {
+        if (bexcp != null && bexcp instanceof MasterChanged) {
             val req = FinishReplicator.getPendingBackupRequest(num);
-            val ex = bresp.excp as MasterChanged;
+            val ex = bexcp as MasterChanged;
             req.toAdopter = true;
             req.id = ex.newMasterId;
             req.masterPlaceId = ex.newMasterPlace;
@@ -546,12 +546,12 @@ public final class FinishReplicator {
                 bFin = findBackupOrCreate(req.id, req.parentId, Place(req.finSrc), req.finKind);
             else
                 bFin = findBackupOrThrow(req.id);
-            val resp = bFin.exec(req);
-            if (resp.excp != null) { 
-                throw resp.excp;
+            val bexcp = bFin.exec(req);
+            if (bexcp != null) { 
+                throw bexcp;
             }
             if (verbose>=1) debug("<<<< Replicator(id="+req.id+").backupExec returning [" + req + "]" );
-            return resp;
+            return bexcp;
         }
         val backupRes = new GlobalRef[BackupResponse](new BackupResponse());
         val backup = Place(req.backupPlaceId);
@@ -563,8 +563,7 @@ public final class FinishReplicator {
                     bFin = findBackupOrCreate(req.id, req.parentId, Place(req.finSrc), req.finKind);
                 else
                     bFin = findBackupOrThrow(req.id);
-                val resp = bFin.exec(req);
-                val r_excp = resp.excp;
+                val r_excp = bFin.exec(req);
                 at (gr) @Immediate("backup_exec_response") async {
                     val bRes = (backupRes as GlobalRef[BackupResponse]{self.home == here})();
                     bRes.excp = r_excp;
