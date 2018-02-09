@@ -283,8 +283,12 @@ public final class FinishReplicator {
                     processBackupResponse(bresp, req.num);
                 }
                 else {
-                    if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup moving to backup " + backup);
+                    val id = req.id;
+                    if (verbose>=1) debug("==== Replicator(id="+id+").asyncMasterToBackup moving to backup " + backup);
                     at (backup) @Immediate("async_backup_exec") async {
+                        if (req == null) {
+                            throw new Exception(here + " FATAL ERROR req(id="+id+") is null when reached backup!!!");
+                        }
                         if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup reached backup ");
                         val bFin:FinishBackupState;
                         if (createOk)
