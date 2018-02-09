@@ -226,12 +226,19 @@ public final class FinishReplicator {
                 asyncMasterToBackup(caller, req, mresp);
             }
         } else {
-            if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal remote" );
+        	val id = req.id;
+            if (verbose>=1) debug(">>>> Replicator(id="+id+").asyncExecInternal remote" );
             at (master) @Immediate("async_master_exec") async {
-                val mFin = findMaster(req.id);
-                assert (mFin != null) : here + " fatal error, master(id="+req.id+") is null2 while processing req["+req+"]";
+            	if (req == null) {
+                    throw new Exception(here + " FATAL ERROR (1111) req(id="+id+") is null when reached master!!!");
+                }
+                val mFin = findMaster(id);
+                assert (mFin != null) : here + " FATAL ERROR (2222), master(id="+id+") is null2 while processing req["+req+"]";
                 val mresp = mFin.exec(req);
                 at (caller) @Immediate("async_master_exec_response") async {
+                	if (mresp == null) {
+                        throw new Exception(here + " FATAL ERROR (3333) req(id="+id+") has null mresp!!!");
+                    }
                     if (mresp.excp != null && mresp.excp instanceof MasterMigrating) {
                         if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal MasterMigrating2, try again after 10ms" );
                         //we cannot block within an immediate thread
