@@ -163,23 +163,24 @@ public final class FinishReplicator {
         } 
     }
     
-    private static def finalizeAsyncExec(num:Long, backupPlaceId:Int) {
+    private static def finalizeAsyncExec(num:Long, id:FinishResilient.Id, backupPlaceId:Int) {
         try {
             glock.lock();
-            if (verbose>=1) debug(">>>> Replicator.finalizeAsyncExec(num="+num+") called");
+            if (verbose>=1) debug(">>>> Replicator.finalizeAsyncExec(id="+id+",num="+num+") called");
             val req = pendingBackup.remove(num);
             if (req == null) {
-                if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(num="+num+") req not found, backupDead? " + Place(backupPlaceId).isDead());
+                if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(id="+id+",num="+num+") req not found, backupDead? " + Place(backupPlaceId).isDead());
                 if (!Place(backupPlaceId).isDead())
-                	throw new Exception( here + " FATAL ERROR, pending backup request not found although backup is alive" );
+                	throw new Exception( here + " FATAL ERROR, req(id="+id+") pending backup request not found although backup is alive" );
+                if (verbose>=1) debug("<<<< Replicator.finalizeAsyncExec(id="+id+",num="+num+") returning");
+                return;
             }
-            if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(num="+num+", id="+req.id+") req found");
+            if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(id="+id+",num="+num+") req found");
             val postSendAction = postActions.remove(num); 
             if (postSendAction != null) {
-                if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(id="+req.id+") executing postSendAction(submit="+req.outSubmit+",adopterId="+req.outAdopterId+")");
                 postSendAction(req.outSubmit, req.outAdopterId);
             }
-            if (verbose>=1) debug("<<<< Replicator.finalizeAsyncExec(id="+req.id+", num="+req.num+", submit="+req.outSubmit+", backupPlace="+req.backupPlaceId+") returned");
+            if (verbose>=1) debug("<<<< Replicator.finalizeAsyncExec(id="+id+",num="+num+", submit="+req.outSubmit+", backupPlace="+req.backupPlaceId+") returning");
             FinishRequest.deallocReq(req);
             
         } finally {
@@ -364,7 +365,7 @@ public final class FinishReplicator {
                     else
                         bFin = findBackupOrThrow(req.id, "asyncMasterToBackup local");
                     val bexcp = bFin.exec(req);
-                    processBackupResponse(bexcp, req.num, req.backupPlaceId);
+                    processBackupResponse(bexcp, req.num, req.id, req.backupPlaceId);
                 }
                 else {
                     if (verbose>=1) debug("==== Replicator(id="+id+").asyncMasterToBackup moving to backup " + backup);
@@ -405,7 +406,8 @@ public final class FinishReplicator {
                         val bexcp = bFin.exec(reqy);
                         if (verbose>=1) debug("==== Replicator(id="+reqy.id+").asyncMasterToBackup moving to caller " + caller);
                         at (caller) @Immediate("async_backup_exec_response") async {
-                            processBackupResponse(bexcp, num, backupPlaceId);
+                        	val idtmp = FinishResilient.Id(id_home, id_id);
+                            processBackupResponse(bexcp, num, idtmp, backupPlaceId);
                         }
                     }
                 }                
@@ -416,8 +418,8 @@ public final class FinishReplicator {
         }
     }
     
-    static def processBackupResponse(bexcp:Exception, num:Long, backupPlaceId:Int) {
-        if (verbose>=1) debug(">>>> Replicator(num="+num+").processBackupResponse called" );
+    static def processBackupResponse(bexcp:Exception, num:Long, id:FinishResilient.Id, backupPlaceId:Int) {
+        if (verbose>=1) debug(">>>> Replicator(id="+id+", num="+num+").processBackupResponse called" );
         if (bexcp != null && bexcp instanceof MasterChanged) {
             val req = FinishReplicator.getPendingBackupRequest(num);
             val ex = bexcp as MasterChanged;
@@ -426,12 +428,12 @@ public final class FinishReplicator {
             req.masterPlaceId = ex.newMasterPlace;
             if (!OPTIMISTIC)
                 req.outAdopterId = req.id;
-            if (verbose>=1) debug("==== Replicator(id="+req.id+").processBackupResponse MasterChanged exception caught, newMasterId["+ex.newMasterId+"] newMasterPlace["+ex.newMasterPlace+"]" );
+            if (verbose>=1) debug("==== Replicator(id="+id+", num="+num+").processBackupResponse MasterChanged exception caught, newMasterId["+ex.newMasterId+"] newMasterPlace["+ex.newMasterPlace+"]" );
             asyncExecInternal(req, null);
         } else {
-            finalizeAsyncExec(num, backupPlaceId);
+            finalizeAsyncExec(num, id, backupPlaceId);
         }
-        if (verbose>=1) debug("<<<< Replicator(num="+num+").processBackupResponse returned" );
+        if (verbose>=1) debug("<<<< Replicator(id="+id+", num="+num+").processBackupResponse returned" );
     }
     
     static def submitDeadBackupPendingRequests(newDead:HashSet[Int]) {
