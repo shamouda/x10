@@ -112,23 +112,19 @@ public final class FinishReplicator {
     }
     
     //we don't insert a backup request if backup is dead
-    private static def masterToBackupPending(inReq:FinishRequest, submit:Boolean, backupPlaceId:Int, transitSubmitDPE:Boolean) {
+    /*
+    private static def masterToBackupPending(num:Long, masterPlaceId:Int, submit:Boolean, backupPlaceId:Int, transitSubmitDPE:Boolean,
+    		parentId:FinishResilient:Id) {
         try {
             glock.lock();
-            val num = inReq.num;
-            val masterPlaceId = inReq.masterPlaceId;
             val req = pendingMaster.remove(num);
-            
-            req.outSubmit = submit;   //in
-            inReq.backupPlaceId = backupPlaceId; //in
-            req.backupPlaceId = backupPlaceId;  //in
-            inReq.transitSubmitDPE = transitSubmitDPE; //in
-            req.transitSubmitDPE = transitSubmitDPE; //in
-            req.parentId = inReq.parentId; //in
-            inReq.outAdopterId = req.outAdopterId; //out
-            inReq.outSubmit = submit; //out
-            
             if (req != null) {
+            	req.outSubmit = submit;   //in
+                req.backupPlaceId = backupPlaceId;  //in
+                req.transitSubmitDPE = transitSubmitDPE; //in
+                req.parentId = parentId; //in
+                //inReq.outAdopterId = req.outAdopterId; //out
+                
                 if (verbose>=1) debug(">>>> Replicator.masterToBackupPending(id="+req.id+", num="+num+", submit="+submit+") called, req found");
                 if (Place(backupPlaceId).isDead()) {
                     if (verbose>=1) debug("<<<< Replicator.masterToBackupPending(id="+req.id+", num="+num+", submit="+submit+") returned TARGET_DEAD");
@@ -139,14 +135,15 @@ public final class FinishReplicator {
                 return SUCCESS;
             } else {
                 if (verbose>=1) debug("<<<< Replicator.masterToBackupPending(num="+num+", submit="+submit+") req not found, masterDead? " + Place(masterPlaceId).isDead());
-                assert Place(masterPlaceId).isDead() : here + " FATAL ERROR, pending master request not found although master is alive";
+                if (!Place(masterPlaceId).isDead())
+                	throw new Exception(here + " FATAL ERROR, pending master request not found although master is alive");
             }
             return LEGAL_ABSENCE;
         } finally {
             glock.unlock();
         } 
     }
-    
+    */
     private static def removeMasterPending(num:Long) {
         try {
             glock.lock();
@@ -209,7 +206,11 @@ public final class FinishReplicator {
     //FIXME: reduce serialization
     private static def asyncExecInternal(req:FinishRequest, localMaster:FinishMasterState) {
         val caller = here;
-        val master = Place(req.masterPlaceId);
+        val masterPlaceId = req.masterPlaceId;
+        val master = Place(masterPlaceId);
+        val num = req.num;
+        val id = req.id;
+        val reqType = req.reqType;
         if (master.id == here.id) {
             if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal local" );
             val mFin = localMaster != null ? findMasterOrAdd(req.id, localMaster) : findMaster(req.id);
@@ -219,33 +220,40 @@ public final class FinishReplicator {
                 if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal MasterMigrating1, try again after 10ms" );
                 Runtime.submitUncounted( ()=>{
                     System.threadSleep(10);
-                    asyncExecInternal(req, null);
+                    val reqx:FinishRequest;
+                    try {
+                    	FinishReplicator.glock.lock();
+                    	reqx = FinishReplicator.pendingMaster.getOrThrow(num);
+                    } finally {
+                    	FinishReplicator.glock.unlock();
+                    }
+                    asyncExecInternal(reqx, null);
                 });
             }
             else {
-                asyncMasterToBackup(caller, req, mresp);
+            	asyncMasterToBackup(caller, id, num, reqType, masterPlaceId, mresp);
             }
         } else {
-        	val id = req.id;
             if (verbose>=1) debug(">>>> Replicator(id="+id+").asyncExecInternal remote" );
             at (master) @Immediate("async_master_exec") async {
             	if (req == null) {
                     throw new Exception(here + " FATAL ERROR (1111) req(id="+id+") is null when reached master!!!");
                 }
                 val mFin = findMaster(id);
-                assert (mFin != null) : here + " FATAL ERROR (2222), master(id="+id+") is null2 while processing req["+req+"]";
+                if (mFin == null)
+                	throw new Exception (here + " FATAL ERROR (2222), master(id="+id+") is null2 while processing req["+req+"]");
                 val mresp = mFin.exec(req);
-                val mresp_backupPlaceId = mresp.backupPlaceId ;
-                val mresp_excp = mresp.excp ;
-                val mresp_submit = mresp.submit ;
-                val mresp_transitSubmitDPE = mresp.transitSubmitDPE ;
-                val mresp_backupChanged = mresp.backupChanged ;
-                val mresp_parentId = mresp.parentId ;
+                val mresp_backupPlaceId = mresp.backupPlaceId;
+                val mresp_excp = mresp.excp;
+                val mresp_submit = mresp.submit;
+                val mresp_transitSubmitDPE = mresp.transitSubmitDPE;
+                val mresp_backupChanged = mresp.backupChanged;
+                val mresp_parentId = mresp.parentId;
                 at (caller) @Immediate("async_master_exec_response") async {
                 	val respCopy = new MasterResponse();
                 	respCopy.backupPlaceId = mresp_backupPlaceId;
-                	respCopy.excp = mresp_excp ;
-                	respCopy.submit = mresp_submit ;
+                	respCopy.excp = mresp_excp;
+                	respCopy.submit = mresp_submit;
                 	respCopy.transitSubmitDPE = mresp_transitSubmitDPE;
                 	respCopy.backupChanged = mresp_backupChanged;
                 	respCopy.parentId = mresp_parentId;
@@ -255,33 +263,66 @@ public final class FinishReplicator {
                         //we cannot block within an immediate thread
                         Runtime.submitUncounted( ()=>{
                             System.threadSleep(10); 
-                            asyncExecInternal(req, null);
+                            val reqx:FinishRequest;
+                            try {
+                            	FinishReplicator.glock.lock();
+                            	reqx = FinishReplicator.pendingMaster.getOrThrow(num);
+                            } finally {
+                            	FinishReplicator.glock.unlock();
+                            }
+                            asyncExecInternal(reqx, null);
                         });
-                    }
-                    else {
-                        asyncMasterToBackup(caller, req, respCopy);
+                    } else {
+                        asyncMasterToBackup(caller, id, num, reqType, masterPlaceId, respCopy);
                     }
                 }
             }
         }
     }
     
-    static def asyncMasterToBackup(caller:Place, req:FinishRequest, mresp:MasterResponse) {
-        val submit = mresp.submit;
-        if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncMasterToBackup => backupPlaceId = " + mresp.backupPlaceId + " submit = " + submit );
-        assert mresp.backupPlaceId != -1n : here + " fatal error ["+req+"], backup -1 means master had a fatal error before reporting its backup value";
+    static def asyncMasterToBackup(caller:Place, id:FinishResilient.Id, num:Long, reqType:Int, masterPlaceId:Int, mresp:MasterResponse) {
+        if (verbose>=1) debug(">>>> Replicator(id="+id+", num="+num+").asyncMasterToBackup => backupPlaceId = " + mresp.backupPlaceId + " submit = " + mresp.submit );
+        if (mresp.backupPlaceId == -1n)
+        	throw new Exception (here + " FATAL ERROR (id="+id+", num="+num+") backup -1 means master had a fatal error before reporting its backup value");
         if (mresp.backupChanged) {
-            updateBackupPlace(req.id.home, mresp.backupPlaceId);
+            updateBackupPlace(id.home, mresp.backupPlaceId);
         }
-        val backupGo = ( submit || (mresp.transitSubmitDPE && req.reqType == FinishRequest.TRANSIT));
+        val backupGo = ( mresp.submit || (mresp.transitSubmitDPE && reqType == FinishRequest.TRANSIT));
         if (backupGo) {
-            if (req.reqType == FinishRequest.ADD_CHILD) /*in some cases, the parent may be transiting at the same time as its child, */ 
-                req.parentId = mresp.parentId;          /*the child may not find the parent's backup during globalInit, so it needs to create it*/
-            val rc = masterToBackupPending(req, submit, mresp.backupPlaceId, mresp.transitSubmitDPE);
+            var rc:Int = SUCCESS;
+        	var reqx:FinishRequest = null;
+            try {
+            	FinishReplicator.glock.lock();
+                reqx = FinishReplicator.pendingMaster.remove(num);
+                if (reqx != null) {
+                	reqx.outSubmit = mresp.submit;   //in
+                    reqx.backupPlaceId = mresp.backupPlaceId;  //in
+                    reqx.transitSubmitDPE = mresp.transitSubmitDPE; //in
+                    if (reqx.reqType == FinishRequest.ADD_CHILD) /*in some cases, the parent may be transiting at the same time as its child, */ 
+                        reqx.parentId = mresp.parentId;          /*the child may not find the parent's backup during globalInit, so it needs to create it*/
+                    if (verbose>=1) debug(">>>> Replicator.masterToBackupPending(id="+reqx.id+", num="+num+", submit="+mresp.submit+") called, req found");
+                    if (Place(mresp.backupPlaceId).isDead()) {
+                        if (verbose>=1) debug("<<<< Replicator.masterToBackupPending(id="+reqx.id+", num="+num+", submit="+mresp.submit+") returned TARGET_DEAD");
+                        rc = TARGET_DEAD;
+                    } else {
+                    	FinishReplicator.pendingBackup.put(num, reqx);
+                    	if (verbose>=1) debug("<<<< Replicator.masterToBackupPending(id="+reqx.id+", num="+num+", submit="+mresp.submit+") returned SUCCESS");
+                    	rc = SUCCESS;
+                    }
+                } else {
+                    if (verbose>=1) debug("<<<< Replicator.masterToBackupPending(num="+num+", submit="+mresp.submit+") req not found, masterDead? " + Place(masterPlaceId).isDead());
+                    if (!Place(masterPlaceId).isDead())
+                    	throw new Exception(here + " FATAL ERROR, pending master request not found although master is alive");
+                }
+                rc = LEGAL_ABSENCE;
+            } finally {
+            	FinishReplicator.glock.unlock();
+            } 
             if (rc == TARGET_DEAD) {
                 //ignore backup and go ahead with post processing
-                handleBackupDied(req);
+                handleBackupDied(reqx);
             } else if (rc == SUCCESS){ //normal path
+            	val req = reqx;
                 val backup = Place(req.backupPlaceId);
                 val createOk = req.reqType == FinishRequest.ADD_CHILD || 
                         /*in some cases, the parent may be transiting at the same time as its child, 
@@ -301,7 +342,6 @@ public final class FinishReplicator {
                     processBackupResponse(bexcp, req.num);
                 }
                 else {
-                    val id = req.id;
                     if (verbose>=1) debug("==== Replicator(id="+id+").asyncMasterToBackup moving to backup " + backup);
                     at (backup) @Immediate("async_backup_exec") async {
                         if (req == null) {
@@ -315,7 +355,6 @@ public final class FinishReplicator {
                             bFin = findBackupOrThrow(req.id);
                         val bexcp = bFin.exec(req);
                         if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup moving to caller " + caller);
-                        val num = req.num;
                         at (caller) @Immediate("async_backup_exec_response") async {
                             processBackupResponse(bexcp, num);
                         }
@@ -323,8 +362,8 @@ public final class FinishReplicator {
                 }                
             } //else is LEGAL ABSENCE => backup death is being handled by notifyPlaceDeath
         } else {
-            if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup() backupGo = false");
-            removeMasterPending(req.num);
+            if (verbose>=1) debug("==== Replicator(id="+id+").asyncMasterToBackup() backupGo = false");
+            removeMasterPending(num);
         }
     }
     
