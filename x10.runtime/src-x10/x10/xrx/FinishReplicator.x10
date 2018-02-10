@@ -362,7 +362,7 @@ public final class FinishReplicator {
                     if (createOk)
                         bFin = findBackupOrCreate(req.id, req.parentId, Place(req.finSrc), req.finKind);
                     else
-                        bFin = findBackupOrThrow(req.id);
+                        bFin = findBackupOrThrow(req.id, "asyncMasterToBackup local");
                     val bexcp = bFin.exec(req);
                     processBackupResponse(bexcp, req.num, req.backupPlaceId);
                 }
@@ -401,7 +401,7 @@ public final class FinishReplicator {
                         if (createOk)
                             bFin = findBackupOrCreate(reqy.id, reqy.parentId, Place(reqy.finSrc), reqy.finKind);
                         else
-                            bFin = findBackupOrThrow(reqy.id);
+                            bFin = findBackupOrThrow(reqy.id, "asyncMasterToBackup remote");
                         val bexcp = bFin.exec(reqy);
                         if (verbose>=1) debug("==== Replicator(id="+reqy.id+").asyncMasterToBackup moving to caller " + caller);
                         at (caller) @Immediate("async_backup_exec_response") async {
@@ -652,7 +652,7 @@ public final class FinishReplicator {
             if (createOk)
                 bFin = findBackupOrCreate(req.id, req.parentId, Place(req.finSrc), req.finKind);
             else
-                bFin = findBackupOrThrow(req.id);
+                bFin = findBackupOrThrow(req.id, "backupExec local");
             val bexcp = bFin.exec(req);
             if (bexcp != null) { 
                 throw bexcp;
@@ -669,7 +669,7 @@ public final class FinishReplicator {
                 if (createOk)
                     bFin = findBackupOrCreate(req.id, req.parentId, Place(req.finSrc), req.finKind);
                 else
-                    bFin = findBackupOrThrow(req.id);
+                    bFin = findBackupOrThrow(req.id, "backupExec remote");
                 val r_excp = bFin.exec(req);
                 at (gr) @Immediate("backup_exec_response") async {
                     val bRes = (backupRes as GlobalRef[BackupResponse]{self.home == here})();
@@ -1101,13 +1101,13 @@ public final class FinishReplicator {
     }
 
     
-    static def findBackupOrThrow(id:FinishResilient.Id):FinishBackupState {
+    static def findBackupOrThrow(id:FinishResilient.Id, tag:String):FinishBackupState {
         if (verbose>=1) debug(">>>> findBackupOrThrow(id="+id+") called");
         try {
             glock.lock();
             val bs = fbackups.getOrElse(id, null);
             if (bs == null) {
-                throw new Exception(here + " ["+Runtime.activity()+"] FATAL ERROR backup(id="+id+" not found here");
+                throw new Exception(here + " ["+Runtime.activity()+"] FATAL ERROR backup(id="+id+") not found here tag["+tag+"]");
             }
             else {
                 if (verbose>=1) debug("<<<< findBackupOrThrow(id="+id+") returning, bs = " + bs);
