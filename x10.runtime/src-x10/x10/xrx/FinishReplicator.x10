@@ -289,7 +289,7 @@ public final class FinishReplicator {
         }
         val backupGo = ( mresp.submit || (mresp.transitSubmitDPE && reqType == FinishRequest.TRANSIT));
         if (backupGo) {
-            var rc:Int = SUCCESS;
+            var rc:Int = LEGAL_ABSENCE;
         	var reqx:FinishRequest = null;
             try {
             	FinishReplicator.glock.lock();
@@ -314,7 +314,6 @@ public final class FinishReplicator {
                     if (!Place(masterPlaceId).isDead())
                     	throw new Exception(here + " FATAL ERROR, pending master request not found although master is alive");
                 }
-                rc = LEGAL_ABSENCE;
             } finally {
             	FinishReplicator.glock.unlock();
             } 
