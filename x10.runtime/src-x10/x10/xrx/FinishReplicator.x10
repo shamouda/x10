@@ -235,11 +235,22 @@ public final class FinishReplicator {
                 val mFin = findMaster(id);
                 assert (mFin != null) : here + " FATAL ERROR (2222), master(id="+id+") is null2 while processing req["+req+"]";
                 val mresp = mFin.exec(req);
+                val mresp_backupPlaceId = mresp.backupPlaceId ;
+                val mresp_excp = mresp.excp ;
+                val mresp_submit = mresp.submit ;
+                val mresp_transitSubmitDPE = mresp.transitSubmitDPE ;
+                val mresp_backupChanged = mresp.backupChanged ;
+                val mresp_parentId = mresp.parentId ;
                 at (caller) @Immediate("async_master_exec_response") async {
-                	if (mresp == null) {
-                        throw new Exception(here + " FATAL ERROR (3333) req(id="+id+") has null mresp!!!");
-                    }
-                    if (mresp.excp != null && mresp.excp instanceof MasterMigrating) {
+                	val respCopy = new MasterResponse();
+                	respCopy.backupPlaceId = mresp_backupPlaceId;
+                	respCopy.excp = mresp_excp ;
+                	respCopy.submit = mresp_submit ;
+                	respCopy.transitSubmitDPE = mresp_transitSubmitDPE;
+                	respCopy.backupChanged = mresp_backupChanged;
+                	respCopy.parentId = mresp_parentId;
+                    
+                    if (respCopy.excp != null && respCopy.excp instanceof MasterMigrating) {
                         if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal MasterMigrating2, try again after 10ms" );
                         //we cannot block within an immediate thread
                         Runtime.submitUncounted( ()=>{
@@ -248,7 +259,7 @@ public final class FinishReplicator {
                         });
                     }
                     else {
-                        asyncMasterToBackup(caller, req, mresp);
+                        asyncMasterToBackup(caller, req, respCopy);
                     }
                 }
             }
@@ -414,6 +425,7 @@ public final class FinishReplicator {
     public static def exec(req:FinishRequest):FinishResilient.ReplicatorResponse {
         return exec(req, null);
     }
+    
     public static def exec(req:FinishRequest, localMaster:FinishMasterState):FinishResilient.ReplicatorResponse {
         if (verbose>=1) debug(">>>> Replicator(id="+req.id+").exec() called");
         checkMainTermination(); 
