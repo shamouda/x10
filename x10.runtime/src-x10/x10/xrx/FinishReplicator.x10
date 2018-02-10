@@ -730,7 +730,7 @@ public final class FinishReplicator {
                             var foundVar:Boolean = false;
                             var newMasterIdVar:FinishResilient.Id = FinishResilient.UNASSIGNED;
                             var newMasterPlaceVar:Int = -1n;
-                            val bFin = findBackupOrThrow(id);
+                            val bFin = findBackupOrThrow(id, "prepareRequestForNewMaster");
                             if (bFin != null) {
                                 foundVar = true;
                                 newMasterIdVar = bFin.getNewMasterBlocking();
