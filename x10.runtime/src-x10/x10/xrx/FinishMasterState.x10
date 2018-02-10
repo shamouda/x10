@@ -24,39 +24,11 @@ public abstract class FinishMasterState extends FinishResilient {
     abstract def dump():void;
 }
 
-class MasterResponse implements CustomSerialization {
+class MasterResponse {
     var backupPlaceId:Int;
     var excp:Exception;
     var submit:Boolean = false;
     var transitSubmitDPE:Boolean = false;
     var backupChanged:Boolean = false;
     var parentId:FinishResilient.Id; /*used in ADD_CHILD only*/
-	
-	public def this() {
-		
-	}
-	/*
-	 * Custom serialization
-	 */
-	public def serialize(s:Serializer) {
-    	s.writeAny(backupPlaceId);
-    	s.writeAny(excp);
-    	s.writeAny(submit);
-    	s.writeAny(transitSubmitDPE);
-    	s.writeAny(backupChanged);
-    	s.writeAny(parentId.home);
-    	s.writeAny(parentId.id);
-	}
-	
-    /*
-     * Custom deserialization
-     */
-    public def this(ds:Deserializer) {
-        this.backupPlaceId = ds.readAny() as Int;
-        this.excp = ds.readAny() as Exception;
-        this.submit = ds.readAny() as Boolean;
-        this.transitSubmitDPE = ds.readAny() as Boolean;
-        this.backupChanged = ds.readAny() as Boolean;
-        this.parentId = FinishResilient.Id( ds.readAny() as Int, ds.readAny() as Int);
-    }
 }
