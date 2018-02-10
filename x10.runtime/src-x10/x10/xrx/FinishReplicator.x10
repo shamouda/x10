@@ -209,7 +209,6 @@ public final class FinishReplicator {
         val masterPlaceId = req.masterPlaceId;
         val master = Place(masterPlaceId);
         val num = req.num;
-        val id = req.id;
         val reqType = req.reqType;
         if (master.id == here.id) {
             if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal local" );
@@ -231,24 +230,48 @@ public final class FinishReplicator {
                 });
             }
             else {
-            	asyncMasterToBackup(caller, id, num, reqType, masterPlaceId, mresp);
+            	asyncMasterToBackup(caller, req.id, num, reqType, masterPlaceId, mresp);
             }
         } else {
-            if (verbose>=1) debug(">>>> Replicator(id="+id+").asyncExecInternal remote" );
+            if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal remote" );
+            val id_home = req.id.home;
+            val id_id = req.id.id;
+            val typeDesc = req.typeDesc;  
+            val parentId_home = req.parentId.home;
+            val parentId_id = req.parentId.id;
+            val toAdopter = req.toAdopter;
+            val tasks = req.tasks;
+            val kinds = req.kinds;
+            val counts = req.counts;
+            val childId_home = req.childId.home;
+            val childId_id = req.childId.id;
+            val srcId = req.srcId;
+            val dstId = req.dstId;
+            val kind = req.kind;
+            val ex = req.ex;
+            val finSrc = req.finSrc;
+            val finKind = req.finKind;
+            val backupPlaceId = req.backupPlaceId;
+            val transitSubmitDPE = req.transitSubmitDPE;
+            val outSubmit = req.outSubmit;
+            val outAdopterId_home = req.outAdopterId.home;
+            val outAdopterId_id = req.outAdopterId.id;
             at (master) @Immediate("async_master_exec") async {
-            	if (req == null) {
-                    throw new Exception(here + " FATAL ERROR (1111) req(id="+id+") is null when reached master!!!");
-                }
-                val mFin = findMaster(id);
+            	val reqy = new FinishRequest(num, id_home, id_id, masterPlaceId, reqType, typeDesc,
+                		parentId_home, parentId_id, toAdopter, tasks, kinds, counts, childId_home, childId_id, 
+                		srcId, dstId, kind, ex, finSrc, finKind, backupPlaceId, transitSubmitDPE, outSubmit,
+                        outAdopterId_home, outAdopterId_id );
+                val mFin = findMaster(reqy.id);
                 if (mFin == null)
-                	throw new Exception (here + " FATAL ERROR (2222), master(id="+id+") is null2 while processing req["+req+"]");
-                val mresp = mFin.exec(req);
+                	throw new Exception (here + " FATAL ERROR, master(id="+reqy.id+") is null2 while processing req["+req+"]");
+                val mresp = mFin.exec(reqy);
                 val mresp_backupPlaceId = mresp.backupPlaceId;
                 val mresp_excp = mresp.excp;
                 val mresp_submit = mresp.submit;
                 val mresp_transitSubmitDPE = mresp.transitSubmitDPE;
                 val mresp_backupChanged = mresp.backupChanged;
-                val mresp_parentId = mresp.parentId;
+                val mresp_parentId_home = mresp.parentId.home;
+                val mresp_parentId_id = mresp.parentId.id;
                 at (caller) @Immediate("async_master_exec_response") async {
                 	val respCopy = new MasterResponse();
                 	respCopy.backupPlaceId = mresp_backupPlaceId;
@@ -256,10 +279,11 @@ public final class FinishReplicator {
                 	respCopy.submit = mresp_submit;
                 	respCopy.transitSubmitDPE = mresp_transitSubmitDPE;
                 	respCopy.backupChanged = mresp_backupChanged;
-                	respCopy.parentId = mresp_parentId;
+                	respCopy.parentId = FinishResilient.Id(mresp_parentId_home, mresp_parentId_id);
                     
+                	val id = FinishResilient.Id(id_home, id_id);
                     if (respCopy.excp != null && respCopy.excp instanceof MasterMigrating) {
-                        if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal MasterMigrating2, try again after 10ms" );
+                        if (verbose>=1) debug(">>>> Replicator(id="+id+").asyncExecInternal MasterMigrating2, try again after 10ms" );
                         //we cannot block within an immediate thread
                         Runtime.submitUncounted( ()=>{
                             System.threadSleep(10); 
@@ -342,18 +366,42 @@ public final class FinishReplicator {
                 }
                 else {
                     if (verbose>=1) debug("==== Replicator(id="+id+").asyncMasterToBackup moving to backup " + backup);
+                    val id_home = req.id.home;
+                    val id_id = req.id.id;
+                    val typeDesc = req.typeDesc;  
+                    val parentId_home = req.parentId.home;
+                    val parentId_id = req.parentId.id;
+                    val toAdopter = req.toAdopter;
+                    val tasks = req.tasks;
+                    val kinds = req.kinds;
+                    val counts = req.counts;
+                    val childId_home = req.childId.home;
+                    val childId_id = req.childId.id;
+                    val srcId = req.srcId;
+                    val dstId = req.dstId;
+                    val kind = req.kind;
+                    val ex = req.ex;
+                    val finSrc = req.finSrc;
+                    val finKind = req.finKind;
+                    val backupPlaceId = req.backupPlaceId;
+                    val transitSubmitDPE = req.transitSubmitDPE;
+                    val outSubmit = req.outSubmit;
+                    val outAdopterId_home = req.outAdopterId.home;
+                    val outAdopterId_id = req.outAdopterId.id;
                     at (backup) @Immediate("async_backup_exec") async {
-                        if (req == null) {
-                            throw new Exception(here + " FATAL ERROR req(id="+id+") is null when reached backup!!!");
-                        }
-                        if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup reached backup ");
+                        val reqy = new FinishRequest( num, id_home, id_id, masterPlaceId, reqType, typeDesc,
+                        		parentId_home, parentId_id, toAdopter, tasks, kinds, counts, childId_home, childId_id, 
+                        		srcId, dstId, kind, ex, finSrc, finKind, backupPlaceId, transitSubmitDPE, outSubmit,
+                                outAdopterId_home, outAdopterId_id );
+                        
+                        if (verbose>=1) debug("==== Replicator(id="+reqy.id+").asyncMasterToBackup reached backup ");
                         val bFin:FinishBackupState;
                         if (createOk)
-                            bFin = findBackupOrCreate(req.id, req.parentId, Place(req.finSrc), req.finKind);
+                            bFin = findBackupOrCreate(reqy.id, reqy.parentId, Place(reqy.finSrc), reqy.finKind);
                         else
-                            bFin = findBackupOrThrow(req.id);
-                        val bexcp = bFin.exec(req);
-                        if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup moving to caller " + caller);
+                            bFin = findBackupOrThrow(reqy.id);
+                        val bexcp = bFin.exec(reqy);
+                        if (verbose>=1) debug("==== Replicator(id="+reqy.id+").asyncMasterToBackup moving to caller " + caller);
                         at (caller) @Immediate("async_backup_exec_response") async {
                             processBackupResponse(bexcp, num);
                         }
