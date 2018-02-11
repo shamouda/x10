@@ -670,27 +670,22 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
            }
         }
         
-        static def p0TermMultiple(id:Id, dstId:Int, tasks:Rail[Int], kinds:Rail[Int], counts:Rail[Int]) {
-            if (tasks == null || tasks.size == 0 || kinds == null || kinds.size == 0 || 
-                counts == null || counts.size == 0 )
-                throw new Exception(here + " FATAL ERROR-1 p0TermMultiple(id="+id+", dstId="+dstId+", tasks="+tasks+", kinds="+kinds+", counts="+counts+") something is null or zero size");
-            
+        static def p0TermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int]) {
             //NOLOG if (verbose>=1) debug(">>>> State(id="+id+").p0TermMultiple [dstId=" + dstId +", size="+tasks.size+" ] called");
             at (place0) @Immediate("p0Opt_notifyTermMul_to_zero") async {
-                if (tasks == null || tasks.size == 0 || kinds == null || kinds.size == 0 || 
-                        counts == null || counts.size == 0 )
-                        throw new Exception(here + " FATAL ERROR-2 p0TermMultiple(id="+id+", dstId="+dstId+", tasks="+tasks+", kinds="+kinds+", counts="+counts+") something is null or zero size");
+                if (map == null )
+                    throw new Exception(here + " FATAL ERROR p0TermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is null");
                 
-                //NOLOG if (verbose>=1) debug("==== State(id="+id+").p0TermMultiple [dstId=" + dstId +", tasksSize="+tasks.size+", kindsSize="+kinds.size+", countsSize="+counts.size+" ] called");
+                //NOLOG if (verbose>=1) debug("==== State(id="+id+").p0TermMultiple [dstId=" + dstId +", mapSize="+map.size()+"] called");
                 //Unlike place0 finish, we don't suppress termination notifications whose dst is dead.
                 //Because we expect termination messages from these tasks to be notified if the tasks were recieved by a dead dst
                 try {
                     statesLock.lock();
                     val state = states(id);
-                    for (var i:Long = 0; i < tasks.size; i++) {
-                        val srcId = tasks(i);
-                        val kind = kinds(i);
-                        val cnt = counts(i);
+                    for (e in map.entries()) {
+                        val srcId = e.getKey().place;
+                        val kind = e.getKey().kind;
+                        val cnt = e.getValue();
                         state.transitToCompletedMul(srcId, dstId, kind, cnt);
                     }
                 } finally {
@@ -701,9 +696,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         static def p0HereTermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int]) {
-            if (map == null)
-                throw new Exception(here + " FATAL ERROR p0HereTermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is NULL");
-            
             //NOLOG if (verbose>=1) debug(">>>> State(id="+id+").p0HereTermMultiple [dstId=" + dstId +", mapSz="+map.size()+" ] called");
             //Unlike place0 finish, we don't suppress termination notifications whose dst is dead.
             //Because we expect termination messages from these tasks to be notified if the tasks were recieved by a dead dst
@@ -1141,20 +1133,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             if (here.id == 0)
                 State.p0HereTermMultiple(id, dstId, map);
             else {
-                //manual serialization because serialization of hashmap is problematic
-                val size = map.size();
-                val tasks = new Rail[Int](size);
-                val kinds = new Rail[Int](size);
-                val counts = new Rail[Int](size);
-                var i:Long = 0;
-                for (e in map.entries()) {
-                    tasks(i) = e.getKey().place;
-                    kinds(i) = e.getKey().kind;
-                    counts(i) = e.getValue();
-                    i++;
-                }
-                map.clear();
-                State.p0TermMultiple(id, dstId, tasks, kinds, counts);
+                State.p0TermMultiple(id, dstId, map);
             }
             //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
         }
@@ -1185,20 +1164,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             if (here.id == 0)
                 State.p0HereTermMultiple(id, dstId, map);
             else {
-                //manual serialization because serialization of hashmap is problematic
-                val size = map.size();
-                val tasks = new Rail[Int](size);
-                val kinds = new Rail[Int](size);
-                val counts = new Rail[Int](size);
-                var i:Long = 0;
-                for (e in map.entries()) {
-                    tasks(i) = e.getKey().place;
-                    kinds(i) = e.getKey().kind;
-                    counts(i) = e.getValue();
-                    i++;
-                }
-                map.clear();
-                State.p0TermMultiple(id, dstId, tasks, kinds, counts);
+                State.p0TermMultiple(id, dstId, map);
             }
             //NOLOG if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning");
         }
