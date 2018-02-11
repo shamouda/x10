@@ -112,21 +112,22 @@ public final class FinishReplicator {
     }
     
     //we don't insert a backup request if backup is dead
-    private static def masterToBackupPending(inReq:FinishRequest, submit:Boolean, backupPlaceId:Int, transitSubmitDPE:Boolean) {
+    private static def masterToBackupPending(num:Long, masterPlaceId:Int, submit:Boolean, 
+            backupPlaceId:Int, transitSubmitDPE:Boolean, parentId:FinishResilient.Id) {
         try {
             glock.lock();
-            val num = inReq.num;
-            val masterPlaceId = inReq.masterPlaceId;
             val req = pendingMaster.remove(num);
             if (req != null) {
                 req.outSubmit = submit;   //in
-                inReq.backupPlaceId = backupPlaceId; //in
+                /////inReq.backupPlaceId = backupPlaceId; //in
                 req.backupPlaceId = backupPlaceId;  //in
-                inReq.transitSubmitDPE = transitSubmitDPE; //in
+                /////inReq.transitSubmitDPE = transitSubmitDPE; //in
                 req.transitSubmitDPE = transitSubmitDPE; //in
-                req.parentId = inReq.parentId; //in
-                inReq.outAdopterId = req.outAdopterId; //out
-                inReq.outSubmit = submit; //out
+                req.parentId = parentId; //in
+                /////inReq.outAdopterId = req.outAdopterId; //out
+                /////inReq.outSubmit = submit; //out
+                if (req.reqType == FinishRequest.ADD_CHILD) /*in some cases, the parent may be transiting at the same time as its child, */ 
+                    req.parentId = parentId;                /*the child may not find the parent's backup during globalInit, so it needs to create it*/
                 
                 if (verbose>=1) debug(">>>> Replicator.masterToBackupPending(id="+req.id+", num="+num+", submit="+submit+") called, req found");
                 if (Place(backupPlaceId).isDead()) {
@@ -258,18 +259,17 @@ public final class FinishReplicator {
     
     static def asyncMasterToBackup(req:FinishRequest, mresp:MasterResponse) {
         val gr = req.getGR();
-        val submit = mresp.submit;
-        if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncMasterToBackup => backupPlaceId = " + mresp.backupPlaceId + " submit = " + submit );
+        val num = req.num;
+        val masterPlaceId = req.masterPlaceId;
+        if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncMasterToBackup => backupPlaceId = " + mresp.backupPlaceId + " submit = " + mresp.submit );
         assert mresp.backupPlaceId != -1n : here + " fatal error ["+req+"], backup -1 means master had a fatal error before reporting its backup value";
         if (mresp.backupChanged) {
             updateBackupPlace(req.id.home, mresp.backupPlaceId);
         }
-        val backupGo = ( submit || (mresp.transitSubmitDPE && req.reqType == FinishRequest.TRANSIT));
+        val backupGo = ( mresp.submit || (mresp.transitSubmitDPE && req.reqType == FinishRequest.TRANSIT));
         if (backupGo) {
             val backupPlaceId = mresp.backupPlaceId; //req.backupPlace = -1 here
-            if (req.reqType == FinishRequest.ADD_CHILD) /*in some cases, the parent may be transiting at the same time as its child, */ 
-                req.parentId = mresp.parentId;          /*the child may not find the parent's backup during globalInit, so it needs to create it*/
-            val rc = masterToBackupPending(req, submit, mresp.backupPlaceId, mresp.transitSubmitDPE);
+            val rc = masterToBackupPending(num, masterPlaceId, mresp.submit, mresp.backupPlaceId, mresp.transitSubmitDPE, mresp.parentId);
             if (rc == TARGET_DEAD) {
                 //ignore backup and go ahead with post processing
                 handleBackupDied(req);
@@ -307,7 +307,6 @@ public final class FinishReplicator {
                             bFin = findBackupOrThrow(req.id, "asyncMasterToBackup remote");
                         val bexcp = bFin.exec(req);
                         if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup moving to caller " + gr.home);
-                        val num = req.num;
                         at (gr) @Immediate("async_backup_exec_response") async {
                             val reqx = (gr as GlobalRef[FinishRequest]{self.home == here})();
                             processBackupResponse(bexcp, reqx);
