@@ -144,10 +144,11 @@ public class FinishRequest implements x10.io.Unserializable {
             finSrc:Int, finKind:Int) {
         try {
             poolLock.lock();
-            if (pool.isEmpty())
+            if (pool.isEmpty()) {
                 val req = new FinishRequest(-1111, id, masterPlaceId, toAdopter, reqType, typeDesc, parentId, map, childId, srcId, dstId, kind, ex, finSrc, finKind);
                 req.updateBytes();
                 return req;
+            }
             else {
                 val req = pool.iterator().next();
                 req.init(id, masterPlaceId, toAdopter, reqType, typeDesc, parentId, map, childId, srcId, dstId, kind, ex, finSrc, finKind);
