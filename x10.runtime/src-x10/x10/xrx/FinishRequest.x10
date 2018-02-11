@@ -28,6 +28,8 @@ public class FinishRequest {
     private static val nextReqId = new AtomicLong(0);
     
     public val num = nextReqId.incrementAndGet();
+    private val gr = GlobalRef[FinishRequest](this);
+    public def getGR() = gr;
     
     //main identification fields
     var id:FinishResilient.Id;  //can be changed to adopter id
