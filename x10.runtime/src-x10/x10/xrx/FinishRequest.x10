@@ -107,7 +107,8 @@ public class FinishRequest implements x10.io.Unserializable {
         }
         val finSrc = deser.readAny() as Int;
         val finKind = deser.readAny() as Int;
-        return new FinishRequest(num, id, masterPlaceId, toAdopter, reqType, typeDesc, parentId, map, childId, srcId, dstId, kind, ex,
+        return new FinishRequest(num, id, masterPlaceId, toAdopter, reqType, typeDesc, 
+        		parentId, map, childId, srcId, dstId, kind, ex,
         		finSrc, finKind);       
     }
     

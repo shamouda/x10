@@ -971,7 +971,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 return;
             }
             if (verbose>=1) debug("==== Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
-            val req = FinishRequest.makeTermRequest(id, parentId, UNASSIGNED, finSrc.id as Int, finKind, srcId, dstId, kind);
+            val req = FinishRequest.makeTermRequest(id, parentId, UNASSIGNED, srcId, dstId, kind, finSrc.id as Int, finKind);
             FinishReplicator.asyncExec(req, this);
             if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
         }
@@ -1332,7 +1332,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 dpe = null;
             Runtime.submitUncounted( ()=>{
                 if (verbose>=1) debug(">>>> Backup(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+finKind+") called");
-                val req = FinishRequest.makeTermRequest(parentId, FinishResilient.UNASSIGNED, FinishResilient.UNASSIGNED, DUMMY_INT, DUMMY_INT, srcId, dstId, finKind);
+                val req = FinishRequest.makeTermRequest(parentId, FinishResilient.UNASSIGNED, FinishResilient.UNASSIGNED, srcId, dstId, finKind, DUMMY_INT, DUMMY_INT);
                 req.ex = dpe;
                 val resp = FinishReplicator.exec(req);
                 if (verbose>=1) debug("<<<< Backup(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+finKind+") returning");
