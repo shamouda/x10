@@ -1602,7 +1602,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             return quiet;
         }
         
-        public def exec(id:Id, masterPlaceId:Int, reqType:Int, parentId:FinishResilient.Id, finSrc:Int, finKind:Int,
+        public def exec(id:Id, masterPlaceId:Int, reqType:Int, finSrc:Int, finKind:Int,
                 map:HashMap[FinishResilient.Task,Int], 
                 childId:FinishResilient.Id, srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable, toAdopter:Boolean,
                 transitSubmitDPE:Boolean):Exception {
