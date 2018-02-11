@@ -312,7 +312,7 @@ public final class FinishReplicator {
                 else {
                     if (verbose>=1) debug("==== Replicator(id="+id+").asyncMasterToBackup moving to backup " + backup);
                     at (backup) @Immediate("async_backup_exec") async {
-                        if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup reached backup ");
+                        if (verbose>=1) debug("==== Replicator(id="+id+").asyncMasterToBackup reached backup ");
                         val bFin:FinishBackupState;
                         if (createOk)
                             bFin = findBackupOrCreate(id, parentId, Place(finSrc), finKind);
