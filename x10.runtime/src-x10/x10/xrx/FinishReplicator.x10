@@ -179,7 +179,8 @@ public final class FinishReplicator {
                     postSendAction(req.outSubmit, req.outAdopterId);
                 }
                 if (verbose>=1) debug("<<<< Replicator.finalizeAsyncExec(id="+id+", num="+num+", backupPlace="+backupPlaceId+") returning");
-                FinishRequest.deallocReq(req);
+                //FinishRequest.deallocReq(req);
+                req.forget();
             }
         } finally {
             glock.unlock();
@@ -431,7 +432,8 @@ public final class FinishReplicator {
             postSendAction(req.outSubmit, req.outAdopterId);
         }
         if (verbose>=1) debug("<<<< Replicator.handleBackupDied(id="+req.id+") returning");
-        FinishRequest.deallocReq(req);
+        req.forget();
+        //FinishRequest.deallocReq(req);
     }
     
     /**************** Blocking Replication Protocol **********************/
@@ -487,7 +489,8 @@ public final class FinishReplicator {
             }
         }
         pending.decrementAndGet();
-        FinishRequest.deallocReq(req); //reuse the finish request object
+        req.forget();
+        //FinishRequest.deallocReq(req); //reuse the finish request object
         return FinishResilient.ReplicatorResponse(submit, adopterId);
     }
     

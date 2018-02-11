@@ -30,6 +30,9 @@ public class FinishRequest implements x10.io.Unserializable {
     public val num = nextReqId.incrementAndGet();
     private val gr = GlobalRef[FinishRequest](this);
     public def getGR() = gr;
+    public def forget() {
+        (gr as GlobalRef[FinishRequest]{self.home == here}).forget();
+    }
     
     //main identification fields
     var id:FinishResilient.Id;  //can be changed to adopter id
@@ -56,7 +59,7 @@ public class FinishRequest implements x10.io.Unserializable {
     var outSubmit:Boolean; 
     var outAdopterId:FinishResilient.Id = FinishResilient.UNASSIGNED;
     
-    private static val pool = new HashSet[FinishRequest]();
+/*  private static val pool = new HashSet[FinishRequest]();
     private static val poolLock = new Lock();
     
     private static def allocReq(id:FinishResilient.Id, masterPlaceId:Int,
@@ -89,6 +92,26 @@ public class FinishRequest implements x10.io.Unserializable {
         }
     }
     
+    private def init(id:FinishResilient.Id, masterPlaceId:Int,
+            reqType:Int, typeDesc:String, parentId:FinishResilient.Id, finSrc:Int, finKind:Int,
+            map:HashMap[FinishResilient.Task,Int],
+            childId:FinishResilient.Id, srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable, toAdopter:Boolean) {
+        this.id = id;
+        this.masterPlaceId = masterPlaceId;
+        this.reqType = reqType;
+        this.typeDesc = typeDesc;     
+        this.parentId = parentId;
+        this.finSrc = finSrc;
+        this.finKind = finKind;
+        this.toAdopter = toAdopter;   
+        this.map = map;
+        this.childId = childId;
+        this.srcId = srcId;
+        this.dstId = dstId;
+        this.kind = kind;
+        this.ex = ex;
+    }
+*/    
     public def toString() {
         return "type=" + typeDesc + ",id="+id+",outSubmit="+outSubmit+",toAdopter="+toAdopter+",childId="+childId+",srcId="+srcId+",dstId="+dstId+",ex="+(ex == null? "null": ex.getMessage());
     }
@@ -113,41 +136,21 @@ public class FinishRequest implements x10.io.Unserializable {
         this.ex = ex;
     }
     
-    private def init(id:FinishResilient.Id, masterPlaceId:Int,
-            reqType:Int, typeDesc:String, parentId:FinishResilient.Id, finSrc:Int, finKind:Int,
-            map:HashMap[FinishResilient.Task,Int],
-            childId:FinishResilient.Id, srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable, toAdopter:Boolean) {
-        this.id = id;
-        this.masterPlaceId = masterPlaceId;
-        this.reqType = reqType;
-        this.typeDesc = typeDesc;     
-        this.parentId = parentId;
-        this.finSrc = finSrc;
-        this.finKind = finKind;
-        this.toAdopter = toAdopter;   
-        this.map = map;
-        this.childId = childId;
-        this.srcId = srcId;
-        this.dstId = dstId;
-        this.kind = kind;
-        this.ex = ex;
-    }
-
     //pessimistic only
     public static def makeAddChildRequest(id:FinishResilient.Id,
         childId:FinishResilient.Id) {
         val masterPlaceId = id.home;
-        return allocReq(id, masterPlaceId, ADD_CHILD, "ADD_CHILD", FinishResilient.UNASSIGNED, -1n, -1n, null, childId, -1n, -1n, -1n, null, false);
+        return new FinishRequest(id, masterPlaceId, ADD_CHILD, "ADD_CHILD", FinishResilient.UNASSIGNED, -1n, -1n, null, childId, -1n, -1n, -1n, null, false);
     }
     
     public static def makeTransitRequest(id:FinishResilient.Id,parentId:FinishResilient.Id,adopterId:FinishResilient.Id,
             finSrc:Int,finKind:Int,srcId:Int, dstId:Int,kind:Int) {
         if (OPTIMISTIC || adopterId == FinishResilient.UNASSIGNED) {
             val masterPlaceId = OPTIMISTIC? FinishReplicator.getMasterPlace(id.home) : id.home;
-            return allocReq(id, masterPlaceId, TRANSIT, "TRANSIT", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, null, false);    
+            return new FinishRequest(id, masterPlaceId, TRANSIT, "TRANSIT", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, null, false);    
         } else {
             val masterPlaceId = adopterId.home;
-            return allocReq(adopterId, masterPlaceId, TRANSIT, "TRANSIT", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, null, true);
+            return new FinishRequest(adopterId, masterPlaceId, TRANSIT, "TRANSIT", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, null, true);
         }
     }
     
@@ -156,10 +159,10 @@ public class FinishRequest implements x10.io.Unserializable {
             finSrc:Int,finKind:Int,srcId:Int, dstId:Int,kind:Int, ex:CheckedThrowable) {
         if (adopterId == FinishResilient.UNASSIGNED) {
             val masterPlaceId = id.home;
-            return allocReq(id, masterPlaceId, TRANSIT_TERM, "TRANSIT_TERM", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, ex, false);    
+            return new FinishRequest(id, masterPlaceId, TRANSIT_TERM, "TRANSIT_TERM", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, ex, false);    
         } else {
             val masterPlaceId = adopterId.home;
-            return allocReq(adopterId, masterPlaceId, TRANSIT_TERM, "TRANSIT_TERM", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, ex, true);
+            return new FinishRequest(adopterId, masterPlaceId, TRANSIT_TERM, "TRANSIT_TERM", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, ex, true);
         }
     }
     
@@ -167,10 +170,10 @@ public class FinishRequest implements x10.io.Unserializable {
             finSrc:Int,finKind:Int,srcId:Int, dstId:Int,kind:Int) {
         if (OPTIMISTIC || adopterId == FinishResilient.UNASSIGNED) {
             val masterPlaceId = OPTIMISTIC? FinishReplicator.getMasterPlace(id.home) : id.home;
-            return allocReq(id, masterPlaceId, LIVE, "LIVE", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, null, false);    
+            return new FinishRequest(id, masterPlaceId, LIVE, "LIVE", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, null, false);    
         } else {
             val masterPlaceId = adopterId.home;
-            return allocReq(adopterId, masterPlaceId, LIVE, "LIVE", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, null, true);
+            return new FinishRequest(adopterId, masterPlaceId, LIVE, "LIVE", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, null, true);
         }
     }
     
@@ -178,10 +181,10 @@ public class FinishRequest implements x10.io.Unserializable {
             finSrc:Int,finKind:Int,srcId:Int, dstId:Int,kind:Int) {
         if (OPTIMISTIC || adopterId == FinishResilient.UNASSIGNED) {
             val masterPlaceId = OPTIMISTIC? FinishReplicator.getMasterPlace(id.home) : id.home;
-            return allocReq(id, masterPlaceId, TERM, "TERM", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, null, false);            
+            return new FinishRequest(id, masterPlaceId, TERM, "TERM", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, null, false);            
         } else {
             val masterPlaceId = adopterId.home;
-            return allocReq(adopterId, masterPlaceId, TERM, "TERM", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, null, true);
+            return new FinishRequest(adopterId, masterPlaceId, TERM, "TERM", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, srcId, dstId, kind, null, true);
         }
     }
     
@@ -189,10 +192,10 @@ public class FinishRequest implements x10.io.Unserializable {
             finSrc:Int,finKind:Int,ex:CheckedThrowable) {
         if (OPTIMISTIC || adopterId == FinishResilient.UNASSIGNED) {
             val masterPlaceId = OPTIMISTIC? FinishReplicator.getMasterPlace(id.home) : id.home;
-            return allocReq(id, masterPlaceId, EXCP, "EXCP", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, -1n, -1n, -1n, ex, false);
+            return new FinishRequest(id, masterPlaceId, EXCP, "EXCP", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, -1n, -1n, -1n, ex, false);
         } else {
             val masterPlaceId = adopterId.home;
-            return allocReq(adopterId, masterPlaceId, EXCP, "EXCP", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, -1n, -1n, -1n, ex, true);
+            return new FinishRequest(adopterId, masterPlaceId, EXCP, "EXCP", parentId, finSrc, finKind, null, FinishResilient.UNASSIGNED, -1n, -1n, -1n, ex, true);
         }
         
     }
@@ -201,7 +204,6 @@ public class FinishRequest implements x10.io.Unserializable {
     public static def makeTermMulRequest(id:FinishResilient.Id, parentId:FinishResilient.Id, finSrc:Int, finKind:Int, dstId:Int,
             map:HashMap[FinishResilient.Task,Int]) {
         val masterPlaceId = FinishReplicator.getMasterPlace(id.home);
-        return allocReq(id, masterPlaceId, TERM_MUL, "TERM_MUL", parentId, finSrc, finKind, map, FinishResilient.UNASSIGNED, -1n, dstId, -1n, null, false);
+        return new FinishRequest(id, masterPlaceId, TERM_MUL, "TERM_MUL", parentId, finSrc, finKind, map, FinishResilient.UNASSIGNED, -1n, dstId, -1n, null, false);
     }
-   
 }
