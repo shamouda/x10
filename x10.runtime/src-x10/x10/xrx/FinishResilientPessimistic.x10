@@ -34,7 +34,6 @@ import x10.util.resilient.concurrent.ResilientLowLevelFinish;
 //TODO: test notifyActivityCreationFailed()
 //TODO: revise the adoption logic of nested local finishes
 //TODO: backup GC
-//TODO: delete backup in sync(...) if quiescent reached
 //TODO: remove children upon adoption
 /**
  * Distributed Resilient Finish (records transit and live tasks)
