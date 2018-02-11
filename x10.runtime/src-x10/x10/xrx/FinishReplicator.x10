@@ -54,14 +54,13 @@ public final class FinishReplicator {
     private static pendingBackupLock = new Lock();
     private static val pendingBackup = new HashMap[Long,FinishRequest]();
     private static val pendingBackupIndx = new HashMap[Int/*place*/,ArrayList[Long]/*req.num*/]();
+    private static val postActions = new HashMap[Long,(Boolean, FinishResilient.Id)=>void]();
+    private static val reqOutputs = new HashMap[Long,ReqOutput]();
     
     private static transitPendingActLock = new Lock();
     private static val transitPendingAct = new HashMap[Long,PendingActivity]();
     
-    private static postActionsLock = new Lock();
-    private static val postActions = new HashMap[Long,(Boolean, FinishResilient.Id)=>void]();
-    private static val reqOutputs = new HashMap[Long,ReqOutput]();
-    
+
     protected static struct PendingActivity(dst:Long, fs:FinishState, bodyBytes:Rail[Byte], prof:x10.xrx.Runtime.Profile) {}
     private static val NULL_PENDING_ACT = PendingActivity(-1, null, null, null);
     
@@ -125,33 +124,33 @@ public final class FinishReplicator {
         pendingMaster.put(req.num, req);
         pendingMasterLock.unlock();
         
-        postActionsLock.lock();
+        pendingBackupLock.lock();
         if (postSendAction != null) {
             postActions.put(req.num, postSendAction);
         }
         reqOutputs.put(req.num, reqOutput);
-        postActionsLock.unlock();
+        pendingBackupLock.unlock();
         if (verbose>=1) debug("<<<< Replicator.addMasterPending(id="+req.id+", num="+req.num+") returned SUCCESS");
         return SUCCESS;
     }
     
     private static def updateOutput(num:Long, submit:Boolean) {
-        postActionsLock.lock();
+        pendingBackupLock.lock();
         reqOutputs.getOrThrow(num).submit = submit;
-        postActionsLock.unlock();
+        pendingBackupLock.unlock();
     }
     
     private static def updateOutput(num:Long, adopterId:FinishResilient.Id) {
-        postActionsLock.lock();
+        pendingBackupLock.lock();
         reqOutputs.getOrThrow(num).adopterId = adopterId;
-        postActionsLock.unlock();
+        pendingBackupLock.unlock();
     }
     
     private static def updateOutput(num:Long, submit:Boolean, adopterId:FinishResilient.Id) {
-        postActionsLock.lock();
+        pendingBackupLock.lock();
         reqOutputs.getOrThrow(num).submit = submit;
         reqOutputs.getOrThrow(num).adopterId = adopterId;
-        postActionsLock.unlock();
+        pendingBackupLock.unlock();
     }
     
     //we don't insert a backup request if backup is dead
@@ -219,7 +218,6 @@ public final class FinishReplicator {
     private static def finalizeAsyncExec(num:Long, backupPlaceId:Int) {
         try {
             pendingBackupLock.lock();
-            postActionsLock.lock();
             val req = pendingBackup.remove(num);
             pendingBackupIndx.getOrThrow(backupPlaceId).remove(num);
             
@@ -240,7 +238,6 @@ public final class FinishReplicator {
             }
         } finally {
             pendingBackupLock.unlock();
-            postActionsLock.unlock();
         }
     }
     
@@ -470,10 +467,10 @@ public final class FinishReplicator {
     
     static def handleBackupDied(req:FinishRequest) {
         if (verbose>=1) debug(">>>> Replicator.handleBackupDied(id="+req.id+") called");
-        postActionsLock.lock();
+        pendingBackupLock.lock();
         val postSendAction = postActions.remove(req.num);
         val output = reqOutputs.remove(req.num);
-        postActionsLock.unlock();
+        pendingBackupLock.unlock();
         if (postSendAction != null) {
             if (verbose>=1) debug("==== Replicator.handleBackupDied(id="+req.id+") calling postSendAction(submit="+output.submit+",adopterId="+output.adopterId+")");
             postSendAction(output.submit, output.adopterId);
