@@ -125,12 +125,12 @@ public final class FinishReplicator {
         pendingMaster.put(req.num, req);
         pendingMasterLock.unlock();
         
+        postActionsLock.lock();
         if (postSendAction != null) {
-            postActionsLock.lock();
             postActions.put(req.num, postSendAction);
-            reqOutputs.put(req.num, reqOutput);
-            postActionsLock.unlock();
         }
+        reqOutputs.put(req.num, reqOutput);
+        postActionsLock.unlock();
         if (verbose>=1) debug("<<<< Replicator.addMasterPending(id="+req.id+", num="+req.num+") returned SUCCESS");
         return SUCCESS;
     }
@@ -330,7 +330,7 @@ public final class FinishReplicator {
         /*in some cases, the parent may be transiting at the same time as its child, */ 
         /*the child may not find the parent's backup during globalInit, so it needs to create it*/
         
-        if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncMasterToBackup => backupPlaceId = " + mresp.backupPlaceId + " submit = " + mresp.submit );
+        if (verbose>=1) debug(">>>> Replicator(id="+req.id+", num="+num+").asyncMasterToBackup => backupPlaceId = " + mresp.backupPlaceId + " submit = " + mresp.submit );
         assert mresp.backupPlaceId != -1n : here + " fatal error [id="+req.id+"], backup -1 means master had a fatal error before reporting its backup value";
         
         updateOutput(num, mresp.submit);
@@ -560,11 +560,13 @@ public final class FinishReplicator {
         val masterRes = new GlobalRef[MasterResponse](new MasterResponse());
         val master = Place(req.masterPlaceId);
         val rCond = ResilientCondition.make(master);
+        val bytes = req.bytes;
         val closure = (gr:GlobalRef[Condition]) => {
             at (master) @Immediate("master_exec") async {
-                val mFin = findMaster(req.id);
-                assert (mFin != null) : here + " fatal error, master(id="+req.id+") is null";
-                val resp = mFin.exec(req);
+            	val newReq = FinishRequest.make(bytes);
+                val mFin = findMaster(newReq.id);
+                assert (mFin != null) : here + " fatal error, master(id="+newReq.id+") is null";
+                val resp = mFin.exec(newReq);
                 val r_back = resp.backupPlaceId;
                 val r_backChg = resp.backupChanged;
                 val r_submit = resp.submit;
@@ -634,14 +636,16 @@ public final class FinishReplicator {
         val backupRes = new GlobalRef[BackupResponse](new BackupResponse());
         val backup = Place(backupPlaceId);
         val rCond = ResilientCondition.make(backup);
+        val bytes = req.bytes;
         val closure = (gr:GlobalRef[Condition]) => {
             at (backup) @Immediate("backup_exec") async {
+            	val newReq = FinishRequest.make(bytes);
                 val bFin:FinishBackupState;
                 if (createOk)
-                    bFin = findBackupOrCreate(req.id, parentId, Place(req.finSrc), req.finKind);
+                    bFin = findBackupOrCreate(newReq.id, parentId, Place(newReq.finSrc), newReq.finKind);
                 else
-                    bFin = findBackupOrThrow(id, "backupExec remote");
-                val r_excp = bFin.exec(req, transitSubmitDPE);
+                    bFin = findBackupOrThrow(newReq.id, "backupExec remote");
+                val r_excp = bFin.exec(newReq, transitSubmitDPE);
                 at (gr) @Immediate("backup_exec_response") async {
                     val bRes = (backupRes as GlobalRef[BackupResponse]{self.home == here})();
                     bRes.excp = r_excp;
