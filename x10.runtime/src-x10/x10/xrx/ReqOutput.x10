@@ -13,4 +13,10 @@ package x10.xrx;
 public class ReqOutput {
     var submit:Boolean = false;
     var adopterId:FinishResilient.Id = FinishResilient.UNASSIGNED;
+
+    public def this() {}
+    public def this(submit:Boolean, adopterId:FinishResilient.Id) {
+    	this.submit = submit;
+    	this.adopterId = adopterId;
+    }
 }

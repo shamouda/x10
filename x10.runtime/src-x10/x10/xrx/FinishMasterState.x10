@@ -17,9 +17,7 @@ import x10.io.Serializer;
 import x10.util.HashMap;
 
 public abstract class FinishMasterState extends FinishResilient {
-    abstract def exec(id:FinishResilient.Id, reqType:Int, parentId:FinishResilient.Id, finSrc:Int, finKind:Int,
-            map:HashMap[FinishResilient.Task,Int], 
-            childId:FinishResilient.Id, srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable, toAdopter:Boolean):MasterResponse;
+    abstract def exec(req:FinishRequest):MasterResponse;
     abstract def isImpactedByDeadPlaces(newDead:HashSet[Int]):Boolean;
     abstract def lock():void;
     abstract def unlock():void;
