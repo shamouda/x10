@@ -217,7 +217,8 @@ public final class FinishReplicator {
         if (master.id == here.id) {
             if (verbose>=1) debug(">>>> Replicator(id="+id+").asyncExecInternal local" );
             val mFin = localMaster != null ? findMasterOrAdd(id, localMaster) : findMaster(id);
-            assert (mFin != null) : here + " fatal error, master(id="+id+") is null1 while processing req["+reqType+", srcId="+srcId+", dstId="+dstId+"]";
+            if (mFin == null)
+                throw new Exception (here + " FATAL ERROR, master(id="+id+") is null1 while processing req["+reqType+", srcId="+srcId+", dstId="+dstId+"]");
             val mresp = mFin.exec(id, reqType, parentId, finSrc, finKind,
                     map, childId, srcId, dstId, kind, ex, toAdopter);
             if (mresp.excp != null && mresp.excp instanceof MasterMigrating) {
@@ -235,7 +236,9 @@ public final class FinishReplicator {
             if (verbose>=1) debug(">>>> Replicator(id="+id+").asyncExecInternal remote" );
             at (master) @Immediate("async_master_exec") async {
                 val mFin = findMaster(id);
-                assert (mFin != null) : here + " fatal error, master(id="+id+") is null1 while processing req["+reqType+", srcId="+srcId+", dstId="+dstId+"]";
+                if (mFin == null)
+                    throw new Exception (here + " FATAL ERROR, master(id="+id+") is null1 while processing req["+reqType+", srcId="+srcId+", dstId="+dstId+"]");
+
                 val mresp = mFin.exec(id, reqType, parentId, finSrc, finKind,
                         map, childId, srcId, dstId, kind, ex, toAdopter);
                 at (gr) @Immediate("async_master_exec_response") async {
@@ -263,6 +266,7 @@ public final class FinishReplicator {
         val req = (gr as GlobalRef[FinishRequest]{self.home == here})();
         val num = req.num;
         val id = req.id;
+        val idStr = "<"+id.home+","+id.id+">";
         val masterPlaceId = req.masterPlaceId;
         val reqType = req.reqType;
         val finSrc = req.finSrc;
@@ -304,7 +308,7 @@ public final class FinishReplicator {
                     if (createOk)
                         bFin = findBackupOrCreate(id, parentId, Place(finSrc), finKind);
                     else
-                        bFin = findBackupOrThrow(id, "asyncMasterToBackup local");
+                        bFin = findBackupOrThrow(id, "asyncMasterToBackup local" + idStr);
                     val bexcp = bFin.exec(id, masterPlaceId, reqType, parentId, finSrc, finKind,
                             map, childId, srcId, dstId, kind, ex, toAdopter, transitSubmitDPE);
                     processBackupResponse(bexcp, req, backupPlaceId);
@@ -317,12 +321,14 @@ public final class FinishReplicator {
                         if (createOk)
                             bFin = findBackupOrCreate(id, parentId, Place(finSrc), finKind);
                         else
-                            bFin = findBackupOrThrow(id, "asyncMasterToBackup remote");
+                            bFin = findBackupOrThrow(id, "asyncMasterToBackup remote" + idStr);
                         val bexcp = bFin.exec(id, masterPlaceId, reqType, parentId, finSrc, finKind,
                                 map, childId, srcId, dstId, kind, ex, toAdopter, transitSubmitDPE);
                         if (verbose>=1) debug("==== Replicator(id="+id+").asyncMasterToBackup moving to caller " + gr.home);
                         at (gr) @Immediate("async_backup_exec_response") async {
                             val reqx = (gr as GlobalRef[FinishRequest]{self.home == here})();
+                            if (reqx == null)
+                                throw new Exception (here + " FATAL ERROR reqx(id="+id+") is null" );
                             processBackupResponse(bexcp, reqx, backupPlaceId);
                         }
                     }
