@@ -14,7 +14,9 @@ import x10.util.GrowableRail;
 import x10.util.HashMap;
 
 public abstract class FinishBackupState {
-    abstract def exec(req:FinishRequest):Exception;
+    abstract def exec(id:FinishResilient.Id, masterPlaceId:Int, reqType:Int, parentId:FinishResilient.Id, finSrc:Int, finKind:Int,
+            map:HashMap[FinishResilient.Task,Int], 
+            childId:FinishResilient.Id, srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable, toAdopter:Boolean, transitSubmitDPE:Boolean):Exception;
     abstract def getNewMasterBlocking():FinishResilient.Id;
     
     abstract def getId():FinishResilient.Id;

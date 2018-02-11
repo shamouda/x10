@@ -739,8 +739,9 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (verbose>=1) debug("<<<< Master(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+finKind+") returning");
         }
         
-        public def exec(req:FinishRequest) {
-            val id = req.id;
+        public def exec(id:Id, reqType:Int, parentId:FinishResilient.Id, finSrc:Int, finKind:Int,
+                map:HashMap[FinishResilient.Task,Int], 
+                childId:FinishResilient.Id, srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable, toAdopter:Boolean) {            
             val resp = new MasterResponse();
             try {
                 lock();
@@ -751,10 +752,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             } finally {
                 unlock();
             }
-            if (req.reqType == FinishRequest.TRANSIT) {
-                val srcId = req.srcId;
-                val dstId = req.dstId;
-                val kind = req.kind;
+            if (reqType == FinishRequest.TRANSIT) {
                 if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=TRANSIT, id=" + id + ", srcId=" + srcId + ", dstId="+ dstId + ", kind=" + kind + " ] called");
                 try{
                     if (Place(srcId).isDead()) {
@@ -777,11 +775,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     resp.excp = t;
                 }
                 if (verbose>=1) debug("<<<< Master(id="+id+").exec [req=TRANSIT, srcId=" + srcId + ", dstId=" + dstId + ", kind=" + kind + ", submit="+resp.submit+" ] returning");
-            } else if (req.reqType == FinishRequest.TERM) {
-                val srcId = req.srcId;
-                val dstId = req.dstId;
-                val kind = req.kind;
-                val ex = req.ex;
+            } else if (reqType == FinishRequest.TERM) {
                 if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=TERM, srcId=" + srcId + ", dstId=" + dstId + ", kind=" + kind + ", ex="+ ex + " ] called");
                 try{
                     //Unlike place0 pessimistic finish, we don't suppress termination notifications whose dst is dead.
@@ -794,8 +788,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     resp.excp = t;
                 }
                 if (verbose>=1) debug("<<<< Master(id="+id+").exec [req=TERM, srcId=" + srcId + ", dstId=" + dstId + ", kind=" + kind + ", ex="+ ex + " ] returning");
-            } else if (req.reqType == FinishRequest.EXCP) {
-                val ex = req.ex;
+            } else if (reqType == FinishRequest.EXCP) {
                 if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=EXCP, ex="+ex+" ] called");
                 try{
                     addException(ex, resp);
@@ -806,11 +799,9 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     resp.excp = t;
                 }
                 if (verbose>=1) debug("<<<< Master(id="+id+").exec [req=EXCP, ex="+ex+" ] returning");
-            } else if (req.reqType == FinishRequest.TERM_MUL) {
-                if (req.map == null)
-                    throw new Exception (here + "["+Runtime.activity()+"] map is NULL");
-                val map = req.map;
-                val dstId = req.dstId;
+            } else if (reqType == FinishRequest.TERM_MUL) {
+                if (map == null)
+                    throw new Exception (here + "["+Runtime.activity()+"] exec(id="+id+") map is NULL");
                 if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=TERM_MUL, dstId=" + dstId +", map="+map.size()+" ] called");
                 try{
                   //Unlike place0 finish, we don't suppress termination notifications whose dst is dead.
@@ -819,10 +810,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                         latch.lock();
                         resp.backupPlaceId = -1n;
                         for (e in map.entries()) {
-                            val srcId = e.getKey().place;
-                            val kind = e.getKey().kind;
-                            val cnt = e.getValue();
-                            transitToCompletedUnsafe(srcId, dstId, kind, cnt, "notifyActivityTermination", resp);
+                            val srcId_ = e.getKey().place;
+                            val kind_ = e.getKey().kind;
+                            val cnt_ = e.getValue();
+                            transitToCompletedUnsafe(srcId_, dstId, kind_, cnt_, "notifyActivityTermination", resp);
                         }
                     } finally {
                         latch.unlock();
@@ -1341,24 +1332,23 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             });
         }
 
-        public def exec(req:FinishRequest):Exception {
-            val reqMaster = req.masterPlaceId;
+        public def exec(id:Id, masterPlaceId:Int, reqType:Int, parentId:FinishResilient.Id, finSrc:Int, finKind:Int,
+                map:HashMap[FinishResilient.Task,Int], 
+                childId:FinishResilient.Id, srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable, toAdopter:Boolean,
+                transitSubmitDPE:Boolean):Exception {
             try {
                 lock();
                 if (migrating) {
                     return new MasterDied();
                 }
-                if (reqMaster != placeOfMaster) {
+                if (masterPlaceId != placeOfMaster) {
                     return new MasterChanged(id, placeOfMaster);
                 }
             } finally {
                 unlock();
             }
             var bexcp:Exception = null;
-            if (req.reqType == FinishRequest.TRANSIT) {
-                val srcId = req.srcId;
-                val dstId = req.dstId;
-                val kind = req.kind;
+            if (reqType == FinishRequest.TRANSIT) {
                 if (verbose>=1) debug(">>>> Backup(id="+id+").exec [req=TRANSIT, srcId=" + srcId + ", dstId="+ dstId + ",kind=" + kind + " ] called");
                 try{
                     inTransit(srcId, dstId, kind, "notifySubActivitySpawn");
@@ -1366,11 +1356,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     bexcp = t;
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=TRANSIT, srcId=" + srcId + ", dstId="+ dstId + ",kind=" + kind + " ] returning");
-            } else if (req.reqType == FinishRequest.TERM) {
-                val srcId = req.srcId;
-                val dstId = req.dstId;
-                val kind = req.kind;
-                val ex = req.ex;
+            } else if (reqType == FinishRequest.TERM) {
                 if (verbose>=1) debug(">>>> Backup(id="+id+").exec [req=TERM, srcId=" + srcId + ", dstId="+ dstId + ", kind=" + kind + ", ex=" + ex + " ] called");
                 try{
                     transitToCompleted(srcId, dstId, kind, ex, "notifyActivityTermination");
@@ -1378,8 +1364,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     bexcp = t;
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=TERM, srcId=" + srcId + ", dstId="+ dstId + ", kind=" + kind + ", ex=" + ex + " ] returning");
-            } else if (req.reqType == FinishRequest.EXCP) {
-                val ex = req.ex;
+            } else if (reqType == FinishRequest.EXCP) {
                 if (verbose>=1) debug(">>>> Backup(id="+id+").exec [req=EXCP, ex="+ex+" ] called");
                 try{
                     addException(ex);
@@ -1387,21 +1372,18 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     bexcp = t;
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=EXCP, ex="+ex+" ] returning");
-            } else if (req.reqType == FinishRequest.TERM_MUL) {
-                if (req.map == null)
-                    throw new Exception (here + "["+Runtime.activity()+"] map is NULL");
-            
-                val map = req.map;
-                val dstId = req.dstId;
+            } else if (reqType == FinishRequest.TERM_MUL) {
+                if (map == null)
+                    throw new Exception (here + "["+Runtime.activity()+"] exec(id="+id+") map is NULL");
                 if (verbose>=1) debug(">>>> Backup(id="+id+").exec [req=TERM_MUL, dstId=" + dstId +", mapSz="+map.size()+" ] called");
                 try{
                     try {
                         ilock.lock();
                         for (e in map.entries()) {
-                            val srcId = e.getKey().place;
-                            val kind = e.getKey().kind;
-                            val cnt = e.getValue();
-                            transitToCompletedUnsafe(srcId, dstId, kind, cnt, "notifyActivityTermination");
+                            val srcId_ = e.getKey().place;
+                            val kind_ = e.getKey().kind;
+                            val cnt_ = e.getValue();
+                            transitToCompletedUnsafe(srcId_, dstId, kind_, cnt_, "notifyActivityTermination");
                         }
                     }finally {
                         ilock.unlock();

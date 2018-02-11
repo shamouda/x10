@@ -15,7 +15,7 @@ import x10.util.HashSet;
 import x10.util.concurrent.Lock;
 import x10.util.concurrent.AtomicLong;
 
-public class FinishRequest {
+public class FinishRequest implements x10.io.Unserializable {
     static val ADD_CHILD = 0n;
     static val TRANSIT = 1n;
     static val LIVE = 2n;
@@ -46,13 +46,11 @@ public class FinishRequest {
     var kind:Int;
     var ex:CheckedThrowable;     //excp
     
-    //special backup parameters
-    var backupPlaceId:Int = -1n;
-    var transitSubmitDPE:Boolean = false;
-    
     //optimistic finish source
     var finSrc:Int = -1n;
     var finKind:Int = -1n;
+    
+    var backupPlaceId:Int;
     
     //output variables for non-blocking replication
     var outSubmit:Boolean; 
@@ -206,8 +204,4 @@ public class FinishRequest {
         return allocReq(id, masterPlaceId, TERM_MUL, "TERM_MUL", parentId, finSrc, finKind, map, FinishResilient.UNASSIGNED, -1n, dstId, -1n, null, false);
     }
    
-    public def isMasterLocal() = masterPlaceId == here.id as Int;
-    public def isBackupLocal() = backupPlaceId == here.id as Int;
-    
-    
 }
