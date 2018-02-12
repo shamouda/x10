@@ -320,7 +320,7 @@ public final class FinishReplicator {
                 val mresp_backupChanged = mresp.backupChanged;
                 val mresp_parentId = mresp.parentId;
                 val num2 = newReq.num;
-                at (caller) @Immediate("async_master_exec_response") async {
+                val wrappedBodyResponse = ()=> @AsyncClosure {
                     val mresp2 = new MasterResponse(mresp_backupPlaceId, mresp_excp, mresp_submit, mresp_transitSubmitDPE, mresp_backupChanged, mresp_parentId);
                     if (mresp2.excp != null && mresp2.excp instanceof MasterMigrating) {
                         if (verbose>=1) debug(">>>> Replicator(num="+num2+").asyncExecInternal MasterMigrating2, try again after 10ms" );
@@ -335,6 +335,9 @@ public final class FinishReplicator {
                         val reqx = getPendingMasterRequest(num2);
                         asyncMasterToBackup(caller, reqx, mresp2);
                     }
+                };
+                at (caller) @Immediate("async_master_exec_response") async {
+                    wrappedBodyResponse();
                 }
             };
             at (master) @Immediate("async_master_exec") async {
@@ -400,8 +403,11 @@ public final class FinishReplicator {
                             bFin = findBackupOrThrow(newReq.id, "asyncMasterToBackup remote");
                         val bexcp = bFin.exec(newReq, transitSubmitDPE);
                         if (verbose>=1) debug("==== Replicator(id="+newReq.id+").asyncMasterToBackup moving to caller " + caller);
-                        at (caller) @Immediate("async_backup_exec_response") async {
+                        val wrappedBodyResponse = ()=> @AsyncClosure {
                             processBackupResponse(bexcp, num, backupPlaceId);
+                        };
+                        at (caller) @Immediate("async_backup_exec_response") async {
+                            wrappedBodyResponse();
                         }
                     };
                     

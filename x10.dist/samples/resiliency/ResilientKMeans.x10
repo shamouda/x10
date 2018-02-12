@@ -165,9 +165,10 @@ public class ResilientKMeans {
         var maxIterations:Long;
         var currentIteration:Long;
         var ckptCurrentClusters:Rail[Float]; // master only checkpointing data
-
-
-        def this(lsPLH:PlaceLocalHandle[LocalState], pg:PlaceGroup, epsilon:Float, iterations:Long) {
+        val progress:Long;
+        val time0:Long;
+    
+        def this(lsPLH:PlaceLocalHandle[LocalState], pg:PlaceGroup, epsilon:Float, iterations:Long, prog:Long) {
            this.distState = new DistState(lsPLH, pg);
            this.pg = pg;
            this.epsilon = epsilon;
@@ -178,8 +179,19 @@ public class ResilientKMeans {
            newClusterCounts = new Rail[Int](numClusters);
            maxIterations = iterations;
            currentIteration = 0;
+           progress = prog;
+           time0 = System.currentTimeMillis();
         }
 
+        def println(message:String) {
+            val time = System.currentTimeMillis();
+            val s = "        " + (time - time0);
+            val s1 = s.substring(s.length() - 9n, s.length() - 3n);
+            val s2 = s.substring(s.length() - 3n, s.length());
+            Console.OUT.println(s1 + "." + s2 + ": " + message);
+            return time;
+          }
+        
         def setInitialCentroids() {
             finish {
                 for (p in pg) async {
@@ -244,6 +256,9 @@ public class ResilientKMeans {
             }
             converged = didConverge;
             currentIteration += 1;
+            
+            if (progress > 0)
+                println("iter: " + currentIteration);
 
             // Prepare for next iteration
             Rail.copy(newClusters, currentClusters);
@@ -262,6 +277,7 @@ public class ResilientKMeans {
             distState.remake(changes);
             currentClusters = new Rail(ckptCurrentClusters);
             currentIteration = lastCkptIter;
+            println("rolled back to iter: " + currentIteration);
         }
     }
 
@@ -278,7 +294,7 @@ public class ResilientKMeans {
 
     static def computeClusters(initPoints:(Place)=>Rail[Float], numPoints:Long,
                                dim:Long, numClusters:Long, iterations:Long, epsilon:Float,
-                               verbose:Boolean, checkpointFreq:Long, sparePlaces:Long):Rail[Float] {
+                               verbose:Boolean, checkpointFreq:Long, sparePlaces:Long, progress:Long):Rail[Float] {
         val startTime = System.currentTimeMillis(); // the executor takes milli time.
         val executor = new GlobalResilientIterativeExecutor(checkpointFreq, sparePlaces, false);
         val activePlaces = executor.activePlaces();
@@ -287,7 +303,7 @@ public class ResilientKMeans {
         val localPLH = PlaceLocalHandle.make[LocalState](activePlaces, ()=>{ new LocalState(initPoints, numPoints, dim, numClusters) });
 
         // Initialize algorithm state
-        val master = new KMeansMaster(localPLH, activePlaces, epsilon, iterations);
+        val master = new KMeansMaster(localPLH, activePlaces, epsilon, iterations, progress);
         master.setInitialCentroids();
 
         if (verbose) {
@@ -315,7 +331,8 @@ public class ResilientKMeans {
             Option("e","epsilon","convergence threshold"),
             Option("s","spare","number of spare places"),
             Option("k","checkpointFreq","number of interations between checkpoints"),
-            Option("n","num","quantity of points")
+            Option("n","num","quantity of points"),
+            Option("p","progress","print progress")
         ]);
         if (opts.filteredArgs().size!=0L) {
             Console.ERR.println("Unexpected arguments: "+opts.filteredArgs());
@@ -336,6 +353,7 @@ public class ResilientKMeans {
         val verbose = opts("-v");
         val checkpointFreq = opts("-k",5);
         val sparePlaces = opts("-s",0);
+        val progress = opts("-p",0);
 
         Console.OUT.println("points: "+numPoints+" clusters: "+numClusters+" dim: "+dim);
         Console.OUT.println("active places: "+(Place.numPlaces() - sparePlaces)+" spares: "+sparePlaces);
@@ -348,7 +366,7 @@ public class ResilientKMeans {
         };
 
         val start = System.nanoTime();
-        val clusters = computeClusters(initPoints, pointsPerPlace, dim, numClusters, iterations, epsilon, verbose, checkpointFreq, sparePlaces);
+        val clusters = computeClusters(initPoints, pointsPerPlace, dim, numClusters, iterations, epsilon, verbose, checkpointFreq, sparePlaces, progress);
         val stop = System.nanoTime();
         Console.OUT.printf("TOTAL_TIME: %.3f seconds\n", (stop-start)/1e9);
 
