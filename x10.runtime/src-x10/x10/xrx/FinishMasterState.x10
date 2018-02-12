@@ -25,11 +25,23 @@ public abstract class FinishMasterState extends FinishResilient {
     abstract def dump():void;
 }
 
-class MasterResponse {
+class MasterResponse implements x10.io.Unserializable {
     var backupPlaceId:Int;
     var excp:Exception;
     var submit:Boolean = false;
     var transitSubmitDPE:Boolean = false;
     var backupChanged:Boolean = false;
     var parentId:FinishResilient.Id; /*used in ADD_CHILD only*/
+
+    public def this() { }
+    
+    public def this(backupPlaceId:Int, excp:Exception, submit:Boolean, transitSubmitDPE:Boolean,
+            backupChanged:Boolean, parentId:FinishResilient.Id) {
+        this.backupPlaceId = backupPlaceId;
+        this.excp = excp;
+        this.submit = submit;
+        this.transitSubmitDPE = transitSubmitDPE;
+        this.backupChanged = backupChanged;
+        this.parentId = parentId;
+    }
 }

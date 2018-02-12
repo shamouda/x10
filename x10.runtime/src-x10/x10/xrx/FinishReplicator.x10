@@ -313,10 +313,15 @@ public final class FinishReplicator {
                 if (mFin == null)
                     throw new Exception (here + " FATAL ERROR, master(id="+newReq.id+") is null while processing req["+newReq+"]");
                 val mresp = mFin.exec(newReq);
+                val mresp_backupPlaceId = mresp.backupPlaceId;
+                val mresp_excp = mresp.excp;
+                val mresp_submit = mresp.submit;
+                val mresp_transitSubmitDPE = mresp.transitSubmitDPE;
+                val mresp_backupChanged = mresp.backupChanged;
+                val mresp_parentId = mresp.parentId;
                 at (caller) @Immediate("async_master_exec_response") async {
-                    if (mresp == null)
-                        throw new Exception (here + " FATAL ERROR mresp is null");
-                    if (mresp.excp != null && mresp.excp instanceof MasterMigrating) {
+                    val mresp2 = new MasterResponse(mresp_backupPlaceId, mresp_excp, mresp_submit, mresp_transitSubmitDPE, mresp_backupChanged, mresp_parentId);
+                    if (mresp2.excp != null && mresp2.excp instanceof MasterMigrating) {
                         if (verbose>=1) debug(">>>> Replicator(num="+num+").asyncExecInternal MasterMigrating2, try again after 10ms" );
                         //we cannot block within an immediate thread
                         Runtime.submitUncounted( ()=>{
@@ -327,7 +332,7 @@ public final class FinishReplicator {
                     }
                     else {
                         val reqx = getPendingMasterRequest(num);
-                        asyncMasterToBackup(caller, reqx, mresp);
+                        asyncMasterToBackup(caller, reqx, mresp2);
                     }
                 }
             }
