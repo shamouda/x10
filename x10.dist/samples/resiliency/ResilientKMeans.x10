@@ -355,6 +355,7 @@ public class ResilientKMeans {
         val sparePlaces = opts("-s",0);
         val progress = opts("-p",0);
 
+        Console.OUT.println("RESILIENT MODE "+x10.xrx.Runtime.RESILIENT_MODE);
         Console.OUT.println("points: "+numPoints+" clusters: "+numClusters+" dim: "+dim);
         Console.OUT.println("active places: "+(Place.numPlaces() - sparePlaces)+" spares: "+sparePlaces);
         
