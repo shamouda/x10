@@ -305,7 +305,8 @@ public final class FinishReplicator {
             val bytes = req.bytes;
             if (bytes == null)
                 throw new Exception (here + " FATAL ERROR, bytes null before moving to master " + master);
-            at (master) @Immediate("async_master_exec") async {
+//            at (master) @Immediate("async_master_exec") async {
+            at (master) @Uncounted async {
                 if (bytes == null)
                     throw new Exception (here + " FATAL ERROR, at master null bytes");
                 val newReq = FinishRequest.make(bytes);
@@ -319,19 +320,20 @@ public final class FinishReplicator {
                 val mresp_transitSubmitDPE = mresp.transitSubmitDPE;
                 val mresp_backupChanged = mresp.backupChanged;
                 val mresp_parentId = mresp.parentId;
+                val num2 = newReq.num;
                 at (caller) @Immediate("async_master_exec_response") async {
                     val mresp2 = new MasterResponse(mresp_backupPlaceId, mresp_excp, mresp_submit, mresp_transitSubmitDPE, mresp_backupChanged, mresp_parentId);
                     if (mresp2.excp != null && mresp2.excp instanceof MasterMigrating) {
-                        if (verbose>=1) debug(">>>> Replicator(num="+num+").asyncExecInternal MasterMigrating2, try again after 10ms" );
+                        if (verbose>=1) debug(">>>> Replicator(num="+num2+").asyncExecInternal MasterMigrating2, try again after 10ms" );
                         //we cannot block within an immediate thread
                         Runtime.submitUncounted( ()=>{
-                            val reqx = getPendingMasterRequest(num);
+                            val reqx = getPendingMasterRequest(num2);
                             System.threadSleep(10); 
                             asyncExecInternal(reqx, null);
                         });
                     }
                     else {
-                        val reqx = getPendingMasterRequest(num);
+                        val reqx = getPendingMasterRequest(num2);
                         asyncMasterToBackup(caller, reqx, mresp2);
                     }
                 }
@@ -384,7 +386,8 @@ public final class FinishReplicator {
                     val bytes = req.bytes;
                     if (bytes == null)
                         throw new Exception (here + " FATAL ERROR, bytes null before moving to backup " + backup);
-                    at (backup) @Immediate("async_backup_exec") async {
+//                    at (backup) @Immediate("async_backup_exec") async {
+                    at (backup) @Uncounted async {
                         if (bytes == null)
                             throw new Exception (here + " FATAL ERROR, at backup null bytes");
                         val newReq = FinishRequest.make(bytes);
