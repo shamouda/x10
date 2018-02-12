@@ -216,31 +216,35 @@ public final class FinishReplicator {
     
 
     private static def finalizeAsyncExec(num:Long, backupPlaceId:Int) {
-        try {
-            pendingBackupLock.lock();
-            val req = pendingBackup.remove(num);
-            pendingBackupIndx.getOrThrow(backupPlaceId).remove(num);
-            
-            if (verbose>=1) debug(">>>> Replicator.finalizeAsyncExec(num="+num+", backupPlace="+backupPlaceId+") called");
-            if (req == null) {
-                if (!Place(backupPlaceId).isDead())
+        if (verbose>=1) debug(">>>> Replicator.finalizeAsyncExec(num="+num+", backupPlace="+backupPlaceId+") called");
+        var req:FinishRequest = null;
+        pendingBackupLock.lock();
+        
+        req = pendingBackup.remove(num);
+        pendingBackupIndx.getOrThrow(backupPlaceId).remove(num);
+        
+        if (req == null) {
+            try {
+                if (!Place(backupPlaceId).isDead()) {
                     throw new Exception (here + " FATAL ERROR, finalizeAsyncExec(num="+num+") pending backup request not found although backup is alive");
-            }
-            else {
-                val postSendAction = postActions.remove(num); 
-                val output = reqOutputs.remove(num);
-                if (postSendAction != null) {
-                    if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(id="+req.id+") executing postSendAction(submit="+output.submit+",adopterId="+output.adopterId+")");
-                    postSendAction(output.submit, output.adopterId);
                 }
-                if (verbose>=1) debug("<<<< Replicator.finalizeAsyncExec(id="+req.id+", num="+num+", backupPlace="+backupPlaceId+") returning");
-                FinishRequest.deallocReq(req);
+            } finally {
+                pendingBackupLock.unlock();
             }
-        } finally {
-            pendingBackupLock.unlock();
+            return;
         }
+        
+        val postSendAction = postActions.remove(num);
+        val output = reqOutputs.remove(num);
+        pendingBackupLock.unlock();
+        val id = req.id;
+        FinishRequest.deallocReq(req);
+        if (postSendAction != null) {
+            if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(id="+id+") executing postSendAction(submit="+output.submit+",adopterId="+output.adopterId+")");
+            postSendAction(output.submit, output.adopterId);
+        }
+        if (verbose>=1) debug("<<<< Replicator.finalizeAsyncExec(id="+id+", num="+num+", backupPlace="+backupPlaceId+") returning");
     }
-    
     
     static def restartExec(req:FinishRequest, localMaster:FinishMasterState, reqOutput:ReqOutput):void {
         val rc = addMasterPending(req, null, reqOutput);
