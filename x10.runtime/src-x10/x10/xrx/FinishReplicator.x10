@@ -172,6 +172,7 @@ public final class FinishReplicator {
                     pendingBackupIndx.put(backupPlaceId, list);
                 }
                 list.add(num);
+                if (verbose>=1) debug("==== Replicator.masterToBackupPending(id="+req.id+", num="+num+") pendingBackupIndx.add("+num+") successful");
                 if (verbose>=1) debug("<<<< Replicator.masterToBackupPending(id="+req.id+", num="+num+") returned SUCCESS");
                 return SUCCESS;
             } else {
@@ -221,7 +222,15 @@ public final class FinishReplicator {
         pendingBackupLock.lock();
         
         req = pendingBackup.remove(num);
-        pendingBackupIndx.getOrThrow(backupPlaceId).remove(num);
+        val list = pendingBackupIndx.getOrElse(backupPlaceId, null);
+        if (list == null) {
+            throw new Exception (here + " FATAL ERROR finalizeAsyncExec(num="+num+", backupPlace="+backupPlaceId+") pendingBackupIndx has null list ");
+        }
+        if (!list.contains(num)) {
+            throw new Exception (here + " FATAL ERROR finalizeAsyncExec(num="+num+", backupPlace="+backupPlaceId+") list does not include num");
+        }
+        list.remove(num);
+        if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(num="+num+", backupPlace="+backupPlaceId+") pendingBackupIndx.remove("+num+") successful");
         
         if (req == null) {
             try {
@@ -294,6 +303,8 @@ public final class FinishReplicator {
             }
         } else {
             val bytes = req.bytes;
+            if (bytes == null)
+                throw new Exception (here + " FATAL ERROR, bytes null before moving to master " + master);
             at (master) @Immediate("async_master_exec") async {
                 if (bytes == null)
                     throw new Exception (here + " FATAL ERROR, at master null bytes");
@@ -366,6 +377,8 @@ public final class FinishReplicator {
                 else {
                     if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup moving to backup " + backup);
                     val bytes = req.bytes;
+                    if (bytes == null)
+                        throw new Exception (here + " FATAL ERROR, bytes null before moving to backup " + backup);
                     at (backup) @Immediate("async_backup_exec") async {
                         if (bytes == null)
                             throw new Exception (here + " FATAL ERROR, at backup null bytes");
