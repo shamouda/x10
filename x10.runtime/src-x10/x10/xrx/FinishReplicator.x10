@@ -98,7 +98,7 @@ public final class FinishReplicator {
         try {
             transitPendingActLock.lock();
             val pendingAct = transitPendingAct.getOrElse(num, NULL_PENDING_ACT);
-            assert pendingAct != NULL_PENDING_ACT : here + " FATAL ERROR req["+num+"] lost its pending activity";
+            assert pendingAct != NULL_PENDING_ACT : here + "["+Runtime.activity()+"] FATAL ERROR req[id="+id+", num="+num+"] lost its pending activity";
             transitPendingAct.remove(num);
             val preSendAction = ()=>{ };
             if (verbose>=1) debug("<<<< Replicator.sendPendingAct(id="+id+", num="+num+", dst="+pendingAct.dst+", fs="+pendingAct.fs+") returned");
@@ -237,13 +237,12 @@ public final class FinishReplicator {
         val postSendAction = postActions.remove(num);
         val output = reqOutputs.remove(num);
         pendingBackupLock.unlock();
-        val id = req.id;
-        FinishRequest.deallocReq(req);
         if (postSendAction != null) {
-            if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(id="+id+") executing postSendAction(submit="+output.submit+",adopterId="+output.adopterId+")");
+            if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(id="+req.id+") executing postSendAction(submit="+output.submit+",adopterId="+output.adopterId+")");
             postSendAction(output.submit, output.adopterId);
         }
-        if (verbose>=1) debug("<<<< Replicator.finalizeAsyncExec(id="+id+", num="+num+", backupPlace="+backupPlaceId+") returning");
+        FinishRequest.deallocReq(req);
+        if (verbose>=1) debug("<<<< Replicator.finalizeAsyncExec(id="+req.id+", num="+num+", backupPlace="+backupPlaceId+") returning");
     }
     
     static def restartExec(req:FinishRequest, localMaster:FinishMasterState, reqOutput:ReqOutput):void {
