@@ -22,6 +22,7 @@ import x10.util.concurrent.SimpleLatch;
 import x10.util.GrowableRail;
 import x10.util.HashMap;
 import x10.util.HashSet;
+import x10.util.Timer;
 
 //TODO: don't use getOrCreate unnecessarily (i.e. in notifyActivityCreation[Failed])
 /**
@@ -504,6 +505,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
         }
         try {
             lock.lock();
+            val start = Timer.milliTime();
             for (e in states.entries()) {
                 e.getValue().seekAdoption();
             }
@@ -521,6 +523,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
             for (s in toRemove) {
                 s.removeFromStates();
             }
+            Console.OUT.println("p0FinishRecoveryTime:" + (Timer.milliTime()-start) + "ms");
         } finally {
             lock.unlock();
         }

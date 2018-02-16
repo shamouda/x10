@@ -26,6 +26,7 @@ import x10.util.HashSet;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.concurrent.ResilientLowLevelFinish;
 import x10.util.concurrent.Condition;
+import x10.util.Timer;
 
 //FIXME: return a dummy remote rather than a fatal RemoteCreationDenied
 /**
@@ -1506,6 +1507,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             //NOLOG if (verbose>=2) debug(">>>> notifyPlaceDeath returning, not place0");
             return;
         }
+        val start = Timer.milliTime();
         val newDead = FinishReplicator.getNewDeadPlaces();
         if (newDead == null || newDead.size() == 0) //occurs at program termination
             return;
@@ -1532,5 +1534,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         
         State.convertDeadActivities(newDead, states, countChildren, countReceived);
         //NOLOG if (verbose>=1) debug("<<<< notifyPlaceDeath returning");
+        Console.OUT.println("p0FinishRecoveryTime:" + (Timer.milliTime()-start) + "ms");
     }
 }
