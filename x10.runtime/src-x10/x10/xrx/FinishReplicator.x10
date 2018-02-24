@@ -22,6 +22,7 @@ import x10.util.resilient.concurrent.ResilientLowLevelFinish;
 import x10.util.concurrent.Lock;
 import x10.io.Deserializer;
 import x10.compiler.AsyncClosure;
+import x10.xrx.freq.FinishRequest;
 
 public final class FinishReplicator {
     
@@ -259,7 +260,7 @@ public final class FinishReplicator {
         val submit = mresp.submit;
         //NOLOG if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncMasterToBackup => backupPlaceId = " + mresp.backupPlaceId + " submit = " + submit );
         if (mresp.backupPlaceId == -1n)
-            throw new Exception (here + " fatal error ["+req+"], backup -1 means master had a fatal error before reporting its backup value");
+            throw new Exception (here + " FATAL ERROR ["+req+"], backup -1 means master had a fatal error before reporting its backup value");
         if (mresp.backupChanged) {
             updateBackupPlace(req.id.home, mresp.backupPlaceId);
         }
@@ -290,8 +291,7 @@ public final class FinishReplicator {
                         bFin = findBackupOrThrow(req.id);
                     val bresp = bFin.exec(req);
                     processBackupResponse(bresp, req.num, backupPlaceId);
-                }
-                else {
+                } else {
                     //NOLOG if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup moving to backup " + backup);
                     at (backup) @Immediate("async_backup_exec") async {
                         if (req == null)
@@ -690,7 +690,7 @@ public final class FinishReplicator {
         Console.OUT.println(output); Console.OUT.flush();
     }
     
-    static def getMasterPlace(idHome:Int) {
+    public static def getMasterPlace(idHome:Int) {
         try {
             glock.lock();
             val m = masterMap.getOrElse(idHome, -1n);

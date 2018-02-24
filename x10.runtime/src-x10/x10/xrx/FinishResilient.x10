@@ -20,7 +20,7 @@ import x10.util.HashMap;
 /*
  * Common abstract class for Resilient Finish
  */
-abstract class FinishResilient extends FinishState {
+public abstract class FinishResilient extends FinishState {
     /*
      * for debug
      */
