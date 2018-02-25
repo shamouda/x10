@@ -162,9 +162,10 @@ void x10aux::run_async_at(x10aux::place p, x10::lang::VoidFun_0_0* body_fun,
     
     serialization_id_t net_id = real_body->_get_network_id();
     if (!is_cuda(p)) {
-        _X_(ANSI_BOLD<<ANSI_X10RT<<"Transmitting an async: "<<ANSI_RESET
+        /*_X_(ANSI_BOLD<<ANSI_X10RT<<"Transmitting an async: "<<ANSI_RESET
             <<real_body->toString()->c_str()
-            <<" nid "<<net_id<<" to place: "<<p);
+            <<" nid "<<net_id<<" to place: "<<p);*/
+    	printf("Transmitting an async: [%s]  nid[%d] to place[%d]\n", real_body->toString()->c_str(), net_id, p );
 
     } else {
         _X_(ANSI_BOLD<<ANSI_X10RT<<"This is actually a kernel: "<<ANSI_RESET
@@ -317,7 +318,8 @@ static void receive_async (const x10rt_msg_params *p) {
                 x10aux::dealloc(body);
             } catch (x10::lang::CheckedThrowable* e) {
                 if (!x10::xrx::Configuration::silenceInternalWarnings()) {
-                    printf("WARNING: Ignoring uncaught exception in @Immediate async.");
+                    printf("WARNING from network.cc: Ignoring uncaught exception in @Immediate async.\n");
+                    printf("WARNING2 from network.cc: received buffer %s\n", static_cast<char*>(p->msg));
                     e->printStackTrace();
                 }
             }
