@@ -26,5 +26,7 @@ public abstract class FinishBackupState {
 }
 
 class BackupResponse {
-    var excp:Exception;
+    var errMasterDied:Boolean = false;
+    var errMasterChanged:Boolean = false; 
+    var newMasterPlace:Int = -1n; //valid only if errMasterChanged = true
 }

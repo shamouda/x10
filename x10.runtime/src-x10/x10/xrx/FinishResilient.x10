@@ -279,7 +279,7 @@ class RemoteCreationDenied extends Exception {}
 class MasterDied extends Exception {}
 class BackupDied extends Exception {}
 class MasterMigrating extends Exception {}
-class MasterChanged(newMasterId:FinishResilient.Id,newMasterPlace:Int)  extends Exception {}
+class MasterChanged(newMasterPlace:Int)  extends Exception {} //optimistic only
 class MasterAndBackupDied extends Exception {}
 class BackupCreationDenied extends Exception {}
 class OptResolveRequest { //used in optimistic protocols only
