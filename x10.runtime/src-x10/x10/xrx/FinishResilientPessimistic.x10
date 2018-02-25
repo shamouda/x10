@@ -755,7 +755,8 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=ADD_CHILD, masterId="+id+", childId="+childId+"] called");
                 addChild(childId, resp);
                 resp.submit = true;
-                resp.parentId = parentId;
+                resp.parentIdHome = parentId.home;
+                resp.parentIdSeq = parentId.id;
                 if (verbose>=1) debug("<<<< Master(id="+id+").exec returning [req=ADD_CHILD, masterId="+id+", childId="+childId+"]");
             } else if (xreq instanceof TransitRequestPes) {
                 val req = xreq as TransitRequestPes;

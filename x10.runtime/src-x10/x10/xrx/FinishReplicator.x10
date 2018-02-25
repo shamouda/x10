@@ -273,8 +273,10 @@ public final class FinishReplicator {
         }
         val backupGo = ( submit || (mresp.transitSubmitDPE && req.isTransitRequest()) );
         if (backupGo) {
-            if (req.isAddChildRequest()) /*in some cases, the parent may be transiting at the same time as its child, */ 
-                req.parentId = mresp.parentId;          /*the child may not find the parent's backup during globalInit, so it needs to create it*/
+            if (req.isAddChildRequest()){ /*in some cases, the parent may be transiting at the same time as its child, */
+                /*the child may not find the parent's backup during globalInit, so it needs to create it*/
+                req.parentId = FinishResilient.Id(mresp.parentIdHome, mresp.parentIdSeq);          
+            }
             val rc = masterToBackupPending(req, submit, mresp.backupPlaceId, mresp.transitSubmitDPE);
             if (rc == TARGET_DEAD) {
                 //ignore backup and go ahead with post processing
@@ -439,8 +441,10 @@ public final class FinishReplicator {
                 
                 val backupGo = ( submit || (mresp.transitSubmitDPE && req.isTransitRequest()));
                 if (backupGo) {
-                    if (req.isAddChildRequest()) /*in some cases, the parent may be transiting at the same time as its child, */ 
-                        req.parentId = mresp.parentId;          /*the child may not find the parent's backup during globalInit, so it needs to create it*/
+                    if (req.isAddChildRequest()) { /*in some cases, the parent may be transiting at the same time as its child, */
+                                                   /*the child may not find the parent's backup during globalInit, so it needs to create it*/
+                        req.parentId = FinishResilient.Id(mresp.parentIdHome, mresp.parentIdSeq);
+                    }
                     req.backupPlaceId = mresp.backupPlaceId;
                     req.setSubmitDPE(mresp.transitSubmitDPE);
                     backupExec(req);
@@ -506,7 +510,8 @@ public final class FinishReplicator {
                 val r_submit = resp.submit;
                 val r_submitDPE = resp.transitSubmitDPE;
                 val r_errMasterMigrating = resp.errMasterMigrating;
-                val r_parentId = resp.parentId;
+                val r_parentId_home = resp.parentIdHome;
+                val r_parentId_seq = resp.parentIdSeq;
                 at (gr) @Immediate("master_exec_response") async {
                     val mRes = (masterRes as GlobalRef[MasterResponse]{self.home == here})();
                     mRes.backupPlaceId = r_back;
@@ -514,7 +519,8 @@ public final class FinishReplicator {
                     mRes.submit = r_submit;
                     mRes.transitSubmitDPE = r_submitDPE;
                     mRes.errMasterMigrating = r_errMasterMigrating;
-                    mRes.parentId = r_parentId;
+                    mRes.parentIdHome = r_parentId_home;
+                    mRes.parentIdSeq = r_parentId_seq;
                     gr().release();
                 }
             }
@@ -1012,7 +1018,7 @@ public final class FinishReplicator {
             glock.lock();
             val bs = fbackups.getOrElse(id, null);
             if (bs == null) {
-                throw new Exception(here + " ["+Runtime.activity()+"] FATAL ERROR backup(id="+id+" not found here");
+                throw new Exception(here + " ["+Runtime.activity()+"] FATAL ERROR backup(id="+id+") not found here");
             }
             else {
                 if (verbose>=1) debug("<<<< findBackupOrThrow(id="+id+") returning, bs = " + bs);
