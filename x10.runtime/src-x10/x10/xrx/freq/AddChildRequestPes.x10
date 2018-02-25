@@ -22,8 +22,7 @@ public class AddChildRequestPes extends FinishRequest {
     }
     
     public var outAdopterId:FinishResilient.Id = FinishResilient.UNASSIGNED;
-    public def setOutput(submit:Boolean, adopterId:FinishResilient.Id) {
-        this.outSubmit = submit;
+    public def setOutAdopterId(adopterId:FinishResilient.Id) {
         this.outAdopterId = adopterId;
     }
     public def getOutAdopterId() = outAdopterId; 

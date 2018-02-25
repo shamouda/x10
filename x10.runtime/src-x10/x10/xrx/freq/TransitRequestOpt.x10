@@ -21,7 +21,7 @@ public class TransitRequestOpt extends FinishRequest {
     
     public var transitSubmitDPE:Boolean;
 
-    public def this(id:FinishResilient.Id, masterPlaceId:Int, parentId:Int,
+    public def this(id:FinishResilient.Id, masterPlaceId:Int, parentId:FinishResilient.Id,
             finSrc:Int, finKind:Int, srcId:Int, dstId:Int, kind:Int) {
         super(id, masterPlaceId, parentId);
         this.finSrc = finSrc;
@@ -30,9 +30,10 @@ public class TransitRequestOpt extends FinishRequest {
         this.dstId = dstId;
         this.kind = kind;
     }
-    
     public def setSubmitDPE(r:Boolean) {
         this.transitSubmitDPE = r;
     }
+    public def getFinSrc() = finSrc;
+    public def getFinKind() = finKind;
     
 }

@@ -66,7 +66,7 @@ public abstract class FinishResilient extends FinishState {
     public static val AT = 0n;
     public static val ASYNC = 1n;
 
-    protected static struct Task(place:Int, kind:Int) {
+    public static struct Task(place:Int, kind:Int) {
         public def toString() {
             if (Runtime.RESILIENT_MODE == Configuration.RESILIENT_MODE_DIST_OPTIMISTIC ||
                 Runtime.RESILIENT_MODE == Configuration.RESILIENT_MODE_PLACE0_OPTIMISTIC )

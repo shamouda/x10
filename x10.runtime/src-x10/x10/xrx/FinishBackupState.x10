@@ -12,6 +12,7 @@ package x10.xrx;
 
 import x10.util.GrowableRail;
 import x10.util.HashMap;
+import x10.xrx.freq.FinishRequest;
 
 public abstract class FinishBackupState {
     abstract def exec(req:FinishRequest):BackupResponse;

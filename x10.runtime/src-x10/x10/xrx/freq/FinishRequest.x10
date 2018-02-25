@@ -14,6 +14,7 @@ import x10.util.HashMap;
 import x10.xrx.FinishResilient;
 import x10.xrx.FinishReplicator;
 import x10.util.concurrent.AtomicLong;
+import x10.compiler.Inline;
 
 public abstract class FinishRequest {
     private static val nextReqId = new AtomicLong(0);
@@ -21,33 +22,56 @@ public abstract class FinishRequest {
 
     //main identification fields
     public var id:FinishResilient.Id = FinishResilient.UNASSIGNED;  //can be changed to adopter id
-    public var targetPlaceId:Int = -1n;      
+    public var masterPlaceId:Int = -1n;
+    public var backupPlaceId:Int = -1n;
     public var parentId:FinishResilient.Id = FinishResilient.UNASSIGNED;
 
     //output variables for non-blocking replication
-    public var outSubmit:Boolean = false; 
+    private var outSubmit:Boolean = false; 
 
     public def setSubmitDPE(r:Boolean) { }
     
-    public def setTarget(placeId:Int) {
-        targetPlaceId = placeId;
+    public def setOutAdopterId(adopterId:FinishResilient.Id) {
     }
     
-    public def setId(i:FinishResilient.Id) {
-        id = i;
-    }
-    
-    public def setOutput(submit:Boolean, adopterId:FinishResilient.Id) {
+    public def setOutSubmit(submit:Boolean) {
         this.outSubmit = submit;
     }
     
-    public def getOutSubmit() = outSubmit;
+    public def setToAdopter(b:Boolean) {
+        
+    }
     
-    public def getOutAdopterId() = FinishResilient.UNASSIGNED;
+    public def isToAdopter():Boolean = false;
+    public def getFinSrc():Int = -1n;
+    public def getFinKind():Int = -1n;
+    public def getOutAdopterId():FinishResilient.Id = FinishResilient.UNASSIGNED;
+    public def getOutSubmit():Boolean = outSubmit;
+    
+    
+    public @Inline def isTransitRequest() {
+        return this instanceof TransitRequestPes || this instanceof TransitRequestOpt; 
+    }
+    
+    public @Inline def isAddChildRequest() {
+        return this instanceof AddChildRequestPes; 
+    }
+    
+    public @Inline def createOK() {
+        return this instanceof AddChildRequestPes || 
+                /*in some cases, the parent may be transiting at the same time as its child, 
+                  the child may not find the parent's backup during globalInit, so it needs to create it*/
+                this instanceof TransitRequestPes ||
+                this instanceof TransitRequestOpt ||
+                this instanceof ExcpRequestPes ||
+                this instanceof ExcpRequestOpt ||
+                (this instanceof TermRequestPes && id.home == here.id as Int) ||
+                (this instanceof TermRequestOpt && id.home == here.id as Int);
+    }
     
     public def this(id:FinishResilient.Id, masterPlaceId:Int, parentId:FinishResilient.Id) {
         this.id = id;
-        this.targetPlaceId = masterPlaceId;
+        this.masterPlaceId = masterPlaceId;
         this.parentId = parentId;
     }
     

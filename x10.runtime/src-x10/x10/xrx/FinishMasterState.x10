@@ -11,6 +11,7 @@
 package x10.xrx;
 
 import x10.util.HashSet;
+import x10.xrx.freq.FinishRequest;
 
 public abstract class FinishMasterState extends FinishResilient {
     abstract def exec(req:FinishRequest):MasterResponse;

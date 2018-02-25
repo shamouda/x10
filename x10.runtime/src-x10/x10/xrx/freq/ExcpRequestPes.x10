@@ -14,9 +14,9 @@ import x10.xrx.FinishResilient;
 
 public class ExcpRequestPes extends FinishRequest {
     public ex:CheckedThrowable;
-    public val toAdopter:Boolean;
+    public var toAdopter:Boolean;
 
-    public def this(id:FinishResilient.Id, masterPlaceId:Int, parentId:Int,
+    public def this(id:FinishResilient.Id, masterPlaceId:Int, parentId:FinishResilient.Id,
             ex:CheckedThrowable, toAdopter:Boolean) {
         super(id, masterPlaceId, parentId);
         this.ex = ex;
@@ -24,9 +24,14 @@ public class ExcpRequestPes extends FinishRequest {
     }
     
     public var outAdopterId:FinishResilient.Id = FinishResilient.UNASSIGNED;
-    public def setOutput(submit:Boolean, adopterId:FinishResilient.Id) {
-        this.outSubmit = submit;
+    public def setOutAdopterId(adopterId:FinishResilient.Id) {
         this.outAdopterId = adopterId;
     }
-    public def getOutAdopterId() = outAdopterId;
+    public def getOutAdopterId() = outAdopterId; 
+    
+    public def setToAdopter(b:Boolean) {
+        toAdopter = b;
+    }
+    public def isToAdopter() = toAdopter;
+
 }

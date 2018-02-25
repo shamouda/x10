@@ -20,7 +20,7 @@ public class TermRequestOpt extends FinishRequest {
     public val kind:Int;
     public ex:CheckedThrowable;
  
-    public def this(id:FinishResilient.Id, masterPlaceId:Int, parentId:Int,
+    public def this(id:FinishResilient.Id, masterPlaceId:Int, parentId:FinishResilient.Id,
             finSrc:Int, finKind:Int, srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable) {
         super(id, masterPlaceId, parentId);
         this.finSrc = finSrc;
@@ -30,4 +30,6 @@ public class TermRequestOpt extends FinishRequest {
         this.kind = kind;
         this.ex = ex;
     }
+    public def getFinSrc() = finSrc;
+    public def getFinKind() = finKind;
 }

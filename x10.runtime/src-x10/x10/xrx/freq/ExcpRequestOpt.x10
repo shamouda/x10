@@ -17,11 +17,13 @@ public class ExcpRequestOpt extends FinishRequest {
     public val finKind:Int;
     public ex:CheckedThrowable;
 
-    public def this(id:FinishResilient.Id, masterPlaceId:Int, parentId:Int,
+    public def this(id:FinishResilient.Id, masterPlaceId:Int, parentId:FinishResilient.Id,
             finSrc:Int, finKind:Int, ex:CheckedThrowable) {
         super(id, masterPlaceId, parentId);
         this.finSrc = finSrc;
         this.finKind = finKind;
         this.ex = ex;
     }
+    public def getFinSrc() = finSrc;
+    public def getFinKind() = finKind;
 }
