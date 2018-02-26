@@ -225,9 +225,8 @@ void x10aux::run_async_at(x10aux::place p, x10::lang::VoidFun_0_0* body_fun,
     x10rt_msg_params params = {x10rt_place(p), msg_id, bufCopy, sz};
 
     if (params.len >= 10) {
-        printf("Transmitting an async: size[%d] to place[%d] ref[%x %x %x %x %x %x %x %x %x %x...] copy[%x %x %x %x %x %x %x %x %x %x...]\n",
+        printf("Transmitting an async: size[%d] to place[%d] content[%x %x %x %x %x %x %x %x %x %x...]\n",
         		params.len, params.dest_place,
-				bufRef[0], bufRef[1], bufRef[2], bufRef[3], bufRef[4], bufRef[5], bufRef[6], bufRef[7], bufRef[8], bufRef[9],
 				bufCopy[0], bufCopy[1], bufCopy[2], bufCopy[3], bufCopy[4], bufCopy[5], bufCopy[6], bufCopy[7], bufCopy[8], bufCopy[9] );
     }
     else {
@@ -295,9 +294,8 @@ void x10aux::run_closure_at(x10aux::place p, x10::lang::VoidFun_0_0* body_fun,
 	x10rt_msg_params params = {x10rt_place(p), msg_id, bufCopy, sz};
 
 	if (params.len >= 10) {
-		printf("Transmitting an AT: size[%d] to place[%d] ref[%x %x %x %x %x %x %x %x %x %x...] copy[%x %x %x %x %x %x %x %x %x %x...]\n",
+		printf("Transmitting an AT: size[%d] to place[%d] content[%x %x %x %x %x %x %x %x %x %x...]\n",
 				params.len, params.dest_place,
-				bufRef[0], bufRef[1], bufRef[2], bufRef[3], bufRef[4], bufRef[5], bufRef[6], bufRef[7], bufRef[8], bufRef[9],
 				bufCopy[0], bufCopy[1], bufCopy[2], bufCopy[3], bufCopy[4], bufCopy[5], bufCopy[6], bufCopy[7], bufCopy[8], bufCopy[9] );
 	}
 	else {
