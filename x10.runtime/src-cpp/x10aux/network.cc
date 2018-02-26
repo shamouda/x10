@@ -223,10 +223,14 @@ void x10aux::run_async_at(x10aux::place p, x10::lang::VoidFun_0_0* body_fun,
 
     if (params.len >= 10) {
     	char* data = static_cast<char*>(params.msg);
-        printf("Transmitting an async: size[%d] to place[%d] content[%x %x %x %x %x %x %x %x %x %x ...]\n",
+        printf("Transmitting an async: size[%d] to place[%d] content[%x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x ...]\n",
         		params.len, params.dest_place,
-				data[0], data[1], data[2], data[3], data[4],
-				data[5], data[6], data[7], data[8], data[9]);
+        		data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9],
+				data[10], data[11], data[12], data[13], data[14], data[15], data[16], data[17], data[18], data[19],
+				data[20], data[21], data[22], data[23], data[24], data[25], data[26], data[27], data[28], data[29],
+				data[30], data[31], data[32], data[33], data[34], data[35], data[36], data[37], data[38], data[39],
+				data[40], data[41], data[42], data[43], data[44], data[45], data[46], data[47], data[48], data[49],
+				data[50], data[51], data[52], data[53], data[54], data[55], data[56], data[57], data[58], data[59]);
     }
     else {
     	printf("Transmitting an async: size[%d] to place[%d] content[%s]\n", params.len, params.dest_place,
@@ -330,11 +334,15 @@ static void receive_async (const x10rt_msg_params *p) {
             } catch (x10::lang::CheckedThrowable* e) {
                 if (!x10::xrx::Configuration::silenceInternalWarnings()) {
                     printf("WARNING from network.cc: Ignoring uncaught exception in @Immediate async. buf_size[%d] \n", p->len);
-                    if (p->len >= 10 ) {
+                    if (p->len >= 60 ) {
                     	char* data = static_cast<char*>(p->msg);
-                    	printf("WARNING2 from network.cc: received content [%x %x %x %x %x %x %x %x %x %x ...]\n",
-                    			data[0], data[1], data[2], data[3], data[4],
-								data[5], data[6], data[7], data[8], data[9]);
+                    	printf("WARNING2 from network.cc: received content [%x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x ...]\n",
+                    			data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9],
+								data[10], data[11], data[12], data[13], data[14], data[15], data[16], data[17], data[18], data[19],
+								data[20], data[21], data[22], data[23], data[24], data[25], data[26], data[27], data[28], data[29],
+								data[30], data[31], data[32], data[33], data[34], data[35], data[36], data[37], data[38], data[39],
+								data[40], data[41], data[42], data[43], data[44], data[45], data[46], data[47], data[48], data[49],
+								data[50], data[51], data[52], data[53], data[54], data[55], data[56], data[57], data[58], data[59]);
                     }
                     else {
                         printf("WARNING2 from network.cc: received buffer [%s]\n", static_cast<char*>(p->msg));
