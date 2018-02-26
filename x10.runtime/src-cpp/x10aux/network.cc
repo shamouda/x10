@@ -222,7 +222,7 @@ void x10aux::run_async_at(x10aux::place p, x10::lang::VoidFun_0_0* body_fun,
     x10rt_msg_params params = {x10rt_place(p), msg_id, buf.borrow(), sz};
 
     if (params.len >= 10) {
-    	char* data = static_cast<char*>params.msg;
+    	char* data = static_cast<char*>(params.msg);
         printf("Transmitting an async: size[%d] to place[%d] content[%c %c %c %c %c %c %c %c %c %c ...]\n",
         		params.len, params.dest_place,
 				data[0], data[1], data[2], data[3], data[4],
@@ -230,7 +230,7 @@ void x10aux::run_async_at(x10aux::place p, x10::lang::VoidFun_0_0* body_fun,
     }
     else {
     	printf("Transmitting an async: size[%d] to place[%d] content[%s]\n", params.len, params.dest_place,
-    			static_cast<char*>params.msg );
+    			static_cast<char*>(params.msg) );
     }
 
     x10rt_send_msg(&params);
