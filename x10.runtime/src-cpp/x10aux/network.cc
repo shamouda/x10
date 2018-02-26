@@ -224,16 +224,16 @@ void x10aux::run_async_at(x10aux::place p, x10::lang::VoidFun_0_0* body_fun,
     memcpy(static_cast <void *> (bufCopy), bufRef, sz);
     x10rt_msg_params params = {x10rt_place(p), msg_id, bufCopy, sz};
 
-    if (params.len >= 10) {
+    if (params.len >= 20000) {
         printf("Transmitting an async: size[%d] to place[%d] content[%x %x %x %x %x %x %x %x %x %x...]\n",
                 params.len, params.dest_place,
                 bufCopy[0], bufCopy[1], bufCopy[2], bufCopy[3], bufCopy[4], bufCopy[5], bufCopy[6], bufCopy[7], bufCopy[8], bufCopy[9] );
     }
-    else {
+/*    else {
         printf("Transmitting an async: size[%d] to place[%d] content[%s]\n", params.len, params.dest_place,
                 static_cast<char*>(params.msg) );
     }
-
+*/
     x10rt_send_msg(&params);
     if (prof!=NULL) {
         prof->FMGL(communicationNanos) += x10::lang::RuntimeNatives::nanoTime() - before_nanos;
@@ -293,15 +293,16 @@ void x10aux::run_closure_at(x10aux::place p, x10::lang::VoidFun_0_0* body_fun,
     memcpy(static_cast <void *> (bufCopy), bufRef, sz);
     x10rt_msg_params params = {x10rt_place(p), msg_id, bufCopy, sz};
 
-    if (params.len >= 10) {
+    if (params.len >= 20000) {
         printf("Transmitting an AT: size[%d] to place[%d] content[%x %x %x %x %x %x %x %x %x %x...]\n",
                 params.len, params.dest_place,
                 bufCopy[0], bufCopy[1], bufCopy[2], bufCopy[3], bufCopy[4], bufCopy[5], bufCopy[6], bufCopy[7], bufCopy[8], bufCopy[9] );
     }
-    else {
+/*    else {
         printf("Transmitting an AT: size[%d] to place[%d] content[%s]\n", params.len, params.dest_place,
                 static_cast<char*>(params.msg) );
     }
+*/
     x10rt_send_msg(&params);
 }
 
@@ -309,9 +310,20 @@ void x10aux::send_get (x10aux::place place, x10aux::serialization_id_t id_,
                        serialization_buffer &buf, void* srcAddr, void *dstAddr, x10aux::copy_sz len)
 {
     msg_type id = NetworkDispatcher::getMsgType(id_);
-    x10rt_msg_params p = { x10rt_place(place), id, buf.borrow(), buf.length()};
+
+    char* bufRef = static_cast<char*>(buf.borrow());
+    char* bufCopy = static_cast <char*> (malloc(buf.length()));
+    memcpy(static_cast <void *> (bufCopy), bufRef, buf.length());
+
+    x10rt_msg_params p = { x10rt_place(place), id, bufCopy, buf.length()};
     _X_(ANSI_BOLD<<ANSI_X10RT<<"Transmitting a get: "<<ANSI_RESET<<srcAddr<<" nid "<<id_<<" id "<<id
         <<" size "<<len<<" header "<<buf.length()<<" to place@addr: "<<place<<"@"<<dstAddr);
+
+    if (p.len >= 20000) {
+        printf("Transmitting a GET: size[%d] to place[%d] content[%x %x %x %x %x %x %x %x %x %x...]\n",
+                p.len, p.dest_place,
+                bufCopy[0], bufCopy[1], bufCopy[2], bufCopy[3], bufCopy[4], bufCopy[5], bufCopy[6], bufCopy[7], bufCopy[8], bufCopy[9] );
+    }
     x10rt_send_get(&p, srcAddr, dstAddr, len);
 }
 
@@ -319,9 +331,19 @@ void x10aux::send_put (x10aux::place place, x10aux::serialization_id_t id_,
                        serialization_buffer &buf, void *srcAddr, void *dstAddr, x10aux::copy_sz len)
 {
     msg_type id = NetworkDispatcher::getMsgType(id_);
-    x10rt_msg_params p = { x10rt_place(place), id, buf.borrow(), buf.length()};
+    char* bufRef = static_cast<char*>(buf.borrow());
+    char* bufCopy = static_cast <char*> (malloc(buf.length()));
+    memcpy(static_cast <void *> (bufCopy), bufRef, buf.length());
+
+    x10rt_msg_params p = { x10rt_place(place), id, bufCopy, buf.length()};
     _X_(ANSI_BOLD<<ANSI_X10RT<<"Transmitting a put: "<<ANSI_RESET<<srcAddr<<" nid "<<id_<<" id "<<id
         <<" size "<<len<<" header "<<buf.length()<<" to place@addr: "<<place<<"@"<<dstAddr);
+
+    if (p.len >= 20000) {
+        printf("Transmitting a PUT: size[%d] to place[%d] content[%x %x %x %x %x %x %x %x %x %x...]\n",
+        	p.len, p.dest_place,
+			bufCopy[0], bufCopy[1], bufCopy[2], bufCopy[3], bufCopy[4], bufCopy[5], bufCopy[6], bufCopy[7], bufCopy[8], bufCopy[9] );
+    }
     x10rt_send_put(&p, srcAddr, dstAddr, len);
 }
 
