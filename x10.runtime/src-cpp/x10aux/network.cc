@@ -220,7 +220,7 @@ void x10aux::run_async_at(x10aux::place p, x10::lang::VoidFun_0_0* body_fun,
         before_nanos = x10::lang::RuntimeNatives::nanoTime();
     }
     x10rt_msg_params params = {x10rt_place(p), msg_id, buf.borrow(), sz};
-    printf("Transmitting an async: size[%d] to place[%d] content[%s]\n", param.len, param.dest_place,  params.msg );
+    printf("Transmitting an async: size[%d] to place[%d] content[%s]\n", params.len, params.dest_place,  params.msg );
     x10rt_send_msg(&params);
     if (prof!=NULL) {
         prof->FMGL(communicationNanos) += x10::lang::RuntimeNatives::nanoTime() - before_nanos;
