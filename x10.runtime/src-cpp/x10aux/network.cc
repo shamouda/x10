@@ -222,11 +222,12 @@ void x10aux::run_async_at(x10aux::place p, x10::lang::VoidFun_0_0* body_fun,
     x10rt_msg_params params = {x10rt_place(p), msg_id, buf.borrow(), sz};
 
     if (params.len >= 10)
-        printf("Transmitting an async: size[%d] to place[%d] content[%c %c %c %c %c %c %c %c %c %c ...]\n", params.len, params.dest_place,
-        		params.msg[0], params.msg[1], params.msg[2], params.msg[3], params.msg[4],
-				params.msg[5], params.msg[6], params.msg[7], params.msg[8], params.msg[9]);
+        printf("Transmitting an async: size[%d] to place[%d] content[%c %c %c %c %c %c %c %c %c %c ...]\n",
+        		params.len, params.dest_place,
+        		(char)params.msg[0], (char)params.msg[1], (char)params.msg[2], (char)params.msg[3], (char)params.msg[4],
+				(char)params.msg[5], (char)params.msg[6], (char)params.msg[7], (char)params.msg[8], (char)params.msg[9]);
     else
-    	printf("Transmitting an async: size[%d] to place[%d] content[%s]\n", params.len, params.dest_place,  params.msg );
+    	printf("Transmitting an async: size[%d] to place[%d] content[%s]\n", params.len, params.dest_place, static_cast<char*>params.msg );
 
     x10rt_send_msg(&params);
     if (prof!=NULL) {
@@ -327,8 +328,8 @@ static void receive_async (const x10rt_msg_params *p) {
                     printf("WARNING from network.cc: Ignoring uncaught exception in @Immediate async. buf_size[%d] \n", p->len);
                     if (p->len >= 10 )
                     	printf("WARNING2 from network.cc: received buffer [%c %c %c %c %c %c %c %c %c %c]\n",
-                    			p->msg[0], p->msg[1], p->msg[2], p->msg[3], p->msg[4],
-								p->msg[5], p->msg[6], p->msg[7], p->msg[8], p->msg[9]);
+                    			(char)p->msg[0], (char)p->msg[1], (char)p->msg[2], (char)p->msg[3], (char)p->msg[4],
+								(char)p->msg[5], (char)p->msg[6], (char)p->msg[7], (char)p->msg[8], (char)p->msg[9]);
                     else
                         printf("WARNING2 from network.cc: received buffer [%s]\n", static_cast<char*>(p->msg));
                     e->printStackTrace();
