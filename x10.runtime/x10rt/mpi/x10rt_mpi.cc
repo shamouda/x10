@@ -1054,7 +1054,7 @@ void x10rt_net_send_get(x10rt_msg_params *p, void *srcAddr, void *dstAddr, x10rt
     x10rt_lgl_stats.get.messages_sent++ ;
     x10rt_lgl_stats.get.bytes_sent += 0;
 
-    int                 get_msg_len, get_msg_alloc_len;
+    int get_msg_len, get_msg_alloc_len;
     x10rt_start_get_req *get_msg;
     x10rt_get_req       get_req;
     assert(global_state.init);
