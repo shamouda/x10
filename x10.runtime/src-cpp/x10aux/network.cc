@@ -223,7 +223,7 @@ void x10aux::run_async_at(x10aux::place p, x10::lang::VoidFun_0_0* body_fun,
 
     if (params.len >= 10) {
     	char* data = static_cast<char*>(params.msg);
-        printf("Transmitting an async: size[%d] to place[%d] content[%c %c %c %c %c %c %c %c %c %c ...]\n",
+        printf("Transmitting an async: size[%d] to place[%d] content[%x %x %x %x %x %x %x %x %x %x ...]\n",
         		params.len, params.dest_place,
 				data[0], data[1], data[2], data[3], data[4],
 				data[5], data[6], data[7], data[8], data[9]);
@@ -332,7 +332,7 @@ static void receive_async (const x10rt_msg_params *p) {
                     printf("WARNING from network.cc: Ignoring uncaught exception in @Immediate async. buf_size[%d] \n", p->len);
                     if (p->len >= 10 ) {
                     	char* data = static_cast<char*>(p->msg);
-                    	printf("WARNING2 from network.cc: received buffer [%c %c %c %c %c %c %c %c %c %c]\n",
+                    	printf("WARNING2 from network.cc: received content [%x %x %x %x %x %x %x %x %x %x ...]\n",
                     			data[0], data[1], data[2], data[3], data[4],
 								data[5], data[6], data[7], data[8], data[9]);
                     }
