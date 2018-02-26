@@ -1590,8 +1590,8 @@ static bool x10rt_net_probe_ex (bool network_only) {
                  * discovered the PUT request, and the thread that has
                  * processed it, will post the corresponding receive.
                  */
-            	check_pending_sends();
                 if (!network_only) check_pending_receives();
+                check_pending_sends();
                 break;
             } else {
                 /* Don't need to post recv for incoming puts, they
@@ -1621,8 +1621,8 @@ static bool x10rt_net_probe_ex (bool network_only) {
                 if (!network_only) check_pending_receives();
             }
         } else {
-        	pendingMsgs |= check_pending_sends();
             if (!network_only) pendingMsgs |= check_pending_receives();
+            pendingMsgs |= check_pending_sends();
         }
     } while (arrived);
 
