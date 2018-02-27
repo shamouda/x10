@@ -165,6 +165,7 @@ void x10aux::run_async_at(x10aux::place p, x10::lang::VoidFun_0_0* body_fun,
         _X_(ANSI_BOLD<<ANSI_X10RT<<"Transmitting an async: "<<ANSI_RESET
             <<real_body->toString()->c_str()
             <<" nid "<<net_id<<" to place: "<<p);
+
     } else {
         _X_(ANSI_BOLD<<ANSI_X10RT<<"This is actually a kernel: "<<ANSI_RESET
             <<real_body->toString()->c_str()
@@ -219,21 +220,7 @@ void x10aux::run_async_at(x10aux::place p, x10::lang::VoidFun_0_0* body_fun,
     if (prof!=NULL) {
         before_nanos = x10::lang::RuntimeNatives::nanoTime();
     }
-    char* bufRef = static_cast<char*>(buf.borrow());
-    char* bufCopy = static_cast <char*> (malloc(sz));
-    memcpy(static_cast <void *> (bufCopy), bufRef, sz);
-    x10rt_msg_params params = {x10rt_place(p), msg_id, bufCopy, sz};
-
-    if (params.len >= 20000) {
-        printf("Transmitting an async: size[%d] to place[%d] content[%x %x %x %x %x %x %x %x %x %x...]\n",
-                params.len, params.dest_place,
-                bufCopy[0], bufCopy[1], bufCopy[2], bufCopy[3], bufCopy[4], bufCopy[5], bufCopy[6], bufCopy[7], bufCopy[8], bufCopy[9] );
-    }
-/*    else {
-        printf("Transmitting an async: size[%d] to place[%d] content[%s]\n", params.len, params.dest_place,
-                static_cast<char*>(params.msg) );
-    }
-*/
+    x10rt_msg_params params = {x10rt_place(p), msg_id, buf.borrow(), sz};
     x10rt_send_msg(&params);
     if (prof!=NULL) {
         prof->FMGL(communicationNanos) += x10::lang::RuntimeNatives::nanoTime() - before_nanos;
@@ -288,21 +275,7 @@ void x10aux::run_closure_at(x10aux::place p, x10::lang::VoidFun_0_0* body_fun,
         VoidFun_0_0::__apply(preSendAction);
     }
     
-    char* bufRef = static_cast<char*>(buf.borrow());
-    char* bufCopy = static_cast <char*> (malloc(sz));
-    memcpy(static_cast <void *> (bufCopy), bufRef, sz);
-    x10rt_msg_params params = {x10rt_place(p), msg_id, bufCopy, sz};
-
-    if (params.len >= 20000) {
-        printf("Transmitting an AT: size[%d] to place[%d] content[%x %x %x %x %x %x %x %x %x %x...]\n",
-                params.len, params.dest_place,
-                bufCopy[0], bufCopy[1], bufCopy[2], bufCopy[3], bufCopy[4], bufCopy[5], bufCopy[6], bufCopy[7], bufCopy[8], bufCopy[9] );
-    }
-/*    else {
-        printf("Transmitting an AT: size[%d] to place[%d] content[%s]\n", params.len, params.dest_place,
-                static_cast<char*>(params.msg) );
-    }
-*/
+    x10rt_msg_params params = {x10rt_place(p), msg_id, buf.borrow(), sz};
     x10rt_send_msg(&params);
 }
 
@@ -310,20 +283,9 @@ void x10aux::send_get (x10aux::place place, x10aux::serialization_id_t id_,
                        serialization_buffer &buf, void* srcAddr, void *dstAddr, x10aux::copy_sz len)
 {
     msg_type id = NetworkDispatcher::getMsgType(id_);
-
-    char* bufRef = static_cast<char*>(buf.borrow());
-    char* bufCopy = static_cast <char*> (malloc(buf.length()));
-    memcpy(static_cast <void *> (bufCopy), bufRef, buf.length());
-
-    x10rt_msg_params p = { x10rt_place(place), id, bufCopy, buf.length()};
+    x10rt_msg_params p = { x10rt_place(place), id, buf.borrow(), buf.length()};
     _X_(ANSI_BOLD<<ANSI_X10RT<<"Transmitting a get: "<<ANSI_RESET<<srcAddr<<" nid "<<id_<<" id "<<id
         <<" size "<<len<<" header "<<buf.length()<<" to place@addr: "<<place<<"@"<<dstAddr);
-
-    if (p.len >= 20000) {
-        printf("Transmitting a GET: size[%d] to place[%d] content[%x %x %x %x %x %x %x %x %x %x...]\n",
-                p.len, p.dest_place,
-                bufCopy[0], bufCopy[1], bufCopy[2], bufCopy[3], bufCopy[4], bufCopy[5], bufCopy[6], bufCopy[7], bufCopy[8], bufCopy[9] );
-    }
     x10rt_send_get(&p, srcAddr, dstAddr, len);
 }
 
@@ -331,19 +293,9 @@ void x10aux::send_put (x10aux::place place, x10aux::serialization_id_t id_,
                        serialization_buffer &buf, void *srcAddr, void *dstAddr, x10aux::copy_sz len)
 {
     msg_type id = NetworkDispatcher::getMsgType(id_);
-    char* bufRef = static_cast<char*>(buf.borrow());
-    char* bufCopy = static_cast <char*> (malloc(buf.length()));
-    memcpy(static_cast <void *> (bufCopy), bufRef, buf.length());
-
-    x10rt_msg_params p = { x10rt_place(place), id, bufCopy, buf.length()};
+    x10rt_msg_params p = { x10rt_place(place), id, buf.borrow(), buf.length()};
     _X_(ANSI_BOLD<<ANSI_X10RT<<"Transmitting a put: "<<ANSI_RESET<<srcAddr<<" nid "<<id_<<" id "<<id
         <<" size "<<len<<" header "<<buf.length()<<" to place@addr: "<<place<<"@"<<dstAddr);
-
-    if (p.len >= 20000) {
-        printf("Transmitting a PUT: size[%d] to place[%d] content[%x %x %x %x %x %x %x %x %x %x...]\n",
-        	p.len, p.dest_place,
-			bufCopy[0], bufCopy[1], bufCopy[2], bufCopy[3], bufCopy[4], bufCopy[5], bufCopy[6], bufCopy[7], bufCopy[8], bufCopy[9] );
-    }
     x10rt_send_put(&p, srcAddr, dstAddr, len);
 }
 
@@ -365,20 +317,7 @@ static void receive_async (const x10rt_msg_params *p) {
                 x10aux::dealloc(body);
             } catch (x10::lang::CheckedThrowable* e) {
                 if (!x10::xrx::Configuration::silenceInternalWarnings()) {
-                    printf("WARNING from network.cc: Ignoring uncaught exception in @Immediate async.\n");
-                    if (p->len >= 60 ) {
-                        char* data = static_cast<char*>(p->msg);
-                        printf("WARNING2 from network.cc: received size[%d] content[%x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x ...]\n",
-                            p->len,
-                            data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9],
-                            data[10], data[11], data[12], data[13], data[14], data[15], data[16], data[17], data[18], data[19],
-                            data[20], data[21], data[22], data[23], data[24], data[25], data[26], data[27], data[28], data[29],
-                            data[30], data[31], data[32], data[33], data[34], data[35], data[36], data[37], data[38], data[39],
-                            data[40], data[41], data[42], data[43], data[44], data[45], data[46], data[47], data[48], data[49],
-                            data[50], data[51], data[52], data[53], data[54], data[55], data[56], data[57], data[58], data[59]);
-                    } else {
-                        printf("WARNING2 from network.cc: received size[%d] content[%s]\n", p->len, static_cast<char*>(p->msg));
-                    }
+                    printf("WARNING: Ignoring uncaught exception in @Immediate async.");
                     e->printStackTrace();
                 }
             }
@@ -575,8 +514,8 @@ x10::lang::VoidFun_0_1<x10::lang::Place>* place_removed_handler = NULL;
 
 // Called by the network layer to trigger a callback upon detecting a place failure. //
 void x10aux::notify_place_death(unsigned int pl) {
-    if (place_removed_handler != NULL)
-        VoidFun_0_1<x10::lang::Place>::__apply(place_removed_handler, x10::lang::Place::_make(x10rt_place(pl)));
+	if (place_removed_handler != NULL)
+	    VoidFun_0_1<x10::lang::Place>::__apply(place_removed_handler, x10::lang::Place::_make(x10rt_place(pl)));
 }
 
 // Called by System.registerPlaceRemovedHandler to register a callback method //
