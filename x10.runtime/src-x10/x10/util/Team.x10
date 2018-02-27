@@ -683,7 +683,7 @@ public struct Team {
      * @param op The operation to perform
      */
     public def allreduce[T](src:Rail[T], src_off:Long, dst:Rail[T], dst_off:Long, count:Long, op:Int):void {
-        if (DEBUG) Runtime.println("TEAMWARNING:" here + " allreduce[T] called ");
+        if (DEBUG) Runtime.println("TEAMWARNING:" + here + " allreduce[T] called ");
         checkBounds(src_off+count-1, src.size);
         checkBounds(dst_off+count-1, dst.size); 
         state(id).collective_impl[T](LocalTeamState.COLL_ALLREDUCE, state(id).places(0), src, src_off, dst, dst_off, count, op, null, null);
@@ -731,7 +731,7 @@ public struct Team {
      * Implementation of allreduce for builtin struct types (Int, Double etc.)
      */
     private def allreduce_builtin[T](src:Rail[T], src_off:Long, dst:Rail[T], dst_off:Long, count:Long, op:Int):void {
-        if (DEBUG) Runtime.println("TEAMWARNING2:" here + " allreduce_builtin[T] called ");
+        if (DEBUG) Runtime.println("TEAMWARNING2:" + here + " allreduce_builtin[T] called ");
         checkBounds(src_off+count-1, src.size);
         checkBounds(dst_off+count-1, dst.size);
         
