@@ -44,6 +44,7 @@ public class TestGhost {
                     //Console.OUT.println(here + " issued asyncCopy to " + place);
                 }
             }
+            Console.OUT.println(here + " completed iter "+iter+" ...");
         }
         
         Console.OUT.println(here + " finished sending data, validating ...");
