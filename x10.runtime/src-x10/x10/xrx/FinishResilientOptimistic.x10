@@ -377,8 +377,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
             val parentId = UNASSIGNED;
             val req = FinishRequest.makeOptTermRequest(id, parentId, DUMMY_INT, DUMMY_INT, srcId, dstId, kind, t);
-            if (DISABLE_NONBLOCKING_REPLICATION)
-                FinishReplicator.exec(req, null);
+            if (DISABLE_NONBLOCKING_REPLICATION) {
+                Runtime.submitUncounted( ()=>{
+                    FinishReplicator.exec(req, null);
+                });
+            }
             else
                 FinishReplicator.asyncExec(req, null);
             if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
@@ -403,8 +406,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
 
             if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root");
             val req = FinishRequest.makeOptTermMulRequest(id, dstId, map);
-            if (DISABLE_NONBLOCKING_REPLICATION)
-                FinishReplicator.exec(req, null);
+            if (DISABLE_NONBLOCKING_REPLICATION) {
+                Runtime.submitUncounted( ()=>{
+                    FinishReplicator.exec(req, null);
+                });
+            }
             else
                 FinishReplicator.asyncExec(req, null);
             if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
@@ -920,8 +926,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val dstId = here.id as Int;
             if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
             val req = FinishRequest.makeOptTermRequest(id, parentId, finSrc.id as Int, finKind, srcId, dstId, kind, t);
-            if (DISABLE_NONBLOCKING_REPLICATION)
-                FinishReplicator.exec(req, this);
+            if (DISABLE_NONBLOCKING_REPLICATION) {
+                Runtime.submitUncounted( ()=>{
+                    FinishReplicator.exec(req, this);
+                });
+            }
             else
                 FinishReplicator.asyncExec(req, this);
             if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
