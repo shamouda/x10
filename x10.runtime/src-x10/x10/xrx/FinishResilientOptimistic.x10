@@ -295,6 +295,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def spawnRemoteActivity(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
+            if (DISABLE_NONBLOCKING_REPLICATION)
+                super.spawnRemoteActivity(dstPlace, body, prof);
+            else
+                spawnRemoteActivityNBRep(dstPlace, body, prof);
+        }
+        
+        def spawnRemoteActivityNBRep(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
             val kind = ASYNC;
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
@@ -372,7 +379,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
             val parentId = UNASSIGNED;
             val req = FinishRequest.makeOptTermRequest(id, parentId, DUMMY_INT, DUMMY_INT, srcId, dstId, kind, t);
-            FinishReplicator.asyncExec(req, null);
+            if (DISABLE_NONBLOCKING_REPLICATION)
+                FinishReplicator.exec(req, null);
+            else
+                FinishReplicator.asyncExec(req, null);
             if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
         }
 
@@ -395,7 +405,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
 
             if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root");
             val req = FinishRequest.makeOptTermMulRequest(id, dstId, map);
-            FinishReplicator.asyncExec(req, null);
+            if (DISABLE_NONBLOCKING_REPLICATION)
+                FinishReplicator.exec(req, null);
+            else
+                FinishReplicator.asyncExec(req, null);
             if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
         }
         
@@ -425,7 +438,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 return;
             if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root");
             val req = FinishRequest.makeOptTermMulRequest(id, dstId, map);
-            FinishReplicator.asyncExec(req, null);
+            if (DISABLE_NONBLOCKING_REPLICATION)
+                FinishReplicator.exec(req, null);
+            else
+                FinishReplicator.asyncExec(req, null);
             if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning");
         }
 
@@ -735,7 +751,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             
             if (verbose>=1) debug(">>>> Master(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+finKind+") called");
             val req = FinishRequest.makeOptSimulatedTermRequest(parentId, srcId, dstId, finKind, dpe);
-            FinishReplicator.asyncExec(req, null);
+            if (DISABLE_NONBLOCKING_REPLICATION)
+                FinishReplicator.exec(req, null);
+            else
+                FinishReplicator.asyncExec(req, null);
             if (verbose>=1) debug("<<<< Master(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+finKind+") returning");
         }
         
@@ -839,6 +858,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def spawnRemoteActivity(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
+            if (DISABLE_NONBLOCKING_REPLICATION)
+                super.spawnRemoteActivity(dstPlace, body, prof);
+            else
+                spawnRemoteActivityNBRep(dstPlace, body, prof);
+        }
+        
+        def spawnRemoteActivityNBR(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
             val kind = ASYNC;
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
@@ -903,7 +929,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val dstId = here.id as Int;
             if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
             val req = FinishRequest.makeOptTermRequest(id, parentId, finSrc.id as Int, finKind, srcId, dstId, kind, t);
-            FinishReplicator.asyncExec(req, this);
+            if (DISABLE_NONBLOCKING_REPLICATION)
+                FinishReplicator.exec(req, this);
+            else
+                FinishReplicator.asyncExec(req, this);
             if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
         }
 
@@ -951,7 +980,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }
             if (verbose>=1) debug("==== Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
             val req = FinishRequest.makeOptTermRequest(id, parentId, finSrc.id as Int, finKind, srcId, dstId, kind, null);
-            FinishReplicator.asyncExec(req, this);
+            if (DISABLE_NONBLOCKING_REPLICATION)
+                FinishReplicator.exec(req, this);
+            else
+                FinishReplicator.asyncExec(req, this);
             if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
         }
         
