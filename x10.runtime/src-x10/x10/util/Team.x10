@@ -731,7 +731,10 @@ public struct Team {
      */
     private def allreduce_builtin[T](src:Rail[T], src_off:Long, dst:Rail[T], dst_off:Long, count:Long, op:Int):void {
         checkBounds(src_off+count-1, src.size);
-        checkBounds(dst_off+count-1, dst.size); 
+        checkBounds(dst_off+count-1, dst.size);
+        
+        if (DEBUG) Runtime.println(here + "collective support = collectiveSupportLevel");
+        
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES) {
             if (DEBUG) Runtime.println(here + " entering native allreduce on team "+id);
             finish nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
