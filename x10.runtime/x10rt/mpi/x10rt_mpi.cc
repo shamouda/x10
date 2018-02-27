@@ -49,9 +49,15 @@
 
 #if MPI_VERSION >= 3 || (defined(OPEN_MPI) && ( OMPI_MAJOR_VERSION >= 2 || (OMPI_MAJOR_VERSION == 1 && OMPI_MINOR_VERSION >= 8))) || (defined(MVAPICH2_NUMVERSION) && MVAPICH2_NUMVERSION == 10900002)
 #define X10RT_NONBLOCKING_SUPPORTED true
+#ifdef OPEN_MPI_ULFM
+#define ULFM2 true
+#endif
 //#define X10RT_MPI3_RMA true   // performance hasn't been shown to be better than active messages, so disabled by default.  Uncomment this line to use RDMA for PUT & GET
 #else
 #define X10RT_NONBLOCKING_SUPPORTED false
+#ifdef OPEN_MPI_ULFM
+#define ULFM1 true
+#endif
 #endif
 
 #define X10RT_NET_DEBUG(fmt, ...) do { \
@@ -542,8 +548,8 @@ x10rt_error x10rt_net_init(int *argc, char ** *argv, x10rt_msg_type *counter) {
         }
     } else {
         char *thread_serialized = getenv(X10RT_MPI_THREAD_SERIALIZED);
-#ifdef OPEN_MPI_ULFM
-        thread_serialized = "1"; //ULFM does not support MPI_THREAD_MULTIPLE
+#ifdef ULFM1
+        thread_serialized = "1"; //ULFM1 does not support MPI_THREAD_MULTIPLE
 #endif
         int level_required;
         int level_provided;
@@ -1642,7 +1648,7 @@ bool x10rt_net_agreement_support (void) {
 }
 
 x10rt_coll_type x10rt_net_coll_support () {
-#ifndef OPEN_MPI_ULFM
+#ifndef ULFM1
     if (global_state.report_nonblocking_coll)
 	    return X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES;
 	else
@@ -2993,7 +2999,7 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
 #define SAVED(var) \
      cpe.env.MPI_COLLECTIVE_NAME.var
 #define MPI_COLLECTIVE_POSTPROCESS_END X10RT_NET_DEBUG("%s: %"PRIxPTR"_%"PRIxPTR,"end postprocess", SAVED(ch), SAVED(arg));
-#elif defined(OPEN_MPI_ULFM)
+#elif defined(ULFM1)
 #define MPI_COLLECTIVE(name, iname, ...) \
     CollectivePostprocessEnv cpe; \
     do { LOCK_IF_MPI_IS_NOT_MULTITHREADED; \
