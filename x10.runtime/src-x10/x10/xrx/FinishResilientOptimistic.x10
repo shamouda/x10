@@ -68,7 +68,12 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     def notifyActivityTermination(srcPlace:Place):void { me.notifyActivityTermination(srcPlace); }
     def notifyShiftedActivityCompletion(srcPlace:Place):void { me.notifyShiftedActivityCompletion(srcPlace); }
     def waitForFinish():void { me.waitForFinish(); }
-    def spawnRemoteActivity(place:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void { me.spawnRemoteActivity(place, body, prof); }
+    def spawnRemoteActivity(place:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
+        if (DISABLE_NONBLOCKING_REPLICATION)
+            super.spawnRemoteActivity(place, body, prof);
+        else
+            me.spawnRemoteActivity(place, body, prof); 
+    }
     
     //create root finish
     public def this (parent:FinishState, src:Place, kind:Int) {
@@ -295,13 +300,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def spawnRemoteActivity(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
-            if (DISABLE_NONBLOCKING_REPLICATION)
-                super.spawnRemoteActivity(dstPlace, body, prof);
-            else
-                spawnRemoteActivityNBRep(dstPlace, body, prof);
-        }
-        
-        def spawnRemoteActivityNBRep(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
             val kind = ASYNC;
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
@@ -858,13 +856,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def spawnRemoteActivity(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
-            if (DISABLE_NONBLOCKING_REPLICATION)
-                super.spawnRemoteActivity(dstPlace, body, prof);
-            else
-                spawnRemoteActivityNBRep(dstPlace, body, prof);
-        }
-        
-        def spawnRemoteActivityNBRep(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
             val kind = ASYNC;
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
