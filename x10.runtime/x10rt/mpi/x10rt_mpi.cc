@@ -1479,17 +1479,17 @@ static bool check_pending_receives() {
                     break;
 #ifndef X10RT_MPI3_RMA
                 case X10RT_REQ_TYPE_GET_INCOMING_DATA:
-                    get_incoming_data_completion(q, req);
+                    get_incoming_data_completion(q, req); //ends up calling Rail.cc Rail_get_notifier
                     break;
                 case X10RT_REQ_TYPE_GET_INCOMING_REQ:
-                    get_incoming_req_completion(msg_status.MPI_SOURCE, q, req);
+                    get_incoming_req_completion(msg_status.MPI_SOURCE, q, req); // issues isend to send the data
                     break;
                 case X10RT_REQ_TYPE_PUT_INCOMING_DATA:
-                    put_incoming_data_completion(q, req);
+                    put_incoming_data_completion(q, req); //ends up calling Rail.cc Rail_put_notifier
                     break;
 #endif
                 case X10RT_REQ_TYPE_PUT_INCOMING_REQ:
-                    put_incoming_req_completion(msg_status.MPI_SOURCE, q, req);
+                    put_incoming_req_completion(msg_status.MPI_SOURCE, q, req); // issues irecv to receive the data
                     break;
                 default:
                     fprintf(stderr, "[%s:%d] Unknown completion of type %d, exiting\n",
