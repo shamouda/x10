@@ -1,4 +1,5 @@
 public class TestGhost {
+    private static val ITERATIONS:Long = System.getenv("GHOST_ITER") == null ? 100 : Long.parseLong(System.getenv("GHOST_ITER"));
     
     public static def main (args:Rail[String]) {
         val home = Place(0);
@@ -33,15 +34,18 @@ public class TestGhost {
             }
         }
         Console.OUT.println(here + " finished obtaining global rails");
-        
+
         val src = broadcastRail;
-        finish {
-            for (place in places) {
-                val dst = remoteRecvBuffers(place.id);
-                Rail.asyncCopy(src, 0, dst, 0, size);
-                Console.OUT.println(here + " issued asyncCopy to " + place);
+        for (iter in 1..ITERATIONS) {
+            finish {
+                for (place in places) {
+                    val dst = remoteRecvBuffers(place.id);
+                    Rail.asyncCopy(src, 0, dst, 0, size);
+                    //Console.OUT.println(here + " issued asyncCopy to " + place);
+                }
             }
         }
+        
         Console.OUT.println(here + " finished sending data, validating ...");
         
         finish {
