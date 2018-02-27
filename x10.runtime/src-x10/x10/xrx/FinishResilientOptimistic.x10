@@ -864,7 +864,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 spawnRemoteActivityNBRep(dstPlace, body, prof);
         }
         
-        def spawnRemoteActivityNBR(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
+        def spawnRemoteActivityNBRep(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
             val kind = ASYNC;
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
