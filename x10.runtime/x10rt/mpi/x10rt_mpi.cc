@@ -3649,7 +3649,7 @@ static void x10rt_net_handler_alltoallv (struct CollectivePostprocessEnv cpe) {
 bool x10rt_net_agree (x10rt_team team, x10rt_place role, const int *sbuf, int *dbuf, x10rt_completion_handler *errch,
         x10rt_completion_handler *ch, void *arg)
 {
-#ifdef OPEN_MPI_ULFM
+#ifdef ULFM1 //OPEN_MPI_ULFM FIXME: use agreement in ULFM2
 #define MPI_COLLECTIVE_NAME agree
     assert(global_state.init);
     assert(!global_state.finalized);
