@@ -3674,7 +3674,7 @@ bool x10rt_net_agree (x10rt_team team, x10rt_place role, const int *sbuf, int *d
 }
 
 static void x10rt_net_handler_agree(CollectivePostprocessEnv cpe) {
-#ifdef OPEN_MPI_ULFM
+#ifdef ULFM1 //OPEN_MPI_ULFM FIXME use agree in ULFM2
     if (is_process_failure_error(cpe.mpiError))
     	SAVED(errch)(SAVED(arg));
     else
