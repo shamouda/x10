@@ -556,7 +556,7 @@ x10rt_error x10rt_net_init(int *argc, char ** *argv, x10rt_msg_type *counter) {
         }
     } else {
         char *thread_serialized = getenv(X10RT_MPI_THREAD_SERIALIZED);
-#ifdef ULFM1
+#ifdef OPEN_MPI_ULFM
         thread_serialized = "1"; //ULFM1 does not support MPI_THREAD_MULTIPLE
 #endif
         int level_required;
