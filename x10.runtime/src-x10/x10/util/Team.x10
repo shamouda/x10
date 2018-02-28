@@ -229,8 +229,8 @@ public struct Team {
     
     
     private static def nativeAgree (id:Int, role:Int, src:Rail[Int], dst:Rail[Int]) : void {
-        //TODO: support Java
-        @Native("c++", "x10rt_agree(id, role, src->raw, dst->raw, ::x10aux::coll_handler, ::x10aux::coll_enter())")
+        //FIXME: support Java
+        @Native("c++", "x10rt_agree(id, role, src->raw, dst->raw, ::x10aux::coll_handler, ::x10aux::coll_enter())") {}
     }
 
     /** Blocks until all members have received their part of root's array.
@@ -315,13 +315,13 @@ public struct Team {
     }
     
     private static def nativeScatterv[T] (id:Int, role:Int, root:Int, src:Rail[T], src_off:Int, scounts:Rail[Int], soffsets:Rail[Int], dst:Rail[T], dst_off:Int) : void {
-	    //TODO: not supported for Java
+	    //FIXME: support Java
     	//@Native("java", "x10.x10rt.TeamSupport.nativeScatterv(id, role, root, ...);")
-	    @Native("c++", "x10rt_scatterv(id, role, root, src->raw, soffsets->raw, scounts->raw, &dst->raw[dst_off], &scounts->raw[role], sizeof(TPMGL(T)), ::x10aux::coll_handler, ::x10aux::coll_enter())")    
+	    @Native("c++", "x10rt_scatterv(id, role, root, src->raw, soffsets->raw, scounts->raw, &dst->raw[dst_off], &scounts->raw[role], sizeof(TPMGL(T)), ::x10aux::coll_handler, ::x10aux::coll_enter())") {}    
     }
     
     
-    //TODO: not supported for Java or PAMI
+    //FIXME: support Java and PAMI
     public def gather[T] (root:Place, src:Rail[T], src_off:Long, dst:Rail[T], dst_off:Long, count:Long) : void {
         if (CompilerFlags.checkBounds() && here == root) checkBounds(dst_off + (size() * count) -1, dst.size);
         checkBounds(src_off+count-1, src.size); 
@@ -335,7 +335,7 @@ public struct Team {
             state(id).collective_impl[T](LocalTeamState.COLL_GATHER, root, src, src_off, dst, dst_off, count, 0n, null, null);
     }
     
-    //TODO: not supported for Java or PAMI
+    //FIXME: support Java and PAMI
     private static def nativeGather[T] (id:Int, role:Int, root:Int, src:Rail[T], src_off:Int, dst:Rail[T], dst_off:Int, count:Int) : void {
         //@Native("java", "x10.x10rt.TeamSupport.nativeGather(id, role, root, src, src_off, dst, dst_off, count);")
         @Native("c++", "x10rt_gather(id, role, root, &src->raw[src_off], &dst->raw[dst_off], sizeof(TPMGL(T)), count, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
@@ -381,9 +381,9 @@ public struct Team {
     }
     
     private static def nativeGatherv[T] (id:Int, role:Int, root:Int, src:Rail[T], src_off:Int, dst:Rail[T], dst_off:Int, dcounts:Rail[Int], doffsets:Rail[Int]) : void {
-        //TODO: not supported for Java
+        //FIXME: support Java
         //@Native("java", "x10.x10rt.TeamSupport.nativeGatherv(id, role, root, ...);")
-        @Native("c++", "x10rt_gatherv(id, role, root, &src->raw[src_off], dcounts->raw[role], dst->raw, doffsets->raw, dcounts->raw, sizeof(TPMGL(T)), ::x10aux::coll_handler, ::x10aux::coll_enter())")
+        @Native("c++", "x10rt_gatherv(id, role, root, &src->raw[src_off], dcounts->raw[role], dst->raw, doffsets->raw, dcounts->raw, sizeof(TPMGL(T)), ::x10aux::coll_handler, ::x10aux::coll_enter())") {}
     }
     
     /** Blocks until all members have received root's array.
