@@ -471,6 +471,7 @@ void x10aux::coll_handler(void *arg) {
 //used with ULFM, called only when a collective has failed due to a process failure
 void x10aux::failed_coll_handler(void *arg) {
     x10::xrx::FinishState* fs = (x10::xrx::FinishState*)arg;
+    fs->pushException(x10::lang::DeadPlaceException_make("[Native] Team contains at least one dead member"));
     fs->notifyActivityTermination(x10::lang::Place::_make(x10aux::here));
 }
 
