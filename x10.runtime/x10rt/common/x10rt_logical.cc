@@ -1074,7 +1074,7 @@ void x10rt_lgl_bcast (x10rt_team team, x10rt_place role,
                       size_t el, size_t count,
                       x10rt_completion_handler *ch, void *arg)
 {
-    ESCAPE_IF_ERR_BOOL;
+    ESCAPE_IF_ERR;
     if (has_collectives >= X10RT_COLL_ALLBLOCKINGCOLLECTIVES) {
         x10rt_net_bcast(team, role, root, sbuf, dbuf, el, count, ch, arg);
     } else {
@@ -1103,7 +1103,7 @@ void x10rt_lgl_scatterv (x10rt_team team, x10rt_place role,
                         size_t el,
                         x10rt_completion_handler *ch, void *arg)
 {
-    ESCAPE_IF_ERR_BOOL;
+    ESCAPE_IF_ERR;
     if (has_collectives >= X10RT_COLL_ALLBLOCKINGCOLLECTIVES) {
         x10rt_net_scatterv(team, role, root, sbuf, soffsets, scounts, dbuf, dcount, el, ch, arg);
     } else {
@@ -1116,7 +1116,7 @@ void x10rt_lgl_agree (x10rt_team team, x10rt_place role,
                              const int *sbuf, int *dbuf,
                              x10rt_completion_handler *ch, void *arg)
 {
-    ESCAPE_IF_ERR_BOOL;
+    ESCAPE_IF_ERR;
     if (x10rt_lgl_agreement_support()) {
         x10rt_net_agree(team, role, sbuf, dbuf, ch, arg);
     }
@@ -1142,7 +1142,7 @@ void x10rt_lgl_gatherv (x10rt_team team, x10rt_place role, x10rt_place root,
 		               size_t el,
 		               x10rt_completion_handler *ch, void *arg)
 {
-	ESCAPE_IF_ERR_BOOL;
+	ESCAPE_IF_ERR;
 	if (has_collectives >= X10RT_COLL_ALLBLOCKINGCOLLECTIVES) {
 	    x10rt_net_gatherv(team, role, root, sbuf, scount, dbuf, doffsets, dcounts, el, ch, arg);
 	} else {
@@ -1188,7 +1188,7 @@ void x10rt_lgl_allreduce (x10rt_team team, x10rt_place role,
                           size_t count,
                           x10rt_completion_handler *ch, void *arg)
 {
-	ESCAPE_IF_ERR_BOOL;
+	ESCAPE_IF_ERR;
     if (has_collectives >= X10RT_COLL_ALLBLOCKINGCOLLECTIVES) {
         x10rt_net_allreduce(team, role, sbuf, dbuf, op, dtype, count, ch, arg);
     } else {
