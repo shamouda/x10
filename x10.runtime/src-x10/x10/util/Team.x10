@@ -197,21 +197,17 @@ public struct Team {
         @Native("c++", "x10rt_barrier(id, role, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
     }
     
-    public def barrierIgnoreExceptions () : void {
-        try{
-            barrier();
-        }catch(ex:Exception){
-            if ( DEBUGINTERNALS) Console.OUT.println(here+" Ignoring barrier exception: " + ex.getMessage());
-        }
-    }
-    
     public def preBlockingBarrierIgnoreExceptions () : void {
         try{
             barrier();
-            state(id).preBlockingBarrier[Int](state(id).places(0));
         }catch(ex:Exception){
             if ( DEBUGINTERNALS) Console.OUT.println(here+" Ignoring barrier exception: " + ex.getMessage());
         }
+        try{
+            state(id).preBlockingBarrier[Int](state(id).places(0));
+        } catch(ex:Exception){
+            if ( DEBUGINTERNALS) Console.OUT.println(here+" Ignoring barrier exception: " + ex.getMessage());
+        }    
     }
     
     /** Either agree on a flag or throw a DPE at all team places */
@@ -222,7 +218,7 @@ public struct Team {
             if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
                 finish nativeAgree(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
             else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-                barrierIgnoreExceptions();
+                preBlockingBarrierIgnoreExceptions();
                 val success = nativeAgree(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
                 if (!success)
                     throw new DeadPlaceException("[Native] Team "+id+" contains at least one dead member");
@@ -262,7 +258,7 @@ public struct Team {
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
             finish nativeScatter(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);        
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-            barrierIgnoreExceptions();
+            preBlockingBarrierIgnoreExceptions();
             nativeScatter(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
         }
         else
@@ -310,7 +306,7 @@ public struct Team {
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
             finish nativeScatterv(id, my_role, root.id() as Int, src, src_off as Int, scounts, soffsets, dst, dst_off as Int);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-            barrierIgnoreExceptions();
+            preBlockingBarrierIgnoreExceptions();
             val success = nativeScatterv(id, my_role, root.id() as Int, src, src_off as Int, scounts, soffsets, dst, dst_off as Int);
             if (!success)
                 throw new DeadPlaceException("[Native] Team "+id+" contains at least one dead member");
@@ -333,7 +329,7 @@ public struct Team {
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
             finish nativeGather(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-            barrierIgnoreExceptions();
+            preBlockingBarrierIgnoreExceptions();
             nativeGather(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
         }
         else
@@ -377,7 +373,7 @@ public struct Team {
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
             finish nativeGatherv(id, my_role, root.id() as Int, src, src_off as Int, dst, dst_off as Int, dcounts, doffsets);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-            barrierIgnoreExceptions();
+            preBlockingBarrierIgnoreExceptions();
             val success = nativeGatherv(id, my_role, root.id() as Int, src, src_off as Int, dst, dst_off as Int, dcounts, doffsets);
             if (!success)
                 throw new DeadPlaceException("[Native] Team "+id+" contains at least one dead member");
@@ -412,7 +408,6 @@ public struct Team {
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
             finish nativeBcast(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-            //barrierIgnoreExceptions();
             preBlockingBarrierIgnoreExceptions();
             val success = nativeBcast(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
             if (!success)
@@ -454,7 +449,7 @@ public struct Team {
             finish nativeAlltoall(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int);
         } else /*if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) */ {
             if (DEBUG) Runtime.println(here + " entering pre-alltoall barrier of team "+id);
-            barrierIgnoreExceptions();
+            preBlockingBarrierIgnoreExceptions();
             if (DEBUG) Runtime.println(here + " entering native alltoall of team "+id);
             nativeAlltoall(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int);
         }
@@ -563,7 +558,7 @@ public struct Team {
             finish nativeReduce(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int, op);
         } else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             if (DEBUG) Runtime.println(here + " entering pre-reduce barrier on team "+id);
-            barrierIgnoreExceptions();
+            preBlockingBarrierIgnoreExceptions();
             if (DEBUG) Runtime.println(here + " entering native reduce on team "+id);
             nativeReduce(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int, op);
             if (DEBUG) Runtime.println(here + " Finished native reduce on team "+id);
@@ -742,7 +737,6 @@ public struct Team {
             finish nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
         } else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             if (DEBUG) Runtime.println(here + " entering pre-allreduce barrier on team "+id);
-            //barrierIgnoreExceptions();
             preBlockingBarrierIgnoreExceptions();
             if (DEBUG) Runtime.println(here + " entering native allreduce on team "+id);
             val success = nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
@@ -863,7 +857,7 @@ public struct Team {
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
             finish nativeIndexOfMax(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-            barrierIgnoreExceptions();
+            preBlockingBarrierIgnoreExceptions();
             nativeIndexOfMax(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
         }
         else
@@ -890,7 +884,7 @@ public struct Team {
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
             finish nativeIndexOfMin(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-            barrierIgnoreExceptions();
+            preBlockingBarrierIgnoreExceptions();
             nativeIndexOfMin(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
         }
         else
@@ -958,7 +952,7 @@ public struct Team {
             // now that we have a PlaceGroup for the new team, create it
             if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
                 if (DEBUGINTERNALS) Runtime.println(here + " calling pre-native split barrier on team "+id+" color="+color+" new_role="+new_role);
-                barrierIgnoreExceptions();
+                preBlockingBarrierIgnoreExceptions();
                 if (DEBUGINTERNALS) Runtime.println(here + " calling native split on team "+id+" color="+color+" new_role="+new_role);
                 nativeSplit(id, id==0n?here.id() as Int:Team.roles(id), color, new_role as Int, result);
                 if (DEBUG) Runtime.println(here + " finished native split on team "+id+" color="+color+" new_role="+new_role);
@@ -984,7 +978,7 @@ public struct Team {
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
             finish nativeDel(id, id==0n?here.id() as Int:Team.roles(id));
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-            barrierIgnoreExceptions();
+            preBlockingBarrierIgnoreExceptions();
             nativeDel(id, id==0n?here.id() as Int:Team.roles(id));
         }
         // TODO - see if there is something useful to delete with the local team implementation
