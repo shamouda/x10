@@ -744,7 +744,7 @@ namespace {
     };
 }
 
-static void scatter_after_barrier (void *arg)
+static void scatter_after_barrier (void *arg, bool dummy)
 {
     MemberObj &m = *(static_cast<MemberObj*>(arg));
     TeamObj &t = *gtdb[m.team];
@@ -782,7 +782,7 @@ static void scatter_after_barrier (void *arg)
         // the barrier must have completed or we wouldn't even be here
         // signal completion to root role
         if (m.scatter.ch != NULL) {
-            m.scatter.ch(m.scatter.arg);
+            m.scatter.ch(m.scatter.arg, false);
         }
 
     } else {
@@ -792,7 +792,7 @@ static void scatter_after_barrier (void *arg)
         m.scatter.barrier_done = true;
         if (m.scatter.data_done && m.scatter.ch != NULL) {
             PREEMPT (global_lock);
-            m.scatter.ch(m.scatter.arg);
+            m.scatter.ch(m.scatter.arg, false);
         }
     }
 }
@@ -882,7 +882,7 @@ bool x10rt_emu_bcast (x10rt_team team, x10rt_place role,
 }
 
 
-static void alltoall_intermediate (void *arg)
+static void alltoall_intermediate (void *arg, bool dummy)
 {
     MemberObj &m = *(static_cast<MemberObj*>(arg));
 
