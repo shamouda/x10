@@ -2133,15 +2133,12 @@ static bool test_and_call_handler(struct CollectivePostprocess & cp) {
     assert(!global_state.finalized);
 
     int complete = 0;
-
     LOCK_IF_MPI_IS_NOT_MULTITHREADED;
-    if (MPI_SUCCESS != MPI_Test(&cp.req,
-                &complete,
-                MPI_STATUS_IGNORE)) {
-    }
+    int errCode = MPI_Test(&cp.req, &complete, MPI_STATUS_IGNORE);
     UNLOCK_IF_MPI_IS_NOT_MULTITHREADED;
 
     if (complete) {
+    	cp.env.mpiError = errCode;
         cp.handler(cp.env);
         cp.req = MPI_REQUEST_NULL;
         /*
