@@ -2976,8 +2976,13 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
 
 #if defined(MVAPICH2_NUMVERSION) && MVAPICH2_NUMVERSION == 10900002
 #define MPI_NONBLOCKING_COLLECTIVE_NAME(stem) MPIX_##stem
+#define MPI_BLOCKING_COLLECTIVE_NAME(stem) MPI_##stem
+#elif defined(AGREEMENT_COLL)
+#define MPI_NONBLOCKING_COLLECTIVE_NAME(stem) MPIX_##stem
+#define MPI_BLOCKING_COLLECTIVE_NAME(stem) MPIX_##stem
 #else
 #define MPI_NONBLOCKING_COLLECTIVE_NAME(stem) MPI_##stem
+#define MPI_BLOCKING_COLLECTIVE_NAME(stem) MPI_##stem
 #endif
 #define CONCAT(a,b) CONCAT_I(a,b)
 #define CONCAT_I(a,b) a##b
@@ -3011,7 +3016,7 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
 #define MPI_COLLECTIVE(name, iname, ...) \
     CollectivePostprocessEnv cpe; \
     do { LOCK_IF_MPI_IS_NOT_MULTITHREADED; \
-        cpe.mpiError = MPI_##name(__VA_ARGS__); \
+        cpe.mpiError = MPI_BLOCKING_COLLECTIVE_NAME(name)(__VA_ARGS__); \
         if (MPI_SUCCESS != cpe.mpiError && !is_process_failure_error(cpe.mpiError)) { \
             fprintf(stderr, "[%s:%d] %s\n", \
                     __FILE__, __LINE__, "Error in MPI_" #name); \
@@ -3625,7 +3630,8 @@ static void x10rt_net_handler_alltoallv (struct CollectivePostprocessEnv cpe) {
 bool x10rt_net_agree (x10rt_team team, x10rt_place role, const int *sbuf, int *dbuf, x10rt_completion_handler *errch,
         x10rt_completion_handler *ch, void *arg)
 {
-#ifdef ULFM1 //OPEN_MPI_ULFM FIXME: use agreement in ULFM2
+#define AGREEMENT_COLL true
+#ifdef OPEN_MPI_ULFM
 #define MPI_COLLECTIVE_NAME agree
     assert(global_state.init);
     assert(!global_state.finalized);
@@ -3647,10 +3653,11 @@ bool x10rt_net_agree (x10rt_team team, x10rt_place role, const int *sbuf, int *d
 #else
 	return false;
 #endif
+#undef AGREEMENT_COLL
 }
 
 static void x10rt_net_handler_agree(CollectivePostprocessEnv cpe) {
-#ifdef ULFM1 //OPEN_MPI_ULFM FIXME use agree in ULFM2
+#ifdef OPEN_MPI_ULFM
     if (is_process_failure_error(cpe.mpiError))
     	SAVED(errch)(SAVED(arg));
     else
