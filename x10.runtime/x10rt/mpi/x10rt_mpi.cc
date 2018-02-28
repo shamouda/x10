@@ -162,13 +162,21 @@ static inline void release_lock(pthread_mutex_t * lock) {
         release_lock(&global_state.lock);       \
 }
 
+
 #ifdef OPEN_MPI_ULFM
 void mpiErrorHandler(MPI_Comm * comm, int *errorCode, ...);
-static inline int is_process_failure_error(int mpi_error){
-	return mpi_error == MPI_ERR_PROC_FAILED ||
-		mpi_error == MPI_ERR_REVOKED;
-}
 #endif
+
+static inline int is_process_failure_error(int mpi_error){
+#ifdef OPEN_MPI_ULFM
+	return mpi_error == MPI_ERR_PROC_FAILED ||
+		mpi_error == MPI_ERR_PROC_FAILED_PENDING ||
+		mpi_error == MPI_ERR_REVOKED;
+#else
+	return false;
+#endif
+}
+
 /**
  * Each X10RT API call is broken down into
  * a X10RT request. Each request of either 
@@ -3004,19 +3012,11 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
     CollectivePostprocessEnv cpe; \
     do { LOCK_IF_MPI_IS_NOT_MULTITHREADED; \
         cpe.mpiError = MPI_##name(__VA_ARGS__); \
-#ifdef OPEN_MPI_ULFM
         if (MPI_SUCCESS != cpe.mpiError && !is_process_failure_error(cpe.mpiError)) { \
             fprintf(stderr, "[%s:%d] %s\n", \
                     __FILE__, __LINE__, "Error in MPI_" #name); \
             abort(); \
         } \
-#else
-        if (MPI_SUCCESS != MPI_##name(__VA_ARGS__)) { \
-            fprintf(stderr, "[%s:%d] %s\n", \
-                    __FILE__, __LINE__, "Error in MPI_" #name); \
-            abort(); \
-        } \
-#endif
         UNLOCK_IF_MPI_IS_NOT_MULTITHREADED; \
     } while(0)
 #define MPI_COLLECTIVE_SAVE(var) \
