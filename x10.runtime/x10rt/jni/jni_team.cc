@@ -111,7 +111,7 @@ typedef struct finishOnlyStruct {
     jobject globalFinishState;
 } finishOnlyStruct;
 
-static void finishOnlyCallback(void *arg) {
+static void finishOnlyCallback(void *arg, bool dummy) {
     finishOnlyStruct* callbackArg = (finishOnlyStruct*)arg;
     JNIEnv *env = jniHelper_getEnv();
 
