@@ -166,7 +166,7 @@ typedef struct postCopyStruct {
     void *dstData;
 } postCopyStruct;
 
-static void postCopyCallback(void *arg) {
+static void postCopyCallback(void *arg, bool dummy) {
     postCopyStruct *callbackArg = (postCopyStruct*)arg;
     JNIEnv *env = jniHelper_getEnv();
 
@@ -429,7 +429,7 @@ JNIEXPORT void JNICALL Java_x10_x10rt_TeamSupport_nativeScatterImpl(JNIEnv *env,
  * Method:    nativeBcastImpl
  * Signature: (IIILjava/lang/Object;ILjava/lang/Object;IIILx10/lang/FinishState;)V
  */
-JNIEXPORT jobject JNICALL Java_x10_x10rt_TeamSupport_nativeBcastImpl(JNIEnv *env, jclass klazz,
+JNIEXPORT void JNICALL Java_x10_x10rt_TeamSupport_nativeBcastImpl(JNIEnv *env, jclass klazz,
                                                                       jint id, jint role, jint root,
                                                                       jobject src, jint src_off,
                                                                       jobject dst, jint dst_off,
@@ -578,7 +578,7 @@ JNIEXPORT jobject JNICALL Java_x10_x10rt_TeamSupport_nativeBcastImpl(JNIEnv *env
     callbackArg->srcData = srcData;
     callbackArg->dstData = dstData;
 
-    return (jobject)x10rt_bcast(id, role, root, srcData, dstData, el, count, &postCopyCallback, &postCopyCallback, callbackArg);
+    x10rt_bcast(id, role, root, srcData, dstData, el, count, &postCopyCallback, callbackArg);
 }
 
 
@@ -854,7 +854,7 @@ JNIEXPORT void JNICALL Java_x10_x10rt_TeamSupport_nativeReduceImpl(JNIEnv *env, 
  * Method:    nativeAllReduceImpl
  * Signature: (IILjava/lang/Object;ILjava/lang/Object;IIIILx10/lang/FinishState;)V
  */
-JNIEXPORT jobject JNICALL Java_x10_x10rt_TeamSupport_nativeAllReduceImpl(JNIEnv *env, jclass klazz,
+JNIEXPORT void JNICALL Java_x10_x10rt_TeamSupport_nativeAllReduceImpl(JNIEnv *env, jclass klazz,
                                                                       jint id, jint role,
                                                                       jobject src, jint src_off,
                                                                       jobject dst, jint dst_off,
@@ -954,9 +954,8 @@ JNIEXPORT jobject JNICALL Java_x10_x10rt_TeamSupport_nativeAllReduceImpl(JNIEnv 
     callbackArg->srcData = srcData;
     callbackArg->dstData = dstData;
 
-    //FIXME: how to call the correct failure call back?
-    return (jobject)x10rt_allreduce(id, role, srcData, dstData, (x10rt_red_op_type)op, (x10rt_red_type)typecode,
-                    count, &postCopyCallback, &postCopyCallback, callbackArg);
+    x10rt_allreduce(id, role, srcData, dstData, (x10rt_red_op_type)op, (x10rt_red_type)typecode,
+                    count, &postCopyCallback, callbackArg);
 }
 
 
@@ -1024,7 +1023,7 @@ static void indexOfImpl(JNIEnv *env, jint id, jint role,
     callbackArg->srcData = srcData;
     callbackArg->dstData = dstData;
 
-    x10rt_allreduce(id, role, srcData, dstData, op, X10RT_RED_TYPE_DBL_S32, 1, &minmaxCallback, &minmaxCallback, callbackArg);
+    x10rt_allreduce(id, role, srcData, dstData, op, X10RT_RED_TYPE_DBL_S32, 1, &minmaxCallback, callbackArg);
 }
 
 
