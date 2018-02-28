@@ -2220,7 +2220,8 @@ struct CounterWithLock {
     pthread_mutex_t lock;
 };
 
-static void x10rt_net_one_setter (void *arg)
+/*dummy parameter added because x10rt_completion_handler has two parameters*/
+static void x10rt_net_one_setter (void *arg, bool dummy)
 { *((int*)arg) = 1; }
 
 static CounterWithLock *new_counter(int count) {
