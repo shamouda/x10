@@ -2976,13 +2976,8 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
 
 #if defined(MVAPICH2_NUMVERSION) && MVAPICH2_NUMVERSION == 10900002
 #define MPI_NONBLOCKING_COLLECTIVE_NAME(stem) MPIX_##stem
-#define MPI_BLOCKING_COLLECTIVE_NAME(stem) MPI_##stem
-#elif defined(AGREEMENT_COLL)
-#define MPI_NONBLOCKING_COLLECTIVE_NAME(stem) MPIX_##stem
-#define MPI_BLOCKING_COLLECTIVE_NAME(stem) MPIX_##stem
 #else
 #define MPI_NONBLOCKING_COLLECTIVE_NAME(stem) MPI_##stem
-#define MPI_BLOCKING_COLLECTIVE_NAME(stem) MPI_##stem
 #endif
 #define CONCAT(a,b) CONCAT_I(a,b)
 #define CONCAT_I(a,b) a##b
@@ -2996,6 +2991,17 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
      MPI_Request &req = cp->req; \
      LOCK_IF_MPI_IS_NOT_MULTITHREADED; \
      if (MPI_SUCCESS != MPI_NONBLOCKING_COLLECTIVE_NAME(iname)(__VA_ARGS__, &req)) { \
+         fprintf(stderr, "[%s:%d] %s\n", \
+                 __FILE__, __LINE__, "Error in MPI_" #iname); \
+         abort(); \
+     } \
+     UNLOCK_IF_MPI_IS_NOT_MULTITHREADED;
+#define MPI_AGREEMENT_COLLECTIVE(name, iname, ...) \
+     CollectivePostprocess *cp = new CollectivePostprocess(); \
+     struct CollectivePostprocessEnv cpe = cp->env; \
+     MPI_Request &req = cp->req; \
+     LOCK_IF_MPI_IS_NOT_MULTITHREADED; \
+     if (MPI_SUCCESS != MPIX_Comm_iagree(__VA_ARGS__, &req)) { \
          fprintf(stderr, "[%s:%d] %s\n", \
                  __FILE__, __LINE__, "Error in MPI_" #iname); \
          abort(); \
@@ -3016,7 +3022,18 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
 #define MPI_COLLECTIVE(name, iname, ...) \
     CollectivePostprocessEnv cpe; \
     do { LOCK_IF_MPI_IS_NOT_MULTITHREADED; \
-        cpe.mpiError = MPI_BLOCKING_COLLECTIVE_NAME(name)(__VA_ARGS__); \
+        cpe.mpiError = MPI_##name(__VA_ARGS__); \
+        if (MPI_SUCCESS != cpe.mpiError && !is_process_failure_error(cpe.mpiError)) { \
+            fprintf(stderr, "[%s:%d] %s\n", \
+                    __FILE__, __LINE__, "Error in MPI_" #name); \
+            abort(); \
+        } \
+        UNLOCK_IF_MPI_IS_NOT_MULTITHREADED; \
+    } while(0)
+#define MPI_AGREEMENT_COLLECTIVE(name, iname, ...) \
+    CollectivePostprocessEnv cpe; \
+    do { LOCK_IF_MPI_IS_NOT_MULTITHREADED; \
+        cpe.mpiError = MPIX_Comm_agree(__VA_ARGS__); \
         if (MPI_SUCCESS != cpe.mpiError && !is_process_failure_error(cpe.mpiError)) { \
             fprintf(stderr, "[%s:%d] %s\n", \
                     __FILE__, __LINE__, "Error in MPI_" #name); \
@@ -3036,6 +3053,7 @@ MPI_Op mpi_red_op_type(x10rt_red_type dtype, x10rt_red_op_type op) {
      cpe.env.MPI_COLLECTIVE_NAME.var
 #define MPI_COLLECTIVE_POSTPROCESS_END X10RT_NET_DEBUG("calling blocking collective completed, mpi_return_code is: %d", cpe.mpiError);
 #endif
+
 
 static void x10rt_net_handler_barrier(CollectivePostprocessEnv);
 static void x10rt_net_handler_bcast(CollectivePostprocessEnv);
@@ -3631,14 +3649,13 @@ bool x10rt_net_agree (x10rt_team team, x10rt_place role, const int *sbuf, int *d
         x10rt_completion_handler *ch, void *arg)
 {
 #ifdef OPEN_MPI_ULFM
-#define AGREEMENT_COLL true
 #define MPI_COLLECTIVE_NAME agree
     assert(global_state.init);
     assert(!global_state.finalized);
     MPI_Comm comm = mpi_tdb.comm(team);
     dbuf[0] = sbuf[0];
     
-    MPI_COLLECTIVE("agree", "igree", comm, dbuf);
+    MPI_AGREEMENT_COLLECTIVE("agree", "igree", comm, dbuf);
     
     MPI_COLLECTIVE_SAVE(team);
     MPI_COLLECTIVE_SAVE(role);
@@ -3663,7 +3680,6 @@ static void x10rt_net_handler_agree(CollectivePostprocessEnv cpe) {
     	SAVED(ch)(SAVED(arg));
     MPI_COLLECTIVE_POSTPROCESS_END
 #undef MPI_COLLECTIVE_NAME
-#undef AGREEMENT_COLL
 #endif
 }
 
