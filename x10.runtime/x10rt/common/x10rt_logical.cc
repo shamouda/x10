@@ -101,7 +101,7 @@ static x10rt_error fatal (const char *format, ...)
 x10rt_stats x10rt_lgl_stats;
 
 
-static void one_setter (void *arg)
+static void one_setter (void *arg, bool dummy)
 { *((int*)arg) = 1; }
 
 const char *x10rt_lgl_error_msg (void) {
