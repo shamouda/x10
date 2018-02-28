@@ -739,9 +739,9 @@ public struct Team {
             if (DEBUG) Runtime.println(here + " entering pre-allreduce barrier on team "+id);
             preBlockingBarrierIgnoreExceptions();
             if (DEBUG) Runtime.println(here + " entering native allreduce on team "+id);
-            val success = nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
-            if (!success)
-                throw new DeadPlaceException("[Native] Team "+id+" contains at least one dead member");
+            finish nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
+            /*if (!success)
+                throw new DeadPlaceException("[Native] Team "+id+" contains at least one dead member");*/
         } else {
             if (DEBUG) Runtime.println(here + " entering Team.x10 allreduce on team "+id);
             state(id).collective_impl[T](LocalTeamState.COLL_ALLREDUCE, state(id).places(0), src, src_off, dst, dst_off, count, op, null, null);
