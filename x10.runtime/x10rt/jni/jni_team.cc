@@ -975,7 +975,7 @@ typedef struct minmaxStruct {
     DoubleIdx *dstData;
 } minmaxStruct;
 
-static void minmaxCallback(void *arg) {
+static void minmaxCallback(void *arg, bool dummy) {
     minmaxStruct *callbackArg = (minmaxStruct*)arg;
     JNIEnv *env = jniHelper_getEnv();
 
