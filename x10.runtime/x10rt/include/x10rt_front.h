@@ -967,7 +967,7 @@ X10RT_C void x10rt_allreduce (x10rt_team team, x10rt_place role,
  *
  * \param arg User pointer that is passed to the completion handler
  */
-X10RT_C bool x10rt_agree (x10rt_team team, x10rt_place role,
+X10RT_C void x10rt_agree (x10rt_team team, x10rt_place role,
                              const int *sbuf, int *dbuf,
                              x10rt_completion_handler *ch, void *arg);
 
