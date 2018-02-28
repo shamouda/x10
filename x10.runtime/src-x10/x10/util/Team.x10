@@ -227,9 +227,11 @@ public struct Team {
         return dst(0);
     }
     
-    //TODO: support Java
-    @Native("c++", "x10rt_agree(#id, #role, #src->raw, #dst->raw, ::x10aux::failed_coll_handler, ::x10aux::coll_handler, ::x10aux::coll_enter())")
-    private static def nativeAgree (id:Int, role:Int, src:Rail[Int], dst:Rail[Int]) :Boolean = false;
+    
+    private static def nativeAgree (id:Int, role:Int, src:Rail[Int], dst:Rail[Int]) : void {
+        //TODO: support Java
+        @Native("c++", "x10rt_agree(id, role, src->raw, dst->raw, ::x10aux::coll_handler, ::x10aux::coll_enter())")
+    }
 
     /** Blocks until all members have received their part of root's array.
      * Each member receives a contiguous and distinct portion of the src array.
@@ -312,10 +314,11 @@ public struct Team {
         }
     }
     
-    //TODO: not supported for Java
-    //@Native("java", "x10.x10rt.TeamSupport.nativeScatterv(id, role, root, ...);")
-    @Native("c++", "x10rt_scatterv(#id, #role, #root, #src->raw, #soffsets->raw, #scounts->raw, &(#dst)->raw[#dst_off], #scounts->raw[#role], sizeof(TPMGL(T)), ::x10aux::failed_coll_handler, ::x10aux::coll_handler, ::x10aux::coll_enter())")
-    private static def nativeScatterv[T] (id:Int, role:Int, root:Int, src:Rail[T], src_off:Int, scounts:Rail[Int], soffsets:Rail[Int], dst:Rail[T], dst_off:Int):Boolean = false;
+    private static def nativeScatterv[T] (id:Int, role:Int, root:Int, src:Rail[T], src_off:Int, scounts:Rail[Int], soffsets:Rail[Int], dst:Rail[T], dst_off:Int) : void {
+	    //TODO: not supported for Java
+    	//@Native("java", "x10.x10rt.TeamSupport.nativeScatterv(id, role, root, ...);")
+	    @Native("c++", "x10rt_scatterv(id, role, root, src->raw, soffsets->raw, scounts->raw, &dst->raw[dst_off], &scounts->raw[role], sizeof(TPMGL(T)), ::x10aux::coll_handler, ::x10aux::coll_enter())")    
+    }
     
     
     //TODO: not supported for Java or PAMI
@@ -377,10 +380,11 @@ public struct Team {
         }
     }
     
-    //TODO: not supported for Java
-    //@Native("java", "x10.x10rt.TeamSupport.nativeGatherv(id, role, root, ...);")
-    @Native("c++", "x10rt_gatherv(#id, #role, #root, &(#src)->raw[#src_off], #dcounts->raw[#role], #dst->raw, #doffsets->raw, #dcounts->raw, sizeof(TPMGL(T)), ::x10aux::failed_coll_handler, ::x10aux::coll_handler, ::x10aux::coll_enter())")
-    private static def nativeGatherv[T] (id:Int, role:Int, root:Int, src:Rail[T], src_off:Int, dst:Rail[T], dst_off:Int, dcounts:Rail[Int], doffsets:Rail[Int]) : Boolean = false;
+    private static def nativeGatherv[T] (id:Int, role:Int, root:Int, src:Rail[T], src_off:Int, dst:Rail[T], dst_off:Int, dcounts:Rail[Int], doffsets:Rail[Int]) : void {
+        //TODO: not supported for Java
+        //@Native("java", "x10.x10rt.TeamSupport.nativeGatherv(id, role, root, ...);")
+        @Native("c++", "x10rt_gatherv(id, role, root, &src->raw[src_off], dcounts->raw[role], dst->raw, doffsets->raw, dcounts->raw, sizeof(TPMGL(T)), ::x10aux::coll_handler, ::x10aux::coll_enter())")
+    }
     
     /** Blocks until all members have received root's array.
      *
@@ -409,9 +413,10 @@ public struct Team {
              state(id).collective_impl[T](LocalTeamState.COLL_BROADCAST, root, src, src_off, dst, dst_off, count, 0n, null, null);
     }
 
-    @Native("java", "x10.x10rt.TeamSupport.nativeBcast(#id, #role, #root, #src, #src_off, #dst, #dst_off, #count)")
-    @Native("c++", "x10rt_bcast(#id, #role, #root, &(#src)->raw[#src_off], &(#dst)->raw[#dst_off], sizeof(TPMGL(T)), #count, ::x10aux::failed_coll_handler, ::x10aux::coll_handler, ::x10aux::coll_enter())")
-    private static def nativeBcast[T] (id:Int, role:Int, root:Int, src:Rail[T], src_off:Int, dst:Rail[T], dst_off:Int, count:Int) : Boolean = false;
+    private static def nativeBcast[T] (id:Int, role:Int, root:Int, src:Rail[T], src_off:Int, dst:Rail[T], dst_off:Int, count:Int) : void {
+        @Native("java", "x10.x10rt.TeamSupport.nativeBcast(id, role, root, src, src_off, dst, dst_off, count);")
+        @Native("c++", "x10rt_bcast(id, role, root, &src->raw[src_off], &dst->raw[dst_off], sizeof(TPMGL(T)), count, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
+    }
 
     /** Blocks until all members have received their part of each other member's array.
      * Each member receives a contiguous and distinct portion of the src array.
@@ -739,9 +744,10 @@ public struct Team {
         if (DEBUG) Runtime.println(here + " Finished allreduce on team "+id);
     }
 
-    @Native("java", "x10.x10rt.TeamSupport.nativeAllReduce(#id, #role, #src, #src_off, #dst, #dst_off, #count, #op)")
-    @Native("c++", "x10rt_allreduce(#id, #role, &(#src)->raw[#src_off], &(#dst)->raw[#dst_off], (x10rt_red_op_type)(#op), x10rt_get_red_type<TPMGL(T)>(), #count, ::x10aux::failed_coll_handler, ::x10aux::coll_handler,::x10aux::coll_enter())")
-    private static def nativeAllreduce[T](id:Int, role:Int, src:Rail[T], src_off:Int, dst:Rail[T], dst_off:Int, count:Int, op:Int):Boolean = false;
+    private static def nativeAllreduce[T](id:Int, role:Int, src:Rail[T], src_off:Int, dst:Rail[T], dst_off:Int, count:Int, op:Int) : void {
+        @Native("java", "x10.x10rt.TeamSupport.nativeAllReduce(id, role, src, src_off, dst, dst_off, count, op);")
+        @Native("c++", "x10rt_allreduce(id, role, &src->raw[src_off], &dst->raw[dst_off], (x10rt_red_op_type)op, x10rt_get_red_type<TPMGL(T)>(), count, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
+    }
 
     /** Performs a reduction on a single value, returning the result */
     public def allreduce (src:Boolean, op:Int):Boolean {
@@ -830,7 +836,7 @@ public struct Team {
 
     private static def nativeAllreduce[T](id:Int, role:Int, src:Rail[T], dst:Rail[T], op:Int) : void {
         @Native("java", "x10.x10rt.TeamSupport.nativeAllReduce(id, role, src, 0, dst, 0, 1, op);")
-        @Native("c++", "x10rt_allreduce(id, role, src->raw, dst->raw, (x10rt_red_op_type)op, x10rt_get_red_type<TPMGL(T)>(), 1, ::x10aux::failed_coll_handler, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
+        @Native("c++", "x10rt_allreduce(id, role, src->raw, dst->raw, (x10rt_red_op_type)op, x10rt_get_red_type<TPMGL(T)>(), 1, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
     }
 
     /** This operation blocks until all members have received the computed result.  
@@ -857,7 +863,7 @@ public struct Team {
 
     private static def nativeIndexOfMax(id:Int, role:Int, src:Rail[DoubleIdx], dst:Rail[DoubleIdx]) : void {
         @Native("java", "x10.x10rt.TeamSupport.nativeIndexOfMax(id, role, src, dst);")
-        @Native("c++", "x10rt_allreduce(id, role, src->raw, dst->raw, X10RT_RED_OP_MAX, X10RT_RED_TYPE_DBL_S32, 1, ::x10aux::failed_coll_handler, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
+        @Native("c++", "x10rt_allreduce(id, role, src->raw, dst->raw, X10RT_RED_OP_MAX, X10RT_RED_TYPE_DBL_S32, 1, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
     }
 
     /** This operation blocks until all members have received the computed result.  
@@ -884,7 +890,7 @@ public struct Team {
 
     private static def nativeIndexOfMin(id:Int, role:Int, src:Rail[DoubleIdx], dst:Rail[DoubleIdx]) : void {
         @Native("java", "x10.x10rt.TeamSupport.nativeIndexOfMin(id, role, src, dst);")
-        @Native("c++", "x10rt_allreduce(id, role, src->raw, dst->raw, X10RT_RED_OP_MIN, X10RT_RED_TYPE_DBL_S32, 1, ::x10aux::failed_coll_handler, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
+        @Native("c++", "x10rt_allreduce(id, role, src->raw, dst->raw, X10RT_RED_OP_MIN, X10RT_RED_TYPE_DBL_S32, 1, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
     }
 
     /** Create new teams by subdividing an existing team.  This is called by each member

@@ -835,7 +835,6 @@ bool  x10rt_emu_scatterv (x10rt_team team, x10rt_place role,
       	                  x10rt_place root, const void *sbuf,
       	                  const void *soffsets, const void *scounts,
       	                  void *dbuf, size_t dcount, size_t el,
-      	                  x10rt_completion_handler *errch,
       	                  x10rt_completion_handler *ch, void *arg)
 {
 	abort(); //not used by Team.x10
@@ -852,7 +851,6 @@ void x10rt_emu_gather (x10rt_team team, x10rt_place role,
 bool x10rt_emu_gatherv (x10rt_team team, x10rt_place role, x10rt_place root,
 		                const void *sbuf, size_t scount, void *dbuf,
 		                const void *doffsets, const void *dcounts, size_t el,
-		                x10rt_completion_handler *errch,
 		                x10rt_completion_handler *ch, void *arg)
 {
 	abort(); //not used by Team.x10
@@ -861,7 +859,6 @@ bool x10rt_emu_gatherv (x10rt_team team, x10rt_place role, x10rt_place root,
 bool x10rt_emu_bcast (x10rt_team team, x10rt_place role,
                       x10rt_place root, const void *sbuf, void *dbuf,
                       size_t el, size_t count,
-                      x10rt_completion_handler *errch,
                       x10rt_completion_handler *ch, void *arg)
 {
     TeamObj &t = *gtdb[team];
