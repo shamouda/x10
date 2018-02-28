@@ -3638,7 +3638,7 @@ bool x10rt_net_agree (x10rt_team team, x10rt_place role, const int *sbuf, int *d
     MPI_Comm comm = mpi_tdb.comm(team);
     dbuf[0] = sbuf[0];
     
-    MPI_AGREEMENT_COLLECTIVE("agree", "igree", comm, dbuf);
+    MPI_COLLECTIVE("agree", "igree", comm, dbuf);
     
     MPI_COLLECTIVE_SAVE(team);
     MPI_COLLECTIVE_SAVE(role);
