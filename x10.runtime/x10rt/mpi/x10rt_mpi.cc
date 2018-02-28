@@ -3630,8 +3630,8 @@ static void x10rt_net_handler_alltoallv (struct CollectivePostprocessEnv cpe) {
 bool x10rt_net_agree (x10rt_team team, x10rt_place role, const int *sbuf, int *dbuf, x10rt_completion_handler *errch,
         x10rt_completion_handler *ch, void *arg)
 {
-#define AGREEMENT_COLL true
 #ifdef OPEN_MPI_ULFM
+#define AGREEMENT_COLL true
 #define MPI_COLLECTIVE_NAME agree
     assert(global_state.init);
     assert(!global_state.finalized);
@@ -3653,7 +3653,6 @@ bool x10rt_net_agree (x10rt_team team, x10rt_place role, const int *sbuf, int *d
 #else
 	return false;
 #endif
-#undef AGREEMENT_COLL
 }
 
 static void x10rt_net_handler_agree(CollectivePostprocessEnv cpe) {
@@ -3664,6 +3663,7 @@ static void x10rt_net_handler_agree(CollectivePostprocessEnv cpe) {
     	SAVED(ch)(SAVED(arg));
     MPI_COLLECTIVE_POSTPROCESS_END
 #undef MPI_COLLECTIVE_NAME
+#undef AGREEMENT_COLL
 #endif
 }
 
