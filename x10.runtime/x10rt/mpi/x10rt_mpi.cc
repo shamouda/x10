@@ -2572,7 +2572,7 @@ static void team_callback_recv (const x10rt_msg_params *p)
 
     x10rt_completion_handler *ch = reinterpret_cast<x10rt_completion_handler*>(ch_);
     void *arg = reinterpret_cast<void*>(arg_);
-    ch(arg);
+    ch(arg, false);
     free(cont);
 }
 
@@ -2646,7 +2646,7 @@ static void x10rt_net_team_barrier_for_blocking (x10rt_place placec, x10rt_place
     x10rt_serbuf_free(&b);
     */
 
-    ch(arg);
+    ch(arg, false);
 
     X10RT_NET_DEBUG("%s", "finished");
 }
@@ -2701,7 +2701,7 @@ void x10rt_net_team_del (x10rt_team team, x10rt_place role,
 {
     X10RT_NET_DEBUG("team=%d, role=%d", team, role);
     mpi_tdb.releaseTeam(team);
-   ch(arg);
+    ch(arg, false);
     return;
 }
 
@@ -2745,7 +2745,7 @@ void x10rt_net_team_members (x10rt_team team, x10rt_place *members, x10rt_comple
 
     MPI_Group_free(&MPI_GROUP_WORLD);
     MPI_Group_free(&grp);
-    ch(arg);
+    ch(arg, false);
 }
 
 x10rt_place x10rt_net_team_sz (x10rt_team team)
