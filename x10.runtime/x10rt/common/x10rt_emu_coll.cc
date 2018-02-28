@@ -1073,7 +1073,7 @@ namespace {
     };
 
     template<x10rt_red_op_type op, x10rt_red_type dtype>
-    void reduce3 (void *arg)
+    void reduce3 (void *arg, bool dummy)
     {
         MemberObj &m = *(static_cast<MemberObj*>(arg));
 
