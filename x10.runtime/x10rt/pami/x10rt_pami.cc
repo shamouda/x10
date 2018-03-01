@@ -1748,7 +1748,7 @@ static void collective_operation_complete (pami_context_t   context,
 	#ifdef DEBUG
 		fprintf(stderr, "Place %u completed collective operation. cookie=%p\n", state.myPlaceId, cookie);
 	#endif
-	cbd->tcb(cbd->arg);
+	cbd->tcb(cbd->arg, false);
 	free(cbd->counts);
 	free(cbd->offsets);
 	free(cbd);
