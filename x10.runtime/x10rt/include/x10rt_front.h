@@ -974,7 +974,7 @@ X10RT_C void x10rt_agree (x10rt_team team, x10rt_place role,
 /** Sets arg to 1.
  * \param arg Assumed to be an int*
  */
-X10RT_C void x10rt_one_setter (void *arg);
+X10RT_C void x10rt_one_setter (void *arg, bool throwDPE);
 
 /** Sets arg to the given team.
  * \param v The new team is passed in here
