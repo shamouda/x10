@@ -406,7 +406,7 @@ void x10rt_emu_team_del (x10rt_team team, x10rt_place role, x10rt_completion_han
 {
     assert(gtdb[team]->placev[role] == x10rt_net_here());
     gtdb.releaseTeam(team);
-    ch(arg);
+    ch(arg, false);
 }
 
 namespace {
@@ -519,7 +519,7 @@ static void reduce_c_to_p_update_recv (const x10rt_msg_params *p)
 	}
 	m.reduce.rbuf = recv;
 	if (m.reduce.started) {
-		m.reduce.ch(m.reduce.arg);
+		m.reduce.ch(m.reduce.arg, false);
 	}
 	//fprintf(stderr, "%d: Decrementing child from %d to %d\n", (int)role, (int) m.barrier.wait, (int) m.barrier.wait-1);
 	m.barrier.childToReceive--;
@@ -672,7 +672,7 @@ bool CollOp::progress (void)
                 }
                 safe_free(this);
                 m.bcast.count = 0;  // bcast completed
-                m.barrier.ch(m.barrier.arg);
+                m.barrier.ch(m.barrier.arg, false);
                 return true;
             }
         }
@@ -684,12 +684,12 @@ void CollOp::handlePendingReduce(MemberObj *m) {
     if (m->reduce.count > 0) {
         SYNCHRONIZED (global_lock);
         if (m->reduce.rbuf != NULL) {
-            m->reduce.ch(m->reduce.arg);
+            m->reduce.ch(m->reduce.arg, false);
         }
         if (m->reduce.rbuf2 != NULL) {
             m->reduce.rbuf = m->reduce.rbuf2;
             m->reduce.rbuf2 = NULL;
-            m->reduce.ch(m->reduce.arg);
+            m->reduce.ch(m->reduce.arg, false);
         }
     }
 }
@@ -733,7 +733,7 @@ static void scatter_copy_recv (const x10rt_msg_params *p)
     m.scatter.data_done = true;
     if (m.scatter.barrier_done && m.scatter.ch != NULL) {
         PREEMPT (global_lock);
-        m.scatter.ch(m.scatter.arg);
+        m.scatter.ch(m.scatter.arg, false);
     }
 }
 
@@ -744,7 +744,7 @@ namespace {
     };
 }
 
-static void scatter_after_barrier (void *arg)
+static void scatter_after_barrier (void *arg, bool dummy)
 {
     MemberObj &m = *(static_cast<MemberObj*>(arg));
     TeamObj &t = *gtdb[m.team];
@@ -764,7 +764,7 @@ static void scatter_after_barrier (void *arg)
                 m2->scatter.data_done = true;
                 if (m2->scatter.barrier_done && m2->scatter.ch != NULL) {
                     PREEMPT (global_lock);
-                    m2->scatter.ch(m2->scatter.arg);
+                    m2->scatter.ch(m2->scatter.arg, false);
                 }
             } else {
                 // serialise all the data
@@ -782,7 +782,7 @@ static void scatter_after_barrier (void *arg)
         // the barrier must have completed or we wouldn't even be here
         // signal completion to root role
         if (m.scatter.ch != NULL) {
-            m.scatter.ch(m.scatter.arg);
+            m.scatter.ch(m.scatter.arg, false);
         }
 
     } else {
@@ -792,7 +792,7 @@ static void scatter_after_barrier (void *arg)
         m.scatter.barrier_done = true;
         if (m.scatter.data_done && m.scatter.ch != NULL) {
             PREEMPT (global_lock);
-            m.scatter.ch(m.scatter.arg);
+            m.scatter.ch(m.scatter.arg, false);
         }
     }
 }
@@ -831,11 +831,10 @@ void x10rt_emu_scatter (x10rt_team team, x10rt_place role,
     // 'run into' the current barrier causing race conditions
 }
 
-bool  x10rt_emu_scatterv (x10rt_team team, x10rt_place role,
+void  x10rt_emu_scatterv (x10rt_team team, x10rt_place role,
       	                  x10rt_place root, const void *sbuf,
       	                  const void *soffsets, const void *scounts,
       	                  void *dbuf, size_t dcount, size_t el,
-      	                  x10rt_completion_handler *errch,
       	                  x10rt_completion_handler *ch, void *arg)
 {
 	abort(); //not used by Team.x10
@@ -849,19 +848,17 @@ void x10rt_emu_gather (x10rt_team team, x10rt_place role,
 	abort(); //not used by Team.x10
 }
 
-bool x10rt_emu_gatherv (x10rt_team team, x10rt_place role, x10rt_place root,
+void x10rt_emu_gatherv (x10rt_team team, x10rt_place role, x10rt_place root,
 		                const void *sbuf, size_t scount, void *dbuf,
 		                const void *doffsets, const void *dcounts, size_t el,
-		                x10rt_completion_handler *errch,
 		                x10rt_completion_handler *ch, void *arg)
 {
 	abort(); //not used by Team.x10
 }
 
-bool x10rt_emu_bcast (x10rt_team team, x10rt_place role,
+void x10rt_emu_bcast (x10rt_team team, x10rt_place role,
                       x10rt_place root, const void *sbuf, void *dbuf,
                       size_t el, size_t count,
-                      x10rt_completion_handler *errch,
                       x10rt_completion_handler *ch, void *arg)
 {
     TeamObj &t = *gtdb[team];
@@ -881,11 +878,10 @@ bool x10rt_emu_bcast (x10rt_team team, x10rt_place role,
     m.barrier.root = root;
 
     x10rt_emu_barrier (team, role, ch, arg);
-    return true;
 }
 
 
-static void alltoall_intermediate (void *arg)
+static void alltoall_intermediate (void *arg, bool dummy)
 {
     MemberObj &m = *(static_cast<MemberObj*>(arg));
 
@@ -1076,7 +1072,7 @@ namespace {
     };
 
     template<x10rt_red_op_type op, x10rt_red_type dtype>
-    void reduce3 (void *arg)
+    void reduce3 (void *arg, bool dummy)
     {
         MemberObj &m = *(static_cast<MemberObj*>(arg));
 
@@ -1234,7 +1230,7 @@ static void receive_new_team (x10rt_team new_team, void *arg)
     safe_free(m.split.newTeamPlaces);
 }
 
-static void split (void *arg)
+static void split (void *arg, bool dummy)
 {
     MemberObj &m = *(static_cast<MemberObj*>(arg));
     TeamObj &t = *gtdb[m.team];

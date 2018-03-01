@@ -20,6 +20,7 @@ import x10.compiler.Pragma;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.concurrent.Lock;
 import x10.xrx.Runtime;
+import x10.compiler.Immediate;
 
 /**
  * A team is a collection of activities that work together by simultaneously 
@@ -196,36 +197,41 @@ public struct Team {
         @Native("c++", "x10rt_barrier(id, role, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
     }
     
-    public def barrierIgnoreExceptions () : void {
-    	try{
-    		barrier();
-    	}catch(ex:Exception){
-    		if ( DEBUGINTERNALS) Console.OUT.println(here+" Ignoring barrier exception: " + ex.getMessage());
-    	}
+    public def preBlockingBarrierIgnoreExceptions () : void {
+        try{
+            barrier();
+        }catch(ex:Exception){
+            if ( DEBUGINTERNALS) Console.OUT.println(here+" Ignoring barrier exception: " + ex.getMessage());
+        }
+        try{
+            state(id).preBlockingBarrier[Int](state(id).places(0));
+        } catch(ex:Exception){
+            if ( DEBUGINTERNALS) Console.OUT.println(here+" Ignoring barrier exception: " + ex.getMessage());
+        }    
     }
     
     /** Either agree on a flag or throw a DPE at all team places */
     public def agree (flag:Int) : Int {
-    	val src = new Rail[Int](1, flag);
+        val src = new Rail[Int](1, flag);
         val dst = new Rail[Int](1, flag);
         if (Runtime.x10rtAgreementSupport()){
-        	if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
-            	finish nativeAgree(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
-        	else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-        		barrierIgnoreExceptions();
-        		val success = nativeAgree(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
-        		if (!success)
-        			throw new DeadPlaceException("[Native] Team "+id+" contains at least one dead member");
-        	}
+            if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
+                finish nativeAgree(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
+            else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
+                preBlockingBarrierIgnoreExceptions();
+                finish nativeAgree(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
+            }
         } else {
-        	throw new UnsupportedOperationException("Emulated agreement not supported");
+            throw new UnsupportedOperationException("Emulated agreement not supported");
         }   
         return dst(0);
     }
     
-    //TODO: support Java
-    @Native("c++", "x10rt_agree(#id, #role, #src->raw, #dst->raw, ::x10aux::failed_coll_handler, ::x10aux::coll_handler, ::x10aux::coll_enter())")
-    private static def nativeAgree (id:Int, role:Int, src:Rail[Int], dst:Rail[Int]) :Boolean = false;
+    
+    private static def nativeAgree (id:Int, role:Int, src:Rail[Int], dst:Rail[Int]) : void {
+        //FIXME: support Java
+        @Native("c++", "x10rt_agree(id, role, src->raw, dst->raw, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
+    }
 
     /** Blocks until all members have received their part of root's array.
      * Each member receives a contiguous and distinct portion of the src array.
@@ -252,8 +258,8 @@ public struct Team {
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
             finish nativeScatter(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);        
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-            barrierIgnoreExceptions();
-            nativeScatter(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
+            preBlockingBarrierIgnoreExceptions();
+            finish nativeScatter(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
         }
         else
             state(id).collective_impl[T](LocalTeamState.COLL_SCATTER, root, src, src_off, dst, dst_off, count, 0n, null, null);
@@ -294,43 +300,42 @@ public struct Team {
         checkBounds(dst_off+dst_count-1, dst.size);
         
         val soffsets = (collectiveSupportLevel > X10RT_COLL_NOCOLLECTIVES)?
-    		RailUtils.scanExclusive(scounts, (x:Int, y:Int) => x+y, src_off as Int):
-    		RailUtils.scanExclusive(scounts, (x:Int, y:Int) => x+y, 0n);
-        		
-    	if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
-    		finish nativeScatterv(id, my_role, root.id() as Int, src, src_off as Int, scounts, soffsets, dst, dst_off as Int);
-    	else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-    		barrierIgnoreExceptions();
-    	    val success = nativeScatterv(id, my_role, root.id() as Int, src, src_off as Int, scounts, soffsets, dst, dst_off as Int);
-            if (!success)
-                throw new DeadPlaceException("[Native] Team "+id+" contains at least one dead member");
-    	}
-    	else{
-    		state(id).collective_impl[T](LocalTeamState.COLL_SCATTERV, root, src, src_off, dst, dst_off, 0n, 0n, soffsets, scounts);
-    	}
+            RailUtils.scanExclusive(scounts, (x:Int, y:Int) => x+y, src_off as Int):
+            RailUtils.scanExclusive(scounts, (x:Int, y:Int) => x+y, 0n);
+                
+        if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
+            finish nativeScatterv(id, my_role, root.id() as Int, src, src_off as Int, scounts, soffsets, dst, dst_off as Int);
+        else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
+            preBlockingBarrierIgnoreExceptions();
+            finish nativeScatterv(id, my_role, root.id() as Int, src, src_off as Int, scounts, soffsets, dst, dst_off as Int);
+        }
+        else{
+            state(id).collective_impl[T](LocalTeamState.COLL_SCATTERV, root, src, src_off, dst, dst_off, 0n, 0n, soffsets, scounts);
+        }
     }
     
-    //TODO: not supported for Java
-    //@Native("java", "x10.x10rt.TeamSupport.nativeScatterv(id, role, root, ...);")
-    @Native("c++", "x10rt_scatterv(#id, #role, #root, #src->raw, #soffsets->raw, #scounts->raw, &(#dst)->raw[#dst_off], #scounts->raw[#role], sizeof(TPMGL(T)), ::x10aux::failed_coll_handler, ::x10aux::coll_handler, ::x10aux::coll_enter())")
-    private static def nativeScatterv[T] (id:Int, role:Int, root:Int, src:Rail[T], src_off:Int, scounts:Rail[Int], soffsets:Rail[Int], dst:Rail[T], dst_off:Int):Boolean = false;
+    private static def nativeScatterv[T] (id:Int, role:Int, root:Int, src:Rail[T], src_off:Int, scounts:Rail[Int], soffsets:Rail[Int], dst:Rail[T], dst_off:Int) : void {
+	    //FIXME: support Java
+    	//@Native("java", "x10.x10rt.TeamSupport.nativeScatterv(id, role, root, ...);")
+	    @Native("c++", "x10rt_scatterv(id, role, root, src->raw, soffsets->raw, scounts->raw, &dst->raw[dst_off], scounts->raw[role], sizeof(TPMGL(T)), ::x10aux::coll_handler, ::x10aux::coll_enter());") {}    
+    }
     
     
-    //TODO: not supported for Java or PAMI
+    //FIXME: support Java and PAMI
     public def gather[T] (root:Place, src:Rail[T], src_off:Long, dst:Rail[T], dst_off:Long, count:Long) : void {
         if (CompilerFlags.checkBounds() && here == root) checkBounds(dst_off + (size() * count) -1, dst.size);
         checkBounds(src_off+count-1, src.size); 
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
             finish nativeGather(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-            barrierIgnoreExceptions();
-            nativeGather(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
+            preBlockingBarrierIgnoreExceptions();
+            finish nativeGather(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
         }
         else
             state(id).collective_impl[T](LocalTeamState.COLL_GATHER, root, src, src_off, dst, dst_off, count, 0n, null, null);
     }
     
-    //TODO: not supported for Java or PAMI
+    //FIXME: support Java and PAMI
     private static def nativeGather[T] (id:Int, role:Int, root:Int, src:Rail[T], src_off:Int, dst:Rail[T], dst_off:Int, count:Int) : void {
         //@Native("java", "x10.x10rt.TeamSupport.nativeGather(id, role, root, src, src_off, dst, dst_off, count);")
         @Native("c++", "x10rt_gather(id, role, root, &src->raw[src_off], &dst->raw[dst_off], sizeof(TPMGL(T)), count, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
@@ -362,25 +367,24 @@ public struct Team {
 
         val doffsets = (collectiveSupportLevel > X10RT_COLL_NOCOLLECTIVES)?
             RailUtils.scanExclusive(dcounts, (x:Int, y:Int) => x+y, dst_off as Int):
-	        RailUtils.scanExclusive(dcounts, (x:Int, y:Int) => x+y, 0n);
+            RailUtils.scanExclusive(dcounts, (x:Int, y:Int) => x+y, 0n);
 
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
             finish nativeGatherv(id, my_role, root.id() as Int, src, src_off as Int, dst, dst_off as Int, dcounts, doffsets);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-        	barrierIgnoreExceptions();
-            val success = nativeGatherv(id, my_role, root.id() as Int, src, src_off as Int, dst, dst_off as Int, dcounts, doffsets);
-            if (!success)
-                throw new DeadPlaceException("[Native] Team "+id+" contains at least one dead member");
+            preBlockingBarrierIgnoreExceptions();
+            finish nativeGatherv(id, my_role, root.id() as Int, src, src_off as Int, dst, dst_off as Int, dcounts, doffsets);
         }
         else{
             state(id).collective_impl[T](LocalTeamState.COLL_GATHERV, root, src, src_off, dst, dst_off, 0n, 0n, doffsets, dcounts);
         }
     }
     
-    //TODO: not supported for Java
-    //@Native("java", "x10.x10rt.TeamSupport.nativeGatherv(id, role, root, ...);")
-    @Native("c++", "x10rt_gatherv(#id, #role, #root, &(#src)->raw[#src_off], #dcounts->raw[#role], #dst->raw, #doffsets->raw, #dcounts->raw, sizeof(TPMGL(T)), ::x10aux::failed_coll_handler, ::x10aux::coll_handler, ::x10aux::coll_enter())")
-    private static def nativeGatherv[T] (id:Int, role:Int, root:Int, src:Rail[T], src_off:Int, dst:Rail[T], dst_off:Int, dcounts:Rail[Int], doffsets:Rail[Int]) : Boolean = false;
+    private static def nativeGatherv[T] (id:Int, role:Int, root:Int, src:Rail[T], src_off:Int, dst:Rail[T], dst_off:Int, dcounts:Rail[Int], doffsets:Rail[Int]) : void {
+        //FIXME: support Java
+        //@Native("java", "x10.x10rt.TeamSupport.nativeGatherv(id, role, root, ...);")
+        @Native("c++", "x10rt_gatherv(id, role, root, &src->raw[src_off], dcounts->raw[role], dst->raw, doffsets->raw, dcounts->raw, sizeof(TPMGL(T)), ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
+    }
     
     /** Blocks until all members have received root's array.
      *
@@ -402,18 +406,17 @@ public struct Team {
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
             finish nativeBcast(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-        	barrierIgnoreExceptions();
-            val success = nativeBcast(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
-            if (!success)
-                throw new DeadPlaceException("[Native] Team "+id+" contains at least one dead member");
+            preBlockingBarrierIgnoreExceptions();
+            finish nativeBcast(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
         }
          else
              state(id).collective_impl[T](LocalTeamState.COLL_BROADCAST, root, src, src_off, dst, dst_off, count, 0n, null, null);
     }
 
-    @Native("java", "x10.x10rt.TeamSupport.nativeBcast(#id, #role, #root, #src, #src_off, #dst, #dst_off, #count)")
-    @Native("c++", "x10rt_bcast(#id, #role, #root, &(#src)->raw[#src_off], &(#dst)->raw[#dst_off], sizeof(TPMGL(T)), #count, ::x10aux::failed_coll_handler, ::x10aux::coll_handler, ::x10aux::coll_enter())")
-    private static def nativeBcast[T] (id:Int, role:Int, root:Int, src:Rail[T], src_off:Int, dst:Rail[T], dst_off:Int, count:Int) : Boolean = false;
+    private static def nativeBcast[T] (id:Int, role:Int, root:Int, src:Rail[T], src_off:Int, dst:Rail[T], dst_off:Int, count:Int) : void {
+        @Native("java", "x10.x10rt.TeamSupport.nativeBcast(id, role, root, src, src_off, dst, dst_off, count);")
+        @Native("c++", "x10rt_bcast(id, role, root, &src->raw[src_off], &dst->raw[dst_off], sizeof(TPMGL(T)), count, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
+    }
 
     /** Blocks until all members have received their part of each other member's array.
      * Each member receives a contiguous and distinct portion of the src array.
@@ -443,9 +446,9 @@ public struct Team {
             finish nativeAlltoall(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int);
         } else /*if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) */ {
             if (DEBUG) Runtime.println(here + " entering pre-alltoall barrier of team "+id);
-            barrierIgnoreExceptions();
+            preBlockingBarrierIgnoreExceptions();
             if (DEBUG) Runtime.println(here + " entering native alltoall of team "+id);
-            nativeAlltoall(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int);
+            finish nativeAlltoall(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int);
         }
 // XTENLANG-3434 X10 alltoall is broken
 /*
@@ -552,9 +555,9 @@ public struct Team {
             finish nativeReduce(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int, op);
         } else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             if (DEBUG) Runtime.println(here + " entering pre-reduce barrier on team "+id);
-            barrierIgnoreExceptions();
+            preBlockingBarrierIgnoreExceptions();
             if (DEBUG) Runtime.println(here + " entering native reduce on team "+id);
-            nativeReduce(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int, op);
+            finish nativeReduce(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int, op);
             if (DEBUG) Runtime.println(here + " Finished native reduce on team "+id);
         } else {
             state(id).collective_impl[T](LocalTeamState.COLL_REDUCE, root, src, src_off, dst, dst_off, count, op, null, null);
@@ -672,6 +675,7 @@ public struct Team {
      * @param op The operation to perform
      */
     public def allreduce[T](src:Rail[T], src_off:Long, dst:Rail[T], dst_off:Long, count:Long, op:Int):void {
+        if (DEBUGINTERNALS) Runtime.println("TEAMWARNING:" + here + " allreduce[T] called ");
         checkBounds(src_off+count-1, src.size);
         checkBounds(dst_off+count-1, dst.size); 
         state(id).collective_impl[T](LocalTeamState.COLL_ALLREDUCE, state(id).places(0), src, src_off, dst, dst_off, count, op, null, null);
@@ -719,18 +723,20 @@ public struct Team {
      * Implementation of allreduce for builtin struct types (Int, Double etc.)
      */
     private def allreduce_builtin[T](src:Rail[T], src_off:Long, dst:Rail[T], dst_off:Long, count:Long, op:Int):void {
+        if (DEBUGINTERNALS) Runtime.println("TEAMWARNING2:" + here + " allreduce_builtin[T] called ");
         checkBounds(src_off+count-1, src.size);
-        checkBounds(dst_off+count-1, dst.size); 
+        checkBounds(dst_off+count-1, dst.size);
+        
+        if (DEBUGINTERNALS) Runtime.println(here + "collective support = " + collectiveSupportLevel);
+        
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES) {
             if (DEBUG) Runtime.println(here + " entering native allreduce on team "+id);
             finish nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
         } else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             if (DEBUG) Runtime.println(here + " entering pre-allreduce barrier on team "+id);
-            barrierIgnoreExceptions();
+            preBlockingBarrierIgnoreExceptions();
             if (DEBUG) Runtime.println(here + " entering native allreduce on team "+id);
-            val success = nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
-            if (!success)
-                throw new DeadPlaceException("[Native] Team "+id+" contains at least one dead member");
+            finish nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
         } else {
             if (DEBUG) Runtime.println(here + " entering Team.x10 allreduce on team "+id);
             state(id).collective_impl[T](LocalTeamState.COLL_ALLREDUCE, state(id).places(0), src, src_off, dst, dst_off, count, op, null, null);
@@ -738,9 +744,10 @@ public struct Team {
         if (DEBUG) Runtime.println(here + " Finished allreduce on team "+id);
     }
 
-    @Native("java", "x10.x10rt.TeamSupport.nativeAllReduce(#id, #role, #src, #src_off, #dst, #dst_off, #count, #op)")
-    @Native("c++", "x10rt_allreduce(#id, #role, &(#src)->raw[#src_off], &(#dst)->raw[#dst_off], (x10rt_red_op_type)(#op), x10rt_get_red_type<TPMGL(T)>(), #count, ::x10aux::failed_coll_handler, ::x10aux::coll_handler,::x10aux::coll_enter())")
-    private static def nativeAllreduce[T](id:Int, role:Int, src:Rail[T], src_off:Int, dst:Rail[T], dst_off:Int, count:Int, op:Int):Boolean = false;
+    private static def nativeAllreduce[T](id:Int, role:Int, src:Rail[T], src_off:Int, dst:Rail[T], dst_off:Int, count:Int, op:Int) : void {
+        @Native("java", "x10.x10rt.TeamSupport.nativeAllReduce(id, role, src, src_off, dst, dst_off, count, op);")
+        @Native("c++", "x10rt_allreduce(id, role, &src->raw[src_off], &dst->raw[dst_off], (x10rt_red_op_type)op, x10rt_get_red_type<TPMGL(T)>(), count, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
+    }
 
     /** Performs a reduction on a single value, returning the result */
     public def allreduce (src:Boolean, op:Int):Boolean {
@@ -829,7 +836,7 @@ public struct Team {
 
     private static def nativeAllreduce[T](id:Int, role:Int, src:Rail[T], dst:Rail[T], op:Int) : void {
         @Native("java", "x10.x10rt.TeamSupport.nativeAllReduce(id, role, src, 0, dst, 0, 1, op);")
-        @Native("c++", "x10rt_allreduce(id, role, src->raw, dst->raw, (x10rt_red_op_type)op, x10rt_get_red_type<TPMGL(T)>(), 1, ::x10aux::failed_coll_handler, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
+        @Native("c++", "x10rt_allreduce(id, role, src->raw, dst->raw, (x10rt_red_op_type)op, x10rt_get_red_type<TPMGL(T)>(), 1, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
     }
 
     /** This operation blocks until all members have received the computed result.  
@@ -846,8 +853,8 @@ public struct Team {
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
             finish nativeIndexOfMax(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-            barrierIgnoreExceptions();
-            nativeIndexOfMax(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
+            preBlockingBarrierIgnoreExceptions();
+            finish nativeIndexOfMax(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
         }
         else
             state(id).collective_impl[DoubleIdx](LocalTeamState.COLL_INDEXOFMAX, state(id).places(0), src, 0, dst, 0, 1, 0n, null, null);
@@ -856,7 +863,7 @@ public struct Team {
 
     private static def nativeIndexOfMax(id:Int, role:Int, src:Rail[DoubleIdx], dst:Rail[DoubleIdx]) : void {
         @Native("java", "x10.x10rt.TeamSupport.nativeIndexOfMax(id, role, src, dst);")
-        @Native("c++", "x10rt_allreduce(id, role, src->raw, dst->raw, X10RT_RED_OP_MAX, X10RT_RED_TYPE_DBL_S32, 1, ::x10aux::failed_coll_handler, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
+        @Native("c++", "x10rt_allreduce(id, role, src->raw, dst->raw, X10RT_RED_OP_MAX, X10RT_RED_TYPE_DBL_S32, 1, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
     }
 
     /** This operation blocks until all members have received the computed result.  
@@ -873,8 +880,8 @@ public struct Team {
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
             finish nativeIndexOfMin(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-            barrierIgnoreExceptions();
-            nativeIndexOfMin(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
+            preBlockingBarrierIgnoreExceptions();
+            finish nativeIndexOfMin(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
         }
         else
             state(id).collective_impl[DoubleIdx](LocalTeamState.COLL_INDEXOFMIN, state(id).places(0), src, 0, dst, 0, 1, 0n, null, null);
@@ -883,7 +890,7 @@ public struct Team {
 
     private static def nativeIndexOfMin(id:Int, role:Int, src:Rail[DoubleIdx], dst:Rail[DoubleIdx]) : void {
         @Native("java", "x10.x10rt.TeamSupport.nativeIndexOfMin(id, role, src, dst);")
-        @Native("c++", "x10rt_allreduce(id, role, src->raw, dst->raw, X10RT_RED_OP_MIN, X10RT_RED_TYPE_DBL_S32, 1, ::x10aux::failed_coll_handler, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
+        @Native("c++", "x10rt_allreduce(id, role, src->raw, dst->raw, X10RT_RED_OP_MIN, X10RT_RED_TYPE_DBL_S32, 1, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
     }
 
     /** Create new teams by subdividing an existing team.  This is called by each member
@@ -941,9 +948,9 @@ public struct Team {
             // now that we have a PlaceGroup for the new team, create it
             if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
                 if (DEBUGINTERNALS) Runtime.println(here + " calling pre-native split barrier on team "+id+" color="+color+" new_role="+new_role);
-                barrierIgnoreExceptions();
+                preBlockingBarrierIgnoreExceptions();
                 if (DEBUGINTERNALS) Runtime.println(here + " calling native split on team "+id+" color="+color+" new_role="+new_role);
-                nativeSplit(id, id==0n?here.id() as Int:Team.roles(id), color, new_role as Int, result);
+                finish nativeSplit(id, id==0n?here.id() as Int:Team.roles(id), color, new_role as Int, result);
                 if (DEBUG) Runtime.println(here + " finished native split on team "+id+" color="+color+" new_role="+new_role);
                 return Team(result(0), newTeamPlaceGroup, new_role);
             }
@@ -967,8 +974,8 @@ public struct Team {
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
             finish nativeDel(id, id==0n?here.id() as Int:Team.roles(id));
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
-            barrierIgnoreExceptions();
-            nativeDel(id, id==0n?here.id() as Int:Team.roles(id));
+            preBlockingBarrierIgnoreExceptions();
+            finish nativeDel(id, id==0n?here.id() as Int:Team.roles(id));
         }
         // TODO - see if there is something useful to delete with the local team implementation
     }
@@ -1010,6 +1017,13 @@ public struct Team {
         private static PHASE_SCATTER2:Int = 6n; // sending data to second child
         private static PHASE_DONE:Int = 7n;    // done, but not yet ready for the next collective call
         private static PHASE_INVALID:Int = -1n; // this team is invalid due to an earlier failure
+        
+        // States of the pre-blocking barrier, which is called before blocking MPI calls
+        private static PHASE_PB_INIT:Int = 100n;
+        private static PHASE_PB_PARENT:Int = 101n;
+        private static PHASE_PB_GATHER1:Int = 102n;
+        private static PHASE_PB_GATHER2:Int = 103n;
+        
         private val phase:AtomicInteger = new AtomicInteger(PHASE_READY); // which of the above phases we're in
         private val dstLock:Lock = new Lock();
 
@@ -1076,12 +1090,12 @@ public struct Team {
                 myLinks = getLinks(placeIndex, rootIndex, 0, rootIndex-1, counts);
             else { // non-zero root
                 var countsSum:Int = -1n; // calculate the space required for the data of this member and all its children
-            	if (counts != null){
-            		countsSum = 0n; // the root has the sum of all segments
-            		for (var i:Long = 0; i < places.numPlaces(); i++){
-            			countsSum += counts(i);
-            		}            		
-            	}
+                if (counts != null){
+                    countsSum = 0n; // the root has the sum of all segments
+                    for (var i:Long = 0; i < places.numPlaces(); i++){
+                        countsSum += counts(i);
+                    }                   
+                }
                 myLinks = new TreeStructure(-1, 0, ((places.numPlaces()-1)==rootIndex)?-1:(rootIndex+1), places.numPlaces()-1, countsSum);
             }
             return myLinks;
@@ -1097,10 +1111,10 @@ public struct Team {
                 val children:Long = endIndex-startIndex; // overall gap of children
                 var countsSum:Int = -1n; // calculate the space required for the data of this member and all its children
                 if (counts != null){
-                	countsSum = 0n;
-                	for (var i:Long = startIndex; i <= endIndex; i++){
-                		countsSum+= counts(i);
-                	}
+                    countsSum = 0n;
+                    for (var i:Long = startIndex; i <= endIndex; i++){
+                        countsSum+= counts(i);
+                    }
                 }
                 return new TreeStructure(parent, (children<1)?-1:(startIndex+1), (children<2)?-1:(startIndex+1+((endIndex-startIndex)/2)), children, countsSum);
             }
@@ -1162,14 +1176,23 @@ public struct Team {
                     while (!condition() && Team.state(teamidcopy).isValid()) {
                         // look for dead neighboring places
                         if (Team.state(teamidcopy).local_parentIndex > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex).isDead()) {
-                            Team.state(teamidcopy).markInvalid();
-                            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex)+" is dead!");
+                            //sometimes the index is set to -1 while a child is waiting for parent gather, so check again
+                            if (Team.state(teamidcopy).local_parentIndex > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex).isDead()) {
+                                Team.state(teamidcopy).markInvalid();
+                                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex)+" is dead!");
+                            }
                         } else if (Team.state(teamidcopy).local_child1Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index).isDead()) {
-                            Team.state(teamidcopy).markInvalid();
-                            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index)+" is dead!");
+                            //sometimes the index is set to -1 while a child is waiting for parent gather, so check again
+                            if (Team.state(teamidcopy).local_child1Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index).isDead()) {
+                                Team.state(teamidcopy).markInvalid();
+                                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index)+" is dead!");
+                            }
                         } else if (Team.state(teamidcopy).local_child2Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index).isDead()) {
-                            Team.state(teamidcopy).markInvalid();
-                            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index)+" is dead!");
+                            //sometimes the index is set to -1 while a child is waiting for parent gather, so check again
+                            if (Team.state(teamidcopy).local_child2Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index).isDead()) {
+                                Team.state(teamidcopy).markInvalid();
+                                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index)+" is dead!");
+                            }
                         } else {
                             System.threadSleep(0); // release the CPU to more productive pursuits
                         }
@@ -1198,7 +1221,7 @@ public struct Team {
                 + ", children "+((myLinks.child1Index==-1)?Place.INVALID_PLACE:places(myLinks.child1Index))
                 + ", "+((myLinks.child2Index==-1)?Place.INVALID_PLACE:places(myLinks.child2Index)));
                 if (counts != null){
-                	Runtime.println(here + ":team"+teamidcopy+", local_counts_sum= " + myLinks.countsSum);
+                    Runtime.println(here + ":team"+teamidcopy+", local_counts_sum= " + myLinks.countsSum);
                 }
             }
             
@@ -1232,7 +1255,7 @@ public struct Team {
                 }
             } else if (myLinks.parentIndex != -1 && (collType == COLL_SCATTER || collType == COLL_SCATTERV)) {
                 // data size may differ between places
-            	if (DEBUGINTERNALS) Runtime.println(here+" allocated local_temp_buff size " + local_counts_sum);
+                if (DEBUGINTERNALS) Runtime.println(here+" allocated local_temp_buff size " + local_counts_sum);
                 local_temp_buff = Unsafe.allocRailUninitialized[T](local_counts_sum);
             } else if (collType == COLL_GATHER  || collType == COLL_GATHERV) {
                 //initialize and copy my data to the local buffer, the root uses the dst buffer as its local buffer
@@ -1358,7 +1381,7 @@ public struct Team {
                                 finish Rail.asyncCopy(gr, childDstOffset+(count*sourceIndex), Team.state(teamidcopy).local_dst as Rail[T], Team.state(teamidcopy).local_dst_off+(count*sourceIndex), childTotalData);
 
                             } else if (collType == COLL_REDUCE || collType == COLL_ALLREDUCE) {
-	                            // copy reduced data to parent
+                                // copy reduced data to parent
                                 var target:Rail[T];
                                 var off:Long;
                                 if (sourceIndex == Team.state(teamidcopy).local_child2Index) {
@@ -1401,7 +1424,7 @@ public struct Team {
                                 val nonnulltempbuff = Team.state(teamidcopy).local_temp_buff;
                                 if (nonnulltempbuff != null)
                                     finish Rail.asyncCopy(gr, 0, nonnulltempbuff as Rail[T], myOffset, childTotalData);
-	                        }
+                            }
 
                             // upward phase complete for this child
                             if (Team.state(teamidcopy).phase.compareAndSet(PHASE_GATHER1, PHASE_GATHER2)
@@ -1442,14 +1465,14 @@ public struct Team {
                                 finish Rail.asyncCopy(notNullDst, Team.state(teamidcopy).local_dst_off, gr, childDstOffset, Team.state(teamidcopy).local_count);
 
                             } else if (collType == COLL_SCATTER || collType == COLL_SCATTERV) {
-	                            val notNullTmp = Team.state(teamidcopy).local_temp_buff as Rail[T]{self!=null};
+                                val notNullTmp = Team.state(teamidcopy).local_temp_buff as Rail[T]{self!=null};
                                 // root scatters direct from src
                                 val parentOffset = (Team.state(teamidcopy).local_parentIndex == -1) ? 0 : Team.state(teamidcopy).local_offset;
                                 val rootSourceOffset = (Team.state(teamidcopy).local_parentIndex == -1) ? Team.state(teamidcopy).local_src_off : 0;
                                 val myOffset = childOffset - parentOffset + rootSourceOffset;
                                 if (DEBUGINTERNALS) Runtime.println(here+ " scattering " + childTotalData + " from "+notNullTmp+" offset " + myOffset + " into "+gr);
-	                            finish Rail.asyncCopy(notNullTmp, myOffset, gr, 0, childTotalData);
-	                        }
+                                finish Rail.asyncCopy(notNullTmp, myOffset, gr, 0, childTotalData);
+                            }
 
                             if (! (Team.state(teamidcopy).phase.compareAndSet(PHASE_SCATTER1, PHASE_SCATTER2)
                                 || Team.state(teamidcopy).phase.compareAndSet(PHASE_SCATTER2, PHASE_DONE))) {
@@ -1586,6 +1609,231 @@ public struct Team {
 	            }
                 
                 if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" failed "+getCollName(collType));
+
+                throw new DeadPlaceException("Team "+teamidcopy+" contains at least one dead member");
+            }
+        }
+            
+        private def preBlockingBarrier[T](root:Place):void {
+            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamid+" entered preBlockingBarrier phase="+phase.get()+", root="+root);
+            
+            val teamidcopy = this.teamid; // needed to prevent serializing "this" in at() statements
+
+            /**
+             * Block the current activity until condition is set to true by
+             * another activity, giving preference to activities running
+             * locally on another worker thread.
+             */
+            val sleepUntil = (condition:() => Boolean, conditionStr:String) => @NoInline {
+                if (!condition() && Team.state(teamidcopy).isValid()) {
+                    if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" waiting for " + conditionStr);
+                    Runtime.increaseParallelism();
+                    while (!condition() && Team.state(teamidcopy).isValid()) {
+                        // look for dead neighboring places
+                        if (Team.state(teamidcopy).local_parentIndex > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex).isDead()) {
+                            //sometimes the index is set to -1 while a child is waiting for parent gather, so check again
+                            if (Team.state(teamidcopy).local_parentIndex > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex).isDead()) {
+                                Team.state(teamidcopy).markInvalid();
+                                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_parentIndex)+" is dead!");
+                            }
+                        } else if (Team.state(teamidcopy).local_child1Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index).isDead()) {
+                            //sometimes the index is set to -1 while a child is waiting for parent gather, so check again
+                            if (Team.state(teamidcopy).local_child1Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index).isDead()) {
+                                Team.state(teamidcopy).markInvalid();
+                                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_child1Index)+" is dead!");
+                            }
+                        } else if (Team.state(teamidcopy).local_child2Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index).isDead()) {
+                            //sometimes the index is set to -1 while a child is waiting for parent gather, so check again
+                            if (Team.state(teamidcopy).local_child2Index > -1 && Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index).isDead()) {
+                                Team.state(teamidcopy).markInvalid();
+                                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" detected place "+Team.state(teamidcopy).places(Team.state(teamidcopy).local_child2Index)+" is dead!");
+                            }
+                        } else {
+                            System.threadSleep(0); // release the CPU to more productive pursuits
+                        }
+                    }
+                    Runtime.decreaseParallelism(1n);
+                }
+
+                if (DEBUGINTERNALS) {
+                    if (Team.state(teamidcopy).isValid()) {
+                        Runtime.println(here+":team"+teamidcopy+" reached " + conditionStr);
+                    } else {
+                        Runtime.println(here+":team"+teamidcopy+" failed to reach " + conditionStr);
+                    }
+                }
+            };
+
+            // block if some other collective is in progress.
+            // note that local indexes are not yet set up, so we won't check for dead places in this call
+            sleepUntil(() => this.phase.compareAndSet(PHASE_READY, PHASE_PB_INIT), "init");
+            
+            val myLinks = getLinks(myIndex, root, null);
+
+            if (DEBUGINTERNALS) { 
+                Runtime.println(here+":team"+teamidcopy
+                + " has parent "+((myLinks.parentIndex==-1)?Place.INVALID_PLACE:places(myLinks.parentIndex))
+                + ", children "+((myLinks.child1Index==-1)?Place.INVALID_PLACE:places(myLinks.child1Index))
+                + ", "+((myLinks.child2Index==-1)?Place.INVALID_PLACE:places(myLinks.child2Index)));
+            }
+            
+            // make my local data arrays visible to other places
+            local_parentIndex = myLinks.parentIndex;
+            local_grandchildren = myLinks.totalChildren;
+            local_child1Index = myLinks.child1Index;
+            local_child2Index = myLinks.child2Index;
+
+            // allow children to update our dst array
+            if (local_child1Index == -1) {
+                // no children to wait for
+                this.phase.compareAndSet(PHASE_PB_INIT, PHASE_PB_PARENT);
+            } else if (local_child2Index == -1) {
+                // only one child, so skip a phase waiting for the second child
+                this.phase.compareAndSet(PHASE_PB_INIT, PHASE_PB_GATHER2);
+            } else {
+                this.phase.compareAndSet(PHASE_PB_INIT, PHASE_PB_GATHER1); 
+            }
+
+            // wait for phase updates from children
+            sleepUntil(() => this.phase.get() == PHASE_PB_PARENT, "upward");
+
+            if (Team.state(teamidcopy).isValid()) {
+                if (myLinks.parentIndex == -1) {
+                    // this is the root
+                    // copy data locally from src to dst if needed
+
+                } else {
+                    // update parent and/or copy data to/from parent
+                    val sourceIndex = myIndex;
+                    val grandchildren = myLinks.totalChildren;
+                    val lastChild = myIndex + local_grandchildren + 1;
+                    val childOffset = local_offset;
+                    val childDstOffset = Team.state(teamidcopy).local_dst_off;
+                    
+                    if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" about to jump to parent " + places(myLinks.parentIndex));
+                    try { // try/catch for DeadPlaceExceptions
+                        at (places(myLinks.parentIndex)) @Immediate("team_signal_parent") async {
+                            sleepUntil(() => {
+                                val parentPhase = Team.state(teamidcopy).phase.get();
+                                (parentPhase >= PHASE_PB_GATHER1 && parentPhase <= PHASE_PB_GATHER2)
+                                }, "parent gather");
+                            if (!Team.state(teamidcopy).isValid()) {
+                                throw new DeadPlaceException(here+" detected dead team member before parent gather");
+                            }
+
+                            // upward phase complete for this child
+                            if (Team.state(teamidcopy).phase.compareAndSet(PHASE_PB_GATHER1, PHASE_PB_GATHER2)
+                             || Team.state(teamidcopy).phase.compareAndSet(PHASE_PB_GATHER2, PHASE_PB_PARENT)) {
+                                
+                            } else {
+                                Runtime.println("ERROR moving to downward phase at the parent "+here+":team"+teamidcopy+" current phase "+Team.state(teamidcopy).phase.get());
+                            }
+
+                            if (!Team.state(teamidcopy).isValid()) {
+                                throw new DeadPlaceException(here+" detected dead team member before parent scatter--");
+                            }                            
+                        }
+                        if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" returned from parent " + places(myLinks.parentIndex));
+
+                    } catch (me:MultipleExceptions) {
+                        val dper = me.getExceptionsOfType[DeadPlaceException]();
+                        if (dper.size > 0) {
+                            if (DEBUGINTERNALS) Runtime.println(here+" caught DPE (multiple) from parent: "+dper(0));
+                            Team.state(teamidcopy).markInvalid();
+                        } else {
+                            throw me;
+                        }
+                    }
+                }
+            }
+
+            // done with local structures
+            local_parentIndex = -1;
+            local_child1Index = -1;
+            local_child2Index = -1;
+            
+            if (isValid()) {
+                if (local_child1Index > -1) {
+                    // Ensure activity completion messages are sent to children
+                    // before starting another team operation
+                    Runtime.x10rtProbe();
+                }
+                this.phase.compareAndSet(PHASE_PB_PARENT, PHASE_READY);
+                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" completed preBlockingBarrier");
+            } else {
+                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" preBlockingBarrier invalid path started");
+                // notify all associated places of the death of some other place
+                // note: uses myLinks so it's OK to do this after clearing local structures
+                val mex = here;
+                if (myLinks.parentIndex != -1) {
+                    if (!places(myLinks.parentIndex).isDead()) {
+                        try {
+                            if (DEBUGINTERNALS) Runtime.println(here+" notifying parent "+places(myLinks.parentIndex)+"  of an invalid team");
+                            @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.parentIndex)) async {
+                                Team.state(teamidcopy).markInvalid();
+                            }
+                        } catch (me:MultipleExceptions) { }
+                    } else {
+                        // parent is dead; notify grandparent
+                        val parentLinks = getLinks(myLinks.parentIndex, root, null);
+                        if (parentLinks.parentIndex != -1) {
+                            try {
+                                if (DEBUGINTERNALS) Runtime.println(here+" notifying grandparent "+places(parentLinks.parentIndex)+"  of an invalid team");
+                                @Pragma(Pragma.FINISH_ASYNC) finish at (places(parentLinks.parentIndex)) async {
+                                    Team.state(teamidcopy).markInvalid();
+                                }
+                            } catch (me:MultipleExceptions) { }
+                        }
+                    }
+                }
+
+                val notifyGrandchildren = (childIndex:Long) => {
+                    // child is dead; notify grandchildren
+                    val childLinks = getLinks(childIndex, root, null);
+                    if (childLinks.child1Index != -1) {
+                        try {
+                            if (DEBUGINTERNALS) Runtime.println(here+" notifying grandchild 1 "+places(childLinks.child1Index)+"  of an invalid team");
+                            @Pragma(Pragma.FINISH_ASYNC) finish at (places(childLinks.child1Index)) async {
+                                Team.state(teamidcopy).markInvalid();
+                            }
+                        } catch (me:MultipleExceptions) { }
+                    }
+                    if (childLinks.child2Index != -1) {
+                        try {
+                            if (DEBUGINTERNALS) Runtime.println(here+" notifying grandchild 2 "+places(childLinks.child2Index)+"  of an invalid team");
+                            @Pragma(Pragma.FINISH_ASYNC) finish at (places(childLinks.child2Index)) async {
+                                Team.state(teamidcopy).markInvalid();
+                            }
+                        } catch (me:MultipleExceptions) { }
+                    }
+                };
+                
+                if (myLinks.child1Index != -1) {
+                    if (!places(myLinks.child1Index).isDead()) {
+                        try {
+                            if (DEBUGINTERNALS) Runtime.println(here+" notifying child1 "+places(myLinks.child1Index)+" of an invalid team");
+                            @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.child1Index)) async {
+                                Team.state(teamidcopy).markInvalid();
+                            }
+                        } catch (me:MultipleExceptions) { }
+                    } else {
+                        notifyGrandchildren(myLinks.child1Index);
+                    }
+                }
+                if (myLinks.child2Index != -1) {
+                    if (!places(myLinks.child2Index).isDead()) {
+                        try {
+                            if (DEBUGINTERNALS) Runtime.println(here+" notifying child2 "+places(myLinks.child2Index)+"  of an invalid team");
+                            @Pragma(Pragma.FINISH_ASYNC) finish at (places(myLinks.child2Index)) async {
+                                Team.state(teamidcopy).markInvalid();
+                            }
+                        } catch (me:MultipleExceptions) { }
+                    } else {
+                        notifyGrandchildren(myLinks.child2Index);
+                    }
+                }
+                
+                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" failed preBlockingBarrier");
 
                 throw new DeadPlaceException("Team "+teamidcopy+" contains at least one dead member");
             }
