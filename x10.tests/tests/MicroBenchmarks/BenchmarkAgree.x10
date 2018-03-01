@@ -20,7 +20,7 @@ public class BenchmarkAgree extends x10Test {
 
 	public def run(): Boolean {
         finish for (place in Place.places()) at (place) async {
-            Team.WORLD.agree(0); // warm up comms layer
+            Team.WORLD.agree(0n); // warm up comms layer
             val start = System.nanoTime();
             for (iter in 1..ITERS) {
                 val out = Team.WORLD.agree(iter as Int);
