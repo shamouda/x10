@@ -25,7 +25,7 @@ public class BenchmarkAgree extends x10Test {
             for (iter in 1..ITERS) {
                 val out = Team.WORLD.agree(iter as Int);
                 // check correctness
-                chk(iter == out, here + " agreement not reached expected["+iter+"] found["+out+"]");
+                chk((iter as Int) == out, here + " agreement not reached expected["+iter+"] found["+out+"]");
             }
             val stop = System.nanoTime();
 
