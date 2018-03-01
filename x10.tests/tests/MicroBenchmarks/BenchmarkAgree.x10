@@ -23,7 +23,7 @@ public class BenchmarkAgree extends x10Test {
             Team.WORLD.agree(0); // warm up comms layer
             val start = System.nanoTime();
             for (iter in 1..ITERS) {
-                val out = Team.WORLD.agree(iter);
+                val out = Team.WORLD.agree(iter as Int);
                 // check correctness
                 chk(iter == out, here + " agreement not reached expected["+iter+"] found["+out+"]");
             }
