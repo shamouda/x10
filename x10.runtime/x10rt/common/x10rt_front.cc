@@ -287,7 +287,7 @@ void x10rt_agree (x10rt_team team, x10rt_place role,
 	x10rt_lgl_agree(team, role, sbuf, dbuf, ch, arg);
 }
 
-void x10rt_one_setter (void *arg)
+void x10rt_one_setter (void *arg, bool dummy)
 { *((int*)arg) = 1; }
 
 void x10rt_team_setter (x10rt_team v, void *arg)
