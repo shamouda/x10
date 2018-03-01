@@ -230,7 +230,7 @@ public struct Team {
     
     private static def nativeAgree (id:Int, role:Int, src:Rail[Int], dst:Rail[Int]) : void {
         //FIXME: support Java
-        @Native("c++", "x10rt_agree(id, role, src->raw, dst->raw, ::x10aux::coll_handler, ::x10aux::coll_enter())") {}
+        @Native("c++", "x10rt_agree(id, role, src->raw, dst->raw, ::x10aux::coll_handler, ::x10aux::coll_enter());") {}
     }
 
     /** Blocks until all members have received their part of root's array.
