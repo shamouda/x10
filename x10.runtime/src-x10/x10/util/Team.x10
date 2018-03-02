@@ -204,9 +204,9 @@ public struct Team {
             if ( DEBUGINTERNALS) Console.OUT.println(here+" Ignoring barrier exception: " + ex.getMessage());
         }
         try{
-            state(id).preBlockingBarrier[Int](state(id).places(0));
+            state(id).upwardBarrier[Int](state(id).places(0));
         } catch(ex:Exception){
-            if ( DEBUGINTERNALS) Console.OUT.println(here+" Ignoring barrier exception: " + ex.getMessage());
+            if ( DEBUGINTERNALS) Console.OUT.println(here+" Ignoring upwardBarrier exception: " + ex.getMessage());
         }    
     }
     
@@ -226,7 +226,6 @@ public struct Team {
         }   
         return dst(0);
     }
-    
     
     private static def nativeAgree (id:Int, role:Int, src:Rail[Int], dst:Rail[Int]) : void {
         //FIXME: support Java
@@ -1613,9 +1612,9 @@ public struct Team {
                 throw new DeadPlaceException("Team "+teamidcopy+" contains at least one dead member");
             }
         }
-            
-        private def preBlockingBarrier[T](root:Place):void {
-            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamid+" entered preBlockingBarrier phase="+phase.get()+", root="+root);
+        
+        private def upwardBarrier[T](root:Place):void {
+            if (DEBUGINTERNALS) Runtime.println(here+":team"+teamid+" entered upwardBarrier phase="+phase.get()+", root="+root);
             
             val teamidcopy = this.teamid; // needed to prevent serializing "this" in at() statements
 
@@ -1759,9 +1758,9 @@ public struct Team {
                     Runtime.x10rtProbe();
                 }
                 this.phase.compareAndSet(PHASE_PB_PARENT, PHASE_READY);
-                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" completed preBlockingBarrier");
+                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" completed upwardBarrier");
             } else {
-                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" preBlockingBarrier invalid path started");
+                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" upwardBarrier invalid path started");
                 // notify all associated places of the death of some other place
                 // note: uses myLinks so it's OK to do this after clearing local structures
                 val mex = here;
@@ -1833,7 +1832,7 @@ public struct Team {
                     }
                 }
                 
-                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" failed preBlockingBarrier");
+                if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" failed upwardBarrier");
 
                 throw new DeadPlaceException("Team "+teamidcopy+" contains at least one dead member");
             }
