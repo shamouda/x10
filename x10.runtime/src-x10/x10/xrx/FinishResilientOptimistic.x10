@@ -802,11 +802,28 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 val kind = req.kind;
                 val ex = req.ex;
                 if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=TERM, srcId=" + srcId + ", dstId=" + dstId + ", kind=" + kind + ", ex="+ ex + " ] called");
-                //Unlike place0 pessimistic finish, we don't suppress termination notifications whose dst is dead.
-                //We actually wait for these termination messages to come from (kind of) adopted children
-                transitToCompleted(srcId, dstId, kind, ex, "notifyActivityTermination", resp);
-                resp.submit = true;
+                if (Place(dstId).isDead()) {
+                    // drop termination messages from a dead place; only simulated termination signals are accepted
+                    if (verbose>=1) debug("==== notifyActivityTermination(id="+id+") suppressed: "+dstId+" kind="+kind);
+                } else {
+                    transitToCompleted(srcId, dstId, kind, ex, "notifyActivityTermination", resp);
+                    resp.submit = true;
+                }
                 if (verbose>=1) debug("<<<< Master(id="+id+").exec [req=TERM, srcId=" + srcId + ", dstId=" + dstId + ", kind=" + kind + ", ex="+ ex + " ] returning");
+            } else if (xreq instanceof TermSimRequestOpt) {
+                val req = xreq as TermSimRequestOpt;
+                val srcId = req.srcId;
+                val dstId = req.dstId;
+                val kind = req.kind;
+                val ex = req.ex;
+                if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=SIM_TERM, srcId=" + srcId + ", dstId=" + dstId + ", kind=" + kind + ", ex="+ ex + " ] called");
+                if (Place(dstId).isDead()) {
+                    transitToCompleted(srcId, dstId, kind, ex, "simulated notifyActivityTermination", resp);
+                    resp.submit = true;
+                } else {
+                    throw new Exception(here + " FATAL ERROR: simulated termination signal received for a non-dead place " + dstId);
+                }
+                if (verbose>=1) debug("<<<< Master(id="+id+").exec [req=SIM_TERM, srcId=" + srcId + ", dstId=" + dstId + ", kind=" + kind + ", ex="+ ex + " ] returning");
             } else if (xreq instanceof ExcpRequestOpt) {
                 val req = xreq as ExcpRequestOpt;
                 val ex = req.ex;
@@ -1383,6 +1400,15 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (verbose>=1) debug(">>>> Backup(id="+id+").exec [req=TERM, srcId=" + srcId + ", dstId="+ dstId + ", kind=" + kind + ", ex=" + ex + " ] called");
                 transitToCompleted(srcId, dstId, kind, ex, "notifyActivityTermination");
                 if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=TERM, srcId=" + srcId + ", dstId="+ dstId + ", kind=" + kind + ", ex=" + ex + " ] returning");
+            } else if (xreq instanceof TermSimRequestOpt) {
+                val req = xreq as TermSimRequestOpt;
+                val srcId = req.srcId;
+                val dstId = req.dstId;
+                val kind = req.kind;
+                val ex = req.ex;
+                if (verbose>=1) debug(">>>> Backup(id="+id+").exec [req=SIM_TERM, srcId=" + srcId + ", dstId="+ dstId + ", kind=" + kind + ", ex=" + ex + " ] called");
+                transitToCompleted(srcId, dstId, kind, ex, "simulated notifyActivityTermination");
+                if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=SIM_TERM, srcId=" + srcId + ", dstId="+ dstId + ", kind=" + kind + ", ex=" + ex + " ] returning");
             } else if (xreq instanceof ExcpRequestOpt) {
                 val req = xreq as ExcpRequestOpt;
                 val ex = req.ex;

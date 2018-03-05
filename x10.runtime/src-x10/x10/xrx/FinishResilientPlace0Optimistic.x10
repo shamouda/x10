@@ -643,12 +643,15 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         static def p0TransitToCompletedGlobal(id:Id, srcId:Int, dstId:Int, kind:Int, t:CheckedThrowable) {
             at (place0) @Immediate("p0OptGlobal_notifyActivityCreationFailed_to_zero") async {
                 try {
-                    //Unlike place0 pessimistic finish, we don't suppress termination notifications whose dst is dead.
-                    //We actually wait for these termination messages to come from (kind of) adopted children
                     statesLock.lock();
-                    //NOLOG if (verbose>=1) debug(">>>> State.p0TransitToCompletedGlobal(id="+id+", srcId="+srcId+", dstId="+dstId+",t="+t+") called");
-                    states(id).transitToCompleted(srcId, dstId, kind, t);
-                    //NOLOG if (verbose>=1) debug("<<<< State.p0TransitToCompletedGlobal(id="+id+", srcId="+srcId+", dstId="+dstId+",t="+t+") returning");
+                    if (Place(dstId).isDead()) {
+                        // drop termination messages from a dead place; only simulated termination signals are accepted
+                        if (verbose>=1) debug("==== notifyActivityTermination(id="+id+") suppressed: "+dstId+" kind="+kind);
+                    } else {
+                        //NOLOG if (verbose>=1) debug(">>>> State.p0TransitToCompletedGlobal(id="+id+", srcId="+srcId+", dstId="+dstId+",t="+t+") called");
+                        states(id).transitToCompleted(srcId, dstId, kind, t);
+                        //NOLOG if (verbose>=1) debug("<<<< State.p0TransitToCompletedGlobal(id="+id+", srcId="+srcId+", dstId="+dstId+",t="+t+") returning");
+                    }
                 } finally {
                     statesLock.unlock();
                 }
@@ -657,14 +660,17 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         
         static def p0TransitToCompleted(optId:OptimisticRootId, gfs:GlobalRef[P0OptimisticMasterState], srcId:Int, dstId:Int, kind:Int, t:CheckedThrowable) {
             at (place0) @Immediate("p0Opt_notifyActivityCreationFailed_to_zero") async {
-                //Unlike place0 pessimistic finish, we don't suppress termination notifications whose dst is dead.
-                //We actually wait for these termination messages to come from (kind of) adopted children
                 try {
                     statesLock.lock();
-                    val state = getOrCreateState(optId, gfs);
-                    //NOLOG if (verbose>=1) debug(">>>> State.p0TransitToCompleted(id="+optId.id+", srcId="+srcId+", dstId="+dstId+",t="+t+") called");
-                    state.transitToCompleted(srcId, dstId, kind, t);
-                    //NOLOG if (verbose>=1) debug("<<<< State.p0TransitToCompleted(id="+optId.id+", srcId="+srcId+", dstId="+dstId+",t="+t+") returning");
+                    if (Place(dstId).isDead()) {
+                        // drop termination messages from a dead place; only simulated termination signals are accepted
+                        if (verbose>=1) debug("==== notifyActivityTermination(id="+optId.id+") suppressed: "+dstId+" kind="+kind);
+                    } else {
+                        val state = getOrCreateState(optId, gfs);
+                        //NOLOG if (verbose>=1) debug(">>>> State.p0TransitToCompleted(id="+optId.id+", srcId="+srcId+", dstId="+dstId+",t="+t+") called");
+                        state.transitToCompleted(srcId, dstId, kind, t);
+                        //NOLOG if (verbose>=1) debug("<<<< State.p0TransitToCompleted(id="+optId.id+", srcId="+srcId+", dstId="+dstId+",t="+t+") returning");
+                    }
                 } finally {
                     statesLock.unlock();
                 }
