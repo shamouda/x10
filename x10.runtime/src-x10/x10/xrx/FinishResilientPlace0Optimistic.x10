@@ -646,7 +646,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     statesLock.lock();
                     if (Place(dstId).isDead()) {
                         // drop termination messages from a dead place; only simulated termination signals are accepted
-                        if (verbose>=1) debug("==== notifyActivityTermination(id="+id+") suppressed: "+dstId+" kind="+kind);
+                        //NOLOG if (verbose>=1) debug("==== notifyActivityTermination(id="+id+") suppressed: "+dstId+" kind="+kind);
                     } else {
                         //NOLOG if (verbose>=1) debug(">>>> State.p0TransitToCompletedGlobal(id="+id+", srcId="+srcId+", dstId="+dstId+",t="+t+") called");
                         states(id).transitToCompleted(srcId, dstId, kind, t);
@@ -664,7 +664,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     statesLock.lock();
                     if (Place(dstId).isDead()) {
                         // drop termination messages from a dead place; only simulated termination signals are accepted
-                        if (verbose>=1) debug("==== notifyActivityTermination(id="+optId.id+") suppressed: "+dstId+" kind="+kind);
+                        //NOLOG if (verbose>=1) debug("==== notifyActivityTermination(id="+optId.id+") suppressed: "+dstId+" kind="+kind);
                     } else {
                         val state = getOrCreateState(optId, gfs);
                         //NOLOG if (verbose>=1) debug(">>>> State.p0TransitToCompleted(id="+optId.id+", srcId="+srcId+", dstId="+dstId+",t="+t+") called");

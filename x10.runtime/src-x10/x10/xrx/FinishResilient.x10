@@ -292,3 +292,8 @@ class OptResolveRequest { //used in optimistic protocols only
 class SearchBackupResponse {
     var found:Boolean = false;
 }
+class GetNewMasterResponse {
+    var found:Boolean = false;
+    var newMasterPlace:Int = -1n;
+    var newMasterId:FinishResilient.Id = FinishResilient.UNASSIGNED;
+}
