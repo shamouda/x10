@@ -16,6 +16,7 @@ import x10.util.concurrent.AtomicBoolean;
 import x10.util.concurrent.Condition;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.HashMap;
+import x10.util.HashSet;
 
 /*
  * Common abstract class for Resilient Finish
@@ -50,7 +51,7 @@ public abstract class FinishResilient extends FinishState {
         public def toString() = "<"+home+","+id+">";
     }
 
-    public static struct OptimisticRootId(id:Id, parentId:Id, src:Int, kind:Int) {
+    public static struct OptimisticRootId(id:Id, parentId:Id) {
         public def toString() = "<"+id.home+","+id.id+">";
     }
     
@@ -96,6 +97,10 @@ public abstract class FinishResilient extends FinishState {
     /* Recovery related structs to hold query parameters needed to count the number of live tasks */
     protected static struct ReceivedQueryId(id:Id, src:Int, dst:Int, kind:Int) {
         public def toString() = "<receivedQuery id=" + id + " src=" + src + " dst="+dst+" kind="+kind+">";
+    }
+    
+    protected static struct DroppedQueryId(id:Id, src:Int, dst:Int, kind:Int, sent:Int) {
+        public def toString() = "<droppedQueryId id=" + id + " src=" + src + " dst="+dst+" kind="+kind+" sent="+sent+" >";
     }
     
     protected static struct ChildrenQueryId(parentId:Id, dead:Int, src:Int) {
@@ -166,10 +171,8 @@ public abstract class FinishResilient extends FinishState {
         case Configuration.RESILIENT_MODE_PLACE0_OPTIMISTIC:
         {
             val p = (parent!=null) ? parent : getCurrentFS();
-            val src = Runtime.activity().srcPlace;
-            val kind = Runtime.activity().atFinishState() instanceof FinishResilientOptimistic ? AT : ASYNC ;
-            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p + " src=" + src);
-            fs = FinishResilientPlace0Optimistic.make(p, src, kind);
+            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
+            fs = FinishResilientPlace0Optimistic.make(p);
             break;
         }
         case Configuration.RESILIENT_MODE_HC:
@@ -288,6 +291,7 @@ class BackupCreationDenied extends Exception {}
 class OptResolveRequest { //used in optimistic protocols only
     val countChildren  = new HashMap[FinishResilient.ChildrenQueryId, Int]();
     val countReceived = new HashMap[FinishResilient.ReceivedQueryId, Int]();
+    val countDropped = new HashMap[FinishResilient.DroppedQueryId, Int]();
 }
 class SearchBackupResponse {
     var found:Boolean = false;

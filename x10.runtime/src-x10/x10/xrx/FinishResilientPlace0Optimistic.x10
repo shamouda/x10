@@ -54,10 +54,10 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
     def waitForFinish():void { me.waitForFinish(); }
     
     //create root finish
-    public def this (parent:FinishState, src:Place, kind:Int) {
+    public def this (parent:FinishState) {
         id = Id(here.id as Int, nextId.getAndIncrement());
-        me = new P0OptimisticMasterState(id, parent, src, kind);
-        if (verbose>=1) debug("<<<< RootFinish(id="+id+", src="+src+") created");
+        me = new P0OptimisticMasterState(id, parent);
+        if (verbose>=1) debug("<<<< RootFinish(id="+id+") created");
     }
     
     //create remote finish
@@ -67,8 +67,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
     }
     
     //make root finish    
-    static def make(parent:FinishState, src:Place, kind:Int) {
-        return new FinishResilientPlace0Optimistic(parent, src, kind);
+    static def make(parent:FinishState) {
+        return new FinishResilientPlace0Optimistic(parent);
     }
     
     def getSource():Place {
@@ -95,14 +95,13 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         val gfs:GlobalRef[P0OptimisticMasterState]; // root finish state
         val id:Id;
         val parentId:Id; // id of parent (UNASSIGNED means no parent / parent is UNCOUNTED)
-        val finSrc:Int; //the source place that initiated the task that created this finish
-        val finKind:Int; //the kind of the task that created the finish
     
         var numActive:Long = 0;
         var excs:GrowableRail[CheckedThrowable] = null;  // lazily allocated in addException
         val sent = new HashMap[Edge,Int](); //always increasing 
         val transit = new HashMap[Edge,Int]();
-        var isAdopted:Boolean = false;//set to true when backup recreates a master
+        var ghostChildren:HashSet[Id] = null;  //lazily allocated in addException
+        var isAdopted:Boolean = false;  //set to true when backup recreates a master
         
         /**Place0 states**/
         private static val states = (here.id==0) ? new HashMap[Id, State]() : null;
@@ -113,8 +112,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             this.id = optId.id;
             this.parentId = optId.parentId; 
             this.gfs = gfs;
-            this.finSrc = optId.src;
-            this.finKind = optId.kind;
             this.numActive = 1;
             sent.put(FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
             transit.put(FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
@@ -123,235 +120,131 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         /*********************************************************************/
         /*******************   Failure Recovery Methods   ********************/
         /*********************************************************************/
-        public def setLocalTaskCount(localChildrenCount:Int) {
-            if (verbose>=1) debug(">>>> State(id="+id+").setLocalTaskCount called, localChildrenCount = " + localChildrenCount);
-            val edge = Edge(id.home, id.home, FinishResilient.ASYNC);
-            val old = transit.getOrElse(edge, 0n);
-            
-            if (localChildrenCount == 0n)
-            	transit.remove(edge);
-            else
-            	transit.put(edge, localChildrenCount);
-            if (verbose>=3) dump();
+        /*count number of remote children created under a given parent (acting as adopter)*/
+        def addGhostsUnsafe(newDead:HashSet[Int]):Long {
             var count:Long = 0;
-            if (old != localChildrenCount)
-                count = old - localChildrenCount;
-            val oldActive = numActive;
-            numActive -= count;
-            
-            if (quiescent()) {
-                releaseLatch();
-                notifyParent();
-                removeFromStates();
-            }
-            if (verbose>=1) debug("<<<< State(id="+id+").setLocalTaskCount returning, old["+old+"] new["+localChildrenCount+"] numActive="+oldActive +" changing numActive to " + numActive);
-        }
-        
-        public def convertToDead(newDead:HashSet[Int], countChildren:HashMap[Id, Int]) {
-            if (verbose>=1) debug(">>>> State(id="+id+").convertToDead called");
-            val toRemove = new HashSet[Edge]();
-            for (e in transit.entries()) {
-                val edge = e.getKey();
-                if (newDead.contains(edge.dst) && edge.dst != edge.src ) {
-                    val t1 = e.getValue();
-                    val t2 = countChildren.get(id);
-                    assert t1 > 0 : here + " State(id="+id+").convertToDead FATAL error, t1 must be positive";
-                    if (t1 >= t2) {
-                        val count = t1-t2;
-                        val oldActive = numActive;
-                        numActive -= count;
-                        
-                        if (verbose>=1) debug("==== State(id="+id+").convertToDead t1["+t1+"] t2["+t2+"] numActive["+oldActive+"] changing numActive to " + numActive);
-                        
-                        if (t2 == 0n)
-                        	toRemove.add(edge);
- 						else
- 						    transit.put(edge, t2);
- 						    
-                        assert numActive >= 0 : here + " State(id="+id+").convertToDead FATAL error, numActive must not be negative";
-                        if (edge.kind == ASYNC) {
-                            for (1..count) {
-                                if (verbose>=3) debug("adding DPE to "+id+" for transit task at "+edge.dst);
-                                val dpe = new DeadPlaceException(Place(edge.dst));
-                                dpe.fillInStackTrace();
-                                addException(dpe);
-                            }
-                        }
-                    }
-                    else assert false: here + " State(id="+id+").convertToDead FATAL error, t1 >= t2 condition not met";
-                }
-            }
-            
-            for (e in toRemove)
-                transit.remove(e);
-
-            if (quiescent()) {
-                releaseLatch();
-                notifyParent();
-                removeFromStates();
-            }
-            if (verbose>=1) debug("<<<< State(id="+id+").convertToDead returning, numActive="+numActive);
-        }
-        
-        def convertFromDead(newDead:HashSet[Int], countReceived:HashMap[ReceivedQueryId, Int]) {
-            if (verbose>=1) debug(">>>> State(id="+id+").convertFromDead called");
-            val toRemove = new HashSet[Edge]();
-            for (e in transit.entries()) {
-                val edge = e.getKey();
-                var trns:Int = e.getValue();
-                if (newDead.contains(edge.src) && edge.src != edge.dst ) {
-                    val sent = sent.get(edge);
-                    val rcvId = ReceivedQueryId(id, edge.src, edge.dst, edge.kind);
-                    val received = countReceived.get(rcvId);
-                    assert sent > 0 && sent >= received : here + " State(id="+id+").convertFromDead FATAL error, transit["+trns+"] sent["+sent+"] received["+received+"]";
-
-                    val dropedMsgs = sent - received;
-                    val oldActive = numActive;
-                    numActive -= dropedMsgs;
-                    trns -= dropedMsgs;
-                    if (verbose>=1) debug("==== State(id="+id+").convertFromDead src="+edge.src+" dst="+edge.dst+" transit["+trns+"] sent["+sent+"] received["+received+"] numActive["+oldActive+"] dropedMsgs["+dropedMsgs+"] changing numActive to " + numActive);
-                    
-                    if (trns == 0n)
-                        toRemove.add(edge);
-                    else
-                        transit.put(edge, trns);
- 
-                    assert numActive >= 0 : here + " State(id="+id+").convertFromDead FATAL error, numActive must not be negative";
-                    // we don't add DPE when src is dead; we can assume that the message was not sent as long as it was not received.
-                }
-            }
-            
-            for (e in toRemove)
-                transit.remove(e);
- 
-            if (quiescent()) {
-                releaseLatch();
-                notifyParent();
-                removeFromStates();
-            }
-            if (verbose>=1) debug("<<<< State(id="+id+").convertFromDead returning, numActive="+numActive);
-        }
-        
-        static def countLocalChildren(id:Id, states:HashSet[State]) {
-            if (verbose>=1) debug(">>>> countLocalChildren(id="+id+") called");
-            var count:Int = 0n;
-            for (s in states) {
-                if (s.parentId == id && s.id.home == s.parentId.home) 
+            for (e in states.entries()) {
+                val otherState = e.getValue(); 
+                if (newDead.contains(otherState.id.home) && otherState.parentId == id) {
+                    otherState.isAdopted = true;
+                    if (ghostChildren == null)
+                        ghostChildren = new HashSet[Id]();
+                    ghostChildren.add(otherState.id);
                     count++;
+                }
             }
-            if (verbose>=1) debug("<<<< countLocalChildren(id="+id+") returning, count = " + count);
             return count;
+            //no more states under this parent from that src should be created
         }
         
-        static def convertDeadActivities(newDead:HashSet[Int], states:HashSet[State], countChildren:HashMap[Id, Int], 
-                countReceived:HashMap[ReceivedQueryId, Int]) {
-            try {
-                statesLock.lock();
-                for (state in states) {
-                    if (state.numActive > 0) {
-                        if (newDead.contains(state.id.home)) {
-                            val localChildren = countLocalChildren(state.id, states);
-                            state.setLocalTaskCount(localChildren);
-                        }
-                        if (state.numActive > 0) {
-                            state.convertToDead(newDead, countChildren);
-                            if (state.numActive > 0)
-                                state.convertFromDead(newDead, countReceived);
-                        }
-                    }
-                }
-            } finally {
-                statesLock.unlock();
-            }
-        }
-        
-        def isImpactedByDeadPlacesUnsafe(newDead:HashSet[Int]) {
-            if (newDead.contains(id.home)) {
-                if (verbose>=1) debug("<<<< isImpactedByDeadPlacesUnsafe(id="+id+",parentId="+parentId+") true");
-                return true;
-            }
-            for (e in transit.entries()) {
-                val edge = e.getKey();
-                if (newDead.contains(edge.src) || newDead.contains(edge.dst)) {
-                    if (verbose>=1) debug("<<<< isImpactedByDeadPlacesUnsafe(id="+id+",parentId="+parentId+") true");
-                    return true;
-                }
-            }
-            if (verbose>=1) debug("<<<< isImpactedByDeadPlacesUnsafe(id="+id+",parentId="+parentId+") false");
-            return false;
-        }
-        
-        static def getImpactedStates(newDead:HashSet[Int]) {
-            try {
-                statesLock.lock();
-                val result = new HashSet[State]();
-                for (e in states.entries()) {
-                    val id = e.getKey();
-                    val state = e.getValue();
-                    if (state.isImpactedByDeadPlacesUnsafe(newDead)) {
-                        result.add(state);
-                    }
-                }
-                return result;
-            } finally {
-                statesLock.unlock();
-            }
-        }
-        
-        static def aggregateCountingRequests(newDead:HashSet[Int], states:HashSet[State]) {
+        static def updateGhostChildrenAndGetRemoteQueries(newDead:HashSet[Int]):HashMap[Int,OptResolveRequest] {
             val countingReqs = new HashMap[Int,OptResolveRequest]();
-            val place0 = 0 as Int;
-            if (!states.isEmpty()) {
-                try {
-                    statesLock.lock();
-                    for (dead in newDead) {
-                        for (s in states) {
-                            for (entry in s.transit.entries()) {
-                                val edge = entry.getKey();
-                                if (dead == edge.dst) {
-                                    var rreq:OptResolveRequest = countingReqs.getOrElse(place0, null);
-                                    if (rreq == null){
-                                        rreq = new OptResolveRequest();
-                                        countingReqs.put(place0, rreq);
-                                    }
-                                    rreq.countChildren.put(ChildrenQueryId(s.id /*parent id*/, dead, edge.src ), -1n);
-                                } else if (dead == edge.src) {
-                                    var rreq:OptResolveRequest = countingReqs.getOrElse(edge.dst, null);
-                                    if (rreq == null){
-                                        rreq = new OptResolveRequest();
-                                        countingReqs.put(edge.dst, rreq);
-                                    }
-                                    rreq.countReceived.put(ReceivedQueryId(s.id, dead, edge.dst, edge.kind), -1n);
+            try {
+                statesLock.lock();
+                val toRemoveState = new HashSet[State]();
+                val result = new HashSet[State]();
+                for (s in states.entries()) {
+                    val id = s.getKey();
+                    val state = s.getValue();
+                    var calGhosts:Boolean = false;
+                    val toRemove = new HashSet[Edge]();
+                    for (e in state.transit.entries()) {
+                        val edge = e.getKey();
+                        if (newDead.contains(edge.dst)) {
+                            calGhosts = true;
+                            val count = e.getValue();
+                            toRemove.add(edge);
+                            state.numActive -= count;
+                            if (state.numActive < 0)
+                                throw new Exception ( here + " State(id="+id+").convertToDead FATAL error, numActive must not be negative");
+                            
+                            if (edge.kind == ASYNC) {
+                                for (1..count) {
+                                    if (verbose>=3) debug("adding DPE to "+id+" for transit task at "+edge.dst);
+                                    val dpe = new DeadPlaceException(Place(edge.dst));
+                                    dpe.fillInStackTrace();
+                                    state.addException(dpe);
                                 }
                             }
                         }
+                        
+                        //prepare list of queries to destination places whose source place died
+                        if (!toRemove.contains(edge) && newDead.contains(edge.src)) {
+                            var rreq:OptResolveRequest = countingReqs.getOrElse(edge.dst, null);
+                            if (rreq == null){
+                                rreq = new OptResolveRequest();
+                                countingReqs.put(edge.dst, rreq);
+                            }
+                            val sent = state.sent.get(edge);
+                            rreq.countDropped.put(DroppedQueryId(state.id, edge.src, edge.dst, edge.kind, sent), -1n);
+                        }
                     }
-                } finally {
-                    statesLock.unlock();
-                }
-            }
-            if (verbose >=1) printResolveReqs(countingReqs); 
-            return countingReqs;
-        }
-        
-        /*count number of remote children created under a given parent (acting as adopter)*/
-        static def countChildren(parentId:Id, dead:Int, src:Int) {
-            var count:Int = 0n;
-            try {
-                statesLock.lock();
-                for (e in states.entries()) {
-                    val state = e.getValue(); 
-                    if (state.id.home == dead && state.parentId == parentId && state.finSrc == src) {
-                        if (verbose>=1) debug("== countChildren(parentId="+parentId+",dead="+dead+", src="+src+") found state " + state.id);
-                        count++;
+                    
+                    for (e in toRemove)
+                        state.transit.remove(e);
+                    
+                    if (calGhosts) {
+                        val count = state.addGhostsUnsafe(newDead);
+                        state.numActive += count;
                     }
+                    
+                    if (state.quiescent()) {
+                        toRemoveState.add(state);
+                    }
+                    
                 }
-                //no more states under this parent from that src should be created
-                if (verbose>=1) debug("<<<< countChildren(parentId="+parentId+",dead="+dead+", src="+src+") returning, count = " + count + " and parentId added to denyList");
+                
+                for (s in toRemoveState) {
+                    s.releaseLatch();
+                    s.notifyParent();
+                    s.removeFromStates();
+                }
+                return countingReqs;
             } finally {
                 statesLock.unlock();
             }
-            return count;
+        }
+        
+        
+        static def convertDeadActivities(droppedCounts:HashMap[DroppedQueryId, Int]) {
+            try {
+                statesLock.lock();
+                val toRemoveState = new HashSet[State]();
+                for (e in droppedCounts.entries()) {
+                    val query = e.getKey();
+                    val dropped = e.getValue();
+                    if (dropped > 0) {
+                        val state = states(query.id);
+                        //FATAL IF STATE IS NULL
+                        val edge = Edge(query.src, query.dst, query.kind);
+                        val oldTransit = state.transit.get(edge);
+                        val oldActive = state.numActive;
+                        
+                        if (oldActive < dropped)
+                            throw new Exception(here + " FATAL: dropped tasks counting error id = " + state.id);
+                        
+                        state.numActive -= dropped;
+                        if (oldTransit - dropped == 0n) {
+                            state.transit.remove(edge);
+                        }
+                        else {
+                            state.transit.put(edge, oldTransit - dropped);
+                        }
+                        
+                        if (state.quiescent()) {
+                            toRemoveState.add(state);
+                        }
+                    }
+                }
+                
+                for (s in toRemoveState) {
+                    s.releaseLatch();
+                    s.notifyParent();
+                    s.removeFromStates();
+                }
+            } finally {
+                statesLock.unlock();
+            }
         }
         
         //P0FUNC
@@ -678,7 +571,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         static def p0TermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int]) {
-            if (verbose>=1) debug(">>>> State(id="+id+").p0TermMultiple [dstId=" + dstId +", size="+tasks.size+" ] called");
+            if (verbose>=1) debug(">>>> State(id="+id+").p0TermMultiple [dstId=" + dstId +", size="+map.size()+" ] called");
             at (place0) @Immediate("p0Opt_notifyTermMul_to_zero") async {
                 if (map == null )
                     throw new Exception(here + " FATAL ERROR p0TermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is null");
@@ -698,7 +591,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 } finally {
                     statesLock.unlock();
                 }
-                if (verbose>=1) debug("<<<< State(id="+id+").p0TermMultiple [dstId=" + dstId +", size="+tasks.size+" ] returning");
+                if (verbose>=1) debug("<<<< State(id="+id+").p0TermMultiple [dstId=" + dstId +", size="+map.size()+" ] returning");
            }
         }
         
@@ -742,42 +635,75 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         
         def transitToCompleted(srcId:Long, dstId:Long, kind:Int, t:CheckedThrowable) {
             if (verbose>=1) debug(">>>> State(id="+id+").transitToCompleted srcId=" + srcId + ", dstId=" + dstId + " called");
-            val e = Edge(srcId, dstId, kind);
-            decrement(transit, e);
-            assert transit.getOrElse(e, 0n) >= 0n : here + " ["+Runtime.activity()+"] FATAL error, transit reached negative id="+id;
-            //don't decrement 'sent'
+            if (Place(dstId).isDead()) {
+                // NOTE: no state updates or DPE processing here.
+                //       Must happen exactly once and is done
+                //       when Place0 is notified of a dead place.
+                if (verbose>=1) debug("<<<< State(id="+id+").transitToCompleted returning suppressed dead dst id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
+            }
+            else {
+                val e = Edge(srcId, dstId, kind);
+                decrement(transit, e);
+                assert transit.getOrElse(e, 0n) >= 0n : here + " ["+Runtime.activity()+"] FATAL error, transit reached negative id="+id;
+                //don't decrement 'sent'
+                numActive--;
+                assert numActive>=0 : here + " FATAL error, State(id="+id+").numActive reached -ve value";
+                if (t != null) addException(t);
+                if (quiescent()) {
+                    releaseLatch();
+                    notifyParent();
+                    removeFromStates();
+                }
+                if (verbose>=1) debug("<<<< State(id="+id+").transitToCompleted returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
+            }
+        }
+        
+        
+        def removeGhostChild(childId:Id) {
+            if (verbose>=1) debug(">>>> State(id="+id+").removeGhostChild childId=" + childId + " called");
+            if (ghostChildren == null || !ghostChildren.contains(childId))
+                throw new Exception(here + " FATAL error, State(id="+id+") does not has the ghost child " + childId);
+            ghostChildren.remove(childId);
             numActive--;
-            assert numActive>=0 : here + " FATAL error, State(id="+id+").numActive reached -ve value";
-            if (t != null) addException(t);
+            if (numActive < 0)
+                throw new Exception (here + " FATAL error, State(id="+id+").numActive reached -ve value" );
             if (quiescent()) {
                 releaseLatch();
                 notifyParent();
                 removeFromStates();
             }
-            if (verbose>=1) debug("<<<< State(id="+id+").transitToCompleted returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
+            if (verbose>=1) debug("<<<< State(id="+id+").removeGhostChild childId=" + childId + " returning");
         }
         
         def transitToCompletedMul(srcId:Long, dstId:Long, kind:Int, cnt:Int) {
             if (verbose>=1) debug(">>>> State(id="+id+").transitToCompletedMul srcId=" + srcId + ", dstId=" + dstId + ", kind="+kind +" called");
             if (verbose>=3) dump();
-            val e = Edge(srcId, dstId, kind);
-            deduct(transit, e, cnt);
-            
-            if (transit.getOrElse(e, 0n) < 0n)
-                throw new Exception(here + " FATAL error, transit reached negative id="+id);
-            
-            //don't decrement 'sent'
-            numActive-=cnt;
-            
-            if ( numActive < 0 )
-                throw new Exception(here + " FATAL error, State(id="+id+").numActive reached -ve value");
-            
-            if (quiescent()) {
-                releaseLatch();
-                notifyParent();
-                removeFromStates();
+            if (Place(dstId).isDead()) {
+                // NOTE: no state updates or DPE processing here.
+                //       Must happen exactly once and is done
+                //       when Place0 is notified of a dead place.
+                if (verbose>=1) debug("<<<< State(id="+id+").transitToCompletedMul returning suppressed dead dst id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
             }
-            if (verbose>=1) debug("<<<< State(id="+id+").transitToCompletedMul returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
+            else {
+                val e = Edge(srcId, dstId, kind);
+                deduct(transit, e, cnt);
+                
+                if (transit.getOrElse(e, 0n) < 0n)
+                    throw new Exception(here + " FATAL error, transit reached negative id="+id);
+                
+                //don't decrement 'sent'
+                numActive-=cnt;
+                
+                if ( numActive < 0 )
+                    throw new Exception(here + " FATAL error, State(id="+id+").numActive reached -ve value");
+                
+                if (quiescent()) {
+                    releaseLatch();
+                    notifyParent();
+                    removeFromStates();
+                }
+                if (verbose>=1) debug("<<<< State(id="+id+").transitToCompletedMul returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
+            }
         }
         
         def quiescent():Boolean {
@@ -796,7 +722,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         def releaseLatch() {
-            if (gfs.home.isDead()) { //isAdopted
+            if (isAdopted) { //
                 if (verbose>=1) debug("releaseLatch(id="+id+") called on lost finish; not releasing latch");
             } else {
                 val exceptions = (excs == null || excs.isEmpty()) ?  null : excs.toRail();
@@ -824,23 +750,14 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         def notifyParent() {
-            if (!gfs.home.isDead()/*isAdopted*/ || parentId == FinishResilient.UNASSIGNED) {
+            if (verbose>=1) debug(">>>> State(id="+id+").notifyParent(parentId=" + parentId + ", isAdopted="+isAdopted+") called");
+            if ( !isAdopted || parentId == FinishResilient.UNASSIGNED) {
                 if (verbose>=1) debug("<<< State(id="+id+").notifyParent returning, not lost or parent["+parentId+"] does not exist");
                 return;
             }
-            val srcId = finSrc;
-            val dstId = id.home;
-            val dpe:CheckedThrowable;
-            if (finKind == FinishResilient.ASYNC) {
-                dpe = new DeadPlaceException(Place(dstId));
-                dpe.fillInStackTrace();
-            } else {
-                dpe = null;
-            }
-            if (verbose>=1) debug(">>>> State(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+finKind+") called");
             val parentState = states(parentId);
-            parentState.transitToCompleted(srcId, dstId, finKind, dpe);
-            if (verbose>=1) debug("<<<< State(id="+id+").notifyParent(srcId=" + srcId + ",dstId="+dstId+",kind="+finKind+") returning");
+            parentState.removeGhostChild(id);
+            if (verbose>=1) debug("<<<< State(id="+id+").notifyParent(parentId=" + parentId + ", isAdopted="+isAdopted+") returning");
         }
 
         def removeFromStates() {
@@ -888,14 +805,15 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             this.id = id;
         }
         
-        public static def countReceived(id:Id, src:Int, kind:Int) {
-            if (verbose>=1) debug(">>>> countReceived(id="+id+", src="+src+", kind="+kind+") called");
-            var count:Int = 0n;
+        public static def countDropped(id:Id, src:Int, kind:Int, sent:Int) {
+            if (verbose>=1) debug(">>>> countDropped(id="+id+", src="+src+", kind="+kind+", sent="+sent+") called");
+            var dropped:Int = 0n;
             try {
                 remoteLock.lock();
                 val remote = remotes.getOrElse(id, null);
                 if (remote != null) {
-                    count = remote.receivedFrom(src, kind);
+                    val received = remote.receivedFrom(src, kind);
+                    dropped = sent - received;
                 } else {
                     //no remote finish for this id should be created here
                     remoteDeny.add(id);
@@ -903,8 +821,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             } finally {
                 remoteLock.unlock();
             }
-            if (verbose>=1) debug("<<<< countReceived(id="+id+", src="+src+", kind="+kind+") returning, count="+count);
-            return count;
+            if (verbose>=1) debug("<<<< countDropped(id="+id+", src="+src+", kind="+kind+", sent="+sent+") returning, dropped="+dropped);
+            return dropped;
         }
         
         public static def getOrCreateRemote(id:Id) {
@@ -1195,13 +1113,13 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         var excs:GrowableRail[CheckedThrowable]; 
         val lc = new AtomicInteger(1n);
         
-        def this(id:Id, parent:FinishState, src:Place, kind:Int) {
+        def this(id:Id, parent:FinishState) {
             this.parent = parent;
             if (parent instanceof FinishResilientPlace0Optimistic) {
                 val parentId = (parent as FinishResilientPlace0Optimistic).id;
-                optId = OptimisticRootId(id, parentId, src.id as Int, kind);
+                optId = OptimisticRootId(id, parentId);
             } else {
-                optId = OptimisticRootId(id, UNASSIGNED, src.id as Int, kind);
+                optId = OptimisticRootId(id, UNASSIGNED);
             }
         }
         
@@ -1461,23 +1379,13 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 } else {
                     at (Place(p)) @Immediate("counting_request") async {
                         if (verbose>=1) debug("==== processCountingRequests  reached from " + gr.home + " to " + here);
-                        val countChildren = requests.countChildren ;
-                        val countReceived = requests.countReceived;
-                        if (countChildren.size() > 0) {
-                            for (b in countChildren.entries()) {
-                                val parentId = b.getKey().parentId;
-                                val src = b.getKey().src;
-                                val dead = b.getKey().dead;
-                                val count = State.countChildren(parentId, dead, src);
-                                countChildren.put(b.getKey(), count);   
-                            }
-                        }
+                        val countDropped = requests.countDropped;
                         
-                        if (countReceived.size() > 0) {
-                            for (r in countReceived.entries()) {
+                        if (countDropped.size() > 0) {
+                            for (r in countDropped.entries()) {
                                 val key = r.getKey();
-                                val count = P0OptimisticRemoteState.countReceived(key.id, key.src, key.kind);
-                                countReceived.put(key, count);
+                                val count = P0OptimisticRemoteState.countDropped(key.id, key.src, key.kind, key.sent);
+                                countDropped.put(key, count);
                             }
                         }
                         
@@ -1485,12 +1393,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                         if (verbose>=1) debug("==== processCountingRequests  reporting termination to " + gr.home + " from " + here);
                         at (gr) @Immediate("counting_response") async {
                             val output = (outputGr as GlobalRef[HashMap[Int,OptResolveRequest]]{self.home == here})().getOrThrow(me);
-                            
-                            for (ve in countChildren.entries()) {
-                                output.countChildren.put(ve.getKey(), ve.getValue());
-                            }
-                            for (vr in countReceived.entries()) {
-                                output.countReceived.put(vr.getKey(), vr.getValue());
+                            for (vr in countDropped.entries()) {
+                                output.countDropped.put(vr.getKey(), vr.getValue());
                             }
                             gr().notifyTermination(me);
                         }
@@ -1517,28 +1421,21 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         val newDead = FinishReplicator.getNewDeadPlaces();
         if (newDead == null || newDead.size() == 0) //occurs at program termination
             return;
-        val states = State.getImpactedStates(newDead);
-        if (states.isEmpty()) {
-            if (verbose>=2) debug(">>>> notifyPlaceDeath returning, no impacted states");
-        }
         
-        val countingReqs = State.aggregateCountingRequests(newDead, states); // combine all requests targetted to a specific place
-        processCountingRequests(countingReqs); //obtain the counts
-        
-        //merge all results
-        val countChildren = new HashMap[Id, Int]();
-        val countReceived = new HashMap[ReceivedQueryId, Int]();
-        for (e in countingReqs.entries()) {
-            val v = e.getValue();
-            for (ve in v.countChildren .entries()) {
-                countChildren.put(ve.getKey().parentId, ve.getValue());
+        val countingReqs = State.updateGhostChildrenAndGetRemoteQueries(newDead);
+        if (countingReqs.size() > 0) {
+            processCountingRequests(countingReqs); //obtain the counts
+            
+            //merge all results
+            val merged = new HashMap[DroppedQueryId, Int]();
+            for (e in countingReqs.entries()) {
+                val v = e.getValue();
+                for (vr in v.countDropped.entries()) {
+                    merged.put(vr.getKey(), vr.getValue());
+                }
             }
-            for (vr in v.countReceived.entries()) {
-                countReceived.put(vr.getKey(), vr.getValue());
-            }
+            State.convertDeadActivities(merged);
         }
-        
-        State.convertDeadActivities(newDead, states, countChildren, countReceived);
         if (verbose>=1) debug("<<<< notifyPlaceDeath returning");
         Console.OUT.println("p0FinishRecoveryTime:" + (Timer.milliTime()-start) + "ms");
     }
