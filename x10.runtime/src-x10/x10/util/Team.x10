@@ -1210,15 +1210,6 @@ public struct Team {
                 }
             };
 
-                if (DEBUGINTERNALS) {
-                    if (Team.state(teamidcopy).isValid()) {
-                        Runtime.println(here+":team"+teamidcopy+" reached " + conditionStr);
-                    } else {
-                        Runtime.println(here+":team"+teamidcopy+" failed to reach " + conditionStr);
-                    }
-                }
-            };
-
             // block if some other collective is in progress.
             // note that local indexes are not yet set up, so we won't check for dead places in this call
             sleepUntil(() => this.phase.compareAndSet(PHASE_READY, PHASE_INIT), "init");
