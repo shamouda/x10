@@ -12,18 +12,11 @@ package x10.xrx.freq;
 
 import x10.xrx.FinishResilient;
 
-public class TermSimRequestOpt extends FinishRequest {
-    public val srcId:Int;
-    public val dstId:Int;
-    public val kind:Int;
-    public ex:CheckedThrowable;
+public class RemoveGhostChildRequestOpt extends FinishRequest {
+    public var childId:FinishResilient.Id;
 
-    public def this(id:FinishResilient.Id, masterPlaceId:Int, 
-            srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable) {
+    public def this(id:FinishResilient.Id, masterPlaceId:Int, childId:FinishResilient.Id) {
         super(id, masterPlaceId, FinishResilient.UNASSIGNED);
-        this.srcId = srcId;
-        this.dstId = dstId;
-        this.kind = kind;
-        this.ex = ex;
+        this.childId = childId;
     }
 }

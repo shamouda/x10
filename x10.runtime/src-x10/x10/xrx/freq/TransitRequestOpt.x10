@@ -13,19 +13,14 @@ package x10.xrx.freq;
 import x10.xrx.FinishResilient;
 
 public class TransitRequestOpt extends FinishRequest {
-    public val finSrc:Int;
-    public val finKind:Int;
     public val srcId:Int;
     public val dstId:Int;
     public val kind:Int;
     
     public var transitSubmitDPE:Boolean;
 
-    public def this(id:FinishResilient.Id, masterPlaceId:Int, parentId:FinishResilient.Id,
-            finSrc:Int, finKind:Int, srcId:Int, dstId:Int, kind:Int) {
+    public def this(id:FinishResilient.Id, masterPlaceId:Int, parentId:FinishResilient.Id, srcId:Int, dstId:Int, kind:Int) {
         super(id, masterPlaceId, parentId);
-        this.finSrc = finSrc;
-        this.finKind = finKind;
         this.srcId = srcId;
         this.dstId = dstId;
         this.kind = kind;
@@ -33,7 +28,4 @@ public class TransitRequestOpt extends FinishRequest {
     public def setSubmitDPE(r:Boolean) {
         this.transitSubmitDPE = r;
     }
-    public def getFinSrc() = finSrc;
-    public def getFinKind() = finKind;
-    
 }

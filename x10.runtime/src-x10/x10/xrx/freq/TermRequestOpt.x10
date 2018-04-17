@@ -13,23 +13,17 @@ package x10.xrx.freq;
 import x10.xrx.FinishResilient;
 
 public class TermRequestOpt extends FinishRequest {
-    public val finSrc:Int;
-    public val finKind:Int;
     public val srcId:Int;
     public val dstId:Int;
     public val kind:Int;
     public ex:CheckedThrowable;
  
     public def this(id:FinishResilient.Id, masterPlaceId:Int, parentId:FinishResilient.Id,
-            finSrc:Int, finKind:Int, srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable) {
+            srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable) {
         super(id, masterPlaceId, parentId);
-        this.finSrc = finSrc;
-        this.finKind = finKind;
         this.srcId = srcId;
         this.dstId = dstId;
         this.kind = kind;
         this.ex = ex;
     }
-    public def getFinSrc() = finSrc;
-    public def getFinKind() = finKind;
 }

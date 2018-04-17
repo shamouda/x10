@@ -667,6 +667,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             numActive--;
             if (numActive < 0)
                 throw new Exception (here + " FATAL error, State(id="+id+").numActive reached -ve value" );
+            addException(new DeadPlaceException(Place(childId.home)));
             if (quiescent()) {
                 releaseLatch();
                 notifyParent();

@@ -80,9 +80,9 @@ public abstract class FinishRequest {
     }
     
     public static def makeOptTransitRequest(id:FinishResilient.Id, parentId:FinishResilient.Id,
-            finSrc:Int, finKind:Int, srcId:Int, dstId:Int, kind:Int) {
+            srcId:Int, dstId:Int, kind:Int) {
         val masterPlaceId = FinishReplicator.getMasterPlace(id.home);
-        return new TransitRequestOpt(id, masterPlaceId, parentId, finSrc, finKind, srcId, dstId, kind);    
+        return new TransitRequestOpt(id, masterPlaceId, parentId, srcId, dstId, kind);    
     }
     
     public static def makePesTransitRequest(id:FinishResilient.Id, parentId:FinishResilient.Id, adopterId:FinishResilient.Id,
@@ -107,9 +107,9 @@ public abstract class FinishRequest {
     }
     
     public static def makeOptExcpRequest(id:FinishResilient.Id, parentId:FinishResilient.Id, 
-            finSrc:Int, finKind:Int, ex:CheckedThrowable) {
+            ex:CheckedThrowable) {
         val masterPlaceId = FinishReplicator.getMasterPlace(id.home) ;
-        return new ExcpRequestOpt(id, masterPlaceId, parentId, finSrc, finKind, ex);
+        return new ExcpRequestOpt(id, masterPlaceId, parentId, ex);
     }
     
     public static def makePesExcpRequest(id:FinishResilient.Id, parentId:FinishResilient.Id, adopterId:FinishResilient.Id,
@@ -120,14 +120,14 @@ public abstract class FinishRequest {
     }
     
     public static def makeOptTermRequest(id:FinishResilient.Id, parentId:FinishResilient.Id,
-            finSrc:Int, finKind:Int, srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable) {
+            srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable) {
         val masterPlaceId = FinishReplicator.getMasterPlace(id.home);
-        return new TermRequestOpt(id, masterPlaceId, parentId, finSrc, finKind, srcId, dstId, kind, ex);    
+        return new TermRequestOpt(id, masterPlaceId, parentId, srcId, dstId, kind, ex);    
     }
     
-    public static def makeOptSimulatedTermRequest(id:FinishResilient.Id, srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable) {
+    public static def makeOptRemoveGhostChildRequest(id:FinishResilient.Id, childId:FinishResilient.Id) {
         val masterPlaceId = FinishReplicator.getMasterPlace(id.home);
-        return new TermSimRequestOpt(id, masterPlaceId, srcId, dstId, kind, ex);    
+        return new RemoveGhostChildRequestOpt(id, masterPlaceId, childId);
     }
     
     public static def makePesTermRequest(id:FinishResilient.Id, parentId:FinishResilient.Id, adopterId:FinishResilient.Id,

@@ -155,10 +155,8 @@ public abstract class FinishResilient extends FinishState {
         case Configuration.RESILIENT_MODE_DIST_OPTIMISTIC:
         {
             val p = (parent!=null) ? parent : getCurrentFS();
-            val src = Runtime.activity().srcPlace;
-            val kind = Runtime.activity().atFinishState() instanceof FinishResilientOptimistic ? AT : ASYNC ;
-            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p + " src=" + src);
-            fs = FinishResilientOptimistic.make(p, src, kind);
+            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
+            fs = FinishResilientOptimistic.make(p);
             break;
         }
         case Configuration.RESILIENT_MODE_DIST_PESSIMISTIC:
@@ -258,7 +256,7 @@ public abstract class FinishResilient extends FinishState {
                 val pl = e.getKey();
                 val reqs = e.getValue();
                 val bkps = reqs.countChildren ;
-                val recvs = reqs.countReceived;
+                val recvs = reqs.countDropped;
                 s.add("\nRecovery requests:\n");
                 s.add("   To place: " + pl + "\n");
                 if (bkps.size() > 0) {
@@ -269,9 +267,9 @@ public abstract class FinishResilient extends FinishState {
                     s.add("}\n");
                 }
                 if (recvs.size() > 0) {
-                    s.add("  countReceives:{");
+                    s.add("  countDropped:{");
                     for (r in recvs.entries()) {
-                        s.add("<id="+r.getKey().id+",src="+r.getKey().src + ">, ");
+                        s.add("<id="+r.getKey().id+",src="+r.getKey().src + ",sent="+r.getKey().sent+">, ");
                     }
                     s.add("}\n");
                 }
@@ -289,8 +287,7 @@ class MasterChanged(newMasterPlace:Int)  extends Exception {} //optimistic only
 class MasterAndBackupDied extends Exception {}
 class BackupCreationDenied extends Exception {}
 class OptResolveRequest { //used in optimistic protocols only
-    val countChildren  = new HashMap[FinishResilient.ChildrenQueryId, Int]();
-    val countReceived = new HashMap[FinishResilient.ReceivedQueryId, Int]();
+    val countChildren  = new HashMap[FinishResilient.ChildrenQueryId, HashSet[FinishResilient.Id]]();
     val countDropped = new HashMap[FinishResilient.DroppedQueryId, Int]();
 }
 class SearchBackupResponse {
