@@ -509,6 +509,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         }
         
         public def getId() = id;
+        public def getBackupId() = backupPlaceId;
         
         public def lock() {
             latch.lock();

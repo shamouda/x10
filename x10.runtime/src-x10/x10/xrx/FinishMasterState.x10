@@ -20,6 +20,7 @@ public abstract class FinishMasterState extends FinishResilient {
     abstract def unlock():void;
     abstract def getId():Id;
     abstract def dump():void;
+    abstract def getBackupId():Int;
 }
 
 class MasterResponse {

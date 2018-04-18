@@ -391,7 +391,7 @@ public final class FinishReplicator {
     }
     
     static def handleMasterDied(req:FinishRequest) {
-        prepareRequestForNewMaster(req);
+        backupGetNewMaster(req);
         if (!OPTIMISTIC) {
             req.setOutAdopterId(req.id);
             req.setOutSubmit(false);
@@ -455,7 +455,7 @@ public final class FinishReplicator {
                 //NOLOG if (verbose>=1) debug("<<<< Replicator(id="+req.id+").exec() returning");
                 break;
             } catch (ex:MasterDied) {
-                prepareRequestForNewMaster(req); // we communicate with backup to ask for the new master location
+                backupGetNewMaster(req); // we communicate with backup to ask for the new master location
                 if (!OPTIMISTIC)
                     adopterId = req.id;
                 //NOLOG if (verbose>=1) debug("==== Replicator(id="+req.id+").exec() threw MasterDied exception, forward to newMaster " + req.id + " @ " + req.masterPlaceId);
@@ -467,6 +467,13 @@ public final class FinishReplicator {
                 //try again later
                 System.threadSleep(10);
             } catch (ex:BackupDied) {
+                try {
+                    val newBackupId = masterGetNewBackup(req, localMaster);
+                    updateBackupPlace(req.id.home, newBackupId);
+                }
+                catch (mdied:MasterDied) {
+                    throw new Exception (here + " FATAL error, backup died, as well as original master");
+                }
                 debug("<<<< Replicator(id="+req.id+").exec() returning: ignored backup failure exception");
                 break; //master should re-replicate
             }
@@ -609,8 +616,9 @@ public final class FinishReplicator {
         //NOLOG if (verbose>=1) debug("<<<< Replicator(id="+req.id+").backupExec returning [" + req + "]" );
         return resp;
     }
-
-    public static def prepareRequestForNewMaster(req:FinishRequest) {
+    
+    //prepares request for new master
+    public static def backupGetNewMaster(req:FinishRequest) {
         val id = req.id;
         val initBackup = getBackupPlace(id.home);
         var curBackup:Int = initBackup;
@@ -618,7 +626,7 @@ public final class FinishReplicator {
         val resp = new GetNewMasterResponse();
         val respGR = new GlobalRef[GetNewMasterResponse](resp);
         do {
-            //NOLOG if (verbose>=1) debug(">>>> prepareRequestForNewMaster(id="+req.id+") called, trying curBackup="+curBackup );
+            //NOLOG if (verbose>=1) debug(">>>> backupGetNewMaster(id="+req.id+") called, trying curBackup="+curBackup );
             if (curBackup == here.id as Int) { 
                 val bFin = findBackup(id);
                 if (bFin != null) {
@@ -684,12 +692,61 @@ public final class FinishReplicator {
         
         respGR.forget();
         
-        //NOLOG if (verbose>=1) debug("<<<< prepareRequestForNewMaster(id="+id+") returning, curBackup="+curBackup + " newMasterId="+req.id+",newMasterPlace="+req.masterPlaceId+",toAdopter="+req.isToAdopter());
+        //NOLOG if (verbose>=1) debug("<<<< backupGetNewMaster(id="+id+") returning, curBackup="+curBackup + " newMasterId="+req.id+",newMasterPlace="+req.masterPlaceId+",toAdopter="+req.isToAdopter());
         if (curBackup != initBackup)
             updateBackupPlace(id.home, curBackup);
         if (OPTIMISTIC) //master place doesn't change for pessimistic finish
             updateMasterPlace(req.id.home, req.masterPlaceId);
     }
+    
+    //dummy communication with the master to ensure it is still alive
+    //if it died, fatal error must be raised even if a new master was created by backup
+    //because the new master's state may be incorrect
+    public static def masterGetNewBackup(req:FinishRequest, localMaster:FinishMasterState) {
+        //NOLOG if (verbose>=1) debug(">>>> Replicator(id="+req.id+").masterGetNewBackup called [" + req + "]" );
+        
+        if (req.masterPlaceId == here.id as Int) { /*Local master*/ 
+            val mFin = findMasterOrAdd(req.id, localMaster);
+            if (mFin == null)
+                throw new Exception (here + " fatal error, master(id="+req.id+") is null");
+            val backupId = mFin.getBackupId();
+            //NOLOG if (verbose>=1) debug("<<<< Replicator(id="+req.id+").masterGetNewBackup returning [" + req + "]" );
+            return backupId;
+        }
+        
+        val masterRes = new GlobalRef[MasterResponse](new MasterResponse());
+        val master = Place(req.masterPlaceId);
+        val rCond = ResilientCondition.make(master);
+        val closure = (gr:GlobalRef[Condition]) => {
+            at (master) @Immediate("master_get_backup_id") async {
+                val mFin = findMaster(req.id);
+                if (mFin == null)
+                    throw new Exception (here + " fatal error, master(id="+req.id+") is null");
+                val r_back = mFin.getBackupId();
+                at (gr) @Immediate("master_get_backup_id_response") async {
+                    val mRes = (masterRes as GlobalRef[MasterResponse]{self.home == here})();
+                    mRes.backupPlaceId = r_back;
+                    gr().release();
+                }
+            }
+        };
+        
+        rCond.run(closure);
+        
+        if (rCond.failed()) {
+            rCond.forget();
+            masterRes.forget();
+            throw new MasterDied();
+        }
+        
+        val resp = masterRes();
+        rCond.forget();
+        masterRes.forget();
+        
+        //NOLOG if (verbose>=1) debug("<<<< Replicator(id="+req.id+").masterExec returning [" + req + "]" );
+        return resp.backupPlaceId;
+    }
+    
     
     /***************** Utilities *********************************/
     static def debug(msg:String) {

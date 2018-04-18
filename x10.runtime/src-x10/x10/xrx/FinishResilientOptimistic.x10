@@ -74,7 +74,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     }
     
     //create root finish
-    public def this (parent:FinishState, src:Place, kind:Int) {
+    public def this (parent:FinishState) {
         id = Id(here.id as Int, nextId.getAndIncrement());
         me = new OptimisticMasterState(id, parent);
         //NOLOG if (verbose>=1) debug("<<<< RootFinish(id="+id+", src="+src+") created");
@@ -87,8 +87,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     }
     
     //make root finish    
-    static def make(parent:FinishState, src:Place, kind:Int) {
-        return new FinishResilientOptimistic(parent, src, kind);
+    static def make(parent:FinishState) {
+        return new FinishResilientOptimistic(parent);
     }
     
     def getSource():Place {
@@ -517,6 +517,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         public def getId() = id;
+        public def getBackupId() = backupPlaceId;
         
         //makeBackup is true only when a parent finish if forced to be global by its child
         //otherwise, backup is created with the first transit request
