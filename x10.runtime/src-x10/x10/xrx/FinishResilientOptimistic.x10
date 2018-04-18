@@ -1042,7 +1042,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         /*********************************************************************/
         /*******************   Failure Recovery Methods   ********************/
         /*********************************************************************/
-        
         public def isImpactedByDeadPlaces(newDead:HashSet[Int]) {
             if (newDead.contains(backupPlaceId)) /*needs re-replication*/
                 return true;
@@ -1056,47 +1055,30 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         
         public def convertToDead(newDead:HashSet[Int], countChildrenBackups:HashMap[FinishResilient.Id, HashSet[FinishResilient.Id]]) {
             //NOLOG if (verbose>=1) debug(">>>> Master(id="+id+").convertToDead called");
+            val ghosts = countChildrenBackups.get(id);
+            if (ghostChildren == null)
+                ghostChildren = new HashSet[Id]();
+            ghostChildren.addAll(ghosts);
+            numActive += ghosts.size();
+            
             val toRemove = new HashSet[Edge]();
             for (e in transit.entries()) {
                 val edge = e.getKey();
-                val ghosts = countChildrenBackups.get(id);
-                if (ghostChildren == null)
-                    ghostChildren = new HashSet[Id]();
-                ghostChildren.addAll(ghosts);
-                numActive += ghosts.size();
-                
                 if (newDead.contains(edge.dst) ) {
                     val count = e.getValue();
+                    toRemove.add(edge);
+                    numActive -= count;
+                    if (numActive < 0)
+                        throw new Exception ( here + " Master(id="+id+").convertToDead FATAL error, numActive must not be negative");
                     
-                    
-                    
-                    
-                    val t2 = countChildrenBackups.get(id);
-                    //NOLOG if (verbose>=1) debug("==== Master(id="+id+").convertToDead("+id+") t1=" + t1 + " t2=" + t2);
-                    assert t1 > 0 : here + " Master(id="+id+").convertToDead FATAL error, t1 must be positive";
-                    if (t1 >= t2) {
-                        val count = t1-t2;
-                        val oldActive = numActive;
-                        numActive -= count;
-                        
-                        //NOLOG if (verbose>=1) debug("==== Master(id="+id+").convertToDead t1["+t1+"] t2["+t2+"] numActive["+oldActive+"] changing numActive to " + numActive);
-                        
-                        if (t2 == 0n)
-                        	toRemove.add(edge);
- 						else
- 						    transit.put(edge, t2);
-                        
-                        assert numActive >= 0 : here + " Master(id="+id+").convertToDead FATAL error, numActive must not be negative";
-                        if (edge.kind == ASYNC) {
-                            for (1..count) {
-                                //NOLOG if (verbose>=3) debug("adding DPE to "+id+" for transit task at "+edge.dst);
-                                val dpe = new DeadPlaceException(Place(edge.dst));
-                                dpe.fillInStackTrace();
-                                addExceptionUnsafe(dpe);
-                            }
+                    if (edge.kind == ASYNC) {
+                        for (1..count) {
+                            //NOLOG if (verbose>=3) debug("adding DPE to "+id+" for transit task at "+edge.dst);
+                            val dpe = new DeadPlaceException(Place(edge.dst));
+                            dpe.fillInStackTrace();
+                            addExceptionUnsafe(dpe);
                         }
                     }
-                    else assert false: here + "["+Runtime.activity()+"] Master(id="+id+").convertToDead FATAL error, t1 >= t2 condition not met, t1="+t1+" and t2=" + t2;
                 }
             }
             
@@ -1476,36 +1458,30 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         
         public def convertToDead(newDead:HashSet[Int], countChildrenBackups:HashMap[FinishResilient.Id, HashSet[FinishResilient.Id]]) {
             //NOLOG if (verbose>=1) debug(">>>> Backup(id="+id+").convertToDead called");
+            val ghosts = countChildrenBackups.get(id);
+            if (ghostChildren == null)
+                ghostChildren = new HashSet[Id]();
+            ghostChildren.addAll(ghosts);
+            numActive += ghosts.size();
+            
             val toRemove = new HashSet[Edge]();
             for (e in transit.entries()) {
                 val edge = e.getKey();
-                if (newDead.contains(edge.dst) && edge.src != edge.dst ) {
-                    val t1 = e.getValue();
-                    val t2 = countChildrenBackups.get(id);
-                    //NOLOG if (verbose>=1) debug("==== Backup(id="+id+").convertToDead("+id+") t1=" + t1 + " t2=" + t2);
-                    assert t1 > 0 : here + " Backup(id="+id+").convertToDead FATAL error, t1 must be positive";
-                    if (t1 >= t2) {
-                        val count = t1-t2;
-                        val oldActive = numActive;
-                        numActive -= count;
-                        //NOLOG if (verbose>=1) debug("==== Backup(id="+id+").convertToDead t1["+t1+"] t2["+t2+"] numActive["+oldActive+"] changing numActive to " + numActive);
-                        
-                        if (t2 == 0n)
-                        	toRemove.add(edge);
- 						else
- 						    transit.put(edge, t2);
-                        
-                        assert numActive >= 0 : here + " Backup(id="+id+").convertToDead FATAL error, numActive must not be negative";
-                        if (edge.kind == ASYNC) {
-                            for (1..count) {
-                                //NOLOG if (verbose>=3) debug("adding DPE to "+id+" for transit task at "+edge.dst);
-                                val dpe = new DeadPlaceException(Place(edge.dst));
-                                dpe.fillInStackTrace();
-                                addExceptionUnsafe(dpe);
-                            }
+                if (newDead.contains(edge.dst) ) {
+                    val count = e.getValue();
+                    toRemove.add(edge);
+                    numActive -= count;
+                    if (numActive < 0)
+                        throw new Exception ( here + " Backup(id="+id+").convertToDead FATAL error, numActive must not be negative");
+                    
+                    if (edge.kind == ASYNC) {
+                        for (1..count) {
+                            //NOLOG if (verbose>=3) debug("adding DPE to "+id+" for transit task at "+edge.dst);
+                            val dpe = new DeadPlaceException(Place(edge.dst));
+                            dpe.fillInStackTrace();
+                            addExceptionUnsafe(dpe);
                         }
                     }
-                    else assert false: here + "["+Runtime.activity()+"] Backup(id="+id+").convertToDead FATAL error, t1 >= t2 condition not met, t1="+t1+" t2=" + t2;
                 }
             }
             
