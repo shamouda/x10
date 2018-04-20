@@ -300,7 +300,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 } else {
                     try {
                         statesLock.lock();
-                        states(id).inTransit(srcId, dstId, kind, "notifySubActivitySpawn");
+                        states(id).inTransit(srcId, dstId, kind, "runImmediateAt notifySubActivitySpawn");
                     } finally {
                         statesLock.unlock();
                     }
@@ -518,7 +518,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     try {
                         statesLock.lock();
                         val state = getOrCreateState(optId, gfs);
-                        state.inTransit(srcId, dstId, kind, "notifySubActivitySpawn");
+                        state.inTransit(srcId, dstId, kind, "blocking runImmediateAt notifySubActivitySpawn");
                     } finally {
                         statesLock.unlock();
                     }
@@ -644,7 +644,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         def inTransit(srcId:Long, dstId:Long, kind:Int, tag:String) {
-            if (verbose>=1) debug(">>>> State(id="+id+").inTransit srcId=" + srcId + ", dstId=" + dstId + " called");
+            if (verbose>=1) debug(">>>> State(id="+id+").inTransit srcId=" + srcId + ", dstId=" + dstId + " tag="+tag+" called");
             val e = Edge(srcId, dstId, kind);
             increment(transit, e);
             increment(sent, e);
