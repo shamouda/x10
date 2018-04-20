@@ -76,7 +76,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     public def this (parent:FinishState) {
         id = Id(here.id as Int, nextId.getAndIncrement());
         me = new OptimisticMasterState(id, parent);
-        if (verbose>=1) debug("<<<< RootFinish(id="+id+", src="+src+") created");
+        if (verbose>=1) debug("<<<< RootFinish(id="+id+") created");
     }
     
     //create remote finish
@@ -719,7 +719,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         def removeGhostChild(childId:Id, t:CheckedThrowable, resp:MasterResponse) {
             try {
                 latch.lock();
-                if (verbose>=1) debug(">>>> Master(id="+id+").removeGhostChild childId=" + childId + ", ex=" + ex + " called");
+                if (verbose>=1) debug(">>>> Master(id="+id+").removeGhostChild childId=" + childId + ", t=" + t + " called");
                 if (ghostChildren == null || !ghostChildren.contains(childId))
                     throw new Exception(here + " FATAL error, State(id="+id+") does not has the ghost child " + childId);
                 ghostChildren.remove(childId);
@@ -732,7 +732,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     FinishReplicator.removeMaster(id);
                 }
                 
-                if (verbose>=1) debug("<<<< Master(id="+id+").removeGhostChild childId=" + childId + ", ex=" + ex + " returning");
+                if (verbose>=1) debug("<<<< Master(id="+id+").removeGhostChild childId=" + childId + ", t=" + t + " returning");
                 resp.backupPlaceId = backupPlaceId;
                 resp.backupChanged = backupChanged;
             } finally {

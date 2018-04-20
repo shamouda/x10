@@ -915,7 +915,7 @@ public final class FinishReplicator {
             }
             //no more backups under this parent from that src place should be created
             backupDeny.add(BackupDenyId(parentId, deadDst));
-            if (verbose>=1) debug("<<<< countChildrenBackups(parentId="+parentId+") returning, count = " + count + " and parentId added to denyList");
+            if (verbose>=1) debug("<<<< countChildrenBackups(parentId="+parentId+") returning, count = " + set.size() + " and parentId added to denyList");
         } finally {
             glock.unlock();
         }
