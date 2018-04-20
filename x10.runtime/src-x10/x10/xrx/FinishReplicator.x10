@@ -36,6 +36,8 @@ public final class FinishReplicator {
     private static val backupMap = new HashMap[Int, Int](); //backup place mapping
     private static val masterMap = new HashMap[Int, Int](); //master place mapping
 
+    private static val pendingGC = new HashMap[Int, HashSet[FinishResilient.Id]]();
+    
     private static val verbose = System.getenv("X10_RESILIENT_VERBOSE") == null? 0 : Long.parseLong(System.getenv("X10_RESILIENT_VERBOSE"));
     private static val OPTIMISTIC = Configuration.resilient_mode() == Configuration.RESILIENT_MODE_DIST_OPTIMISTIC;
     
@@ -219,9 +221,13 @@ public final class FinishReplicator {
         val master = Place(req.masterPlaceId);
         if (master.id == here.id) {
             //NOLOG if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal local" );
-            val mFin = localMaster != null ? findMasterOrAdd(req.id, localMaster) : findMaster(req.id);
+            val result = localMaster != null ? 
+                            findMasterOrAdd(req.id, localMaster, req.gc(), caller.id as Int) : 
+                            findMaster(req.id, req.gc(), caller.id as Int);
+            val mFin = result.master;
             if (mFin == null)
                 throw new Exception (here + " fatal error, master(id="+req.id+") is null1 while processing req["+req+"]");
+            deleteRemoteFinishObjects(result.gcReqs); result.gcReqs = null;
             val mresp = mFin.exec(req);
             if (mresp.errMasterMigrating) {
                 //NOLOG if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal MasterMigrating1, try again after 10ms" );
@@ -239,14 +245,17 @@ public final class FinishReplicator {
                 if (req == null)
                     throw new Exception(here + " SER_FATAL at master => req is null");
                 //NOLOG if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncExecInternal remote reached master ");
-                val mFin = findMaster(req.id);
+                val result = findMaster(req.id, req.gc(), caller.id as Int); 
+                val mFin = result.master;
                 if (mFin == null) 
                     throw new Exception(here + " fatal error, master(id="+req.id+") is null2 while processing req["+req+"]");
                 val mresp = mFin.exec(req);
+                mresp.gcReqs = result.gcReqs;
                 //NOLOG if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncExecInternal remote master moving to caller " + caller);
                 at (caller) @Immediate("async_master_exec_response") async {
                     if (mresp == null || req == null)
-                        throw new Exception(here + " SER_FATAL at caller => mresp is null? "+(mresp == null)+", req is null? " + (req==null));                    
+                        throw new Exception(here + " SER_FATAL at caller => mresp is null? "+(mresp == null)+", req is null? " + (req==null));
+                    deleteRemoteFinishObjects(mresp.gcReqs); mresp.gcReqs = null;
                     if (mresp.errMasterMigrating) {
                         //NOLOG if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal MasterMigrating2, try again after 10ms" );
                         //we cannot block within an immediate thread
@@ -492,9 +501,12 @@ public final class FinishReplicator {
         }
         
         if (req.masterPlaceId == here.id as Int) { /*Local master*/ 
-            val mFin = findMasterOrAdd(req.id, localMaster);
+            val result = findMasterOrAdd(req.id, localMaster, req.gc(), here.id as Int);
+            val mFin = result.master;
             if (mFin == null)
                 throw new Exception (here + " fatal error, master(id="+req.id+") is null");
+            
+            deleteRemoteFinishObjects(result.gcReqs); result.gcReqs = null;
             val resp = mFin.exec(req);
             if (resp.errMasterMigrating) { 
                 throw new MasterMigrating();
@@ -508,7 +520,8 @@ public final class FinishReplicator {
         val rCond = ResilientCondition.make(master);
         val closure = (gr:GlobalRef[Condition]) => {
             at (master) @Immediate("master_exec") async {
-                val mFin = findMaster(req.id);
+                val result = findMaster(req.id, req.gc(), gr.home.id as Int);
+                val mFin = result.master;
                 if (mFin == null)
                     throw new Exception (here + " fatal error, master(id="+req.id+") is null");
                 val resp = mFin.exec(req);
@@ -519,6 +532,7 @@ public final class FinishReplicator {
                 val r_errMasterMigrating = resp.errMasterMigrating;
                 val r_parentId_home = resp.parentIdHome;
                 val r_parentId_seq = resp.parentIdSeq;
+                val r_gcReqs = resp.gcReqs;
                 at (gr) @Immediate("master_exec_response") async {
                     val mRes = (masterRes as GlobalRef[MasterResponse]{self.home == here})();
                     mRes.backupPlaceId = r_back;
@@ -528,6 +542,7 @@ public final class FinishReplicator {
                     mRes.errMasterMigrating = r_errMasterMigrating;
                     mRes.parentIdHome = r_parentId_home;
                     mRes.parentIdSeq = r_parentId_seq;
+                    mRes.gcReqs = r_gcReqs;
                     gr().release();
                 }
             }
@@ -548,6 +563,7 @@ public final class FinishReplicator {
         if (resp.errMasterMigrating) { 
             throw new MasterMigrating();
         }
+        deleteRemoteFinishObjects(resp.gcReqs); resp.gcReqs = null;
         //NOLOG if (verbose>=1) debug("<<<< Replicator(id="+req.id+").masterExec returning [" + req + "]" );
         return resp;
     }
@@ -705,8 +721,9 @@ public final class FinishReplicator {
     public static def masterGetNewBackup(req:FinishRequest, localMaster:FinishMasterState) {
         //NOLOG if (verbose>=1) debug(">>>> Replicator(id="+req.id+").masterGetNewBackup called [" + req + "]" );
         
-        if (req.masterPlaceId == here.id as Int) { /*Local master*/ 
-            val mFin = findMasterOrAdd(req.id, localMaster);
+        if (req.masterPlaceId == here.id as Int) { /*Local master*/
+            val result = findMasterOrAdd(req.id, localMaster, false, -1n);
+            val mFin = result.master;
             if (mFin == null)
                 throw new Exception (here + " fatal error, master(id="+req.id+") is null");
             val backupId = mFin.getBackupId();
@@ -719,7 +736,8 @@ public final class FinishReplicator {
         val rCond = ResilientCondition.make(master);
         val closure = (gr:GlobalRef[Condition]) => {
             at (master) @Immediate("master_get_backup_id") async {
-                val mFin = findMaster(req.id);
+                val result = findMaster(req.id, false, -1n);
+                val mFin = result.master;
                 if (mFin == null)
                     throw new Exception (here + " fatal error, master(id="+req.id+") is null");
                 val r_back = mFin.getBackupId();
@@ -1015,7 +1033,8 @@ public final class FinishReplicator {
     static def removeMaster(id:FinishResilient.Id) {
         try {
             glock.lock();
-            fmasters.delete(id);
+            val master = fmasters.remove(id);
+            master.addGCRequests(pendingGC);
             //NOLOG if (verbose>=1) debug("<<<< removeMaster(id="+id+") returning");
         } finally {
             glock.unlock();
@@ -1044,29 +1063,35 @@ public final class FinishReplicator {
         }
     }
     
-    static def findMaster(id:FinishResilient.Id):FinishMasterState {
+    static def findMaster(id:FinishResilient.Id, gcGet:Boolean, gcSrcId:Int):FindMasterResult {
         //NOLOG if (verbose>=1) debug(">>>> findMaster(id="+id+") called");
         try {
+            val result = new FindMasterResult();
             glock.lock();
-            val fs = fmasters.getOrElse(id, null);
+            result.master = fmasters.getOrElse(id, null);
+            if (gcGet)
+                result.gcReqs = pendingGC.remove(gcSrcId); 
             //NOLOG if (verbose>=1) debug("<<<< findMaster(id="+id+") returning");
-            return fs;
+            return result;
         } finally {
             glock.unlock();
         }
     }
     
-    static def findMasterOrAdd(id:FinishResilient.Id, mFin:FinishMasterState):FinishMasterState {
+    static def findMasterOrAdd(id:FinishResilient.Id, mFin:FinishMasterState, gcGet:Boolean, gcSrcId:Int):FindMasterResult {
         //NOLOG if (verbose>=1) debug(">>>> findMasterOrAdd(id="+id+") called");
         try {
             glock.lock();
+            val result = new FindMasterResult();
             var fs:FinishMasterState = fmasters.getOrElse(id, null);
             if (fs == null) {
                 fs = mFin;
                 fmasters.put(id, mFin);
             }
+            if (gcGet)
+                result.gcReqs = pendingGC.remove(gcSrcId);
             //NOLOG if (verbose>=1) debug("<<<< findMasterOrAdd(id="+id+") returning");
-            return fs;
+            return result;
         } finally {
             glock.unlock();
         }
@@ -1255,4 +1280,15 @@ public final class FinishReplicator {
         pending.set(-2000n); //this means the main finish has completed its work
         //NOLOG if (verbose>=1) debug("<<<< waitForZeroPending returning" );
     }
+    
+    static def deleteRemoteFinishObjects(gcReqs:HashSet[FinishResilient.Id]) {
+        if (FinishState.REMOTE_GC && OPTIMISTIC) {
+            FinishResilientOptimistic.OptimisticRemoteState.deleteObjects(gcReqs);
+        }
+    }
+}
+
+class FindMasterResult {
+    var master:FinishMasterState;
+    var gcReqs:HashSet[FinishResilient.Id];
 }

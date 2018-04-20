@@ -11,6 +11,7 @@
 package x10.xrx;
 
 import x10.util.HashSet;
+import x10.util.HashMap;
 import x10.xrx.freq.FinishRequest;
 
 public abstract class FinishMasterState extends FinishResilient {
@@ -21,6 +22,9 @@ public abstract class FinishMasterState extends FinishResilient {
     abstract def getId():Id;
     abstract def dump():void;
     abstract def getBackupId():Int;
+    public def addGCRequests(pendingGC:HashMap[Int, HashSet[Id]]) {
+      //overridden in optimistic finish only  
+    } 
 }
 
 class MasterResponse {
@@ -31,4 +35,5 @@ class MasterResponse {
     var backupChanged:Boolean = false;
     var parentIdHome:Int; /*used in ADD_CHILD only*/
     var parentIdSeq:Int;
+    var gcReqs:HashSet[FinishResilient.Id];
 }

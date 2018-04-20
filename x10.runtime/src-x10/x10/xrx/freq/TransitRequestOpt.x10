@@ -28,4 +28,5 @@ public class TransitRequestOpt extends FinishRequest {
     public def setSubmitDPE(r:Boolean) {
         this.transitSubmitDPE = r;
     }
+    public def gc():Boolean = true;
 }

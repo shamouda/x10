@@ -33,7 +33,7 @@ abstract class FinishState {
 
     // Turn this on to debug deadlocks within the finish implementation
     static VERBOSE = Configuration.envOrElse("X10_FINISH_VERBOSE", false);
-    static REMOTE_GC = Configuration.envOrElse("X10_FINISH_REMOTE_GC", true);
+    public static REMOTE_GC = Configuration.envOrElse("X10_FINISH_REMOTE_GC", true);
 
     /**
      * Called by an activity running at the current Place when it

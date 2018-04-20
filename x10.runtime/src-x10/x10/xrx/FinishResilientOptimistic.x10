@@ -40,7 +40,6 @@ import x10.xrx.freq.TransitRequestOpt;
 //TODO: test notifyActivityCreationFailed()
 //TODO: handle RemoteCreationDenied
 //TODO: getNewMasterBlocking() does not need to be blocking
-//TODO: revise the adoption logic of nested local finishes
 //TODO: delete backup in sync(...) if quiescent reached
 //TODO: DenyId, can it use the src place only without the parent Id??? consider cases when a recovered master is creating new children backups!!!!
 /**
@@ -132,6 +131,20 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         
         public def this (val id:Id) {
             this.id = id;
+        }
+        
+        public static def deleteObjects(gcReqs:HashSet[Id]) {
+            if (gcReqs == null)
+                return;
+            try {
+                remoteLock.lock();
+                for (id in gcReqs) {
+                    if (verbose>=1) debug(">>>> deleting object(id="+id+")");
+                    remotes.delete(id);
+                }
+            } finally {
+                remoteLock.unlock();
+            }
         }
         
         def dump() {
@@ -519,6 +532,19 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         public def getId() = id;
         public def getBackupId() = backupPlaceId;
         
+        public def addGCRequests(pendingGC:HashMap[Int, HashSet[Id]]) {
+            if (REMOTE_GC) {
+                for (e in sent.entries()) {
+                    val dst = e.getKey().dst;
+                    var set:HashSet[Id] = pendingGC.getOrElse(dst, null);
+                    if (set == null) {
+                        set = new HashSet[Id]();
+                        pendingGC.put(dst, set);
+                    }
+                    set.add(id);
+                }
+            }
+        }
         //makeBackup is true only when a parent finish if forced to be global by its child
         //otherwise, backup is created with the first transit request
         def globalInit(makeBackup:Boolean) {
