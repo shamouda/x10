@@ -38,7 +38,7 @@ public final class FinishReplicator {
 
     private static val pendingGC = new HashMap[Int, HashSet[FinishResilient.Id]]();
     
-    private static val verbose = System.getenv("X10_RESILIENT_VERBOSE") == null? 0 : Long.parseLong(System.getenv("X10_RESILIENT_VERBOSE"));
+    private static val verbose = FinishResilient.verbose;
     private static val OPTIMISTIC = Configuration.resilient_mode() == Configuration.RESILIENT_MODE_DIST_OPTIMISTIC;
     
     //non-blocking transit
@@ -251,7 +251,7 @@ public final class FinishReplicator {
                     throw new Exception(here + " fatal error, master(id="+req.id+") is null2 while processing req["+req+"]");
                 val mresp = mFin.exec(req);
                 mresp.gcReqs = result.gcReqs;
-                if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncExecInternal remote master moving to caller " + caller);
+                if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncExecInternal remote master moving to caller " + caller + " gcReqs=" + mresp.gcReqs);
                 at (caller) @Immediate("async_master_exec_response") async {
                     if (mresp == null || req == null)
                         throw new Exception(here + " SER_FATAL at caller => mresp is null? "+(mresp == null)+", req is null? " + (req==null));
@@ -532,7 +532,7 @@ public final class FinishReplicator {
                 val r_errMasterMigrating = resp.errMasterMigrating;
                 val r_parentId_home = resp.parentIdHome;
                 val r_parentId_seq = resp.parentIdSeq;
-                val r_gcReqs = resp.gcReqs;
+                val r_gcReqs = result.gcReqs;
                 at (gr) @Immediate("master_exec_response") async {
                     val mRes = (masterRes as GlobalRef[MasterResponse]{self.home == here})();
                     mRes.backupPlaceId = r_back;

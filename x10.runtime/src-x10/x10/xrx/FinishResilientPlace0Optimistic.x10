@@ -786,6 +786,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
 
         def addGCRequests() {
+            if (verbose>=1) debug(">>>> addGCRequests(id="+id+") called");
             if (REMOTE_GC) {
                 for (e in sent.entries()) {
                     val dst = e.getKey().dst;
@@ -797,6 +798,18 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     set.add(id);
                 }
             }
+            if (verbose>=1) {
+                var str:String = "";
+                for (e in pendingGC.entries()) {
+                    val placeId = e.getKey();
+                    val set = e.getValue();
+                    for (id in set) {
+                        str += "(" + placeId + " :> " + id + ") ";
+                    }
+                }
+                debug("==== addGCRequests(id="+id+") result: " + str);
+            }
+            if (verbose>=1) debug("<<<< addGCRequests(id="+id+") returning");
         }
         
         def removeFromStates() {
@@ -845,8 +858,10 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         public static def deleteObjects(gcReqs:HashSet[Id]) {
-            if (gcReqs == null)
+            if (gcReqs == null) {
+                if (verbose>=1) debug(">>>> deleteObjects gcReqs = NULL");
                 return;
+            }
             try {
                 remoteLock.lock();
                 for (id in gcReqs) {

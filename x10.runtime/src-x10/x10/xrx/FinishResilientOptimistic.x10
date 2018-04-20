@@ -134,13 +134,15 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         public static def deleteObjects(gcReqs:HashSet[Id]) {
-            if (gcReqs == null)
+            if (gcReqs == null) {
+                if (verbose>=1) debug(">>>> deleteObjects gcReqs = NULL");
                 return;
+            }
             try {
                 remoteLock.lock();
-                for (id in gcReqs) {
-                    if (verbose>=1) debug(">>>> deleting object(id="+id+")");
-                    remotes.delete(id);
+                for (idx in gcReqs) {
+                    if (verbose>=1) debug(">>>> deleting object(id="+idx+")");
+                    remotes.delete(idx);
                 }
             } finally {
                 remoteLock.unlock();
@@ -533,6 +535,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         public def getBackupId() = backupPlaceId;
         
         public def addGCRequests(pendingGC:HashMap[Int, HashSet[Id]]) {
+            if (verbose>=1) debug(">>>> addGCRequests(id="+id+") called");
             if (REMOTE_GC) {
                 for (e in sent.entries()) {
                     val dst = e.getKey().dst;
@@ -544,6 +547,18 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     set.add(id);
                 }
             }
+            if (verbose>=1) {
+                var str:String = "";
+                for (e in pendingGC.entries()) {
+                    val placeId = e.getKey();
+                    val set = e.getValue();
+                    for (id in set) {
+                        str += "(" + placeId + " :> " + id + ") ";
+                    }
+                }
+                debug("==== addGCRequests(id="+id+") result: " + str);
+            }
+            if (verbose>=1) debug("<<<< addGCRequests(id="+id+") returning");
         }
         //makeBackup is true only when a parent finish if forced to be global by its child
         //otherwise, backup is created with the first transit request
