@@ -7,6 +7,7 @@
  *      http://www.opensource.org/licenses/eclipse-1.0.php
  *
  *  (C) Copyright IBM Corporation 2006-2016.
+ *  (C) Copyright Sara Salem Hamouda 2018.
  */
 
 /* MPICH2 mpi.h wants to not have SEEK_SET etc defined for C++ bindings */
@@ -1493,17 +1494,17 @@ static bool check_pending_receives() {
                     break;
 #ifndef X10RT_MPI3_RMA
                 case X10RT_REQ_TYPE_GET_INCOMING_DATA:
-                    get_incoming_data_completion(q, req); //ends up calling Rail.cc Rail_get_notifier
+                    get_incoming_data_completion(q, req);
                     break;
                 case X10RT_REQ_TYPE_GET_INCOMING_REQ:
-                    get_incoming_req_completion(msg_status.MPI_SOURCE, q, req); // issues isend to send the data
+                    get_incoming_req_completion(msg_status.MPI_SOURCE, q, req);
                     break;
                 case X10RT_REQ_TYPE_PUT_INCOMING_DATA:
-                    put_incoming_data_completion(q, req); //ends up calling Rail.cc Rail_put_notifier
+                    put_incoming_data_completion(q, req);
                     break;
 #endif
                 case X10RT_REQ_TYPE_PUT_INCOMING_REQ:
-                    put_incoming_req_completion(msg_status.MPI_SOURCE, q, req); // issues irecv to receive the data
+                    put_incoming_req_completion(msg_status.MPI_SOURCE, q, req);
                     break;
                 default:
                     fprintf(stderr, "[%s:%d] Unknown completion of type %d, exiting\n",
@@ -3897,8 +3898,6 @@ void x10rt_net_set_place_removed_cb(x10rt_place_removed_callback* cb) {
 
 #ifdef OPEN_MPI_ULFM
 void mpiErrorHandler(MPI_Comm * comm, int *errorCode, ...){
-
-	X10RT_NET_DEBUG("Place(%d): MPI error handler = %d", x10rt_net_here(), *errorCode);
 
     MPI_Group failedGroup;
 

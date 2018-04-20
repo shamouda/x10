@@ -7,6 +7,7 @@
  *      http://www.opensource.org/licenses/eclipse-1.0.php
  *
  *  (C) Copyright IBM Corporation 2014-2016.
+ *  (C) Copyright Sara Salem Hamouda 2018.
  */
 import harness.x10Test;
 

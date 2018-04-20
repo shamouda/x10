@@ -17,8 +17,9 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
-import java.lang.reflect.Array;
+//import java.lang.reflect.Array;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 
 import x10.core.GlobalRef;
 import x10.core.Rail;
@@ -50,11 +51,11 @@ public final class X10JavaSerializer implements SerializationConstants {
         
     // When a Object is serialized record its position
     // N.B. use custom IdentityHashMap class, as standard one has poor performance on J9
-    X10IdentityHashMap<Object, Integer> objectMap = new X10IdentityHashMap<Object, Integer>();
+    final X10IdentityHashMap<Object, Integer> objectMap = new X10IdentityHashMap<Object, Integer>();
     int counter = 0;
     
     // [GlobalGC] Table to remember serialized GlobalRefs, set and used in GlobalRef.java and InitDispatcher.java
-    X10IdentityHashMap<GlobalRef<?>, Integer> grefMap = new X10IdentityHashMap<GlobalRef<?>, Integer>(); // for GlobalGC
+    final X10IdentityHashMap<GlobalRef<?>, Integer> grefMap = new X10IdentityHashMap<GlobalRef<?>, Integer>(); // for GlobalGC
     public void addToGrefMap(GlobalRef<?> gr, int weight) { grefMap.put(gr, weight); }
     public java.util.Map<GlobalRef<?>, Integer> getGrefMap() { return grefMap; }
     
@@ -240,6 +241,53 @@ public final class X10JavaSerializer implements SerializationConstants {
         out.writeFloat(f);
     }
 
+    final X10IdentityHashMap<Class<?>, Method> writeReplace = new X10IdentityHashMap<Class<?>, Method>();
+    Method getWriteReplaceMethod(Class<?> clazz) {
+        Method m = writeReplace.get(clazz);
+        if (m != null) {
+            return m;
+        } else {
+            if (writeReplace.containsKey(clazz)) return null;
+            try {
+                m = clazz.getDeclaredMethod("writeReplace");
+                m.setAccessible(true);
+            } catch (NoSuchMethodException | SecurityException e) {
+                m = null;
+            }
+            writeReplace.put(clazz, m);
+            return m;
+        }
+    }
+
+    Object invokeWriteReplace(Method m, Object obj) {
+        try {
+            if (Runtime.TRACE_SER) {
+                Runtime.printTraceMessage("\t\tCalling writeReplace() for a " + Runtime.ANSI_CYAN + Runtime.ANSI_BOLD + obj.getClass().getName() + Runtime.ANSI_RESET);
+            }
+            return m.invoke(obj);
+        } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+        }
+        return obj;
+    }
+
+    final X10IdentityHashMap<Class<?>, Method> readResolve = new X10IdentityHashMap<Class<?>, Method>();
+    Method getReadResolveMethod(Class<?> clazz) {
+        Method m = readResolve.get(clazz);
+        if (m != null) {
+            return m;
+        } else {
+            if (readResolve.containsKey(clazz)) return null;
+            try {
+                m = clazz.getDeclaredMethod("readResolve");
+                m.setAccessible(true);
+            } catch (NoSuchMethodException | SecurityException e) {
+                m = null;
+            }
+            readResolve.put(clazz, m);
+            return m;
+        }
+    }
+
     public void write(Object obj) throws IOException {
         if (obj == null) {
             writeNull();
@@ -254,6 +302,36 @@ public final class X10JavaSerializer implements SerializationConstants {
             }            
             serializeArray(obj);
             return;
+        }
+
+        // check for replacement object
+        Object orig = obj;
+        while (true) {
+            Class<? extends Object> replClass;
+            Method m;
+            if (SerializationUtils.useX10SerializationProtocol(objClass) ||
+                (m = getWriteReplaceMethod(objClass)) == null ||
+                (obj = invokeWriteReplace(m, obj)) == null ||
+                (replClass = obj.getClass()) == objClass)
+                break;
+            objClass = replClass;
+        }
+
+        // if object replaced, run through original checks a second time
+        if (obj != orig) {
+            if (obj == null) {
+                writeNull();
+                return;
+            }
+
+            if (objClass.isArray()) {
+                Integer pos = previous_position(obj, true);
+                if (pos != null) {
+                    return;
+                }
+                serializeArray(obj);
+                return;
+            }
         }
 
         short sid = getSerializationId(objClass, obj);
@@ -275,7 +353,7 @@ public final class X10JavaSerializer implements SerializationConstants {
                 Runtime.printTraceMessage("Serializing a " + Runtime.ANSI_CYAN + Runtime.ANSI_BOLD + obj.getClass().getName() + Runtime.ANSI_RESET);
             }
             ((X10JavaSerializable)obj).$_serialize(this);
-        } else if (Runtime.USE_JAVA_SERIALIZATION && obj instanceof java.io.Serializable) {
+        } else if (obj instanceof java.io.Serializable && (Runtime.USE_JAVA_SERIALIZATION || getReadResolveMethod(objClass) != null)) {
             writeSerializationId(JAVA_OBJECT_STREAM_ID);
             writeUsingObjectOutputStream(obj); 
         } else {
@@ -437,11 +515,17 @@ public final class X10JavaSerializer implements SerializationConstants {
             }
         } else {
             writeSerializationId(getSerializationId(componentType, null));
-            int length = Array.getLength(obj);
-            write(length);
-            for (int i = 0; i < length; ++i) {
-                Object o = Array.get(obj, i);
-                write(o);
+            // avoid native method
+            //int length = Array.getLength(obj);
+            //write(length);
+            //for (int i = 0; i < length; ++i) {
+            //    Object o = Array.get(obj, i);
+            //    write(o);
+            //}
+            Object[] array = (Object[])obj;
+            out.writeInt(array.length);
+            for (Object elem : array) {
+                write(elem);
             }
         }
     }
