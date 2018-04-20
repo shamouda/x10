@@ -1083,9 +1083,9 @@ public final class FinishReplicator {
         try {
             glock.lock();
             val result = new FindMasterResult();
-            var fs:FinishMasterState = fmasters.getOrElse(id, null);
-            if (fs == null) {
-                fs = mFin;
+            result.master = fmasters.getOrElse(id, null);
+            if (result.master == null) {
+                result.master = mFin;
                 fmasters.put(id, mFin);
             }
             if (gcGet)
