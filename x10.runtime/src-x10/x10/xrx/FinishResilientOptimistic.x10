@@ -1098,11 +1098,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         public def convertToDead(newDead:HashSet[Int], countChildrenBackups:HashMap[FinishResilient.Id, HashSet[FinishResilient.Id]]) {
             if (verbose>=1) debug(">>>> Master(id="+id+").convertToDead called");
             val ghosts = countChildrenBackups.get(id);
-            if (ghostChildren == null)
-                ghostChildren = new HashSet[Id]();
-            ghostChildren.addAll(ghosts);
-            numActive += ghosts.size();
-            
+            if (ghosts != null && ghosts.size() > 0) {
+                if (ghostChildren == null)
+                    ghostChildren = new HashSet[Id]();
+                ghostChildren.addAll(ghosts);
+                if (verbose>=1) debug("==== Master(id="+id+").convertToDead adding ["+ghosts.size()+"] ghosts");
+                numActive += ghosts.size();
+            }
             val toRemove = new HashSet[Edge]();
             for (e in transit.entries()) {
                 val edge = e.getKey();
@@ -1501,10 +1503,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         public def convertToDead(newDead:HashSet[Int], countChildrenBackups:HashMap[FinishResilient.Id, HashSet[FinishResilient.Id]]) {
             if (verbose>=1) debug(">>>> Backup(id="+id+").convertToDead called");
             val ghosts = countChildrenBackups.get(id);
-            if (ghostChildren == null)
-                ghostChildren = new HashSet[Id]();
-            ghostChildren.addAll(ghosts);
-            numActive += ghosts.size();
+            if (ghosts != null && ghosts.size() > 0 ) {
+                if (ghostChildren == null)
+                    ghostChildren = new HashSet[Id]();
+                ghostChildren.addAll(ghosts);
+                if (verbose>=1) debug("==== Backup(id="+id+").convertToDead adding ["+ghosts.size()+"] ghosts");    
+                numActive += ghosts.size();
+            }
             
             val toRemove = new HashSet[Edge]();
             for (e in transit.entries()) {
@@ -1674,6 +1679,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                             for (b in countChildrenBackups.entries()) {
                                 val rec = b.getKey();
                                 val set = FinishReplicator.countChildrenBackups(rec.parentId, rec.dead, rec.src);
+                                if (verbose>=1) debug("==== processCountingRequests  children of " + rec.parentId + " is the set " + set);
                                 countChildrenBackups.put(b.getKey(), set);   
                             }
                         }
@@ -1682,6 +1688,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                             for (r in countDropped.entries()) {
                                 val key = r.getKey();
                                 val dropped = OptimisticRemoteState.countDropped(key.id, key.src, key.kind, key.sent);
+                                if (verbose>=1) debug("==== processCountingRequests  dropped of id " + key.id + " from src " + key.src + " is " + dropped);
                                 countDropped.put(key, dropped);
                             }
                         }
@@ -1868,10 +1875,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         for (e in countingReqs.entries()) {
             val v = e.getValue();
             for (ve in v.countChildren .entries()) {
-                countChildrenBackups.put(ve.getKey().parentId, ve.getValue());
+                val set = ve.getValue();
+                countChildrenBackups.put(ve.getKey().parentId, set);
+                if (verbose>=1) debug(">>>> notifyPlaceDeath countChildrenBackups.put( id="+ve.getKey().parentId+", set="+ setToString(set) +" )");
             }
             for (vr in v.countDropped.entries()) {
                 countDropped.put(vr.getKey(), vr.getValue());
+                if (verbose>=1) debug(">>>> notifyPlaceDeath countDropped.put( id="+vr.getKey().id+", src="+vr.getKey().src+", set="+ vr.getValue() +" )");
             }
         }
         
@@ -1942,4 +1952,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         if (verbose>=1) debug("<<<< notifyPlaceDeath returning");
     }
     
+    static def setToString(set:HashSet[Id]) {
+        if (set == null)
+            return "set = NULL";
+        var str:String = "{";
+        for (e in set)
+            str += e + "  ";
+        str += "}";
+        return str;
+    }
 }
