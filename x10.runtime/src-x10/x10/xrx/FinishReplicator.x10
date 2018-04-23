@@ -281,6 +281,23 @@ public final class FinishReplicator {
         }
     }
     
+    public static def masterResponseReceived(req:FinishRequest, mresp:MasterResponse) {
+        if (mresp == null || req == null)
+            throw new Exception(here + " SER_FATAL at caller => mresp is null? "+(mresp == null)+", req is null? " + (req==null));
+        deleteRemoteFinishObjects(mresp.gcReqs); mresp.gcReqs = null;
+        if (mresp.errMasterMigrating) {
+            if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal MasterMigrating2, try again after 10ms" );
+            //we cannot block within an immediate thread
+            Runtime.submitUncounted( ()=>{
+                System.threadSleep(10); 
+                asyncExecInternal(req, null);
+            });
+        }
+        else {
+            asyncMasterToBackup(here, req, mresp);
+        }
+    }
+    
     static def asyncMasterToBackup(caller:Place, req:FinishRequest, mresp:MasterResponse) {
         val submit = mresp.submit;
         if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncMasterToBackup => backupPlaceId = " + mresp.backupPlaceId + " submit = " + submit );
