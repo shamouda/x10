@@ -240,8 +240,10 @@ public final class FinishReplicator {
                 asyncMasterToBackup(caller, req, mresp);
             }
         } else {
+            val prof = null;
+            val preSendAction = ()=> { };
             if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncExecInternal remote moving to master " + master);
-            at (master) @Immediate("async_master_exec") async {
+            val closure = ()=> @x10.compiler.RemoteInvocation("runMasterAsync") { 
                 if (req == null)
                     throw new Exception(here + " SER_FATAL at master => req is null");
                 if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncExecInternal remote reached master ");
@@ -252,7 +254,10 @@ public final class FinishReplicator {
                 val mresp = mFin.exec(req);
                 mresp.gcReqs = result.gcReqs;
                 if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncExecInternal remote master moving to caller " + caller + " gcReqs=" + mresp.gcReqs);
-                at (caller) @Immediate("async_master_exec_response") async {
+
+                val prof2 = null;
+                val preSendAction2 = ()=> { };
+                val closure2 = ()=> @x10.compiler.RemoteInvocation("runMasterAsyncResp") {
                     if (mresp == null || req == null)
                         throw new Exception(here + " SER_FATAL at caller => mresp is null? "+(mresp == null)+", req is null? " + (req==null));
                     deleteRemoteFinishObjects(mresp.gcReqs); mresp.gcReqs = null;
@@ -267,8 +272,12 @@ public final class FinishReplicator {
                     else {
                         asyncMasterToBackup(caller, req, mresp);
                     }
-                }
-            }
+                };
+                Runtime.x10rtSendMessage(caller.id, closure2, prof2, preSendAction2);
+                Unsafe.dealloc(closure2);
+            };
+            Runtime.x10rtSendMessage(master.id, closure, prof, preSendAction);
+            Unsafe.dealloc(closure);
         }
     }
     
@@ -304,8 +313,11 @@ public final class FinishReplicator {
                     val bresp = bFin.exec(req);
                     processBackupResponse(bresp, req.num, backupPlaceId);
                 } else {
+                    
+                    val prof = null;
+                    val preSendAction = ()=> { };
                     if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup moving to backup " + backup);
-                    at (backup) @Immediate("async_backup_exec") async {
+                    val closure = ()=> @x10.compiler.RemoteInvocation("runBackupAsync") { 
                         if (req == null)
                             throw new Exception(here + " SER_FATAL at backup => req is null");
                         if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup reached backup ");
@@ -317,12 +329,20 @@ public final class FinishReplicator {
                         val bresp = bFin.exec(req);
                         if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup backup moving to caller " + caller);
                         val num = req.num;
-                        at (caller) @Immediate("async_backup_exec_response") async {
+                        
+                        val prof2 = null;
+                        val preSendAction2 = ()=> { };
+                        val closure2 = ()=> @x10.compiler.RemoteInvocation("runBackupAsyncResp") { 
                             if (bresp == null)
                                 throw new Exception(here + " SER_FATAL at caller => bresp is null");
                             processBackupResponse(bresp, num, backupPlaceId);
-                        }
-                    }
+                        };
+                        
+                        Runtime.x10rtSendMessage(caller.id, closure2, prof2, preSendAction2);
+                        Unsafe.dealloc(closure2);
+                    };
+                    Runtime.x10rtSendMessage(backup.id, closure, prof, preSendAction);
+                    Unsafe.dealloc(closure);
                 }                
             } //else is LEGAL ABSENCE => backup death is being handled by notifyPlaceDeath
         } else {
