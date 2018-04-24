@@ -27,13 +27,3 @@ public abstract class FinishMasterState extends FinishResilient {
     } 
 }
 
-class MasterResponse {
-    var backupPlaceId:Int;
-    var errMasterMigrating:Boolean = false;
-    var submit:Boolean = false;
-    var transitSubmitDPE:Boolean = false;
-    var backupChanged:Boolean = false;
-    var parentIdHome:Int; /*used in ADD_CHILD only*/
-    var parentIdSeq:Int;
-    var gcReqs:HashSet[FinishResilient.Id];
-}

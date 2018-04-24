@@ -25,8 +25,3 @@ public abstract class FinishBackupState {
     abstract def getPlaceOfMaster():Int;
 }
 
-class BackupResponse {
-    var errMasterDied:Boolean = false;
-    var errMasterChanged:Boolean = false; 
-    var newMasterPlace:Int = -1n; //valid only if errMasterChanged = true
-}
