@@ -68,11 +68,11 @@ public class BenchMicro {
         if (basePlace == 0) {
             Console.OUT.println("Test based from place 0");
             doTest(refTime, "place 0 -- ", think, true, MIN_NANOS);
-            doTestTree(refTime, "place 0 -- ", think, true, MIN_NANOS);
+            //doTestTree(refTime, "place 0 -- ", think, true, MIN_NANOS);
         } else {
             Console.OUT.println("Test based from place " + basePlace);
             at (Place(basePlace)) doTest(refTime, "place "+basePlace+" -- ", think, true, MIN_NANOS);
-            doTestTree(refTime, "place 0 -- ", think, true, MIN_NANOS);
+            //doTestTree(refTime, "place 0 -- ", think, true, MIN_NANOS);
         }
         Console.OUT.printf("Test based from place "+basePlace+" completed in %f seconds\n", (System.nanoTime()-t0)/1e9);
         Console.OUT.println();
@@ -113,7 +113,7 @@ public class BenchMicro {
         var time0:Long, time1:Long;
         var iterCount:Long;
         val home = here;
-
+/*
         iterCount = 0;
         time0 = System.nanoTime();
         do {
@@ -171,10 +171,11 @@ public class BenchMicro {
             iterCount++;
         } while (time1-time0 < minTime);
         if (print) println(refTime, prefix+"flat fan out: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
-
+*/
         iterCount = 0;
         time0 = System.nanoTime();
-        do {
+        //do 
+        {
             for (i in 1..OUTER_ITERS) {
                 finish {
                     for (p in Place.places()) {
@@ -186,9 +187,10 @@ public class BenchMicro {
             }
             time1 = System.nanoTime();
             iterCount++;
-        } while (time1-time0 < minTime);
+        } 
+        //while (time1-time0 < minTime);
         if (print) println(refTime, prefix+"flat fan out - message back: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
-        
+/*        
         iterCount = 0;
         time0 = System.nanoTime();
         do {
@@ -255,6 +257,7 @@ public class BenchMicro {
             iterCount++;
         } while (time1-time0 < minTime);
         if (print) println(refTime, prefix+"ring around via at: "+(time1-time0)/1E9/iterCount+" seconds");
+        */
     }
 
     public static def doTestTree(refTime:Long, prefix:String, t:Long, print:Boolean, minTime:Long) {
