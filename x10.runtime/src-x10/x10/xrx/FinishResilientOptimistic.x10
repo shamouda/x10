@@ -129,6 +129,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         private static val remotes = new HashMap[Id, OptimisticRemoteState]() ; //a cache for remote finish objects
         private static val remoteDeny = new HashSet[Id](); //remote deny list
         
+        public def toString() {
+            return "OptimisticRemote(id="+id+", localCount="+lc.get()+")";
+        }
+        
         public def this (val id:Id) {
             this.id = id;
         }
@@ -529,6 +533,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             else {
                 parentId = UNASSIGNED;
             }
+        }
+        
+        public def toString() {
+            return "OptimisticRoot(id="+id+", parentId="+parentId+", localCount="+lc.get()+")";
         }
         
         public def getId() = id;

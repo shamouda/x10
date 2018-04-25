@@ -853,6 +853,10 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         private static val remotes = new HashMap[Id, P0OptimisticRemoteState](); //a cache for remote finish objects
         private static val remoteDeny = new HashSet[Id](); //remote deny list
         
+        public def toString() {
+            return "P0OptimisticRemote(id="+id+", localCount="+lc.get()+")";
+        }
+        
         public def this (val id:Id) {
             this.id = id;
         }
@@ -1180,6 +1184,10 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         var strictFinish:Boolean = false;
         var excs:GrowableRail[CheckedThrowable]; 
         val lc = new AtomicInteger(1n);
+        
+        public def toString() {
+            return "P0OptimisticRoot(id="+optId.id+", parentId="+optId.parentId+", localCount="+lc.get()+")";
+        }
         
         def this(id:Id, parent:FinishState) {
             this.parent = parent;
