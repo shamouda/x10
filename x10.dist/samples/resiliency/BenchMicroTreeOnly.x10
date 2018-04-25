@@ -97,6 +97,7 @@ public class BenchMicroTreeOnly {
         }
         if (child1 < Place.numPlaces() || child2 < Place.numPlaces()) {
             finish {
+                Console.OUT.println(here + " NEW_FINISH c1="+child1+" c2="+child2);
                 if (child1 < Place.numPlaces()) at (Place(child1)) async downTree(thinkTime);
                 if (child2 < Place.numPlaces()) at (Place(child2)) async downTree(thinkTime);
             }
