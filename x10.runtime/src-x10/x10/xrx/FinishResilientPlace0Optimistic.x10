@@ -82,7 +82,9 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
     public def serialize(ser:Serializer) {
         if (verbose>=1) debug(">>>> serialize(id="+id+") called ");
     	if (me instanceof P0OptimisticMasterState) {
-    		(me as P0OptimisticMasterState).globalInit(false); // Once we have more than 1 copy of the finish state, we must go global
+    	    val me2 = (me as P0OptimisticMasterState); 
+    		if (!me2.isGlobal)
+    	        me2.globalInit(); // Once we have more than 1 copy of the finish state, we must go global
     	}
         ser.writeAny(id);
         if (verbose>=1) debug("<<<< serialize(id="+id+") returning ");
@@ -1199,19 +1201,19 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             }
         }
         
-        def globalInit(createState:Boolean) {
+        def globalInit() {
             latch.lock();
             strictFinish = true;
             if (!isGlobal) {
                 if (verbose>=1) debug(">>>> globalInit(id="+optId.id+") called");
-                val parent = parent;
                 if (parent instanceof FinishResilientPlace0Optimistic) {
                     val frParent = parent as FinishResilientPlace0Optimistic;
-                    if (frParent.me instanceof P0OptimisticMasterState) (frParent.me as P0OptimisticMasterState).globalInit(true);
+                    if (frParent.me instanceof P0OptimisticMasterState) {
+                        val par = (frParent.me as P0OptimisticMasterState);
+                        if (!par.isGlobal) par.globalInit();
+                    }
                 }
-                if (createState) {
-                    State.p0CreateState(optId, ref);
-                }
+                State.p0CreateState(optId, ref);
                 isGlobal = true;
                 if (verbose>=1) debug("<<<< globalInit(id="+optId.id+") returning");
             }
@@ -1289,7 +1291,14 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         def spawnRemoteActivity(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
-            globalInit(false);//globalize parent if not global
+            isGlobal = true;
+            if (parent instanceof FinishResilientPlace0Optimistic) {
+                val frParent = parent as FinishResilientPlace0Optimistic;
+                if (frParent.me instanceof P0OptimisticMasterState) {
+                    val par = (frParent.me as P0OptimisticMasterState);
+                    if (!par.isGlobal) par.globalInit();
+                }
+            }
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
             if (verbose>=1) debug(">>>> Root(id="+optId.id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+") called");
