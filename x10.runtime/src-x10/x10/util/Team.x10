@@ -115,22 +115,22 @@ public struct Team {
             }, (Place)=>true);
         } else {
             this.id = Team.state.size() as Int; // id is determined by the number of pre-defined places
+            val teamidcopy = this.id;
+            Place.places().broadcastFlat(()=>{
+                if (Team.state.capacity() <= teamidcopy)
+                    Team.state.grow(teamidcopy+1);
+                while (Team.state.size() < teamidcopy)
+                    Team.state.add(null); // I am not a member of this team id.  Insert a dummy value.
+                val groupIndex = places.indexOf(here);
+                if (groupIndex >= 0) {
+                    Team.state(teamidcopy) = new LocalTeamState(places, teamidcopy, groupIndex);
+                    Team.state(teamidcopy).init();
+                } else {
+                    Team.state(teamidcopy) = null;
+                }
+            }, (Place)=>true);
         }
         if (DEBUG) Runtime.println(here + " new team ID is "+this.id);
-        val teamidcopy = this.id;
-        Place.places().broadcastFlat(()=>{
-            if (Team.state.capacity() <= teamidcopy)
-                Team.state.grow(teamidcopy+1);
-            while (Team.state.size() < teamidcopy)
-                Team.state.add(null); // I am not a member of this team id.  Insert a dummy value.
-            val groupIndex = places.indexOf(here);
-            if (groupIndex >= 0) {
-                Team.state(teamidcopy) = new LocalTeamState(places, teamidcopy, groupIndex);
-                Team.state(teamidcopy).init();
-            } else {
-                Team.state(teamidcopy) = null;
-            }
-        }, (Place)=>true);
     }
 
     private static def nativeMake (places:Rail[Int], count:Int, result:Rail[Int]) : void {
