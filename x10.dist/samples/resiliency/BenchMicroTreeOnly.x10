@@ -78,11 +78,13 @@ public class BenchMicroTreeOnly {
         var iterCount:Long = 0;
         val home = here;
         time0 = System.nanoTime();
-        do {
+        //do 
+        {
             downTree(t);
             time1 = System.nanoTime();
             iterCount++;
-        } while (time1-time0 < minTime);
+        } 
+        //while (time1-time0 < minTime);
         if (print) println(refTime, prefix+"tree fan out: "+(time1-time0)/1E9/iterCount+" seconds");
     }
     
