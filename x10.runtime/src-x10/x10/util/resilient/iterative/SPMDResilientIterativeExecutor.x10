@@ -33,44 +33,41 @@ public class SPMDResilientIterativeExecutor (home:Place) {
     private val resilientMap:Store[Cloneable];
     private var plh:PlaceLocalHandle[PlaceTempData];
     private var team:Team;
-    private val itersPerCheckpoint:Long;
+    private val ckptInterval:Long;
     private val isResilient:Boolean;
-    // if step() are implicitly synchronized, no need for a step barrier inside the executor
-    private val implicitStepSynchronization:Boolean; 
     
     // configuration parameters for killing places at different times
-    private var simplePlaceHammer:SimplePlaceHammer;
+    private var hammer:SimplePlaceHammer;
 
     private transient var ckptTimes:ArrayList[Long] = new ArrayList[Long]();
     private transient var remakeTimes:ArrayList[Long] = new ArrayList[Long]();
     private transient var appRemakeTimes:ArrayList[Long] = new ArrayList[Long]();
     private transient var reconstructTeamTimes:ArrayList[Long] = new ArrayList[Long]();
-    private transient var resilientMapRecoveryTimes:ArrayList[Long] = new ArrayList[Long]();
+    private transient var recovMapTimes:ArrayList[Long] = new ArrayList[Long]();
     private transient var failureDetectionTimes:ArrayList[Long] = new ArrayList[Long]();
-    private transient var applicationInitializationTime:Long = 0;
+    private transient var appInitTime:Long = 0;
     private transient var startRunTime:Long = 0;
     private transient var lastCkptVersion:Long = -1;
     private transient var lastCkptIter:Long = -1;
     
-    public def this(itersPerCheckpoint:Long, sparePlaces:Long, supportShrinking:Boolean, implicitStepSynchronization:Boolean) {
+    public def this(ckptInterval:Long, sparePlaces:Long, supportShrinking:Boolean) {
         property(here);
 
-        isResilient = itersPerCheckpoint > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0;
-        this.itersPerCheckpoint = itersPerCheckpoint;
-        this.implicitStepSynchronization = implicitStepSynchronization;
+        isResilient = ckptInterval > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0;
+        this.ckptInterval = ckptInterval;
         val mgr = new PlaceManager(sparePlaces, supportShrinking);
         this.manager = GlobalRef[PlaceManager](mgr);
         team = new Team(mgr.activePlaces());
         if (isResilient) {
             this.resilientMap = Store.make[Cloneable]("_map_", mgr.activePlaces());
-            this.simplePlaceHammer = new SimplePlaceHammer();
+            this.hammer = new SimplePlaceHammer();
             if (VERBOSE){
-                simplePlaceHammer.printPlan();
+                hammer.printPlan();
             }
         }
         else {        	            
             this.resilientMap = null;
-            this.simplePlaceHammer = null;
+            this.hammer = null;
         }
     }
 
@@ -79,7 +76,7 @@ public class SPMDResilientIterativeExecutor (home:Place) {
     }
     
     public def setHammer(h:SimplePlaceHammer){here == home} {
-        simplePlaceHammer = h;
+        hammer = h;
     }
 
     public def activePlaces(){here == home} = manager().activePlaces();
@@ -89,15 +86,15 @@ public class SPMDResilientIterativeExecutor (home:Place) {
     //the startRunTime parameter is added to allow the executor to consider 
     //any initialization time done by the application before starting the executor
     public def run(app:SPMDResilientIterativeApp, startRunTime:Long){here == home} {
-        if (simplePlaceHammer != null) {
-            simplePlaceHammer.scheduleTimers();
+        if (hammer != null) {
+            hammer.scheduleTimers();
         }
         this.startRunTime = startRunTime;
         Console.OUT.println("SPMDResilientIterativeExecutor: Application start time ["+startRunTime+"] ...");
         val root = here;
         plh = PlaceLocalHandle.make[PlaceTempData](manager().activePlaces(), ()=>new PlaceTempData());
         var tmpGlobalIter:Long = 0;        
-        applicationInitializationTime = Timer.milliTime() - startRunTime;
+        appInitTime = Timer.milliTime() - startRunTime;
         var remakeRequired:Boolean = false;
         
         do{
@@ -144,18 +141,14 @@ public class SPMDResilientIterativeExecutor (home:Place) {
                     var localIter:Long = 0;
                     
                     while ( !app.isFinished_local() && 
-                            (!isResilient || (isResilient && localIter < itersPerCheckpoint)) ) {
+                            (!isResilient || (isResilient && localIter < ckptInterval)) ) {
                         var stepStartTime:Long = -1; // (-1) is used to differenciate between checkpoint exceptions and step exceptions
                             
-                        if ( isResilient && simplePlaceHammer.sayGoodBye(plh().globalIter) ) {
+                        if ( isResilient && hammer.sayGoodBye(plh().globalIter) ) {
                             executorKillHere("step()");
                         }
 
                         stepStartTime = Timer.milliTime();
-                        if (!implicitStepSynchronization){
-                            //to sync places & also to detect DPE
-                            team.barrier();
-                        }
                         
                         app.step_local();
                         
@@ -199,7 +192,7 @@ public class SPMDResilientIterativeExecutor (home:Place) {
         val startResilientMapRecovery = Timer.milliTime();
         val changes = manager().rebuildActivePlaces();
         resilientMap.updateForChangedPlaces(changes);
-        resilientMapRecoveryTimes.add(Timer.milliTime() - startResilientMapRecovery);
+        recovMapTimes.add(Timer.milliTime() - startResilientMapRecovery);
         
         if (VERBOSE){
             var str:String = "";
@@ -338,42 +331,42 @@ public class SPMDResilientIterativeExecutor (home:Place) {
             
             Console.OUT.println("FailureDetection-place0:" + railToString(failureDetectionTimes.toRail()));
             
-            Console.OUT.println("ResilientMapRecovery-place0:" + railToString(resilientMapRecoveryTimes.toRail()));
+            Console.OUT.println("ResilientMapRecovery-place0:" + railToString(recovMapTimes.toRail()));
             Console.OUT.println("AppRemake-place0:" + railToString(appRemakeTimes.toRail()));
             Console.OUT.println("TeamReconstruction-place0:" + railToString(reconstructTeamTimes.toRail()));
             Console.OUT.println("AllRemake-place0:" + railToString(remakeTimes.toRail()));
         }
         Console.OUT.println("=========Totals by averaging Min/Max statistics============");
-        Console.OUT.println(">>>>>>>>>>>>>>Initialization:"      + applicationInitializationTime);
+        Console.OUT.println("Initialization:"      + appInitTime);
         Console.OUT.println();
-        Console.OUT.println("   ---AverageSingleStep:" + railAverage(averageSteps));
-        Console.OUT.println(">>>>>>>>>>>>>>TotalSteps:"+ railSum(averageSteps) as Long);
+        Console.OUT.println("AverageSingleStep:" + railAverage(averageSteps));
+        Console.OUT.println(">>TotalSteps:"+ railSum(averageSteps) as Long);
         Console.OUT.println();
         if (isResilient){
             Console.OUT.println("Checkpoint-all:" + railToString(ckptTimes.toRail()));
-            Console.OUT.println("   ---AverageCheckpoint:" + railAverage(ckptTimes.toRail()) );
-            Console.OUT.println(">>>>>>>>>>>>>>TotalCheckpointingTime:" + railSum(ckptTimes.toRail()) as Long);
+            Console.OUT.println("AverageCheckpoint:" + railAverage(ckptTimes.toRail()) );
+            Console.OUT.println(">>TotalCheckpointingTime:" + railSum(ckptTimes.toRail()) as Long);
       
             Console.OUT.println();
             Console.OUT.println("FailureDetection-all:"        + railToString(failureDetectionTimes.toRail()) );
-            Console.OUT.println("   ---AverageFailureDetection:"   + railAverage(failureDetectionTimes.toRail()) );
+            Console.OUT.println("AverageFailureDetection:"   + railAverage(failureDetectionTimes.toRail()) );
                         
-            Console.OUT.println("ResilientMapRecovery-all:"      + railToString(resilientMapRecoveryTimes.toRail()) );
-            Console.OUT.println("   ---AverageResilientMapRecovery:" + railAverage(resilientMapRecoveryTimes.toRail()) );
+            Console.OUT.println("ResilientMapRecovery-all:"      + railToString(recovMapTimes.toRail()) );
+            Console.OUT.println("AverageResilientMapRecovery:" + railAverage(recovMapTimes.toRail()) );
             Console.OUT.println("AppRemake-all:"      + railToString(appRemakeTimes.toRail()) );
-            Console.OUT.println("   ---AverageAppRemake:" + railAverage(appRemakeTimes.toRail()) );
+            Console.OUT.println("AverageAppRemake:" + railAverage(appRemakeTimes.toRail()) );
             Console.OUT.println("TeamReconstruction-all:"      + railToString(reconstructTeamTimes.toRail()) );
-            Console.OUT.println("   ---AverageTeamReconstruction:" + railAverage(reconstructTeamTimes.toRail()) );
+            Console.OUT.println("AverageTeamReconstruction:" + railAverage(reconstructTeamTimes.toRail()) );
             Console.OUT.println("TotalRemake-all:"                   + railToString(remakeTimes.toRail()) );
-            Console.OUT.println("   ---AverageTotalRemake:"              + railAverage(remakeTimes.toRail()) );
+            Console.OUT.println("AverageTotalRemake:"              + railAverage(remakeTimes.toRail()) );
             
             Console.OUT.println("RestoreData-all:"      + railToString(averageRestore));
-            Console.OUT.println("   ---AverageRestoreData:"    + railAverage(averageRestore));
-            Console.OUT.println(">>>>>>>>>>>>>>TotalRecovery:" + (railSum(failureDetectionTimes.toRail()) + railSum(remakeTimes.toRail()) + railSum(averageRestore) ) as Long);
+            Console.OUT.println("AverageRestoreData:"    + railAverage(averageRestore));
+            Console.OUT.println(">>TotalRecovery:" + (railSum(failureDetectionTimes.toRail()) + railSum(remakeTimes.toRail()) + railSum(averageRestore) ) as Long);
         }
         Console.OUT.println("=============================");
         Console.OUT.println("Actual RunTime:" + runTime);
-        var calcTotal:Double = applicationInitializationTime + railSum(averageSteps);
+        var calcTotal:Double = appInitTime + railSum(averageSteps);
         
         if (isResilient){
             calcTotal += railSum(ckptTimes.toRail()) + 
@@ -389,13 +382,6 @@ public class SPMDResilientIterativeExecutor (home:Place) {
             Console.OUT.println("RestoreCount:"+(averageRestore==null?0:averageRestore.size));
             Console.OUT.println("RemakeCount:"+remakeTimes.size());
             Console.OUT.println("FailureDetectionCount:"+failureDetectionTimes.size());
-        
-            if (VERBOSE){
-                var str:String = "";
-                for (p in manager().activePlaces())
-                    str += p.id + ",";
-                Console.OUT.println("List of final survived places are: " + str);            
-            }
             Console.OUT.println("=============================");
         }
     }
