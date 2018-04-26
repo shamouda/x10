@@ -19,13 +19,20 @@ public class BenchmarkNewTeam extends x10Test {
     private static ITERS = 10;
     
 	public def run(): Boolean {
+	    
+	    //warm-up
+	    val startW = System.nanoTime();
         new Team(Place.places());
+        val stopW = System.nanoTime();
+        
         val start = System.nanoTime();
         for (iter in 1..ITERS) {
             new Team(Place.places());
         }
         val stop = System.nanoTime();
-        if (here == Place.FIRST_PLACE) Console.OUT.printf("newTeam %d places: %g ms\n", Place.numPlaces(), ((stop-start) as Double) / 1e6 / ITERS);
+        Console.OUT.printf("newTeam %d places warmup time: %g ms \n", Place.numPlaces(), ((stopW-startW) as Double) / 1e6);
+        Console.OUT.printf("newTeam %d places: %g ms \n", Place.numPlaces(), ((stop-start) as Double) / 1e6 / ITERS);
+        
         return true;
 	}
 
