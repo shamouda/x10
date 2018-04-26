@@ -52,12 +52,20 @@ public class SPMDResilientIterativeExecutor (home:Place) {
     
     public def this(ckptInterval:Long, sparePlaces:Long, supportShrinking:Boolean) {
         property(here);
-
+        var thisTime:Long = 0;
+        thisTime -= Timer.milliTime();
         isResilient = ckptInterval > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0;
         this.ckptInterval = ckptInterval;
         val mgr = new PlaceManager(sparePlaces, supportShrinking);
         this.manager = GlobalRef[PlaceManager](mgr);
+        
+        var teamTime:Long = 0;
+        teamTime -= Timer.milliTime();
         team = new Team(mgr.activePlaces());
+        teamTime += Timer.milliTime();
+        
+        var storeTime:Long = 0;
+        storeTime -= Timer.milliTime();
         if (isResilient) {
             this.resilientMap = Store.make[Cloneable]("_map_", mgr.activePlaces());
             this.hammer = new SimplePlaceHammer();
@@ -69,6 +77,10 @@ public class SPMDResilientIterativeExecutor (home:Place) {
             this.resilientMap = null;
             this.hammer = null;
         }
+        storeTime += Timer.milliTime();
+        
+        thisTime += Timer.milliTime();
+        Console.OUT.println("SPMDResilientIterativeExecutor created successfully:teamTime:"+teamTime+":storeTime:"+storeTime+":totalTime:"+thisTime);
     }
 
     public def run(app:SPMDResilientIterativeApp){here == home} {
