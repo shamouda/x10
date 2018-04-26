@@ -56,8 +56,8 @@ public struct Team {
     private val id:Int; // team ID
     public def id() = id;
     
-    public var thisNativeCreateNano:Long = 0;
-    public var thisBcastNano:Long = 0;
+    public val thisNativeCreateNano:Long;
+    public val thisBcastNano:Long;
     
     // this constructor is intended to be called at all places of a split, at the same time.
     private def this (id:Int, places:PlaceGroup, role:Long) {
@@ -86,6 +86,8 @@ public struct Team {
             teamState.init();
         }
         if (DEBUG) Runtime.println(here + " created our own team "+id);
+        thisNativeCreateNano = 0;
+        thisBcastNano = 0;
     }
 
     /** 
@@ -142,6 +144,8 @@ public struct Team {
             }, (Place)=>true);
             val stop2 = System.nanoTime();
             thisBcastNano = stop2 - start2;
+            
+            thisNativeCreateNano = 0;
         }
         if (DEBUG) Runtime.println(here + " new team ID is "+this.id);
     }
