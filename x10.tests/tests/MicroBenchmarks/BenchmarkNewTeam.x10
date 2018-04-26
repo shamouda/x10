@@ -36,8 +36,8 @@ public class BenchmarkNewTeam extends x10Test {
         val stop = System.nanoTime();
         Console.OUT.printf("newTeam warmup time: %g ms \n", ((stopW-startW) as Double) / 1e6);
         Console.OUT.printf("newTeam %d places: %g ms \n", Place.numPlaces(), ((stop-start) as Double) / 1e6 / ITERS);
-        Console.OUT.printf("newTeam %d places thisNativeCreateNano: %g ms \n", Place.numPlaces(), (totalNative as Double) / 1e6 / ITERS);
-        Console.OUT.printf("newTeam %d places thisBcastNano: %g ms \n", Place.numPlaces(), (totalBcast as Double) / 1e6 / ITERS);
+        Console.OUT.printf("newTeam %d places thisNativeCreate: %g ms \n", Place.numPlaces(), (totalNative as Double) / 1e6 / ITERS);
+        Console.OUT.printf("newTeam %d places thisBcast: %g ms \n", Place.numPlaces(), (totalBcast as Double) / 1e6 / ITERS);
         
         return true;
 	}
