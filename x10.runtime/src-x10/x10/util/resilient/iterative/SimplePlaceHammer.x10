@@ -23,7 +23,7 @@ import x10.compiler.Uncounted;
  * one of the iterative frameworks.
  */
 public class SimplePlaceHammer {
-    val stepMap:HashMap[Long,Long] = new HashMap[Long,Long]();
+    val steps:ArrayList[Pair[Long,Long]] = new ArrayList[Pair[Long,Long]]();
     val timers:ArrayList[Pair[Long,Long]] = new ArrayList[Pair[Long,Long]]();
 
     public def this() {
@@ -42,7 +42,7 @@ public class SimplePlaceHammer {
                 val sRail = new Rail[Long](tmp2.size, (i:Long) => { Long.parseLong(tmp2(i)) });
                 val min = Math.min(sRail.size, pRail.size);
                 for (i in 0..(min-1)) {
-                    stepMap.put(sRail(i), pRail(i));
+                    steps.add(Pair(sRail(i), pRail(i)));
                 }
             }
             if (times != null) {
@@ -58,8 +58,8 @@ public class SimplePlaceHammer {
 
     public def printPlan() {
         Console.OUT.print("Hammer step plan: ");
-        for (e in stepMap.entries()) {
-            Console.OUT.print("<"+e.getKey()+", "+e.getValue()+"> ");
+        for (e in steps) {
+            Console.OUT.print("<"+e.first+", "+e.second+"> ");
         }
         Console.OUT.print("\nHammer timer plan: ");
         for (p in timers) {
@@ -69,18 +69,16 @@ public class SimplePlaceHammer {
     }
     
     public def sayGoodBye(curStep:Long):Boolean {
-        val placeToKill = stepMap.getOrElse(curStep,-1);
-        if (placeToKill == here.id) {
-            return true;
-        } else {
-            return false;
+        for (e in steps) {
+            val killId = e.second;
+            val killStep = e.first;
+            
+            if (killStep == curStep && here.id == killId)
+                return true;
         }
+        return false;
     }
     
-    public def getVictimPlaceId(curStep:Long):Long {
-        return stepMap.getOrElse(curStep,-1);
-    }
-
     public def scheduleTimers() {
         for (p in timers) {
             val killId = p.second;

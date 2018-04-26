@@ -162,15 +162,8 @@ public class SPMDResilientIterativeExecutor (home:Place) {
                         
                         app.step_local();
                         
-                        try {
-                            plh().stat.stepTimes.add(Timer.milliTime()-stepStartTime);
-                        } catch(tmpEx:DeadPlaceException) {
-                        	//to allow killing multiple places in one step
-                        	if ( isResilient && hammer.sayGoodBye(plh().globalIter+1) ) {
-                                executorKillHere("step()");
-                            }
-                        	throw tmpEx;
-                        }
+                        plh().stat.stepTimes.add(Timer.milliTime()-stepStartTime);
+                        
                         plh().globalIter ++;
                         localIter++;
                         
