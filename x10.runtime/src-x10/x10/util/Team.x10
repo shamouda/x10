@@ -56,6 +56,9 @@ public struct Team {
     private val id:Int; // team ID
     public def id() = id;
     
+    public var thisNativeCreateNano:Long = 0;
+    public var thisBcastNano:Long = 0;
+    
     // this constructor is intended to be called at all places of a split, at the same time.
     private def this (id:Int, places:PlaceGroup, role:Long) {
         this.id = id;
@@ -101,10 +104,14 @@ public struct Team {
             val placeRail = new Rail[Int](count);
             for (var i:Long=0; i<count; i++)
                 placeRail(i) = places(i).id() as Int;
+            val start1 = System.nanoTime();
             finish nativeMake(placeRail, count as Int, result);
+            val stop1 = System.nanoTime();
+            thisNativeCreateNano = stop1 - start1;
             this.id = result(0);
             
             // team created - fill in the role at all places
+            val start2 = System.nanoTime();
             val teamidcopy:Long = this.id as Long;
             Place.places().broadcastFlat(()=>{
                 if (Team.roles.capacity() <= teamidcopy) // TODO move this check into the GrowableRail.grow() method
@@ -113,8 +120,12 @@ public struct Team {
                     Team.roles.add(-1n); // I am not a member of this team id.  Insert a dummy value.
                 Team.roles(teamidcopy) = places.indexOf(here) as Int;
             }, (Place)=>true);
+            val stop2 = System.nanoTime();
+            thisBcastNano = stop2 - start2;
+            
         } else {
             this.id = Team.state.size() as Int; // id is determined by the number of pre-defined places
+            val start2 = System.nanoTime();
             val teamidcopy = this.id;
             Place.places().broadcastFlat(()=>{
                 if (Team.state.capacity() <= teamidcopy)
@@ -129,10 +140,13 @@ public struct Team {
                     Team.state(teamidcopy) = null;
                 }
             }, (Place)=>true);
+            val stop2 = System.nanoTime();
+            thisBcastNano = stop2 - start2;
         }
         if (DEBUG) Runtime.println(here + " new team ID is "+this.id);
     }
-
+    
+    
     private static def nativeMake (places:Rail[Int], count:Int, result:Rail[Int]) : void {
         @Native("java", "x10.x10rt.TeamSupport.nativeMake(places, count, result);")
         @Native("c++", "x10rt_team_new(count, (x10rt_place*)places->raw, ::x10aux::coll_handler2, ::x10aux::coll_enter2(result->raw));") {}
