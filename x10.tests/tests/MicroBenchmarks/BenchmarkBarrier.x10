@@ -16,7 +16,7 @@ import x10.util.Team;
  * Benchmarks performance of Team.barrier
  */
 public class BenchmarkBarrier extends x10Test {
-    private static ITERS = 1000;
+    private static ITERS = 10;
 
 	public def run(): Boolean {
         finish for (place in Place.places()) at (place) async {
@@ -34,6 +34,7 @@ public class BenchmarkBarrier extends x10Test {
 	}
 
 	public static def main(var args: Rail[String]): void {
+	    Console.OUT.println("RESILIENT_MODE="+x10.xrx.Runtime.RESILIENT_MODE + " ITER=" + ITERS);
 		new BenchmarkBarrier().execute();
 	}
 }
