@@ -225,7 +225,7 @@ public class ResilientKMeansSPMD {
                                numClusters:Long, iterations:Long, epsilon:Float, verbose:Boolean,
                                checkpointFreq:Long, sparePlaces:Long):Rail[Float] {
         val startTime = System.currentTimeMillis();
-        val executor = new SPMDResilientIterativeExecutor(checkpointFreq, sparePlaces, false, false);
+        val executor = new SPMDResilientIterativeExecutor(checkpointFreq, sparePlaces, false);
         val pg = executor.activePlaces();
         val team = executor.team();
 
