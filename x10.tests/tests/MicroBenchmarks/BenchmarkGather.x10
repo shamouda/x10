@@ -17,7 +17,8 @@ import x10.util.Team;
  */
 public class BenchmarkGather extends x10Test {
     private static ITERS = 10;
-    private static COUNT_PER_PLACE = 2<<19;
+    //private static COUNT_PER_PLACE = 2<<19;
+    private static COUNT_PER_PLACE = 2<<15; //32768 = 32K
     private static SRC_OFFSET = 5;
     private static DST_OFFSET = 3;
     
@@ -29,7 +30,9 @@ public class BenchmarkGather extends x10Test {
             val warmupIn = new Rail[Double](1);
             var warmupOut:Rail[Double] = new Rail[Double](Place.numPlaces());
             Team.WORLD.gather(root,warmupIn, 0, warmupOut, 0, 1); // warm up comms layer
-            for (var s:Long= 1; s <= COUNT_PER_PLACE; s *= 2) {
+            //for (var s:Long= 1; s <= COUNT_PER_PLACE; s *= 2)
+            val s = COUNT_PER_PLACE;
+            {
                 var dst:Rail[Double] = null;
                 val dstSize = s*Place.numPlaces()+DST_OFFSET;
                 if (here.id == root.id){
@@ -59,6 +62,7 @@ public class BenchmarkGather extends x10Test {
     }
 
     public static def main(var args: Rail[String]): void {
+        Console.OUT.println("RESILIENT_MODE="+x10.xrx.Runtime.RESILIENT_MODE + " ITER=" + ITERS);
         new BenchmarkGather().execute();
     }
 }

@@ -17,7 +17,8 @@ import x10.util.Team;
  */
 public class BenchmarkGatherV extends x10Test {
     private static ITERS = 10;
-    private static MAX_S = 17;
+    //private static MAX_S = 17;
+    private static MAX_S = 15;
     private static SRC_OFFSET = 5;
     private static DST_OFFSET = 3;
 
@@ -32,7 +33,9 @@ public class BenchmarkGatherV extends x10Test {
             val warmupCounts = new Rail[Int](NPLACES, 1n);
             Team.WORLD.gatherv(root,warmupIn, 0, warmupOut, 0, warmupCounts); // warm up comms layer
             
-            for (var s:Long= 1; s <= MAX_S; s++) {
+            //for (var s:Long= 1; s <= MAX_S; s++) 
+            val s = MAX_S;
+            {
                 var dst:Rail[Double] = null;
                 val svalue = s;
                 val dcounts = new Rail[Int](NPLACES, (i:Long) => (Math.pow(2,svalue) * (i + 1)) as Int);
@@ -71,6 +74,7 @@ public class BenchmarkGatherV extends x10Test {
         return true;
     }
     public static def main(var args: Rail[String]): void {
+        Console.OUT.println("RESILIENT_MODE="+x10.xrx.Runtime.RESILIENT_MODE + " ITER=" + ITERS);
         new BenchmarkGatherV().execute();
     }
 }
