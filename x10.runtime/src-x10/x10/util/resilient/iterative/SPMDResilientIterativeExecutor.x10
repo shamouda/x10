@@ -69,9 +69,7 @@ public class SPMDResilientIterativeExecutor (home:Place) {
         if (isResilient) {
             this.resilientMap = Store.make[Cloneable]("_map_", mgr.activePlaces());
             this.hammer = new SimplePlaceHammer();
-            if (VERBOSE){
-                hammer.printPlan();
-            }
+            hammer.printPlan();
         }
         else {        	            
             this.resilientMap = null;
@@ -164,8 +162,15 @@ public class SPMDResilientIterativeExecutor (home:Place) {
                         
                         app.step_local();
                         
-                        plh().stat.stepTimes.add(Timer.milliTime()-stepStartTime);
-                        
+                        try {
+                            plh().stat.stepTimes.add(Timer.milliTime()-stepStartTime);
+                        } catch(tmpEx:DeadPlaceException) {
+                        	//to allow killing multiple places in one step
+                        	if ( isResilient && hammer.sayGoodBye(plh().globalIter+1) ) {
+                                executorKillHere("step()");
+                            }
+                        	throw tmpEx;
+                        }
                         plh().globalIter ++;
                         localIter++;
                         
@@ -484,7 +489,7 @@ public class SPMDResilientIterativeExecutor (home:Place) {
     private def executorKillHere(op:String) {        
         val stat = plh().stat;
         val victimId = here.id;
-        at (Place(0)) {            
+        finish at (Place(0)) async {
             plh().addVictim(victimId,stat);
         }
         Console.OUT.println("[Hammer Log] Killing ["+here+"] before "+op+" ...");
