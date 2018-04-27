@@ -1502,11 +1502,12 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             if (verbose>=2) debug(">>>> notifyPlaceDeath returning, not place0");
             return;
         }
-        val start = Timer.milliTime();
+       
         val newDead = FinishReplicator.getNewDeadPlaces();
         if (newDead == null || newDead.size() == 0) //occurs at program termination
             return;
         
+        val start = Timer.milliTime();
         val countingReqs = State.updateGhostChildrenAndGetRemoteQueries(newDead);
         if (countingReqs.size() > 0) {
             processCountingRequests(countingReqs); //obtain the counts
@@ -1522,6 +1523,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             State.convertDeadActivities(merged);
         }
         if (verbose>=1) debug("<<<< notifyPlaceDeath returning");
-        Console.OUT.println("p0FinishRecoveryTime:" + (Timer.milliTime()-start) + "ms");
+        Console.OUT.println("p0FinishRecoveryTime:" + (Timer.milliTime()-start) + "ms  newDead.size=" + newDead.size());
     }
 }

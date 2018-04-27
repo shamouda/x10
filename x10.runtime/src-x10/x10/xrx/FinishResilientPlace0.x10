@@ -504,6 +504,10 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
             return;
         }
         try {
+            val newDead = FinishReplicator.getNewDeadPlaces();
+            if (newDead == null || newDead.size() == 0) //occurs at program termination
+                return;
+            
             lock.lock();
             val start = Timer.milliTime();
             for (e in states.entries()) {
@@ -523,7 +527,7 @@ final class FinishResilientPlace0 extends FinishResilient implements CustomSeria
             for (s in toRemove) {
                 s.removeFromStates();
             }
-            Console.OUT.println("p0FinishRecoveryTime:" + (Timer.milliTime()-start) + "ms");
+            Console.OUT.println("p0FinishRecoveryTime:" + (Timer.milliTime()-start) + "ms  newDead.size=" + newDead.size());
         } finally {
             lock.unlock();
         }
