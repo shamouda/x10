@@ -123,9 +123,12 @@ public class GlobalResilientIterativeExecutor (home:Place) {
                 while ( !app.isFinished() && 
                         (!isResilient || (isResilient && localIter < itersPerCheckpoint)) ) {
                     if ( isResilient) {
-                    	val victim = simplePlaceHammer.getVictimPlaceId(globalIter);
-                    	if (victim != -1)
-                    		executorKillThere(Place(victim),"step()");
+                    	val victims = simplePlaceHammer.getVictims(globalIter);
+                    	if (victims.size() > 0) {
+                    	    for (victim in victims) {
+                    	        executorKillThere(Place(victim),"step()");
+                    	    }
+                    	}
                     }
 
                     val stepStartTime = Timer.milliTime();                        

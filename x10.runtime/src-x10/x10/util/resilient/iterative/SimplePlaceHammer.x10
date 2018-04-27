@@ -30,15 +30,15 @@ public class SimplePlaceHammer {
         this(System.getenv("KILL_STEPS"), System.getenv("KILL_TIMES"), System.getenv("KILL_PLACES"));
     }
 
-    public def this(steps:String, times:String, places:String) {
-        if (steps != null && times != null) {
+    public def this(stepsStr:String, times:String, places:String) {
+        if (stepsStr != null && times != null) {
             throw new IllegalArgumentException("Limitation: can't set both KILL_STEPS and KILL_TIMES");
         }
         if (places != null) {
             val tmp = places.split(",");
             val pRail = new Rail[Long](tmp.size, (i:Long) => { Long.parseLong(tmp(i)) });
-            if (steps != null) {
-                val tmp2 = steps.split(",");
+            if (stepsStr != null) {
+                val tmp2 = stepsStr.split(",");
                 val sRail = new Rail[Long](tmp2.size, (i:Long) => { Long.parseLong(tmp2(i)) });
                 val min = Math.min(sRail.size, pRail.size);
                 for (i in 0..(min-1)) {
@@ -97,4 +97,18 @@ public class SimplePlaceHammer {
             }
         }
     }
+    
+    public def getVictims(curStep:Long):ArrayList[Long] {
+        val result = new ArrayList[Long]();
+        for (e in steps) {
+            val killId = e.second;
+            val killStep = e.first;
+            
+            if (killStep == curStep) {
+                result.add(killId);
+            }
+        }
+        return result;
+    }
+    
 }
