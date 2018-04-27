@@ -3085,6 +3085,12 @@ static void x10rt_net_handler_barrier (struct CollectivePostprocessEnv cpe) {
 	X10RT_NET_DEBUG("%s: %"PRIxPTR"_%"PRIxPTR,"begin postprocess", SAVED(ch), SAVED(arg));
     X10RT_NET_DEBUG("%s","before postprocess");
 #ifdef OPEN_MPI_ULFM
+    x10rt_team team = SAVED(team);
+    MPI_Comm comm = mpi_tdb.comm(team);
+    printf("pre team revoke\n");
+    MPIX_Comm_revoke(comm);
+    printf("post team revoke\n");
+
     if (is_process_failure_error(cpe.mpiError))
     	SAVED(ch)(SAVED(arg), true);
     else
