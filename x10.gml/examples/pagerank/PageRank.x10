@@ -69,7 +69,7 @@ public class PageRank implements SPMDResilientIterativeApp {
     private val nnz:Float;
 
     private val executor:SPMDResilientIterativeExecutor;
-    private var appTempDataPLH:PlaceLocalHandle[AppTempData];
+    private var plh:PlaceLocalHandle[AppTempData];
     private val root:Place;
     private var places:PlaceGroup;
     private var team:Team;
@@ -227,7 +227,7 @@ public class PageRank implements SPMDResilientIterativeApp {
         val start = (startTime != 0)?startTime:Timer.milliTime();  
         assert (G.isDistVertical()) : "dist block matrix must have vertical distribution";
     
-        appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());
+        plh = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());
         
         executor.run(this, start);
 
@@ -248,10 +248,15 @@ public class PageRank implements SPMDResilientIterativeApp {
         Console.OUT.flush();
     }
     
-    public def isFinished_local():Boolean {
-        return (iterations <= 0 && appTempDataPLH().maxDelta < tolerance) || (iterations > 0 && appTempDataPLH().iter >= iterations);
-    }
+    /*public def isFinished_local():Boolean {
+        return (iterations <= 0 && plh().maxDelta < tolerance) || (iterations > 0 && plh().iter >= iterations);
+    }*/
 
+    //for performance evaluation with fixed number of iterations
+    public def isFinished_local():Boolean {
+        return plh().iter >= iterations;
+    }
+    
     public def step_local():void {
         GP.mult_local(G, P);
         GP.scale_local(alpha);
@@ -266,24 +271,24 @@ public class PageRank implements SPMDResilientIterativeApp {
         for (i in offset..(offset+GP.getSegSize()(places.indexOf(here))-1)) {
             localMaxDelta = Math.max(localMaxDelta, Math.abs(GP(i) - localP(i)));
         }
-        appTempDataPLH().maxDelta = team.allreduce(localMaxDelta, Team.ADD);
+        plh().maxDelta = team.allreduce(localMaxDelta, Team.ADD);
         
         GP.copyTo_local(root, localP);  // only root will have copy of GP in P.local()        
 
         P.sync_local(root);
 
-        appTempDataPLH().iter++;
+        plh().iter++;
     }
 
     public def getCheckpointData_local():HashMap[String,Cloneable] {
     	val map = new HashMap[String,Cloneable]();
-    	if (appTempDataPLH().iter == 0) {
+    	if (plh().iter == 0) {
     		map.put("G", G.makeSnapshot_local());
     	}
     	//map.put("U", U.makeSnapshot_local());
     	map.put("P", P.makeSnapshot_local());
-    	map.put("app", appTempDataPLH().makeSnapshot_local());
-    	if (VERBOSE) Console.OUT.println(here + "Checkpointing at iter ["+appTempDataPLH().iter+"] maxDelta["+appTempDataPLH().maxDelta+"] ...");
+    	map.put("app", plh().makeSnapshot_local());
+    	if (VERBOSE) Console.OUT.println(here + "Checkpointing at iter ["+plh().iter+"] maxDelta["+plh().maxDelta+"] ...");
     	return map;
     }
     
@@ -291,8 +296,8 @@ public class PageRank implements SPMDResilientIterativeApp {
     	G.restoreSnapshot_local(restoreDataMap.getOrThrow("G"));
     	//U.restore_local(restoreDataMap.getOrThrow("U"));
     	P.restoreSnapshot_local(restoreDataMap.getOrThrow("P"));
-    	appTempDataPLH().restoreSnapshot_local(restoreDataMap.getOrThrow("app"));
-    	if (VERBOSE) Console.OUT.println(here + "Restore succeeded. Restarting from iteration["+appTempDataPLH().iter+"] maxDelta["+appTempDataPLH().maxDelta+"] ...");
+    	plh().restoreSnapshot_local(restoreDataMap.getOrThrow("app"));
+    	if (VERBOSE) Console.OUT.println(here + "Restore succeeded. Restarting from iteration["+plh().iter+"] maxDelta["+plh().maxDelta+"] ...");
     }
     
     public def remake(changes:ChangeDescription, newTeam:Team) {
@@ -309,10 +314,10 @@ public class PageRank implements SPMDResilientIterativeApp {
         GP.remake(G.getAggRowBs(), changes.newActivePlaces, newTeam, changes.addedPlaces);
         
         for (sparePlace in changes.addedPlaces){
-    		if (VERBOSE) Console.OUT.println("Adding place["+sparePlace+"] to appTempDataPLH ...");
-    		PlaceLocalHandle.addPlace[AppTempData](appTempDataPLH, sparePlace, ()=>new AppTempData());
+    		if (VERBOSE) Console.OUT.println("Adding place["+sparePlace+"] to plh ...");
+    		PlaceLocalHandle.addPlace[AppTempData](plh, sparePlace, ()=>new AppTempData());
     	}
-        if (VERBOSE) Console.OUT.println("Remake succeeded. Restarting from iteration["+appTempDataPLH().iter+"] ...");
+        if (VERBOSE) Console.OUT.println("Remake succeeded. Restarting from iteration["+plh().iter+"] ...");
     }
     
     class AppTempData implements Cloneable, Snapshottable {

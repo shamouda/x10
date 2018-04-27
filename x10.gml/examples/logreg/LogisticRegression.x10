@@ -128,8 +128,14 @@ public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implem
         LT2 = DistVector.make(N, rowBs, places, team);
     }
     
+    /*
     public def isFinished_local() {
         return plh().converge;// || plh().iter > maxiter;
+    }*/
+    
+    //for performance evaluation with fixed number of iterations
+    public def isFinished_local() {
+        return plh().iter > maxiter;
     }
     
     public def train(startTime:Long):Vector(D) {

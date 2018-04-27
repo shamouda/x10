@@ -65,7 +65,7 @@ public class LinearRegression implements SPMDResilientIterativeApp {
     private val root:Place;
 
     private val executor:SPMDResilientIterativeExecutor;
-    private var appTempDataPLH:PlaceLocalHandle[AppTempData];
+    private var plh:PlaceLocalHandle[AppTempData];
     var team:Team;
     var places:PlaceGroup;
     
@@ -96,16 +96,21 @@ public class LinearRegression implements SPMDResilientIterativeApp {
         root = here;
     }
     
+    /*public def isFinished_local() {
+        return plh().iter >= maxIterations
+            || plh().norm_r2 <= plh().norm_r2_target;
+    }*/
+    
+    //for performance benchmarking with fixed number of iterations
     public def isFinished_local() {
-        return appTempDataPLH().iter >= maxIterations
-            || appTempDataPLH().norm_r2 <= appTempDataPLH().norm_r2_target;
+        return plh().iter >= maxIterations;
     }
     
     //startTime parameter added to account for the time taken by RunLinReg to initialize the input data
     public def run(startTime:Long) {
         val start = (startTime != 0)?startTime:Timer.milliTime();  
         assert (X.isDistVertical()) : "dist block matrix must have vertical distribution";
-        appTempDataPLH = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());
+        plh = PlaceLocalHandle.make[AppTempData](places, ()=>new AppTempData());
         
         init();
         
@@ -128,13 +133,13 @@ public class LinearRegression implements SPMDResilientIterativeApp {
             d_p.scale_local(-1.0 as ElemType);
             val norm_r2_initial = r.dot(r);
 
-            appTempDataPLH().norm_r2 = norm_r2_initial;
-            appTempDataPLH().norm_r2_initial = norm_r2_initial;
-            appTempDataPLH().norm_r2_target = norm_r2_initial * tolerance * tolerance;
+            plh().norm_r2 = norm_r2_initial;
+            plh().norm_r2_initial = norm_r2_initial;
+            plh().norm_r2_target = norm_r2_initial * tolerance * tolerance;
 
             if (root == here) {
                 Console.OUT.println("||r|| initial value = " + Math.sqrt(norm_r2_initial)
-                 + ",  target value = " + Math.sqrt(appTempDataPLH().norm_r2_target));
+                 + ",  target value = " + Math.sqrt(plh().norm_r2_target));
             }
         }
     }
@@ -158,7 +163,7 @@ public class LinearRegression implements SPMDResilientIterativeApp {
         q(q.M-1) -= lambda * p(q.M-1); // don't regularize intercept!
 
         // 11: alpha = norm_r2 / sum(p * q);
-        val alpha = appTempDataPLH().norm_r2 / p.dotProd(q);
+        val alpha = plh().norm_r2 / p.dotProd(q);
 
         // update model and residuals
         // 13: w = w + alpha * p;
@@ -168,34 +173,34 @@ public class LinearRegression implements SPMDResilientIterativeApp {
         r.scaleAdd(alpha, q);
 
         // 15: old_norm_r2 = norm_r2;
-        val old_norm_r2 = appTempDataPLH().norm_r2;
+        val old_norm_r2 = plh().norm_r2;
 
         // 16: norm_r2 = sum(r^2);
-        appTempDataPLH().norm_r2 = r.dot(r);
+        plh().norm_r2 = r.dot(r);
 
         // 17: p = -r + norm_r2/old_norm_r2 * p;
-        p.scale(appTempDataPLH().norm_r2/old_norm_r2).cellSub(r);
+        p.scale(plh().norm_r2/old_norm_r2).cellSub(r);
 
         if (root == here) {
-            Console.OUT.println("Iteration " + appTempDataPLH().iter
+            Console.OUT.println("Iteration " + plh().iter
              + ":  ||r|| / ||r init|| = "
-                 + Math.sqrt(appTempDataPLH().norm_r2 / appTempDataPLH().norm_r2_initial));
+                 + Math.sqrt(plh().norm_r2 / plh().norm_r2_initial));
         }
        
-        appTempDataPLH().iter++;        
+        plh().iter++;        
     }
    
     public def getCheckpointData_local():HashMap[String,Cloneable] {
     	val map = new HashMap[String,Cloneable]();
-    	if (appTempDataPLH().iter == 0) {    		
+    	if (plh().iter == 0) {    		
     		map.put("X", X.makeSnapshot_local());
     	}
     	map.put("d_p", d_p.makeSnapshot_local());
     	map.put("d_q", d_q.makeSnapshot_local());
     	map.put("d_r", d_r.makeSnapshot_local());
     	map.put("d_w", d_w.makeSnapshot_local());
-    	map.put("app", appTempDataPLH().makeSnapshot_local());
-    	if (VERBOSE) Console.OUT.println(here + "Checkpointing at iter ["+appTempDataPLH().iter+"] norm["+appTempDataPLH().norm_r2+"] ...");
+    	map.put("app", plh().makeSnapshot_local());
+    	if (VERBOSE) Console.OUT.println(here + "Checkpointing at iter ["+plh().iter+"] norm["+plh().norm_r2+"] ...");
     	return map;
     }
     
@@ -205,8 +210,8 @@ public class LinearRegression implements SPMDResilientIterativeApp {
         d_q.restoreSnapshot_local(restoreDataMap.getOrThrow("d_q"));
         d_r.restoreSnapshot_local(restoreDataMap.getOrThrow("d_r"));
         d_w.restoreSnapshot_local(restoreDataMap.getOrThrow("d_w"));
-        appTempDataPLH().restoreSnapshot_local(restoreDataMap.getOrThrow("app"));        
-        if (VERBOSE) Console.OUT.println(here + "Restore succeeded. Restarting from iteration["+appTempDataPLH().iter+"] norm["+appTempDataPLH().norm_r2+"] ...");
+        plh().restoreSnapshot_local(restoreDataMap.getOrThrow("app"));        
+        if (VERBOSE) Console.OUT.println(here + "Restore succeeded. Restarting from iteration["+plh().iter+"] norm["+plh().norm_r2+"] ...");
     }
     
     public def remake(changes:ChangeDescription, newTeam:Team) {
@@ -222,8 +227,8 @@ public class LinearRegression implements SPMDResilientIterativeApp {
         d_w.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
         Xp.remake(X.getAggRowBs(), changes.newActivePlaces, newTeam, changes.addedPlaces);
         for (sparePlace in changes.addedPlaces){
-    		if (VERBOSE) Console.OUT.println("Adding place["+sparePlace+"] to appTempDataPLH ...");
-    		PlaceLocalHandle.addPlace[AppTempData](appTempDataPLH, sparePlace, ()=>new AppTempData());
+    		if (VERBOSE) Console.OUT.println("Adding place["+sparePlace+"] to plh ...");
+    		PlaceLocalHandle.addPlace[AppTempData](plh, sparePlace, ()=>new AppTempData());
     	}
     }
     
