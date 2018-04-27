@@ -19,7 +19,7 @@ import x10.matrix.Vector;
 import x10.matrix.util.Debug;
 import x10.matrix.util.VerifyTool;
 import x10.matrix.distblock.DistBlockMatrix;
-
+import x10.util.Team;
 
 /**
  * Page Rank demo
