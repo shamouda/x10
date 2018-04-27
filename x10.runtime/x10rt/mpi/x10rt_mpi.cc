@@ -3088,9 +3088,7 @@ static void x10rt_net_handler_barrier (struct CollectivePostprocessEnv cpe) {
     if (is_process_failure_error(cpe.mpiError)) {
         x10rt_team team = SAVED(team);
         MPI_Comm comm = mpi_tdb.comm(team);
-        printf("pre team revoke\n");
         MPIX_Comm_revoke(comm);
-        printf("post team revoke\n");
 
     	SAVED(ch)(SAVED(arg), true);
     }
@@ -3160,9 +3158,7 @@ static void x10rt_net_handler_bcast (struct CollectivePostprocessEnv cpe) {
     if (is_process_failure_error(cpe.mpiError)) {
         x10rt_team team = SAVED(team);
         MPI_Comm comm = mpi_tdb.comm(team);
-        printf("pre team revoke\n");
         MPIX_Comm_revoke(comm);
-        printf("post team revoke\n");
 
     	SAVED(ch)(SAVED(arg), true);
     }
@@ -3218,9 +3214,7 @@ static void x10rt_net_handler_scatter (struct CollectivePostprocessEnv cpe) {
     if (is_process_failure_error(cpe.mpiError)) {
         x10rt_team team = SAVED(team);
         MPI_Comm comm = mpi_tdb.comm(team);
-        printf("pre team revoke\n");
         MPIX_Comm_revoke(comm);
-        printf("post team revoke\n");
 
     	SAVED(ch)(SAVED(arg), true);
     }
@@ -3274,9 +3268,7 @@ static void x10rt_net_handler_alltoall (struct CollectivePostprocessEnv cpe) {
     if (is_process_failure_error(cpe.mpiError)) {
         x10rt_team team = SAVED(team);
         MPI_Comm comm = mpi_tdb.comm(team);
-        printf("pre team revoke\n");
         MPIX_Comm_revoke(comm);
-        printf("post team revoke\n");
 
     	SAVED(ch)(SAVED(arg), true);
     }
@@ -3337,9 +3329,7 @@ static void x10rt_net_handler_allreduce (struct CollectivePostprocessEnv cpe) {
     if (is_process_failure_error(cpe.mpiError)) {
         x10rt_team team = SAVED(team);
         MPI_Comm comm = mpi_tdb.comm(team);
-        printf("pre team revoke\n");
         MPIX_Comm_revoke(comm);
-        printf("post team revoke\n");
 
     	SAVED(ch)(SAVED(arg), true);
     }
@@ -3408,9 +3398,7 @@ static void x10rt_net_handler_scatterv (struct CollectivePostprocessEnv cpe) {
     if (is_process_failure_error(cpe.mpiError)) {
         x10rt_team team = SAVED(team);
         MPI_Comm comm = mpi_tdb.comm(team);
-        printf("pre team revoke\n");
         MPIX_Comm_revoke(comm);
-        printf("post team revoke\n");
 
     	SAVED(ch)(SAVED(arg), true);
     }
@@ -3465,9 +3453,7 @@ static void x10rt_net_handler_gather (struct CollectivePostprocessEnv cpe) {
     if (is_process_failure_error(cpe.mpiError)) {
         x10rt_team team = SAVED(team);
         MPI_Comm comm = mpi_tdb.comm(team);
-        printf("pre team revoke\n");
         MPIX_Comm_revoke(comm);
-        printf("post team revoke\n");
 
     	SAVED(ch)(SAVED(arg), true);
     }
@@ -3532,9 +3518,7 @@ static void x10rt_net_handler_gatherv (struct CollectivePostprocessEnv cpe) {
     if (is_process_failure_error(cpe.mpiError)) {
         x10rt_team team = SAVED(team);
         MPI_Comm comm = mpi_tdb.comm(team);
-        printf("pre team revoke\n");
         MPIX_Comm_revoke(comm);
-        printf("post team revoke\n");
 
     	SAVED(ch)(SAVED(arg), true);
     }
@@ -3588,9 +3572,7 @@ static void x10rt_net_handler_allgather (struct CollectivePostprocessEnv cpe) {
     if (is_process_failure_error(cpe.mpiError)) {
         x10rt_team team = SAVED(team);
         MPI_Comm comm = mpi_tdb.comm(team);
-        printf("pre team revoke\n");
         MPIX_Comm_revoke(comm);
-        printf("post team revoke\n");
 
     	SAVED(ch)(SAVED(arg), true);
     }
@@ -3644,9 +3626,7 @@ static void x10rt_net_handler_allgatherv (struct CollectivePostprocessEnv cpe) {
     if (is_process_failure_error(cpe.mpiError)) {
         x10rt_team team = SAVED(team);
         MPI_Comm comm = mpi_tdb.comm(team);
-        printf("pre team revoke\n");
         MPIX_Comm_revoke(comm);
-        printf("post team revoke\n");
 
     	SAVED(ch)(SAVED(arg), true);
     }
@@ -3714,9 +3694,7 @@ static void x10rt_net_handler_alltoallv (struct CollectivePostprocessEnv cpe) {
     if (is_process_failure_error(cpe.mpiError)) {
         x10rt_team team = SAVED(team);
         MPI_Comm comm = mpi_tdb.comm(team);
-        printf("pre team revoke\n");
         MPIX_Comm_revoke(comm);
-        printf("post team revoke\n");
 
     	SAVED(ch)(SAVED(arg), true);
     }
@@ -3833,9 +3811,7 @@ static void x10rt_net_handler_reduce (struct CollectivePostprocessEnv cpe) {
     if (is_process_failure_error(cpe.mpiError)) {
         x10rt_team team = SAVED(team);
         MPI_Comm comm = mpi_tdb.comm(team);
-        printf("pre team revoke\n");
         MPIX_Comm_revoke(comm);
-        printf("post team revoke\n");
 
     	SAVED(ch)(SAVED(arg), true);
     }

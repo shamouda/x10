@@ -1523,6 +1523,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             State.convertDeadActivities(merged);
         }
         if (verbose>=1) debug("<<<< notifyPlaceDeath returning");
-        Console.OUT.println("p0FinishRecoveryTime:" + (Timer.milliTime()-start) + "ms  newDead.size=" + newDead.size());
+        Console.OUT.println("p0FinishRecoveryTime:" + (Timer.milliTime()-start) + "ms");
     }
 }
