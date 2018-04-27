@@ -20,6 +20,7 @@ public class BenchmarkScatter extends x10Test {
     //private static COUNT_PER_PLACE = 2<<19;
     private static COUNT_PER_PLACE = 2<<15; //32768 = 32K
     private static SRC_OFFSET = 5;
+    private static VALIDATE = false;
     
     public def run(): Boolean {
         // root=nplaces/2  hangs starting from using  5 places
@@ -44,10 +45,12 @@ public class BenchmarkScatter extends x10Test {
                 }
                 val stop = System.nanoTime();
                 
-                // check correctness
-                for (i in 0..(s-1)) {
-                    val expectedValue = here.id*s+i+SRC_OFFSET;
-                    chk(dst(i) == expectedValue as Double , "elem " + i + " is " + dst(i) + " should be " + expectedValue);
+                if (VALIDATE) {
+                    // check correctness
+                    for (i in 0..(s-1)) {
+                        val expectedValue = here.id*s+i+SRC_OFFSET;
+                        chk(dst(i) == expectedValue as Double , "elem " + i + " is " + dst(i) + " should be " + expectedValue);
+                    }
                 }
 
                 if (here == Place.FIRST_PLACE) Console.OUT.printf("scatter %d: %g ms\n", s, ((stop-start) as Double) / 1e6 / ITERS);

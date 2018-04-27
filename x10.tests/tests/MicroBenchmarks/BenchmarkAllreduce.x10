@@ -19,6 +19,7 @@ public class BenchmarkAllreduce extends x10Test {
     private static ITERS = 10;
     //private static MAX_SIZE = 2<<19;
     private static MAX_SIZE = 2<<15; //32768 = 32K
+    private static VALIDATE = false;
     
 	public def run(): Boolean {
         finish for (place in Place.places()) at (place) async {
@@ -34,9 +35,11 @@ public class BenchmarkAllreduce extends x10Test {
                 }
                 val stop = System.nanoTime();
 
-                // check correctness
-                for (i in 0..(s-1)) {
-                    chk(dst(i) == src(i)*Place.numPlaces(), "elem " + i + " is " + dst(i) + " should be " + src(i)*Place.numPlaces());
+                if (VALIDATE) {
+                    // check correctness
+                    for (i in 0..(s-1)) {
+                        chk(dst(i) == src(i)*Place.numPlaces(), "elem " + i + " is " + dst(i) + " should be " + src(i)*Place.numPlaces());
+                    }
                 }
 
                 if (here == Place.FIRST_PLACE) Console.OUT.printf("allreduce %d: %g ms\n", s, ((stop-start) as Double) / 1e6 / ITERS);

@@ -21,6 +21,7 @@ public class BenchmarkGather extends x10Test {
     private static COUNT_PER_PLACE = 2<<15; //32768 = 32K
     private static SRC_OFFSET = 5;
     private static DST_OFFSET = 3;
+    private static VALIDATE = false;
     
     public def run(): Boolean {
         // root=nplaces/2  hangs starting from using  5 places
@@ -47,11 +48,13 @@ public class BenchmarkGather extends x10Test {
                 }
                 val stop = System.nanoTime();
                 
-                // check correctness
-                if (here.id == root.id){
-                    for (i in DST_OFFSET..(dstSize-1)) {
-                        val expectedValue = (i-DST_OFFSET)/s;
-                        chk(dst(i) == expectedValue as Double , "elem " + i + " is " + dst(i) + " should be " + expectedValue);
+                if (VALIDATE) {
+                    // check correctness
+                    if (here.id == root.id){
+                        for (i in DST_OFFSET..(dstSize-1)) {
+                            val expectedValue = (i-DST_OFFSET)/s;
+                            chk(dst(i) == expectedValue as Double , "elem " + i + " is " + dst(i) + " should be " + expectedValue);
+                        }
                     }
                 }
 
