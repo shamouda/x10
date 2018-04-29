@@ -9,6 +9,14 @@
  *  (C) Copyright IBM Corporation 2006-2016.
  */
 
+import x10.util.Team;
+import x10.util.resilient.iterative.SPMDResilientIterativeExecutor;
+import x10.util.resilient.iterative.SPMDAgreeResilientIterativeExecutor;
+import x10.util.resilient.iterative.SPMDResilientIterativeApp;
+import x10.util.HashMap;
+import x10.util.resilient.PlaceManager.ChangeDescription;
+import x10.util.resilient.localstore.Cloneable;
+
 public class CkptMicroBench {
     private static ITER = 10;
     private static CKPT_INTERVAL = 1;
