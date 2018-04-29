@@ -24,19 +24,22 @@ public class CkptMicroBench {
     
     public static def main(args:Rail[String]){
     	teamWarmup();
-    	
-        val app = new DummyIterApp(ITER);
+    	val places = Place.places();
+    	val plh1 = PlaceLocalHandle.make[PlaceTempData](places, ()=>new PlaceTempData());
+    	val app1 = new DummyIterApp(ITER, plh1);
         val executorCentral = new SPMDResilientIterativeExecutor(CKPT_INTERVAL, 0, false);
         Console.OUT.println("...............................................");
         Console.OUT.println("... Starting SPMDResilientIterativeExecutor ...");
         Console.OUT.println("...............................................");
-        executorCentral.run(app, Timer.milliTime());
+        executorCentral.run(app1, Timer.milliTime());
         
+    	val plh2 = PlaceLocalHandle.make[PlaceTempData](places, ()=>new PlaceTempData());
+    	val app2 = new DummyIterApp(ITER, plh2);
         Console.OUT.println("....................................................");
         Console.OUT.println("... Starting SPMDAgreeResilientIterativeExecutor ...");
         Console.OUT.println("....................................................");
         val executorAgree = new SPMDAgreeResilientIterativeExecutor(CKPT_INTERVAL, 0, false);
-        executorAgree.run(app, Timer.milliTime());
+        executorAgree.run(app2, Timer.milliTime());
     }
     
     public static def teamWarmup(){
@@ -61,15 +64,13 @@ public class CkptMicroBench {
     }
 }
 
-class DummyIterApp(maxIter:Long) implements SPMDResilientIterativeApp {
-	var i:Long = 0;
-
+class DummyIterApp(maxIter:Long, plh:PlaceLocalHandle[PlaceTempData]) implements SPMDResilientIterativeApp {
     public def isFinished_local() {
-        return i == maxIter;
+        return plh().i == maxIter;
     }
     
     public def step_local() {
-    	i++;
+    	plh().i++;
     }
     
     public def getCheckpointData_local() {
@@ -77,4 +78,8 @@ class DummyIterApp(maxIter:Long) implements SPMDResilientIterativeApp {
     }
     public def remake(changes:ChangeDescription, newTeam:Team) { }
     public def restore_local(restoreDataMap:HashMap[String,Cloneable], lastCheckpointIter:Long) { }   
+}
+
+class PlaceTempData {
+	var i:Long = 0;
 }

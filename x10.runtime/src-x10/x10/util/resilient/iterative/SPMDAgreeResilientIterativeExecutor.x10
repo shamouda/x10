@@ -39,7 +39,6 @@ public class SPMDAgreeResilientIterativeExecutor (home:Place) {
     // configuration parameters for killing places at different times
     private var hammer:SimplePlaceHammer;
 
-    private transient var ckptTimes:ArrayList[Long] = new ArrayList[Long]();
     private transient var remakeTimes:ArrayList[Long] = new ArrayList[Long]();
     private transient var appRemakeTimes:ArrayList[Long] = new ArrayList[Long]();
     private transient var reconstructTeamTimes:ArrayList[Long] = new ArrayList[Long]();
@@ -424,7 +423,8 @@ public class SPMDAgreeResilientIterativeExecutor (home:Place) {
         Console.OUT.println("=========Counts============");
         Console.OUT.println("StepCount:"+averageSteps.size);
         if (isResilient){
-            Console.OUT.println("CheckpointCount:"+(ckptTimes==null?0:ckptTimes.size()));
+        	val chkCount = plh().stat.ckptTimes.size();
+            Console.OUT.println("CheckpointCount:"+chkCount);
             Console.OUT.println("RestoreCount:"+(averageRestore==null?0:averageRestore.size));
             Console.OUT.println("RemakeCount:"+remakeTimes.size());
             Console.OUT.println("FailureDetectionCount:"+detectTimes.size());
