@@ -10,47 +10,62 @@
  */
 
 public class CkptMicroBench {
-    private static ITERS = 10;
+    private static ITER = 10;
+    private static CKPT_INTERVAL = 1;
     
     public static def main(args:Rail[String]){
-        val ckptCentral = new CheckpointingCentral();
-        val ckptAgree = new CheckpointingAgree();
+    	teamWarmup();
+    	
+        val app = new DummyIterApp(ITER);
+        val executorCentral = new SPMDResilientIterativeExecutor(CKPT_INTERVAL, 0, false);
+        Console.OUT.println("...............................................");
+        Console.OUT.println("... Starting SPMDResilientIterativeExecutor ...");
+        Console.OUT.println("...............................................");
+        executorCentral.run(app, Timer.milliTime());
+        
+        Console.OUT.println("....................................................");
+        Console.OUT.println("... Starting SPMDAgreeResilientIterativeExecutor ...");
+        Console.OUT.println("....................................................");
+        val executorAgree = new SPMDAgreeResilientIterativeExecutor(CKPT_INTERVAL, 0, false);
+        executorAgree.run(app, Timer.milliTime());
+    }
+    
+    public static def teamWarmup(){
+        val places = Place.places();
+        val team = new Team(places);
+        val startWarmupTime = Timer.milliTime();
+        Console.OUT.println("Starting team warm up ...");
+        finish for (place in places) at (place) async {
+            if (x10.xrx.Runtime.x10rtAgreementSupport()) {   
+                try{
+                    team.agree(1n);
+                    if (here.id == 0) Console.OUT.println(here+" agree done ...");
+                }catch(ex:Exception){
+                    if (here.id == 0) {
+                        Console.OUT.println("agree failed ...");
+                        ex.printStackTrace();
+                    }
+                }
+            }
+        }
+        Console.OUT.println("Team warm up succeeded , time elapsed ["+(Timer.milliTime()-startWarmupTime)+"] ...");
     }
 }
 
-class CheckpointingCentral implements SPMDResilientIterativeApp {
+class DummyIterApp(maxIter:Long) implements SPMDResilientIterativeApp {
+	var i:Long = 0;
+
     public def isFinished_local() {
-        return true;
+        return i == maxIter;
     }
     
-    public def step_local() {}
+    public def step_local() {
+    	i++;
+    }
     
     public def getCheckpointData_local() {
         return new HashMap[String,Cloneable]();
     }
-    
-    public def remake(changes:ChangeDescription, newTeam:Team) {
-        
-    }
-    
-    public def restore_local(restoreDataMap:HashMap[String,Cloneable], lastCheckpointIter:Long) { }   
-}
-
-class CheckpointingAgree implements SPMDResilientIterativeApp {
-    
-    public def isFinished_local() {
-        return true;
-    }
-    
-    public def step_local() {}
-    
-    public def getCheckpointData_local() {
-        return new HashMap[String,Cloneable]();
-    }
-    
-    public def remake(changes:ChangeDescription, newTeam:Team) {
-        
-    }
-    
+    public def remake(changes:ChangeDescription, newTeam:Team) { }
     public def restore_local(restoreDataMap:HashMap[String,Cloneable], lastCheckpointIter:Long) { }   
 }
