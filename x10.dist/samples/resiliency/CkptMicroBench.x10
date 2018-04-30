@@ -23,7 +23,10 @@ public class CkptMicroBench {
     private static CKPT_INTERVAL = 1;
     
     public static def main(args:Rail[String]){
-    	teamWarmup();
+        val places = Place.places();
+        val team = new Team(places);
+    	teamWarmup(places, team);
+    	
     	val places = Place.places();
     	val plh1 = PlaceLocalHandle.make[PlaceTempData](places, ()=>new PlaceTempData());
     	val app1 = new DummyIterApp(ITER, plh1);
@@ -39,12 +42,13 @@ public class CkptMicroBench {
         Console.OUT.println("... Starting SPMDAgreeResilientIterativeExecutor ...");
         Console.OUT.println("....................................................");
         val executorAgree = new SPMDAgreeResilientIterativeExecutor(CKPT_INTERVAL, 0, false);
+        
+        val team2 = executorAgree.team();
+        teamWarmup(places, team2);
         executorAgree.run(app2, Timer.milliTime());
     }
     
-    public static def teamWarmup(){
-        val places = Place.places();
-        val team = new Team(places);
+    public static def teamWarmup(places:PlaceGroup, team:Team){
         val startWarmupTime = Timer.milliTime();
         Console.OUT.println("Starting team warm up ...");
         finish for (place in places) at (place) async {
