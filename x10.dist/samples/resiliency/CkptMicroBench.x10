@@ -27,7 +27,6 @@ public class CkptMicroBench {
         val team = new Team(places);
     	teamWarmup(places, team);
     	
-    	val places = Place.places();
     	val plh1 = PlaceLocalHandle.make[PlaceTempData](places, ()=>new PlaceTempData());
     	val app1 = new DummyIterApp(ITER, plh1);
         val executorCentral = new SPMDResilientIterativeExecutor(CKPT_INTERVAL, 0, false);
