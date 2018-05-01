@@ -18,7 +18,7 @@ import x10.util.Team;
 public class BenchmarkAllreduce extends x10Test {
     private static ITERS = 10;
     //private static MAX_SIZE = 2<<19;
-    private static MAX_SIZE = 2<<15; //32768 = 32K
+    private static MAX_SIZE = 2<<10; 
     private static VALIDATE = false;
     
 	public def run(): Boolean {
@@ -27,11 +27,15 @@ public class BenchmarkAllreduce extends x10Test {
             //for (var s:Long= 1; s <= MAX_SIZE; s *= 2) 
             val s = MAX_SIZE;
             {
+                var timesStr:String = "";
                 val src = new Rail[Double](s, (i:Long) => i as Double);
                 val dst = new Rail[Double](s);
                 val start = System.nanoTime();
                 for (iter in 1..ITERS) {
+                    val startX = System.nanoTime();
                     Team.WORLD.allreduce(src, 0, dst, 0, s, Team.ADD);
+                    val stopX = System.nanoTime();
+                    timesStr += (((stopX-startX) as Double) / 1e6) + ":";
                 }
                 val stop = System.nanoTime();
 
@@ -42,7 +46,10 @@ public class BenchmarkAllreduce extends x10Test {
                     }
                 }
 
-                if (here == Place.FIRST_PLACE) Console.OUT.printf("allreduce %d: %g ms\n", s, ((stop-start) as Double) / 1e6 / ITERS);
+                if (here == Place.FIRST_PLACE) {
+                    Console.OUT.printf("allreduce %d: %g ms\n", s, ((stop-start) as Double) / 1e6 / ITERS);
+                    Console.OUT.println("allreduceAllValues (ms):" + timesStr);
+                }
             } 
         }
 

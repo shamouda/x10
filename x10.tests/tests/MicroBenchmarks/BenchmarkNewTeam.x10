@@ -19,25 +19,35 @@ public class BenchmarkNewTeam extends x10Test {
     private static ITERS = 10;
     
 	public def run(): Boolean {
-	    
 	    //warm-up
-	    val startW = System.nanoTime();
         new Team(Place.places());
-        val stopW = System.nanoTime();
         
         var totalNative:Long = 0;
         var totalBcast:Long = 0;
+        
+	    var times1Str:String = "";
+        var times2Str:String = "";
+        var timesTotalStr:String = "";
+        
         val start = System.nanoTime();
         for (iter in 1..ITERS) {
             val team = new Team(Place.places());
+            
             totalNative += team.thisNativeCreateNano;
+            times1Str += team.thisNativeCreateNano + ":";
+            
             totalBcast += team.thisBcastNano;
+            times2Str += team.thisBcastNano + ":";
+            
+            timesTotalStr += (team.thisNativeCreateNano + team.thisBcastNano) + ":";
         }
         val stop = System.nanoTime();
-        Console.OUT.printf("newTeam warmup time: %g ms \n", ((stopW-startW) as Double) / 1e6);
-        Console.OUT.printf("newTeam %d places: %g ms \n", Place.numPlaces(), ((stop-start) as Double) / 1e6 / ITERS);
         Console.OUT.printf("newTeam %d places thisNativeCreate: %g ms \n", Place.numPlaces(), (totalNative as Double) / 1e6 / ITERS);
         Console.OUT.printf("newTeam %d places thisBcast: %g ms \n", Place.numPlaces(), (totalBcast as Double) / 1e6 / ITERS);
+        
+        Console.OUT.println("newTeamAllValues thisNativeCreate (ms):" + times1Str);
+        Console.OUT.println("newTeamAllValues thisBcast (ms):" + times2Str);
+        Console.OUT.println("newTeamAllValues total (ms):" + timesTotalStr);
         
         return true;
 	}

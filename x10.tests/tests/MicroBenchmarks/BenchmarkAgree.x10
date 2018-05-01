@@ -22,15 +22,24 @@ public class BenchmarkAgree extends x10Test {
 	public def run(): Boolean {
         finish for (place in Place.places()) at (place) async {
             Team.WORLD.agree(0n); // warm up comms layer
+            var timesStr:String = "";
             val start = System.nanoTime();
             for (iter in 1..ITERS) {
+                val startX = System.nanoTime();
                 val out = Team.WORLD.agree(iter as Int);
+                val stopX = System.nanoTime();
+                timesStr += (((stopX-startX) as Double) / 1e6) + ":";
+                
+                
                 // check correctness
                 chk((iter as Int) == out, here + " agreement not reached expected["+iter+"] found["+out+"]");
             }
             val stop = System.nanoTime();
 
-            if (here == Place.FIRST_PLACE) Console.OUT.printf("agree: %g ms\n", ((stop-start) as Double) / 1e6 / ITERS);
+            if (here == Place.FIRST_PLACE) {
+                Console.OUT.printf("agree: %g ms\n", ((stop-start) as Double) / 1e6 / ITERS);
+                Console.OUT.println("agreeAllValues (ms):" + timesStr);
+            }
         }
 
         return true;
