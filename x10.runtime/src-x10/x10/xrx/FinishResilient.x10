@@ -50,10 +50,6 @@ public abstract class FinishResilient extends FinishState {
     public static struct Id(home:int,id:int) {
         public def toString() = "<"+home+","+id+">";
     }
-
-    public static struct OptimisticRootId(id:Id, parentId:Id) {
-        public def toString() = "<"+id.home+","+id.id+">";
-    }
     
     public static val UNASSIGNED = Id(-1n,-1n);
     
