@@ -882,21 +882,24 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 val map = req.map;
                 val dstId = req.dstId;
                 if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=TERM_MUL, dstId=" + dstId +", mapSz="+map.size()+" ] called");
-                  //Unlike place0 finish, we don't suppress termination notifications whose dst is dead.
-                  //Because we expect termination messages from these tasks to be notified if the tasks were recieved by a dead dst
-                try {
-                    latch.lock();
-                    resp.backupPlaceId = -1n;
-                    for (e in map.entries()) {
-                        val srcId = e.getKey().place;
-                        val kind = e.getKey().kind;
-                        val cnt = e.getValue();
-                        transitToCompletedUnsafe(srcId, dstId, kind, cnt, "notifyActivityTermination", resp);
+                if (Place(dstId).isDead()) {
+                    // drop termination messages from a dead place; only simulated termination signals are accepted
+                    if (verbose>=1) debug("==== notifyActivityTermination(id="+id+") suppressed: "+dstId+" kind="+kind);
+                } else {
+                    try {
+                        latch.lock();
+                        resp.backupPlaceId = -1n;
+                        for (e in map.entries()) {
+                            val srcId = e.getKey().place;
+                            val kind = e.getKey().kind;
+                            val cnt = e.getValue();
+                            transitToCompletedUnsafe(srcId, dstId, kind, cnt, "notifyActivityTermination", resp);
+                        }
+                    } finally {
+                        latch.unlock();
                     }
-                } finally {
-                    latch.unlock();
+                    resp.submit = true;
                 }
-                resp.submit = true;
                 if (verbose>=1) debug("<<<< Master(id="+id+").exec [req=TERM_MUL, dstId=" + dstId +", mapSz="+map.size()+" ] returning, backup="+resp.backupPlaceId);
             } else if (xreq instanceof RemoveGhostChildRequestOpt) {
                 val req = xreq as RemoveGhostChildRequestOpt;

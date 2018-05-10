@@ -600,8 +600,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     throw new Exception(here + " FATAL ERROR p0TermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is null");
                 
                 if (verbose>=1) debug("==== State(id="+id+").p0TermMultiple [dstId=" + dstId +", mapSize="+map.size()+"] called");
-                //Unlike place0 finish, we don't suppress termination notifications whose dst is dead.
-                //Because we expect termination messages from these tasks to be notified if the tasks were recieved by a dead dst
                 try {
                     statesLock.lock();
                     val state = states(id);
@@ -609,7 +607,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                         val srcId = e.getKey().place;
                         val kind = e.getKey().kind;
                         val cnt = e.getValue();
-                        state.transitToCompletedMul(srcId, dstId, kind, cnt);
+                        state.transitToCompletedMul(srcId, dstId, kind, cnt); // drops the term msg if dst is dead
                     }
                 } finally {
                     statesLock.unlock();
@@ -623,8 +621,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 throw new Exception(here + " FATAL ERROR p0HereTermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is NULL");
             
             if (verbose>=1) debug(">>>> State(id="+id+").p0HereTermMultiple [dstId=" + dstId +", mapSz="+map.size()+" ] called");
-            //Unlike place0 finish, we don't suppress termination notifications whose dst is dead.
-            //Because we expect termination messages from these tasks to be notified if the tasks were recieved by a dead dst
             try {
                 statesLock.lock();
                 val state = states(id);
@@ -632,7 +628,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     val srcId = e.getKey().place;
                     val kind = e.getKey().kind;
                     val cnt = e.getValue();
-                    state.transitToCompletedMul(srcId, dstId, kind, cnt);
+                    state.transitToCompletedMul(srcId, dstId, kind, cnt); // drops the term msg if dst is dead
                 }
             } finally {
                 statesLock.unlock();
