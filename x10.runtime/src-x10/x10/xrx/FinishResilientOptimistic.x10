@@ -884,7 +884,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=TERM_MUL, dstId=" + dstId +", mapSz="+map.size()+" ] called");
                 if (Place(dstId).isDead()) {
                     // drop termination messages from a dead place; only simulated termination signals are accepted
-                    if (verbose>=1) debug("==== notifyActivityTermination(id="+id+") suppressed: "+dstId+" kind="+kind);
+                    if (verbose>=1) debug("==== notifyActivityTermination(id="+id+") suppressed: "+dstId);
                 } else {
                     try {
                         latch.lock();
