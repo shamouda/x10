@@ -455,10 +455,11 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             }
             val myId = id; //don't copy this
             val myParentId = parentId;
+            val myChildren = children;
             val rCond = ResilientCondition.make(backup);
             val closure = (gr:GlobalRef[Condition]) => {
                 at (backup) @Immediate("backup_create") async {
-                    val bFin = FinishReplicator.pesFindBackupOrCreate(myId, myParentId, children);
+                    val bFin = FinishReplicator.pesFindBackupOrCreate(myId, myParentId, myChildren);
                     at (gr) @Immediate("backup_create_response") async {
                         gr().release();
                     }
