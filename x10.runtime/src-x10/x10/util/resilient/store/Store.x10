@@ -47,7 +47,7 @@ public abstract class Store[V]{V haszero, V <: Cloneable} {
         if ("Hazelcast".equals(dataStore())) {
             return new HazelcastStore[V](name, activePlaces);
         } else {
-            return new NativeStore[V](name, activePlaces);
+            return new NativeStore[V](activePlaces);
         }
     }
 

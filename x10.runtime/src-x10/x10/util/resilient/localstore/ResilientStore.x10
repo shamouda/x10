@@ -15,8 +15,14 @@ package x10.util.resilient.localstore;
 import x10.util.HashSet;
 import x10.util.ArrayList;
 import x10.util.HashMap;
-import x10.util.concurrent.SimpleLatch;
+import x10.util.concurrent.Lock;
 import x10.util.resilient.PlaceManager.ChangeDescription;
+import x10.util.resilient.localstore.Cloneable;
+import x10.util.resilient.localstore.tx.TxManager;
+import x10.util.resilient.localstore.tx.logging.TxDesc;
+import x10.util.concurrent.Lock;
+import x10.compiler.Uncounted;
+import x10.util.resilient.localstore.recovery.*;
 
 /**
  * A store that maintains a master + 1 backup (slave) copy
@@ -24,102 +30,35 @@ import x10.util.resilient.PlaceManager.ChangeDescription;
  * The mapping between masters and slaves is specififed by
  * the next/prev operations on the activePlaces PlaceGroup.
  */
-public class ResilientStore {
-    private val plh:PlaceLocalHandle[LocalStore];
-    private var activePlaces:PlaceGroup;
+public class ResilientStore[K] {K haszero} {
+    static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
-    private val appMaps:HashMap[String,ResilientNativeMap];
-    private transient val lock:SimpleLatch;
+    public val plh:PlaceLocalHandle[LocalStore[K]];
     
-    private def this(pg:PlaceGroup, plh:PlaceLocalHandle[LocalStore]) {
-        this.activePlaces = pg;
+    private transient val lock:Lock;
+    
+    private static val stores = new ArrayList[Any]();
+    
+    private def this(plh:PlaceLocalHandle[LocalStore[K]]) {
         this.plh = plh;
-        this.appMaps = new HashMap[String,ResilientNativeMap]();
-        this.lock = new SimpleLatch();
+        this.lock = new Lock();
     }
     
-    public static def make(pg:PlaceGroup):ResilientStore {
-        val plh = PlaceLocalHandle.make[LocalStore](pg, () => {
-            new LocalStore(pg.indexOf(here), pg.next(here))
+    public static def make[K](pg:PlaceGroup, immediateRecovery:Boolean) {K haszero} {
+        Console.OUT.println("Creating a resilient store with "+pg.size()+" active places, immediateRecovery = " + immediateRecovery);
+        val plh = PlaceLocalHandle.make[LocalStore[K]](Place.places(), ()=> new LocalStore[K](pg, immediateRecovery) );
+        val store = new ResilientStore[K](plh);
+        
+        Place.places().broadcastFlat(()=> { 
+        	plh().setPLH(plh); 
         });
-        return new ResilientStore(pg, plh);
-    }
-    
-    public def makeMap(name:String):ResilientNativeMap {
-    	try {
-    		lock.lock();
-    		val map = new ResilientNativeMap(name, plh);
-    		appMaps.put(name, map);
-    		return map;
-    	} finally {
-    		lock.unlock();
-    	}
-    }
-    
-    public def getVirtualPlaceId() = activePlaces.indexOf(here);
-    
-    public def getActivePlaces() = activePlaces;
-
-    private def getMaster(p:Place) = activePlaces.prev(p);
-
-    private def getSlave(p:Place) = activePlaces.next(p);
-
-    public def updateForChangedPlaces(changes:ChangeDescription):void {
-        // Initialize LocalStore at newly active places.
-        for (p in changes.addedPlaces) {
-            PlaceLocalHandle.addPlace[LocalStore](plh, p, ()=>new LocalStore());
-        }
-
-        checkIfBothMasterAndSlaveDied(changes);
         
-        recoverMasters(changes);
-        
-        recoverSlaves(changes);
-
-        activePlaces = changes.newActivePlaces;
-    }
-
-    private def checkIfBothMasterAndSlaveDied(changes:ChangeDescription) {
-        for (dp in changes.removedPlaces) {
-            val slave = changes.oldActivePlaces.next(dp);
-            if (changes.removedPlaces.contains(slave)) {
-                val virtualId = changes.oldActivePlaces.indexOf(dp);
-                throw new Exception("Fatal: both master and slave lost for virtual place["+virtualId+"] ");
-            }
-        }
-    }
-
-    private def recoverMasters(changes:ChangeDescription) {
-        val plh = this.plh; // don't capture this in at!
-        finish {
-            for (newMaster in changes.addedPlaces) {
-                val virtualId = changes.newActivePlaces.indexOf(newMaster);
-                val slave = changes.newActivePlaces.next(newMaster);
-                at (slave) async {
-                    val maps = plh().slaveStore.getMasterState(virtualId).maps;
-                    at (newMaster) async {
-                        plh().joinAsMaster(virtualId, maps);
-                    }
-                }
-            }
-        }
-    }
-
-    private def recoverSlaves(changes:ChangeDescription) {
-        val plh = this.plh; // don't capture this in at!
-        finish {
-            for (newSlave in changes.addedPlaces) {
-                val master = changes.newActivePlaces.prev(newSlave);
-                val masterVirtualId = changes.newActivePlaces.indexOf(master);
-                at (master) async {
-                    val masterState = plh().masterStore.getState(); 
-                    at (newSlave) {
-                        plh().slaveStore.addMasterPlace(masterVirtualId, masterState);
-                    }
-                    plh().slave = newSlave;
-                }
-            }
-        }
+        stores.add(store);
+        Console.OUT.println("store created successfully ...");
+        return store;
     }
     
+    public def makeMap():ResilientNativeMap[K] {
+    	return new ResilientNativeMap[K](plh);
+    }    
 }

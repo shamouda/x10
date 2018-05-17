@@ -802,7 +802,7 @@ public final class Runtime {
      */
     @Native("c++", "::x10aux::throwException(::x10aux::nullCheck(#e))")
     @Native("java", "x10.runtime.impl.java.Runtime.throwCheckedWithoutThrows(#e)")
-    static native def throwCheckedWithoutThrows (e:CheckedThrowable) : void;
+    public static native def throwCheckedWithoutThrows (e:CheckedThrowable) : void;
 
     /**
      * Transparently wrap checked exceptions at the root of an at desugared closure, and unpack later.

@@ -9,15 +9,16 @@
  *  (C) Copyright IBM Corporation 2006-2016.
  *  (C) Copyright Sara Salem Hamouda 2014-2016.
  */
+
 package x10.util.resilient.localstore;
 
-import x10.util.resilient.localstore.Cloneable;
-
-/**
- * A Snapshottable object provides methods to create a snapshot of its
- * (distributed) state and restore to a previous snapshotted state.
- */
-public interface Snapshottable {
-    public def makeSnapshot_local():Cloneable;
-    public def restoreSnapshot_local(snapshot:Cloneable):void;
+public struct CloneableLong(v:Long) implements Cloneable {
+    
+    public def clone():Cloneable {
+        return new CloneableLong(v);
+    }
+    
+    public def toString() {
+        return "CloneableLong[" + v + "]";
+    }
 }

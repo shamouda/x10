@@ -12,90 +12,327 @@
 
 package x10.util.resilient.localstore;
 
-import x10.util.HashSet;
 import x10.util.HashMap;
 import x10.util.ArrayList;
-import x10.util.concurrent.AtomicLong;
 import x10.compiler.Ifdef;
 import x10.util.concurrent.Lock;
+import x10.util.resilient.localstore.tx.*;
+import x10.util.resilient.localstore.Cloneable;
+import x10.xrx.Runtime;
+import x10.util.resilient.localstore.tx.logging.TxDesc;
 
-public class SlaveStore {
-    private val moduleName = "SlaveStore";
+/* Slave methods are being called by only one place at a time,
+ * either its master during normal execution, or the store coordinator during failure recovery */
+public class SlaveStore[K] {K haszero} {
+    static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
-    private val mastersMap:HashMap[Long,MasterState]; // master_virtual_id, master_data
-    private transient val lock:Lock = new Lock();
+    private var masterState:HashMap[K,Cloneable];
+    // the order of the transactions in this list is important for recovery
+    // TODO: change to a HashMap[place index, list]
+    private var logs:ArrayList[TxSlaveLog[K]]; 
+    private transient val lock:Lock;
+    
+    private val masterTxDesc:HashMap[Long,TxDesc] = new HashMap[Long,TxDesc]();
+    private transient val txDescLock:Lock;
     
     public def this() {
-        mastersMap = new HashMap[Long,MasterState]();
+        assert(resilient);
+        masterState = new HashMap[K,Cloneable]();
+        logs = new ArrayList[TxSlaveLog[K]]();
+        if (!TxConfig.get().LOCK_FREE) {
+            lock = new Lock();
+            txDescLock = new Lock();
+        } else {
+            lock = null;
+            txDescLock = null;
+        }
     }
     
-    public def addMasterPlace(masterVirtualId:Long, masterState:MasterState) {
+    public def this(state:HashMap[K,Cloneable]) {
+        assert(resilient);
+        masterState = state;
+        logs = new ArrayList[TxSlaveLog[K]]();
+        if (!TxConfig.get().LOCK_FREE) {
+            lock = new Lock();
+            txDescLock = new Lock();
+        } else {
+            lock = null;
+            txDescLock = null;
+        }
+    }
+    
+    /******* Recovery functions (called by one place) , no risk of race condition *******/
+    public def addMasterPlace(state:HashMap[K,Cloneable]) {
+        masterState = state;
+        logs = new ArrayList[TxSlaveLog[K]]();
+    }
+    
+    public def getSlaveMasterState():HashMap[K,Cloneable] {
+        return masterState;
+    }
+    /******* Prepare/Commit/Abort functions *******/
+    /*Used by LocalTx to commit a transaction. TransLog is applied immediately and not saved in the logs map*/
+    public def commit(id:Long, transLog:HashMap[K,Cloneable], ownerPlaceIndex:Long) {
         try {
-            lock.lock();
-            mastersMap.put(masterVirtualId, masterState);
+            slaveLock();
+            commitLockAcquired(new TxSlaveLog[K](id, ownerPlaceIndex, transLog));
         }
         finally {
-            lock.unlock();
+            slaveUnlock();
         }
     }
     
-    public def getMasterState(masterVirtualId:Long):MasterState {
+    /*Used by Tx to commit a transaction that was previously prepared. TransLog is removed from the logs map after commit*/
+    public def commit(id:Long) {
         try {
-            lock.lock();
-            var state:MasterState = mastersMap.getOrElse(masterVirtualId, null);
-            if (state == null)
-                return new MasterState(new HashMap[String,HashMap[String,Cloneable]]());
-            return state;
-        }
-        finally {
-            lock.unlock();
-        }
-    }
-    
-    public def commit(mapName:String, masterVirtualId:Long, transLog:HashMap[String,TransKeyLog]) {
-    try {
-            lock.lock();
-            var state:MasterState = mastersMap.getOrElse(masterVirtualId, null);
-            if (state == null) {
-                state = new MasterState(new HashMap[String,HashMap[String,Cloneable]]());
-            	mastersMap.put(masterVirtualId, state); 
+            slaveLock();
+            val txLog = getLog(id);
+            if (txLog != null) {
+                commitLockAcquired(txLog);
+                logs.remove(txLog);
             }
-            applyChangesLockAcquired(mapName, state, transLog);
+        } finally {
+            slaveUnlock();
+        }
+    }
+    
+    private def commitLockAcquired(txLog:TxSlaveLog[K]) {
+        try {
+            val data = masterState;
+            val iter = txLog.transLog.keySet().iterator();
+            while (iter.hasNext()) {
+                val key = iter.next();
+                val value = txLog.transLog.getOrThrow(key);
+                if (value == null)
+                    data.delete(key);
+                else
+                    data.put(key, value);
+            }
+        }catch(ex:Exception){
+            throw ex;
+        }
+    }
+    
+    public def prepare(id:Long, entries:HashMap[K,Cloneable], ownerPlaceIndex:Long) {
+        try {
+            slaveLock();
+            var txSlaveLog:TxSlaveLog[K] = getLog(id);
+            if (txSlaveLog == null) {
+                txSlaveLog = new TxSlaveLog[K](id, ownerPlaceIndex);
+                logs.add(txSlaveLog);
+            }
+            txSlaveLog.transLog = entries;
         }
         finally {
+            slaveUnlock();
+        }
+    }
+    
+    public def abort(id:Long) {
+        try {
+            slaveLock();
+            val log = getLog(id);
+            logs.remove(log);
+        }
+        finally {
+            slaveUnlock();
+        }
+    }
+    
+    public def clusterTransactions() {
+        val map = new HashMap[Long,ArrayList[Long]]();
+        try {
+            slaveLock();
+            for (log in logs) {
+                var list:ArrayList[Long] = map.getOrElse(log.ownerPlaceIndex, null);
+                if (list == null){
+                    list = new ArrayList[Long]();
+                    map.put(log.ownerPlaceIndex, list);
+                }
+                list.add(log.id);
+            }
+        } 
+        finally {
+            slaveUnlock();
+        }
+        return map;
+    }
+    
+    public def getPendingTransactions() {
+        val list = new ArrayList[Long]();
+        try {
+            slaveLock();
+            for (log in logs){
+                list.add(log.id);
+            }
+        } 
+        finally {
+            slaveUnlock();
+        }
+        return list;
+    }
+    
+    public def commitAll(committed:ArrayList[Long]) {
+        try {
+            slaveLock();
+            for (log in logs){
+                if (committed.contains(log.id))
+                    commitLockAcquired(log);
+            }
+            logs.clear();
+        }
+        finally {
+            slaveUnlock();
+        }
+    }
+    
+    private def getLog(id:Long) {
+        for (log in logs){
+            if (log.id == id)
+                return log;
+        }
+        return null;
+    }
+    
+    private def slaveLock(){
+        if (!TxConfig.get().LOCK_FREE)
+            lock.lock();
+    }
+    
+    private def slaveUnlock(){
+        if (!TxConfig.get().LOCK_FREE)
             lock.unlock();
+    }
+    
+    
+    public def waitUntilPaused() {
+        try {
+            slaveLock();
+            if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " - SlaveStore.waitUntilPaused started logsSize["+logs.size() +"] ...");
+            Runtime.increaseParallelism();
+            var count:Long = 0;
+            while (logs.size() != 0) {
+                slaveUnlock();
+                TxConfig.waitSleep();
+                slaveLock();
+                if (count++ % 1000 == 0){
+                    var str:String = "";
+                    for (log in logs){
+                        str += "log{" + log.toString() + "}  , " ;
+                    }
+                    Console.OUT.println(here + " maybe a bug, waited too long ..." + str);
+                }
+            }
+        
+        } finally {
+        	if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " - SlaveStore.waitUntilPaused completed ...");
+            Runtime.decreaseParallelism(1n);
+            slaveUnlock();
         }
     }
     
-    private def applyChangesLockAcquired(mapName:String, state:MasterState, transLog:HashMap[String,TransKeyLog]) {
-        val data = state.getMapData(mapName);
-        val iter = transLog.keySet().iterator();
-        while (iter.hasNext()) {
-            val key = iter.next();
-            val log = transLog.getOrThrow(key);
-            if (log.readOnly())
-                continue;
-            if (log.isDeleted()) 
-                data.remove(key);
-            else
-                data.put(key, log.getValue());
+    public def getTransDescriptors(place:Place):ArrayList[TxDesc] {
+        val result = new ArrayList[TxDesc]();
+        try {
+        	lockTxDesc();
+        	val iter = masterTxDesc.keySet().iterator();
+        	while (iter.hasNext()) {
+        		val id = iter.next();
+        		val txdesc = masterTxDesc.getOrThrow(id);
+        		result.add(txdesc);
+        	} /*FIX_TX_DESC: why did we need to check the place id???*/
         }
-    }
-}
-
-class MasterState {
-    public var maps:HashMap[String,HashMap[String,Cloneable]];
-   
-    public def this(maps:HashMap[String,HashMap[String,Cloneable]]) {
-        this.maps = maps;
+        finally {
+        	unlockTxDesc();
+        }
+        return result;
     }
     
-    public def getMapData(mapName:String) {
-    	var data:HashMap[String,Cloneable] = maps.getOrElse(mapName, null);
-        if (data == null) {
-        	data = new HashMap[String,Cloneable]();
-        	maps.put(mapName, data);
+    public def getTransDescriptor(txId:Long):TxDesc {
+        try {
+        	lockTxDesc();
+            return masterTxDesc.getOrElse(txId, null);
         }
-        return data;
+        finally {
+        	unlockTxDesc();
+        }
     }
+    
+    public def putTransDescriptor(txId:Long, desc:TxDesc) {
+        try {
+        	lockTxDesc();
+            masterTxDesc.put(txId, desc);
+        }
+        finally {
+        	unlockTxDesc();
+        }
+    }
+    
+    
+    public def filterCommitted(txList:ArrayList[Long]) {
+    	try {
+        	lockTxDesc();
+	    	if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " started SlaveStore.filterCommitted ...");
+	        val list = new ArrayList[Long]();
+	        for (txId in txList) {
+	            val obj = masterTxDesc.getOrElse(txId, null);
+	            if (obj != null && obj.status == TxDesc.COMMITTING) {
+	                list.add(txId);
+	            }
+	        }
+	        if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " completed SlaveStore.filterCommitted ...");
+	        return list;
+    	} finally {
+        	unlockTxDesc();
+        }
+    }
+    
+    public def deleteTransDescriptor(txId:Long) {
+        try {
+        	lockTxDesc();
+        	masterTxDesc.remove(txId);
+        }
+        finally {
+        	unlockTxDesc();
+        }
+    }
+    
+    public def updateTxDescStatus(id:Long, newStatus:Long) {
+    	try {
+        	lockTxDesc();
+        	val desc = masterTxDesc.getOrThrow(id);
+    		desc.status = newStatus;
+    		masterTxDesc.put(id, desc);
+        }
+        finally {
+        	unlockTxDesc();
+        }
+    }
+    
+    public def addTxDescMember(id:Long, memId:Long) {
+    	try {
+    		lockTxDesc();
+    		var desc:TxDesc = masterTxDesc.getOrElse(id, null);
+    		if (desc == null) {
+    			desc = new TxDesc(id, false); 
+    			masterTxDesc.put(id, desc);
+    		}
+    		desc.addVirtualMember(memId);
+    	} finally {
+    		unlockTxDesc();
+    	}
+    }
+    
+    public def lockTxDesc(){
+        if (!TxConfig.get().LOCK_FREE) {
+        	txDescLock.lock();
+        }
+    }
+    
+    public def unlockTxDesc() {
+        if (!TxConfig.get().LOCK_FREE) {
+        	txDescLock.unlock();
+        }
+    }
+    
 }
