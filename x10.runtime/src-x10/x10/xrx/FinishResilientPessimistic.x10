@@ -86,6 +86,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         id = Id(here.id as Int, nextId.getAndIncrement());
         val grlc = GlobalRef[AtomicInteger](new AtomicInteger(1n));
         me = new PessimisticMasterState(id, parent, grlc);
+        FinishReplicator.addMaster(id, me as FinishMasterState);
         if (verbose>=1) debug("<<<< RootFinish(id="+id+", grlc=1) created");
     }
     
@@ -96,8 +97,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         if (lc.home == here) {
             me = new PessimisticRemoteState(id, lc);
             if (verbose>=1) debug("<<<< RemoteFinish(id="+id+",lcHome="+lc.home+") createdA");    
-        }
-        else {
+        } else {
             val grlc = GlobalRef[AtomicInteger](new AtomicInteger(1n));
             me = new PessimisticRemoteState(id, grlc);
             if (verbose>=1) debug("<<<< RemoteFinish(id="+id+",lcHome="+lc.home+") createdB with new lc=1");
@@ -113,13 +113,13 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
     public def serialize(ser:Serializer) {
         if (verbose>=1) debug(">>>> serialize(id="+id+") called ");
         if (me instanceof PessimisticMasterState) {
-            (me as PessimisticMasterState).globalInit(false); // Once we have more than 1 copy of the finish state, we must go global
-                                                              // false means don't create a backup
+            val me2 = (me as PessimisticMasterState); 
+            if (!me2.isGlobal)
+                me2.globalInit(false); // Once we have more than 1 copy of the finish state, we must go global
         }
         ser.writeAny(id);
         val grlc = me instanceof PessimisticMasterState ?
-                        (me as PessimisticMasterState).grlc :
-                        (me as PessimisticRemoteState).grlc ;
+              (me as PessimisticMasterState).grlc : (me as PessimisticRemoteState).grlc ;
         ser.writeAny(grlc);
         if (verbose>=1) debug("<<<< serialize(id="+id+") returning ");
     }
@@ -425,15 +425,21 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 if (verbose>=1) debug(">>>> globalInit(id="+id+") called");
                 if (parent instanceof FinishResilientPessimistic) {
                     val frParent = parent as FinishResilientPessimistic;
-                    if (frParent.me instanceof PessimisticMasterState) (frParent.me as PessimisticMasterState).globalInit(true);
-                    val req = FinishRequest.makePesAddChildRequest(parentId /*id*/, id /*child_id*/);
-                    FinishReplicator.exec(req);
+                    if (frParent.me instanceof PessimisticMasterState) {
+                        val x = (frParent.me as PessimisticMasterState);
+                        if (x.isGlobal) {
+                            val req = FinishRequest.makePesAddChildRequest(parentId /*id*/, id /*child_id*/);
+                            FinishReplicator.exec(req);                            
+                        } else {
+                            x.addChild(id);
+                            x.globalInit(true);
+                        }
+                    }
                 }
                 if (makeBackup)
                     createBackup(backupPlaceId);
                 isGlobal = true;
                 strictFinish = true;
-                FinishReplicator.addMaster(id, this);
                 if (verbose>=1) debug("<<<< globalInit(id="+id+") returning");
             }
             latch.unlock();
@@ -452,7 +458,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             val rCond = ResilientCondition.make(backup);
             val closure = (gr:GlobalRef[Condition]) => {
                 at (backup) @Immediate("backup_create") async {
-                    val bFin = FinishReplicator.findBackupOrCreate(myId, myParentId);
+                    val bFin = FinishReplicator.pesFindBackupOrCreate(myId, myParentId, children);
                     at (gr) @Immediate("backup_create_response") async {
                         gr().release();
                     }
@@ -588,6 +594,20 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             }
         }
        
+        def addChild(child:Id) {
+            if (verbose>=1) debug(">>>> Master(id="+id+").addChild(child=" + child + ") called");
+            try {
+                latch.lock();
+                if (children == null) {
+                    children = new HashSet[Id]();
+                }
+                children.add(child);
+                if (verbose>=1) debug("<<<< Master(id="+id+").addChild(child=" + child + ") returning");
+            } finally {
+                latch.unlock();
+            }
+        }
+        
         def addChild(child:Id, resp:MasterResponse) {
             if (verbose>=1) debug(">>>> Master(id="+id+").addChild(child=" + child + ") called");
             try {
@@ -1255,12 +1275,21 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         var placeOfAdopter:Int = -1n; //the place of the adopter
         
         var isReleased:Boolean = false;
-        
+
         def this(id:Id, parentId:Id) {
             this.id = id;
             this.numActive = 1;
             this.parentId = parentId;
             this.live = new HashMap[FinishResilient.Task,Int]();
+            increment(live, Task(id.home, FinishResilient.ASYNC));
+        }
+        
+        def this(id:Id, parentId:Id, children:HashSet[Id]) {
+            this.id = id;
+            this.numActive = 1;
+            this.parentId = parentId;
+            this.live = new HashMap[FinishResilient.Task,Int]();
+            this.children = children;
             increment(live, Task(id.home, FinishResilient.ASYNC));
         }
         

@@ -1164,6 +1164,32 @@ public final class FinishReplicator {
         }
     }
     
+    
+
+    static def pesFindBackupOrCreate(id:FinishResilient.Id, parentId:FinishResilient.Id, children:HashSet[FinishResilient.Id]):FinishBackupState {
+        if (verbose>=1) debug(">>>> findOrCreateBackup(id="+id+", parentId="+parentId+") called ");
+        try {
+            glock.lock();
+            var bs:FinishBackupState = fbackups.getOrElse(id, null);
+            if (bs == null) {
+                if (backupDeny.contains(BackupDenyId(parentId, id.home))) {
+                    if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") failed, BackupCreationDenied");
+                    throw new BackupCreationDenied();
+                    //no need to handle this exception; the caller has died.
+                }
+                bs = new FinishResilientPessimistic.PessimisticBackupState(id, parentId, children);
+                fbackups.put(id, bs);
+                if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") returning, created bs="+bs);
+            }
+            else {
+                if (verbose>=1) debug("<<<< findOrCreateBackup(id="+id+", parentId="+parentId+") returning, found bs="+bs); 
+            }
+            return bs;
+        } finally {
+            glock.unlock();
+        }
+    }
+
     static def findBackupOrCreate(id:FinishResilient.Id, parentId:FinishResilient.Id):FinishBackupState {
         if (verbose>=1) debug(">>>> findOrCreateBackup(id="+id+", parentId="+parentId+") called ");
         try {
