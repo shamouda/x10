@@ -34,14 +34,6 @@ import x10.xrx.freq.TermRequestOpt;
 import x10.xrx.freq.RemoveGhostChildRequestOpt;
 import x10.xrx.freq.TransitRequestOpt;
 
-//TODO: clean remote finishes -> design a piggybacking protocol for GC
-//TODO: bulk globalInit for a chain of finishes.
-//TODO: createBackup: repeat if backup place is dead. block until another place is found!!
-//TODO: test notifyActivityCreationFailed()
-//TODO: handle RemoteCreationDenied
-//TODO: getNewMasterBlocking() does not need to be blocking
-//TODO: delete backup in sync(...) if quiescent reached
-//TODO: DenyId, can it use the src place only without the parent Id??? consider cases when a recovered master is creating new children backups!!!!
 /**
  * Distributed Resilient Finish (records transit tasks only)
  * Implementation notes: remote objects are shared and are persisted in a static hashmap (special GC needed)
@@ -76,6 +68,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     public def this (parent:FinishState) {
         id = Id(here.id as Int, nextId.getAndIncrement());
         me = new OptimisticMasterState(id, parent);
+        FinishReplicator.addMaster(id, me as FinishMasterState);
         if (verbose>=1) debug("<<<< RootFinish(id="+id+") created");
     }
     
@@ -101,7 +94,9 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     public def serialize(ser:Serializer) {
         if (verbose>=1) debug(">>>> serialize(id="+id+") called ");
         if (me instanceof OptimisticMasterState) {
-        	(me as OptimisticMasterState).globalInit(false); 
+            val me2 = (me as OptimisticMasterState); 
+            if (!me2.isGlobal)
+                me2.globalInit(); // Once we have more than 1 copy of the finish state, we must go global
         }
         ser.writeAny(id);
         if (verbose>=1) debug("<<<< serialize(id="+id+") returning ");
@@ -570,19 +565,22 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         //makeBackup is true only when a parent finish if forced to be global by its child
         //otherwise, backup is created with the first transit request
-        def globalInit(makeBackup:Boolean) {
+        def globalInit() {
             latch.lock();
-            strictFinish = true;
             if (!isGlobal) {
+                strictFinish = true;
                 if (verbose>=1) debug(">>>> globalInit(id="+id+") called");
+                
                 if (parent instanceof FinishResilientOptimistic) {
                     val frParent = parent as FinishResilientOptimistic;
-                    if (frParent.me instanceof OptimisticMasterState) (frParent.me as OptimisticMasterState).globalInit(true);
+                    if (frParent.me instanceof OptimisticMasterState) {
+                        val par = (frParent.me as OptimisticMasterState);
+                        if (!par.isGlobal) par.globalInit();
+                    }
                 }
-                if (makeBackup)
-                    createBackup(backupPlaceId);
+                
+                createBackup(backupPlaceId);
                 isGlobal = true;
-                FinishReplicator.addMaster(id, this);
                 if (verbose>=1) debug("<<<< globalInit(id="+id+") returning");
             }
             latch.unlock();
@@ -928,6 +926,17 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called locally, localCount now "+lc);
             } else {
                 if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
+                
+                isGlobal = true;
+                //globalize parent if not global - cannot postpone this till sendPendingAct because it is called in an immediate thread and globalInit is blocking
+                if (parent instanceof FinishResilientOptimistic) {
+                    val frParent = parent as FinishResilientOptimistic;
+                    if (frParent.me instanceof OptimisticMasterState) {
+                        val par = (frParent.me as OptimisticMasterState);
+                        if (!par.isGlobal) par.globalInit();
+                    }
+                }
+                
                 val req = FinishRequest.makeOptTransitRequest(id, parentId, srcId, dstId, kind);
                 FinishReplicator.exec(req, this);
                 if (verbose>=1) debug("<<<< Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
@@ -938,7 +947,17 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val kind = ASYNC;
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
-            globalInit(false);//globalize parent if not global - cannot postpone this till sendPendingAct because it is called in an immediate thread and globalInit is blocking
+            
+            isGlobal = true;
+            //globalize parent if not global - cannot postpone this till sendPendingAct because it is called in an immediate thread and globalInit is blocking
+            if (parent instanceof FinishResilientOptimistic) {
+                val frParent = parent as FinishResilientOptimistic;
+                if (frParent.me instanceof OptimisticMasterState) {
+                    val par = (frParent.me as OptimisticMasterState);
+                    if (!par.isGlobal) par.globalInit();
+                }
+            }
+            
             val start = prof != null ? System.nanoTime() : 0;
             val ser = new Serializer();
             ser.writeAny(body);
@@ -997,6 +1016,17 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable, kind:Int):void { 
             val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
+            
+            isGlobal = true;
+            //globalize parent if not global - cannot postpone this till sendPendingAct because it is called in an immediate thread and globalInit is blocking
+            if (parent instanceof FinishResilientOptimistic) {
+                val frParent = parent as FinishResilientOptimistic;
+                if (frParent.me instanceof OptimisticMasterState) {
+                    val par = (frParent.me as OptimisticMasterState);
+                    if (!par.isGlobal) par.globalInit();
+                }
+            }
+            
             if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
             val req = FinishRequest.makeOptTermRequest(id, parentId, srcId, dstId, kind, t);
             if (DISABLE_NONBLOCKING_REPLICATION) {
@@ -1024,6 +1054,17 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 return;
             }
             assert (Runtime.activity() != null) : here + " >>>> Root(id="+id+").pushException(t="+t.getMessage()+") blocking method called within an immediate thread";
+            
+            isGlobal = true;
+            //globalize parent if not global - cannot postpone this till sendPendingAct because it is called in an immediate thread and globalInit is blocking
+            if (parent instanceof FinishResilientOptimistic) {
+                val frParent = parent as FinishResilientOptimistic;
+                if (frParent.me instanceof OptimisticMasterState) {
+                    val par = (frParent.me as OptimisticMasterState);
+                    if (!par.isGlobal) par.globalInit();
+                }
+            }
+            
             if (verbose>=1) debug(">>>> Root(id="+id+").pushException(t="+t.getMessage()+") called");
             val req = FinishRequest.makeOptExcpRequest(id, parentId, t);
             FinishReplicator.exec(req, this);
