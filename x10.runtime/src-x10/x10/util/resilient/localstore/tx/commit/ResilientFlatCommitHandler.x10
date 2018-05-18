@@ -99,7 +99,7 @@ public class ResilientFlatCommitHandler[K] {K haszero} extends ResilientCommitHa
     protected def finishFlatSlaves(deadMasters:ArrayList[Place], closure:(PlaceLocalHandle[LocalStore[K]],Long)=>void, deleteTxDesc:Boolean) {
         finish for (p in deadMasters) {
             val slave = plh().getSlave(p);
-            async at (slave) {
+            at (slave) async {
                 closure(plh, id);
             }
         }

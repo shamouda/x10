@@ -41,7 +41,7 @@ public class DistributedRecoveryHelper[K] {K haszero} {
             throw new Exception(here + " Fatal error, two consecutive places died : " + deadPlace + "  and " + deadPlaceSlave);
         
         finish {
-            async at (deadPlaceSlave) createMasterStoreAtSpare(plh, spare, deadPlace, deadVirtualId, newActivePlaces, deadMaster);
+            at (deadPlaceSlave) async createMasterStoreAtSpare(plh, spare, deadPlace, deadVirtualId, newActivePlaces, deadMaster);
             createSlaveStoreAtSpare(plh, spare, deadPlace, deadVirtualId);
         }
         
@@ -75,7 +75,7 @@ public class DistributedRecoveryHelper[K] {K haszero} {
         	plh().initSpare(newActivePlaces, deadVirtualId, deadPlace, deadPlaceSlave);
             plh().getMasterStore().reactivate();
             
-            async at (deadPlaceSlave) {
+            at (deadPlaceSlave) async {
                 plh().replace(deadPlace, spare);
             }
         }
@@ -195,7 +195,7 @@ public class DistributedRecoveryHelper[K] {K haszero} {
                         else
                             committedList = plh().slaveStore.filterCommitted(txList);
                         val cList = committedList;
-                        at (committed) {
+                        at (committed) async {
                             committedLock().lock();
                             committed().addAll(cList);
                             committedLock().unlock();

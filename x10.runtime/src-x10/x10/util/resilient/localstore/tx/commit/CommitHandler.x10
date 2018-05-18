@@ -10,7 +10,6 @@ import x10.util.resilient.localstore.TxMembers;
 import x10.util.HashSet;
 import x10.compiler.Pinned;
 import x10.util.resilient.localstore.tx.logging.TxDescManager;
-import x10.compiler.Pragma;
 import x10.xrx.Runtime;
 
 public abstract class CommitHandler[K] {K haszero} {

@@ -13,6 +13,7 @@ import x10.util.Timer;
 import x10.util.resilient.localstore.tx.logging.TxDesc;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.recovery.CentralizedRecoveryHelper;
+import x10.util.resilient.concurrent.ResilientLowLevelFinish;
 
 public class ResilientNativeMap[K] {K haszero} {
     public val plh:PlaceLocalHandle[LocalStore[K]];

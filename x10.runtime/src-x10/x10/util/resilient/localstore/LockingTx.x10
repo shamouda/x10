@@ -59,10 +59,10 @@ public class LockingTx[K] {K haszero} extends AbstractTx[K] {
         val opPerPlace = this.opPerPlace;
         
         val startLock = Timer.milliTime();
-        finish for (var i:Long = 0; i < members.size; i++) {
+        for (var i:Long = 0; i < members.size; i++) {
             val dest = members(i);
             val start = opPerPlace*i;
-            at (Place(dest)) { //locking must be done sequentially
+            finish at (Place(dest)) async { //locking must be done sequentially to avoid out of order locking
                 if (!TxConfig.DISABLE_INCR_PARALLELISM && !TxConfig.get().LOCK_FREE)
                     Runtime.increaseParallelism();
                 
