@@ -71,8 +71,6 @@ public class ResilientTreeCommitHandler[K] {K haszero} extends ResilientCommitHa
     public def commit_resilient(commitRecovery:Boolean) {
         if (!commitRecovery) 
             commitPhaseOne();
-        if (TxConfig.EXPR_LVL == 3)
-            return;
         commitPhaseTwo(commitRecovery);
     }
    

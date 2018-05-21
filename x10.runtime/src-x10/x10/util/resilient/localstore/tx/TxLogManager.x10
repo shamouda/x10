@@ -104,8 +104,6 @@ public class TxLogManager[K] {K haszero} {
         }
     }
     
-    
-    
     public def getOrAddTxLog(id:Long) {
         try {
             lock();
@@ -121,15 +119,7 @@ public class TxLogManager[K] {K haszero} {
                 }
             }
             if (obj == null) {
-                if (TxConfig.EXPR_LVL == 2 || TxConfig.EXPR_LVL == 3) {
-                    lastTaken++;
-                    if (lastTaken == TxConfig.MAX_CONCURRENT_TXS)
-                        lastTaken = 0;
-                    obj = txLogs(lastTaken);
-                    obj.reset();
-                }
-                else
-                    throw new ConcurrentTransactionsLimitExceeded(here + " ConcurrentTransactionsLimitExceeded");
+                throw new ConcurrentTransactionsLimitExceeded(here + " ConcurrentTransactionsLimitExceeded");
             }
             obj.setId(id); //allocate it
             return obj;

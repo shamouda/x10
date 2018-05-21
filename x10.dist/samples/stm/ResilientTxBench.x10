@@ -23,7 +23,7 @@ import x10.util.HashSet;
 import x10.compiler.Uncounted;
 import x10.util.Team;
 
-public class STMBench {
+public class ResilientTxBench {
     private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     public static def main(args:Rail[String]) {
@@ -109,9 +109,9 @@ public class STMBench {
                 resetStatistics(map, throughputPLH);
             }
             
-            Console.OUT.println("+++ STMBench Succeeded +++");
+            Console.OUT.println("+++ TxBench Succeeded +++");
         }catch(ex:Exception) {
-            Console.OUT.println("!!! STMBench Failed !!!");
+            Console.OUT.println("!!! TxBench Failed !!!");
             ex.printStackTrace();
         }
     }
@@ -126,10 +126,10 @@ public class STMBench {
                 startPlace(activePlaces(i), map, activePlaces.size(), producersCount, d, r, u, t, h, o, g, f, victims, optimized, flat, throughput, recoveryThroughput);
             }
             
-        } catch (e:STMBenchFailed) {
+        } catch (e:TxBenchFailed) {
             throw e;
         } catch (mulExp:MultipleExceptions) {
-            val stmFailed = mulExp.getExceptionsOfType[STMBenchFailed]();
+            val stmFailed = mulExp.getExceptionsOfType[TxBenchFailed]();
             if ((stmFailed != null && stmFailed.size != 0) || !resilient)
                 throw mulExp;
             mulExp.printStackTrace();
@@ -215,7 +215,6 @@ public class STMBench {
                             val key = keys(start+x);
                             val read = readFlags(start+x);
                             val value = values(start+x);
-                            //read? Console.OUT.println("Tx["+tx.id+"] STMBench.read("+key+") ") : Console.OUT.println("Tx["+tx.id+"] STMBench.write("+key+") ") ;  
                             read? tx.get(key): tx.put(key, new CloneableLong(value));
                         }
                     });
@@ -284,7 +283,7 @@ public class STMBench {
             if (resilient && producerId == 0 && slaveChange.changed) {
                 val nextPlace = slaveChange.newSlave;
                 if (throughput().rightPlaceDeathTimeNS == -1)
-                    throw new STMBenchFailed(here + " assertion error, did not receive suicide note ...");
+                    throw new TxBenchFailed(here + " assertion error, did not receive suicide note ...");
                 val oldThroughput = throughput().rightPlaceThroughput;
                 val recoveryTime = System.nanoTime() - throughput().rightPlaceDeathTimeNS;
                 oldThroughput.shiftElapsedTime(recoveryTime);
@@ -319,7 +318,7 @@ public class STMBench {
                     team.allreduce(plcTh.reduceSrc, 0, plcTh.reduceDst, 0, 2, Team.ADD);
                     
                     if (!plcTh.started)
-                        throw new STMBenchFailed(here + " never started ...");
+                        throw new TxBenchFailed(here + " never started ...");
                     /*val localThroughput = (counts as Double ) * h * o / (times/1e6) * t;
                     Console.OUT.println("iteration:" + iteration +":"+here+":t="+t+":localthroughput(op/MS):"+localThroughput);*/
                 }
@@ -499,7 +498,7 @@ public class STMBench {
     /***********************   Utils  *****************************/
     public static def printRunConfigurations(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, 
             d:Long, h:Long, o:Long, g:Long, s:Long, f:Boolean, opt:Boolean, flat:Boolean) {
-        Console.OUT.println("STMBench starting with the following parameters:");        
+        Console.OUT.println("TxBench starting with the following parameters:");        
         Console.OUT.println("X10_NPLACES="  + Place.numPlaces());
         Console.OUT.println("X10_NTHREADS=" + Runtime.NTHREADS);
         Console.OUT.println("X10_NUM_IMMEDIATE_THREADS=" + System.getenv("X10_NUM_IMMEDIATE_THREADS"));
@@ -509,7 +508,6 @@ public class STMBench {
         Console.OUT.println("DISABLE_INCR_PARALLELISM=" + System.getenv("DISABLE_INCR_PARALLELISM"));
         Console.OUT.println("X10_EXIT_BY_SIGKILL=" + System.getenv("X10_EXIT_BY_SIGKILL"));
         Console.OUT.println("DISABLE_SLAVE=" + System.getenv("DISABLE_SLAVE"));
-        Console.OUT.println("IMM_AT=" + System.getenv("IMM_AT"));
         Console.OUT.println("ENABLE_STAT=" + System.getenv("ENABLE_STAT"));
         
         Console.OUT.println("r=" + r);
@@ -551,7 +549,6 @@ class ProducerThroughput {
         return placeId+"x"+threadId +": elapsedTime=" + elapsedTimeNS/1e9 + " seconds  txCount= " + txCount;
     }
 }
-
 
 class PlaceThroughput(threads:Long) {
     public var thrds:Rail[ProducerThroughput];
@@ -634,7 +631,7 @@ class PlaceThroughput(threads:Long) {
 }
 
 
-class STMBenchFailed extends Exception {
+class TxBenchFailed extends Exception {
     public def this(message:String) {
         super(message);
     }

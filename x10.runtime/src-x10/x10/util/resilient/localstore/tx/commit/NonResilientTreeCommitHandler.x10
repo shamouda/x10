@@ -23,8 +23,6 @@ public class NonResilientTreeCommitHandler[K] {K haszero} extends CommitHandler[
     
     public def commit(commitRecovery:Boolean):Int {
         commitPhaseOne();
-        if (TxConfig.EXPR_LVL == 3)
-            return AbstractTx.SUCCESS;
         commitPhaseTwo();
         return AbstractTx.SUCCESS;
     }

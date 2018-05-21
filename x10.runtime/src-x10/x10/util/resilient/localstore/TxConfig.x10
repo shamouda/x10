@@ -34,9 +34,6 @@ public class TxConfig {
     //used for performance testing only
 	public static val DISABLE_SLAVE = System.getenv("DISABLE_SLAVE") != null && System.getenv("DISABLE_SLAVE").equals("1");
     public static val ENABLE_STAT = System.getenv("ENABLE_STAT") != null && System.getenv("ENABLE_STAT").equals("1");
-    public static val EXPR_LVL = System.getenv("EXPR_LVL") == null ? 4 : Long.parseLong(System.getenv("EXPR_LVL"));
-    
-    public static val TM_ROOT = System.getenv("TM_ROOT") != null && System.getenv("TM_ROOT").equals("1");
     
 // 1 : start 
 // 2 : start + submit

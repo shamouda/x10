@@ -47,20 +47,11 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
         }
         	
         if (resilient && !TxConfig.DISABLE_SLAVE) {
-            if (TxConfig.TM_ROOT) {
-                if (members == null && !flat)
-                    commitHandler = new ResilientTreeCommitHandlerRoot[K](plh, id);
-                else
-                    commitHandler = new ResilientFlatCommitHandlerRoot[K](plh, id, members);
-            }
-            else {
-                if (members == null && !flat)
-                    commitHandler = new ResilientTreeCommitHandler[K](plh, id);
-                else
-                    commitHandler = new ResilientFlatCommitHandler[K](plh, id, members);
-            }
-        }
-        else {
+            if (members == null && !flat)
+                commitHandler = new ResilientTreeCommitHandler[K](plh, id);
+            else
+                commitHandler = new ResilientFlatCommitHandler[K](plh, id, members);
+        } else {
         	if (members == null && !flat)
         	    commitHandler = new NonResilientTreeCommitHandler[K](plh, id);
         	else
@@ -84,7 +75,8 @@ public class Tx[K] {K haszero} extends AbstractTx[K] {
         try {
             commitHandler.abort(recovery);
         } catch (ex:Exception) {
-            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here="+ here + " ignoring exception during abort ");    
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here="
+                                                              + here + " ignoring exception during abort ");    
         }
         if (plh().stat != null)
             plh().stat.addAbortedTxStats(Timer.milliTime() - startTime, 

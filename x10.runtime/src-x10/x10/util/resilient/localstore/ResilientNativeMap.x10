@@ -233,18 +233,8 @@ public class ResilientNativeMap[K] {K haszero} {
                 if (virtualMembers != null && members == null) 
                     members = plh().getTxMembersIncludingDead(virtualMembers);
                 tx = startGlobalTransaction(members, flat);
-                if (TxConfig.EXPR_LVL == 1) {
-                    tx.clean();
-                    return new TxResult(AbstractTx.SUCCESS, 1);
-                }
-                
                 val out:Any;
-                finish {
-        			out = closure(tx);
-        		}
-                if (TxConfig.EXPR_LVL == 2) {
-                    return new TxResult(AbstractTx.SUCCESS, 1);
-                }
+                finish { out = closure(tx); }
                 commitCalled = true;
                 return new TxResult(tx.commit(), out);
             } catch(ex:Exception) {
