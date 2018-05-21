@@ -248,6 +248,57 @@ public class ResilientNativeMap[K] {K haszero} {
         }
     }
     
+    /***********************   Global Optimistic Transactions ****************************/
+    /*
+    private def startOptTransaction():OptTx[K] {
+        ensurePositiveVirtualId();
+        val id = plh().getMasterStore().getNextTransactionId();
+        val tx = new OptTx(plh, id);
+        return tx;
+    }
+
+    public def restartGlobalTransaction(txDesc:TxDesc):Tx[K] {
+        ensurePositiveVirtualId();
+        val members = txDesc.staticMembers? plh().getTxMembersIncludingDead(txDesc.virtualMembers.toRail()):null;
+        return new Tx(plh, txDesc.id, members, false);
+    }
+
+    public def executeOptTransaction(closure:(OptTx[K])=>Any, maxRetries:Long):TxResult {
+        return executeOptTransaction(closure, maxRetries, -1);
+    }
+    
+    public def executeOptTransaction(closure:(OptTx[K])=>Any, maxRetries:Long, maxTimeNS:Long):TxResult {
+        val beginning = System.nanoTime();
+        var retryCount:Long = 0;
+        var tx:OptTx[K] = null;
+        
+        while(true) {
+            if (retryCount == maxRetries || (maxTimeNS != -1 && System.nanoTime() - beginning >= maxTimeNS)) {
+                throw new FatalTransactionException("Maximum limit for retrying a transaction reached!!");
+            }
+            retryCount++;
+            var commitCalled:Boolean = false;
+            try {
+                tx = startOptTransaction();
+                val out:Any;
+                
+                finish {
+                    Runtime.registerFinishTx(tx.id);
+                    out = closure(tx);
+                }
+                val members = Runtime.getFinishMembers(tx.id);
+                commitCalled = true;
+                return new TxResult(tx.commit(members), out);
+            } catch(ex:Exception) {
+                if (tx != null && !commitCalled) {
+                    val members = Runtime.getFinishMembers(tx.id);
+                    tx.abort(members); // tx.commit() aborts automatically if needed
+                }
+                throwIfFatalSleepIfRequired(tx.id, ex);
+            }
+        }
+    }
+    */    
     /***********************   Lock-based Transactions ****************************/
     private def startLockingTransaction(members:Rail[Long], keys:Rail[K], readFlags:Rail[Boolean], o:Long):LockingTx[K] {
         ensurePositiveVirtualId();

@@ -20,5 +20,4 @@ public class MasterResponse {
     var backupChanged:Boolean = false;
     var parentIdHome:Int; /*used in ADD_CHILD only*/
     var parentIdSeq:Int;
-    var gcReqs:HashSet[FinishResilient.Id];
 }

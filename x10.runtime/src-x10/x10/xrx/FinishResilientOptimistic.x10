@@ -33,6 +33,7 @@ import x10.xrx.freq.TermMulRequestOpt;
 import x10.xrx.freq.TermRequestOpt;
 import x10.xrx.freq.RemoveGhostChildRequestOpt;
 import x10.xrx.freq.TransitRequestOpt;
+import x10.util.Set;
 
 /**
  * Distributed Resilient Finish (records transit tasks only)
@@ -132,7 +133,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             this.id = id;
         }
         
-        public static def deleteObjects(gcReqs:HashSet[Id]) {
+        public static def deleteObjects(gcReqs:Set[Id]) {
             if (gcReqs == null) {
                 if (verbose>=1) debug(">>>> deleteObjects gcReqs = NULL");
                 return;
@@ -537,32 +538,15 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         public def getId() = id;
         public def getBackupId() = backupPlaceId;
         
-        public def addGCRequests(pendingGC:HashMap[Int, HashSet[Id]]) {
-            if (verbose>=1) debug(">>>> addGCRequests(id="+id+") called");
-            if (REMOTE_GC) {
-                for (e in sent.entries()) {
-                    val dst = e.getKey().dst;
-                    var set:HashSet[Id] = pendingGC.getOrElse(dst, null);
-                    if (set == null) {
-                        set = new HashSet[Id]();
-                        pendingGC.put(dst, set);
-                    }
-                    set.add(id);
-                }
+        def addGCRequests() {
+            if (GC_DISABLED) return;
+            val places = new HashSet[Long]();
+            for (e in sent.entries()) {
+                places.add(e.getKey().dst as Long);
             }
-            if (verbose>=1) {
-                var str:String = "";
-                for (e in pendingGC.entries()) {
-                    val placeId = e.getKey();
-                    val set = e.getValue();
-                    for (id in set) {
-                        str += "(" + placeId + " :> " + id + ") ";
-                    }
-                }
-                debug("==== addGCRequests(id="+id+") result: " + str);
-            }
-            if (verbose>=1) debug("<<<< addGCRequests(id="+id+") returning");
+            FinishGC.addGCReady(id, places);
         }
+
         //makeBackup is true only when a parent finish if forced to be global by its child
         //otherwise, backup is created with the first transit request
         def globalInit() {
@@ -727,6 +711,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (quiescent()) {
                     releaseLatch();
                     notifyParent();
+                    addGCRequests();
                     FinishReplicator.removeMaster(id);
                 }
                 if (verbose>=1) debug("<<<< Master(id="+id+").transitToCompleted returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
@@ -750,6 +735,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (quiescent()) {
                     releaseLatch();
                     notifyParent();
+                    addGCRequests();
                     FinishReplicator.removeMaster(id);
                 }
                 
@@ -772,6 +758,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (quiescent()) {
                 releaseLatch();
                 notifyParent();
+                addGCRequests();
                 FinishReplicator.removeMaster(id);
             }
             resp.backupPlaceId = backupPlaceId;
@@ -1184,6 +1171,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (quiescent()) {
                 releaseLatch();
                 notifyParent();
+                addGCRequests();
                 FinishReplicator.removeMaster(id);
             }
             if (verbose>=1) debug("<<<< Master(id="+id+").convertToDead returning, numActive="+numActive);
@@ -1217,6 +1205,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (quiescent()) {
                 releaseLatch();
                 notifyParent();
+                addGCRequests();
                 FinishReplicator.removeMaster(id);
             }
             if (verbose>=1) debug("<<<< Backup(id="+id+").convertFromDead returning, numActive="+numActive);

@@ -588,6 +588,18 @@ public final class Runtime {
         return watcher;
     }
 
+    public static def registerFinishTx(txId:Long) {
+        val a = activity();
+        val state = a.finishState();
+        state.registerFinishTx(txId);    
+    }
+    
+    public static def getFinishMembers(txId:Long) {
+        val a = activity();
+        val state = a.finishState();
+        return state.getFinishMembers(txId);
+    }
+    
     // asyncat, async, at statement, and at expression implementation
     // at is implemented using asyncat
     // asyncat and at must make a copy of the closure parameter (local or remote)

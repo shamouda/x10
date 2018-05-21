@@ -11,55 +11,70 @@
 package x10.xrx;
 
 import x10.util.HashMap;
+import x10.util.Set;
 import x10.util.HashSet;
 import x10.util.concurrent.Lock;
 import x10.compiler.Immediate;
+import x10.util.concurrent.AtomicInteger;
 
 /**
- * This class records the visited places per each finish in a HashSet[Int].
+ * This class records the visited places per each finish in a Set[Int].
  * Cleaning the finishes is done in group of size GC_MAX_PENDING.
  * */
 public class FinishGC {
     
     private static val lock = new Lock();
     
-    private static grMap = new HashMap[GlobalRef[FinishState],HashSet[Int]]();
-    private static grMapGCReady = new HashMap[Int,HashSet[GlobalRef[FinishState]]]();
+    private static grMap = new HashMap[GlobalRef[FinishState],Set[Long]]();
+    private static grMapGCReady = new HashMap[Long,Set[GlobalRef[FinishState]]]();
 
-    private static idMap = new HashMap[FinishResilient.Id,HashSet[Int]]();
-    private static idMapGCReady = new HashMap[Int,HashSet[FinishResilient.Id]]();
+    private static idMap = new HashMap[FinishResilient.Id,Set[Long]]();
+    private static idMapGCReady = new HashMap[Long,Set[FinishResilient.Id]]();
 
-    private static var pending:Long = 0;
-    public static val GC_MAX_PENDING = System.getenv("FINISH_GC_MAX_PENDING") == null ? 100 : Long.parseLong(System.getenv("FINISH_GC_MAX_PENDING"));
-    public static val GC_DEBUG = System.getenv("FINISH_GC_DEBUG") == null ? false : Long.parseLong(System.getenv("FINISH_GC_DEBUG")) == 1;
-    public static val GC_DISABLED = System.getenv("FINISH_GC_DISABLE") == null ? false : Long.parseLong(System.getenv("FINISH_GC_DISABLE")) == 1;
-    public static val GC_PIGGYBACKING = System.getenv("FINISH_GC_PIGGYBACKING") == null ? false : Long.parseLong(System.getenv("FINISH_GC_PIGGYBACKING")) == 1;
+    private static val pending = new AtomicInteger(0n);
     
-    public static def add(gr:GlobalRef[FinishState], places:HashSet[Int]) {
+    public static val GC_DEBUG = FinishState.GC_DEBUG;
+    public static val GC_DISABLED = FinishState.GC_DISABLED;
+    public static val GC_MAX_PENDING = FinishState.GC_MAX_PENDING;
+    public static val GC_PIGGYBACKING = FinishState.GC_PIGGYBACKING;
+    
+    public static def add(gr:GlobalRef[FinishState], places:Set[Long]) {
         if (GC_DISABLED) return;
         lock.lock();
         grMap.put(gr, places);
         lock.unlock();
     }
     
-    public static def addGCReady(gr:GlobalRef[FinishState], places:HashSet[Int]) {
+    public static def addGCReady(gr:GlobalRef[FinishState], places:Set[Long]) {
         if (GC_DISABLED) return;
         lock.lock();
-        grMap.remove(gr);
+        addGCReadyUnsafe(gr, places);
+        lock.unlock();
+    }
+    
+    public static def addGCReady(gr:GlobalRef[FinishState]) {
+        if (GC_DISABLED) return;
+        lock.lock();
+        val places = grMap.remove(gr);
+        addGCReadyUnsafe(gr, places);
+        lock.unlock();
+    }
+    
+    private static def addGCReadyUnsafe(gr:GlobalRef[FinishState], places:Set[Long]) {
         for (p in places) {
-            var s:HashSet[GlobalRef[FinishState]] = grMapGCReady.getOrElse(p, null);
+            var s:Set[GlobalRef[FinishState]] = grMapGCReady.getOrElse(p, null);
             if (s == null) {
                 s = new HashSet[GlobalRef[FinishState]]();
                 grMapGCReady.put(p, s);
             }
             s.add(gr);
         }
-        pending++;
-        if (pending == GC_MAX_PENDING) {
-            cleanGrMapUnsafe();
-            pending = 0;
+        if (!GC_PIGGYBACKING) {
+            if (pending.incrementAndGet() == GC_MAX_PENDING) {
+                cleanGrMapUnsafe();
+                pending.set(0n);
+            }
         }
-        lock.unlock();
     }
     
     private static def cleanGrMapUnsafe() {
@@ -73,6 +88,7 @@ public class FinishGC {
     }
     
     public static def getPendingGC_Gr(place:Int) {
+        if (GC_DISABLED || !GC_PIGGYBACKING) return null;
         try {
             lock.lock();
             return grMapGCReady.remove(place);
@@ -81,34 +97,48 @@ public class FinishGC {
         }
     }
     
-    public static def add(id:FinishResilient.Id, places:HashSet[Int]) {
+    public static def add(id:FinishResilient.Id, places:Set[Long]) {
         if (GC_DISABLED) return;
         lock.lock();
         idMap.put(id, places);
         lock.unlock();
     }
     
-    public static def addGCReady(id:FinishResilient.Id, places:HashSet[Int]) {
+    public static def addGCReady(id:FinishResilient.Id, places:Set[Long]) {
         if (GC_DISABLED) return;
         lock.lock();
-        idMap.remove(id);
+        addGCReadyUnsafe(id, places);
+        lock.unlock();
+    }
+    
+    public static def addGCReady(id:FinishResilient.Id) {
+        if (GC_DISABLED) return;
+        lock.lock();
+        val places = idMap.remove(id);
+        addGCReadyUnsafe(id, places);
+        lock.unlock();
+    }
+    
+    private static def addGCReadyUnsafe(id:FinishResilient.Id, places:Set[Long]) {
         for (p in places) {
-            var s:HashSet[FinishResilient.Id] = idMapGCReady.getOrElse(p, null);
+            var s:Set[FinishResilient.Id] = idMapGCReady.getOrElse(p, null);
             if (s == null) {
                 s = new HashSet[FinishResilient.Id]();
                 idMapGCReady.put(p, s);
             }
             s.add(id);
         }
-        pending++;
-        if (pending == GC_MAX_PENDING) {
-            cleanIdMapUnsafe();
-            pending = 0;
+        if (!GC_PIGGYBACKING) {
+            if (pending.incrementAndGet() == GC_MAX_PENDING) {
+                cleanIdMapUnsafe();
+                pending.set(0n);
+            }
         }
-        lock.unlock();
     }
+    
 
     public static def getPendingGC_Id(place:Int) {
+        if (GC_DISABLED || !GC_PIGGYBACKING) return null;
         try {
             lock.lock();
             return idMapGCReady.remove(place);

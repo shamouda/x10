@@ -23,6 +23,7 @@ import x10.util.concurrent.SimpleLatch;
 import x10.util.GrowableRail;
 import x10.util.HashMap;
 import x10.util.HashSet;
+import x10.util.Set;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.concurrent.ResilientLowLevelFinish;
 import x10.util.concurrent.Condition;
@@ -109,10 +110,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         private static val states = (here.id==0) ? new HashMap[Id, State]() : null;
         private static val statesLock = (here.id==0) ? new Lock() : null;
         private static val place0 = Place.FIRST_PLACE;
-        
-        /*pending requests for remote finish GC per place*/
-        private static val pendingGC = new HashMap[Int, HashSet[Id]]();
-        
+                
         private def this(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState]) {
             this.id = id;
             this.parentId = parentId; 
@@ -359,15 +357,11 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             val wbgr = GlobalRef(wrappedBody);
             at (place0) @Immediate("p0optGlobal_spawnRemoteActivity_big_async_to_zero") async {
                 var markedInTransit:Boolean = false;
-                var gcReqs:HashSet[Id] = null;
                 if (Place(srcId).isDead()) {
                     if (verbose>=1) debug("==== spawnRemoteActivity(id="+id+") src "+srcId + "is dead; dropping async");
                 } else {
                     try {
                     	statesLock.lock();
-                    	if (REMOTE_GC) {
-                    	    gcReqs = pendingGC.remove(srcId);
-                    	}
                         val state = states(id);
                         if (Place(dstId).isDead()) {
                             if (verbose>=1) debug("==== spawnRemoteActivity(id="+id+") destination "+dstId + "is dead; pushed DPE");
@@ -382,7 +376,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 }
                 try {
                     val mt = markedInTransit;
-                    val gcr = gcReqs;
                     at (wbgr) @Immediate("p0optGlobal_spawnRemoteActivity_big_back_to_spawner") async {
                         val fs = (gfs as GlobalRef[FinishState]{self.home == here})();
                         try {
@@ -393,9 +386,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                         }
                         wbgr.forget();
                         fs.notifyActivityTermination(Place(srcId));
-                        if (REMOTE_GC) {
-                            P0OptimisticRemoteState.deleteObjects(gcr);
-                        }
                     }
                 } catch (dpe:DeadPlaceException) {
                     // can ignore; if the src place just died there is nothing left to do.
@@ -453,15 +443,11 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             val wbgr = GlobalRef(wrappedBody);
             at (place0) @Immediate("p0opt_spawnRemoteActivity_big_async_to_zero") async {
                 var markedInTransit:Boolean = false;
-                var gcReqs:HashSet[Id] = null;
                 if (Place(srcId).isDead()) {
                     if (verbose>=1) debug("==== spawnRemoteActivity(id="+id+") src "+srcId + "is dead; dropping async");
                 } else {
                     try {
                     	statesLock.lock();
-                    	if (REMOTE_GC) {
-                    	    gcReqs = pendingGC.remove(srcId);
-                    	}
                     	val state = getOrCreateState(id, parentId, gfs);
                         if (Place(dstId).isDead()) {
                             if (verbose>=1) debug("==== spawnRemoteActivity(id="+id+") destination "+dstId + "is dead; pushed DPE");
@@ -476,7 +462,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 }
                 try {
                     val mt = markedInTransit;
-                    val gcr = gcReqs;
                     at (wbgr) @Immediate("p0opt_spawnRemoteActivity_big_back_to_spawner") async {
                         val fs = (ref as GlobalRef[FinishState]{self.home == here})();
                         try {
@@ -487,9 +472,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                         }
                         wbgr.forget();
                         fs.notifyActivityTermination(Place(srcId));
-                        if (REMOTE_GC) {
-                            P0OptimisticRemoteState.deleteObjects(gcr);
-                        }
                     }
                 } catch (dpe:DeadPlaceException) {
                     // can ignore; if the src place just died there is nothing left to do.
@@ -784,30 +766,12 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
 
         def addGCRequests() {
-            if (verbose>=1) debug(">>>> addGCRequests(id="+id+") called");
-            if (REMOTE_GC) {
-                for (e in sent.entries()) {
-                    val dst = e.getKey().dst;
-                    var set:HashSet[Id] = pendingGC.getOrElse(dst, null);
-                    if (set == null) {
-                        set = new HashSet[Id]();
-                        pendingGC.put(dst, set);
-                    }
-                    set.add(id);
-                }
+            if (GC_DISABLED) return;
+            val places = new HashSet[Long]();
+            for (e in sent.entries()) {
+                places.add(e.getKey().dst as Long);
             }
-            if (verbose>=1) {
-                var str:String = "";
-                for (e in pendingGC.entries()) {
-                    val placeId = e.getKey();
-                    val set = e.getValue();
-                    for (id in set) {
-                        str += "(" + placeId + " :> " + id + ") ";
-                    }
-                }
-                debug("==== addGCRequests(id="+id+") result: " + str);
-            }
-            if (verbose>=1) debug("<<<< addGCRequests(id="+id+") returning");
+            FinishGC.addGCReady(id, places);
         }
         
         def removeFromStates() {
@@ -859,7 +823,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             this.id = id;
         }
         
-        public static def deleteObjects(gcReqs:HashSet[Id]) {
+        public static def deleteObjects(gcReqs:Set[Id]) {
             if (gcReqs == null) {
                 if (verbose>=1) debug(">>>> deleteObjects gcReqs = NULL");
                 return;
