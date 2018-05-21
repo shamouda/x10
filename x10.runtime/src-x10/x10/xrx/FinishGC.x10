@@ -33,9 +33,10 @@ public class FinishGC {
 
     private static val pending = new AtomicInteger(0n);
     
-    public static val GC_DEBUG = FinishState.GC_DEBUG;
-    public static val GC_DISABLED = FinishState.GC_DISABLED;
-    public static val GC_MAX_PENDING = FinishState.GC_MAX_PENDING;
+    public static val GC_DISABLED = System.getenv("FINISH_GC_DISABLE") == null ? false : Long.parseLong(System.getenv("FINISH_GC_DISABLE")) == 1;
+    public static val GC_DEBUG = System.getenv("FINISH_GC_DEBUG") == null ? false : Long.parseLong(System.getenv("FINISH_GC_DEBUG")) == 1;
+    public static val GC_MAX_PENDING = System.getenv("FINISH_GC_MAX_PENDING") == null ? 25 : Int.parseInt(System.getenv("FINISH_GC_MAX_PENDING"));
+    public static val GC_PIGGYBACKING = System.getenv("FINISH_GC_PIGGYBACKING") == null ? false : Long.parseLong(System.getenv("FINISH_GC_PIGGYBACKING")) == 1;
     
     public static def add(gr:GlobalRef[FinishState], places:Set[Long]) {
         if (GC_DISABLED) return;
@@ -77,7 +78,7 @@ public class FinishGC {
     
     private static def cleanGrMapUnsafe() {
         for (placeId in grMapGCReady.keySet()) {
-            val grSet = grMapGCReady.remove(placeId);
+            val grSet = grMapGCReady.getOrThrow(placeId);
             at(Place(placeId)) @Immediate("gr_remoteFinishCleanup") async {
                 if (GC_DEBUG) Console.OUT.println("GCLog: here["+here+"] deleting objects " + logSet(grSet));
                 for (root in grSet) {
@@ -85,6 +86,7 @@ public class FinishGC {
                 }
             }
         }
+        grMapGCReady.clear();
     }
     
     public static def add(id:FinishResilient.Id, places:Set[Long]) {
@@ -126,7 +128,7 @@ public class FinishGC {
     
     private static def cleanIdMapUnsafe() {
         for (placeId in idMapGCReady.keySet()) {
-            val idSet = idMapGCReady.remove(placeId);
+            val idSet = idMapGCReady.getOrThrow(placeId);
             at(Place(placeId)) @Immediate("id_remoteFinishCleanup") async {
                 if (Runtime.RESILIENT_MODE == Configuration.RESILIENT_MODE_PLACE0_OPTIMISTIC) {
                     if (GC_DEBUG) Console.OUT.println("GCLog: here["+here+"] deleting objects " + logSet(idSet));
@@ -137,6 +139,7 @@ public class FinishGC {
                 }
             }
         }
+        idMapGCReady.clear();
     }
     
     private static def logSet(idSet:Set[FinishResilient.Id]) {

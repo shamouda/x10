@@ -33,18 +33,7 @@ abstract class FinishState {
 
     // Turn this on to debug deadlocks within the finish implementation
     static VERBOSE = Configuration.envOrElse("X10_FINISH_VERBOSE", false);
-    
-    public static val GC_DISABLED = System.getenv("FINISH_GC_DISABLE") == null ? 
-                      false : Long.parseLong(System.getenv("FINISH_GC_DISABLE")) == 1;
-
-    public static val GC_DEBUG = System.getenv("FINISH_GC_DEBUG") == null ? 
-                      false : Long.parseLong(System.getenv("FINISH_GC_DEBUG")) == 1;
-    
-    public static val GC_MAX_PENDING = System.getenv("FINISH_GC_MAX_PENDING") == null ? 
-                      100 : Int.parseInt(System.getenv("FINISH_GC_MAX_PENDING"));
-    
-    public static val GC_PIGGYBACKING = System.getenv("FINISH_GC_PIGGYBACKING") == null ? 
-                      false : Long.parseLong(System.getenv("FINISH_GC_PIGGYBACKING")) == 1;
+    static GC_DISABLED = FinishGC.GC_DISABLED;
     
     /**
      * Called by an activity running at the current Place when it
