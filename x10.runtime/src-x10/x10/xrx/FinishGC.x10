@@ -36,7 +36,6 @@ public class FinishGC {
     public static val GC_DEBUG = FinishState.GC_DEBUG;
     public static val GC_DISABLED = FinishState.GC_DISABLED;
     public static val GC_MAX_PENDING = FinishState.GC_MAX_PENDING;
-    public static val GC_PIGGYBACKING = FinishState.GC_PIGGYBACKING;
     
     public static def add(gr:GlobalRef[FinishState], places:Set[Long]) {
         if (GC_DISABLED) return;
@@ -69,11 +68,10 @@ public class FinishGC {
             }
             s.add(gr);
         }
-        if (!GC_PIGGYBACKING) {
-            if (pending.incrementAndGet() == GC_MAX_PENDING) {
-                cleanGrMapUnsafe();
-                pending.set(0n);
-            }
+        
+        if (pending.incrementAndGet() == GC_MAX_PENDING) {
+            cleanGrMapUnsafe();
+            pending.set(0n);
         }
     }
     
@@ -81,19 +79,11 @@ public class FinishGC {
         for (placeId in grMapGCReady.keySet()) {
             val grSet = grMapGCReady.remove(placeId);
             at(Place(placeId)) @Immediate("gr_remoteFinishCleanup") async {
-                for (root in grSet)
+                if (GC_DEBUG) Console.OUT.println("GCLog: here["+here+"] deleting objects " + logSet(grSet));
+                for (root in grSet) {
                     Runtime.finishStates.remove(root);
+                }
             }
-        }
-    }
-    
-    public static def getPendingGC_Gr(place:Int) {
-        if (GC_DISABLED || !GC_PIGGYBACKING) return null;
-        try {
-            lock.lock();
-            return grMapGCReady.remove(place);
-        } finally {
-            lock.unlock();
         }
     }
     
@@ -128,22 +118,9 @@ public class FinishGC {
             }
             s.add(id);
         }
-        if (!GC_PIGGYBACKING) {
-            if (pending.incrementAndGet() == GC_MAX_PENDING) {
-                cleanIdMapUnsafe();
-                pending.set(0n);
-            }
-        }
-    }
-    
-
-    public static def getPendingGC_Id(place:Int) {
-        if (GC_DISABLED || !GC_PIGGYBACKING) return null;
-        try {
-            lock.lock();
-            return idMapGCReady.remove(place);
-        } finally {
-            lock.unlock();
+        if (pending.incrementAndGet() == GC_MAX_PENDING) {
+            cleanIdMapUnsafe();
+            pending.set(0n);
         }
     }
     
@@ -151,12 +128,32 @@ public class FinishGC {
         for (placeId in idMapGCReady.keySet()) {
             val idSet = idMapGCReady.remove(placeId);
             at(Place(placeId)) @Immediate("id_remoteFinishCleanup") async {
-                if (Runtime.RESILIENT_MODE == Configuration.RESILIENT_MODE_PLACE0_OPTIMISTIC)
+                if (Runtime.RESILIENT_MODE == Configuration.RESILIENT_MODE_PLACE0_OPTIMISTIC) {
+                    if (GC_DEBUG) Console.OUT.println("GCLog: here["+here+"] deleting objects " + logSet(idSet));
                     FinishResilientPlace0Optimistic.P0OptimisticRemoteState.deleteObjects(idSet);
-                else if (Runtime.RESILIENT_MODE == Configuration.RESILIENT_MODE_DIST_OPTIMISTIC)
+                } else if (Runtime.RESILIENT_MODE == Configuration.RESILIENT_MODE_DIST_OPTIMISTIC){
+                    if (GC_DEBUG) Console.OUT.println("GCLog: here["+here+"] deleting objects " + logSet(idSet));
                     FinishResilientOptimistic.OptimisticRemoteState.deleteObjects(idSet);
+                }
             }
         }
     }
     
+    private static def logSet(idSet:Set[FinishResilient.Id]) {
+        if (idSet == null)
+            return "";
+        var str:String = "";
+        for (s in idSet)
+            str += s + " : ";
+        return str;
+    }
+    private static def logSet(grSet:Set[GlobalRef[FinishState]]) {
+        if (grSet == null)
+            return "";
+        var str:String = "";
+        for (s in grSet)
+            str += s + " : ";
+        return str;
+    }
+
 }
