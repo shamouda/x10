@@ -42,8 +42,6 @@ public class LocalStore[K] {K haszero} {
     public transient var slave:Place;
     public transient var oldSlave:Place;
     public transient var activePlaces:PlaceGroup;
-    
-    
     private val replacementHistory = new HashMap[Long, Long] ();
     
     public static struct PlaceChange {
@@ -139,7 +137,7 @@ public class LocalStore[K] {K haszero} {
         this.masterStore = m;
     }
     
-    /**************     ActivePlaces utility methods     ****************/
+    /*********** ActivePlaces utility methods ****************/
     public def getMasterVirtualId() {
         try {
             lock();

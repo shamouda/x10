@@ -29,7 +29,7 @@ import x10.util.concurrent.Latch;
 import x10.util.concurrent.Monitor;
 import x10.util.concurrent.SimpleLatch;
 import x10.util.resilient.concurrent.ResilientCondition;
-import x10.util.resilient.concurrent.ResilientLowLevelFinish;
+import x10.util.resilient.concurrent.LowLevelFinish;
 
 /**
  * XRX invocation protocol:
@@ -588,16 +588,10 @@ public final class Runtime {
         return watcher;
     }
 
-    public static def registerFinishTx(txId:Long) {
+    public static def registerFinishTx(tx:Tx):void {
         val a = activity();
         val state = a.finishState();
-        state.registerFinishTx(txId);    
-    }
-    
-    public static def getFinishMembers(txId:Long) {
-        val a = activity();
-        val state = a.finishState();
-        return state.getFinishMembers(txId);
+        state.registerFinishTx(tx);
     }
     
     // asyncat, async, at statement, and at expression implementation
@@ -1409,7 +1403,7 @@ public final class Runtime {
             FinishResilient.notifyPlaceDeath();
             GetRegistry.notifyPlaceDeath();
             ResilientCondition.notifyPlaceDeath();
-            ResilientLowLevelFinish.notifyPlaceDeath();
+            LowLevelFinish.notifyPlaceDeath();
         }
     }
 

@@ -18,7 +18,7 @@ import x10.util.HashMap;
 import x10.util.HashSet;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.GrowableRail;
-import x10.util.resilient.concurrent.ResilientLowLevelFinish;
+import x10.util.resilient.concurrent.LowLevelFinish;
 import x10.util.concurrent.Lock;
 import x10.io.Deserializer;
 import x10.compiler.AsyncClosure;
@@ -1272,13 +1272,13 @@ public final class FinishReplicator {
         var i:Long = 0;
         for (pl in Place.places())
             places(i++) = pl.id as Int;
-        val fin = ResilientLowLevelFinish.make(places);
+        val fin = LowLevelFinish.make(places);
         val gr = fin.getGr();
-        val closure = (gr:GlobalRef[ResilientLowLevelFinish]) => {
+        val closure = (gr:GlobalRef[LowLevelFinish]) => {
             for (p in places) {
                 if (verbose>=1) debug("==== Replicator.finalizeReplication  moving from " + here + " to " + Place(p));
                 if (Place(p).isDead() || p == -1n) {
-                    (gr as GlobalRef[ResilientLowLevelFinish]{self.home == here})().notifyFailure();
+                    (gr as GlobalRef[LowLevelFinish]{self.home == here})().notifyFailure();
                 } else {
                     at (Place(p)) @Uncounted async {
                         if (verbose>=1) debug("==== Replicator.finalizeReplication  reached from " + gr.home + " to " + here);

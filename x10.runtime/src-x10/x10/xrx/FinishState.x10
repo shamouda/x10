@@ -29,7 +29,10 @@ import x10.io.CustomSerialization;
 import x10.io.Deserializer;
 import x10.io.Serializer;
 
-abstract class FinishState {
+import x10.util.resilient.localstore.tx.ConflictException;
+import x10.util.resilient.localstore.TxConfig;
+
+public abstract class FinishState {
 
     // Turn this on to debug deadlocks within the finish implementation
     static VERBOSE = Configuration.envOrElse("X10_FINISH_VERBOSE", false);
@@ -151,10 +154,17 @@ abstract class FinishState {
     abstract def waitForFinish():void;
 
     /**
-     * Finish to Transaction functions
+     * Transactional Finish variables and functions
      * */
-    def registerFinishTx(txId:Long):void { }
-    def getFinishMembers(txId:Long):HashSet[Int] { return new HashSet[Int](); }
+    protected var tx:Tx;
+    
+    /**
+     * Must be called as a first statement in a finish block
+     * */
+    def registerFinishTx(tx:Tx):void { 
+        this.tx = tx;
+        Console.OUT.println("this["+this+"] register tx["+tx+"]");
+    }
     
     /**
      * Spawn a remote activity.
@@ -589,6 +599,11 @@ abstract class FinishState {
                 me = Runtime.finishStates(ref, ()=>new RemoteFinish(_ref));
             }
         }
+        def registerFinishTx(tx:Tx):void { 
+            this.tx = tx;
+            me.registerFinishTx(tx);
+            Console.OUT.println("this["+this+"] register tx["+tx+"]");
+        }
     }
 
     static class RootFinish extends RootFinishSkeleton {
@@ -610,6 +625,7 @@ abstract class FinishState {
             }
         }
        public def notifySubActivitySpawn(place:Place):void {
+            Console.OUT.println("this["+this+"] tx["+tx+"] async to " + place);
             val p = place.parent(); // CUDA
             latch.lock();
             if (p == ref().home) {
@@ -675,7 +691,7 @@ abstract class FinishState {
             }
             latch.await(); // sit here, waiting for all child activities to complete
 
-            addGCRequests();
+            postRelease();
             
             // throw exceptions here if any were collected via the execution of child activities
             val t = MultipleExceptions.make(exceptions);
@@ -684,6 +700,16 @@ abstract class FinishState {
             // if no exceptions, simply return
         }
 
+        def postRelease() {
+            if (tx == null) {
+                addGCRequests();
+                Console.OUT.println("this["+this+"] tx["+tx+"] addGCRequests done ");
+            } else {
+                finishTx();
+                Console.OUT.println("this["+this+"] tx["+tx+"] finishTx done ");
+            }
+        }
+        
         def addGCRequests() {
             if (GC_DISABLED) return;
             // if there were remote activities spawned, clean up the RemoteFinish objects which tracked them
@@ -692,6 +718,27 @@ abstract class FinishState {
                 remoteActivities.remove(here.id);
                 val places = remoteActivities.keySet();
                 FinishGC.addGCReady(root, places);    
+            }
+        }
+        
+        def finishTx() {
+            if (remoteActivities != null && remoteActivities.size() != 0) {
+                if (TxConfig.get().TM_DEBUG) 
+                    Console.OUT.println("Tx["+ tx.id +"] " + TxConfig.txIdToString (tx.id) 
+                                             + " here["+here+"] finish released, start committing ...");
+                val root = ref();
+                remoteActivities.remove(here.id);
+                val pset = remoteActivities.keySet();
+                val places = new Rail[Int](pset.size());
+                var i:Long = 0;
+                for (p in pset)
+                    places(i++) = p as Int;
+                try {
+                    tx.prepare(places);
+                    tx.commit(root, places);
+                } catch (ce:ConflictException) {
+                    tx.abort(root, places);
+                }
             }
         }
         

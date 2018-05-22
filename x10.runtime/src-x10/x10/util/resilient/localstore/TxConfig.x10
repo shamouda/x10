@@ -13,6 +13,7 @@
 package x10.util.resilient.localstore;
 
 import x10.util.resilient.localstore.tx.FatalTransactionException;
+import x10.util.resilient.localstore.tx.TxManager;
 
 public class TxConfig {
     public val TM:String; //baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB
@@ -88,5 +89,9 @@ public class TxConfig {
     
     public static def waitSleep() {
         System.threadSleep(WAIT_MS);
-    }    
+    }
+    
+    public static def txIdToString (txId:Long) {
+        return TxManager.txIdToString(txId);
+    }
 }

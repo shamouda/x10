@@ -35,13 +35,10 @@ public class ResilientStore[K] {K haszero} {
     
     public val plh:PlaceLocalHandle[LocalStore[K]];
     
-    private transient val lock:Lock;
-    
     private static val stores = new ArrayList[Any]();
     
     private def this(plh:PlaceLocalHandle[LocalStore[K]]) {
         this.plh = plh;
-        this.lock = new Lock();
     }
     
     public static def make[K](pg:PlaceGroup, immediateRecovery:Boolean) {K haszero} {

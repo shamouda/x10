@@ -26,7 +26,7 @@ import x10.util.HashSet;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.concurrent.ResilientCondition;
 import x10.util.concurrent.Condition;
-import x10.util.resilient.concurrent.ResilientLowLevelFinish;
+import x10.util.resilient.concurrent.LowLevelFinish;
 import x10.xrx.freq.FinishRequest;
 import x10.xrx.freq.AddChildRequestPes;
 import x10.xrx.freq.ExcpRequestPes;
@@ -1811,14 +1811,14 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             val pl = iter.next();
             places(i++) = pl;
         }
-        val fin = ResilientLowLevelFinish.make(places);
+        val fin = LowLevelFinish.make(places);
         val gr = fin.getGr();
         val outputGr = GlobalRef[HashMap[Int,HashMap[ChildQueryId, ChildAdoptionResponse]]](reqs_resps);
-        val closure = (gr:GlobalRef[ResilientLowLevelFinish]) => {
+        val closure = (gr:GlobalRef[LowLevelFinish]) => {
             for (p in places) {
                 if (verbose>=1) debug("==== acquireChildrenBackups  moving from " + here + " to " + Place(p));
                 if (Place(p).isDead()) {
-                    (gr as GlobalRef[ResilientLowLevelFinish]{self.home == here})().notifyFailure();
+                    (gr as GlobalRef[LowLevelFinish]{self.home == here})().notifyFailure();
                 } else {
                     val preq = reqs_resps.getOrThrow(p);
                     at (Place(p)) @Immediate("acquire_child_backup_request") async {
@@ -1879,10 +1879,10 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             m.backupChanged = true;
             i++;
         }
-        val fin = ResilientLowLevelFinish.make(places);
+        val fin = LowLevelFinish.make(places);
         val gr = fin.getGr();
         val placeOfMaster = here.id as Int;
-        val closure = (gr:GlobalRef[ResilientLowLevelFinish]) => {
+        val closure = (gr:GlobalRef[LowLevelFinish]) => {
             for (mx in masters) {
                 val m = mx as PessimisticMasterState;
                 val backup = Place(m.backupPlaceId);
@@ -1897,7 +1897,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 val excs = m.excs;
                 
                 if (backup.isDead()) {
-                    (gr as GlobalRef[ResilientLowLevelFinish]{self.home == here})().notifyFailure();
+                    (gr as GlobalRef[LowLevelFinish]{self.home == here})().notifyFailure();
                 } else {
                     at (backup) @Immediate("create_or_sync_backup") async {
                         FinishReplicator.createPessimisticBackupOrSync(id, parentId, numActive, live,

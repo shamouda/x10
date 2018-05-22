@@ -10,26 +10,27 @@ import x10.util.concurrent.AtomicInteger;
 /**
  * Low level resilient SPMD finish 
  */
-public class ResilientLowLevelFinish implements Unserializable {
-    private val gr = GlobalRef[ResilientLowLevelFinish](this);
+public class LowLevelFinish implements Unserializable {
+    private val gr = GlobalRef[LowLevelFinish](this);
     private val places:Rail[Int];
-    private val status:Rail[Int];
     private val cond:Condition;
     private var count:Int;
     private val ilock = new Lock();
     
-    private static val all = new ArrayList[ResilientLowLevelFinish]();
+    private var vote:Boolean = true;
+    private var failure:Boolean = false;
+    
+    private static val all = new ArrayList[LowLevelFinish]();
     private static val glock = new Lock();
     
     private def this(p:Rail[Int]) {
     	cond = new Condition();
-    	places = p;
+    	places = new Rail[Int](p);
     	count = p.size as Int;
-    	status = new Rail[Int](p.size, 0n);
     }
     
     public static def make(p:Rail[Int]){
-        val instance = new ResilientLowLevelFinish(p);
+        val instance = new LowLevelFinish(p);
         glock.lock();
         all.add(instance);
         glock.unlock();
@@ -39,12 +40,17 @@ public class ResilientLowLevelFinish implements Unserializable {
     public def getGr() = gr;
     
     public def notifyTermination(place:Int) {
+        notifyTermination(place, true);
+    }
+    
+    public def notifyTermination(place:Int, placeVote:Boolean) {
     	try {
     		ilock.lock();
-    		count--;
     		for (var i:Long = 0; i < places.size; i++) {
     			if (places(i) == place) {
-    				status(i) = 1n;
+    			    count--;
+    	            vote = vote & placeVote;
+    			    places(i) = -1000n;
     				break;
     			}
     		}
@@ -61,9 +67,10 @@ public class ResilientLowLevelFinish implements Unserializable {
     	try {
     		ilock.lock();
     		for (var i:Long = 0; i < places.size; i++) {
-    			if (status(i) == 0n && (places(i) == -1n || Place(places(i)).isDead()) ) {
+    			if (places(i) != -1000n && Place(places(i)).isDead() ) {
     				count--;
-    				status(i) = -1n;
+    				places(i) = -1000n;
+    				failure = true;
     			}
     		}
     		if (count == 0n) {
@@ -75,20 +82,13 @@ public class ResilientLowLevelFinish implements Unserializable {
     	}
     }
     
-    public def failed() {
-        var f:Boolean = false;
-    	for (var i:Long = 0; i < status.size; i++) {
-    		if (status(i) == -1n) {
-    		    Console.OUT.println(here + " low_level_finish failed, Place("+places(i)+") is dead");
-    			f = true;
-    		}
-    	}
-    	return f;
-    }
+    public def failed() = failure;
+    
+    public def yesVote() = vote;
     
     public def forget() {
         glock.lock();
-        (gr as GlobalRef[ResilientLowLevelFinish]{self.home == here}).forget();
+        (gr as GlobalRef[LowLevelFinish]{self.home == here}).forget();
         all.remove(this);
         glock.unlock();
     }
@@ -102,7 +102,7 @@ public class ResilientLowLevelFinish implements Unserializable {
         }
     }
     
-    public def run (immediateAsyncClosure:(gr:GlobalRef[ResilientLowLevelFinish])=>void) {
+    public def run (immediateAsyncClosure:(gr:GlobalRef[LowLevelFinish])=>void) {
         immediateAsyncClosure(gr); //this closure MUST release the condition 
         await();
     }

@@ -17,4 +17,8 @@ public class ConflictException(place:Place) extends Exception {
         super(message);
         property(place);
     }
+    public def this() {
+        super("ConflictException");
+        property(here);
+    }
 }

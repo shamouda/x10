@@ -40,10 +40,9 @@ public class ResilientFlatCommitHandler[K] {K haszero} extends ResilientCommitHa
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " " + here + " abort_resilient started ...");
         val abort_master = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { abort_local_resilient(plh, id); } ;
         val abort_slave = (plh:PlaceLocalHandle[LocalStore[K]], id:Long ):void => { plh().slaveStore.abort(id); } ;
-        try { 
+        try {
             finishFlat(abort_master, true);
-        }
-        catch(ex:MultipleExceptions) {
+        } catch(ex:MultipleExceptions) {
             val deadMasters = getDeadPlaces(ex);
             finishFlatSlaves(deadMasters, abort_slave, true);
         }
@@ -51,7 +50,7 @@ public class ResilientFlatCommitHandler[K] {K haszero} extends ResilientCommitHa
     
     /***********************   Two Phase Commit Protocol ************************/
     public def commit_resilient(commitRecovery:Boolean) {
-        if (!commitRecovery) 
+        if (!commitRecovery)
             commitPhaseOne();
         commitPhaseTwo(commitRecovery);
     }
@@ -77,8 +76,7 @@ public class ResilientFlatCommitHandler[K] {K haszero} extends ResilientCommitHa
         val startP2 = Timer.milliTime();
         try {
             finishFlat(commit_master, true);
-        }
-        catch(ex:MultipleExceptions) {
+        } catch(ex:MultipleExceptions) {
             try {
                 val deadMasters = getDeadPlaces(ex);
                 finishFlatSlaves(deadMasters, commit_slave, true);

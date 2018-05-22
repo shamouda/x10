@@ -35,7 +35,7 @@ public class FinishGC {
     
     public static val GC_DISABLED = System.getenv("FINISH_GC_DISABLE") == null ? false : Long.parseLong(System.getenv("FINISH_GC_DISABLE")) == 1;
     public static val GC_DEBUG = System.getenv("FINISH_GC_DEBUG") == null ? false : Long.parseLong(System.getenv("FINISH_GC_DEBUG")) == 1;
-    public static val GC_MAX_PENDING = System.getenv("FINISH_GC_MAX_PENDING") == null ? 25 : Int.parseInt(System.getenv("FINISH_GC_MAX_PENDING"));
+    public static val GC_MAX_PENDING = System.getenv("FINISH_GC_MAX_PENDING") == null ? 1 : Int.parseInt(System.getenv("FINISH_GC_MAX_PENDING"));
     public static val GC_PIGGYBACKING = System.getenv("FINISH_GC_PIGGYBACKING") == null ? false : Long.parseLong(System.getenv("FINISH_GC_PIGGYBACKING")) == 1;
     
     public static def add(gr:GlobalRef[FinishState], places:Set[Long]) {
