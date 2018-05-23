@@ -10,7 +10,7 @@ import x10.xrx.Runtime;
 import x10.util.Set;
 import x10.util.Timer;
 import x10.util.resilient.localstore.TxConfig;
-
+import x10.util.resilient.localstore.tx.ConflictException;
 
 public class Test {
     public static def main(args:Rail[String]) {
@@ -36,7 +36,7 @@ public class Test {
             randomTransfer(store, mgr.activePlaces(), accountsPerPlace, transfersPerPlace, debugProgress);
             val endTransfer = System.nanoTime();
             
-            val sum2 = 0;
+            val sum2 = sumAccounts(store, mgr.activePlaces());
             
             val end = System.nanoTime();
             if (sum2 == 0) {
@@ -54,6 +54,29 @@ public class Test {
             Console.OUT.println(" ! Test Failed ! Exception thrown  ["+ex.getMessage()+"] ");
             ex.printStackTrace();
         }
+    }
+    
+    public static def sumAccounts(store:TxStore, places:PlaceGroup){
+        val tx = store.makeTx();
+        var sum:Long = 0;
+        for (p in places) {
+            val l = at (p) {
+                var localSum:Long = 0;
+                val set = tx.keySet();
+                val iter = set.iterator();
+                while (iter.hasNext()) {
+                    val accId  = iter.next();
+                    val obj = tx.get(accId);
+                    if (obj != null  && obj instanceof BankAccount) {
+                        localSum += (obj as BankAccount).account;
+                    }
+                }
+                localSum
+            };
+            Console.OUT.println("Place " + p + " localSum = " + l);
+            sum += l;
+        }
+        return sum;
     }
     
     public static def randomTransfer(store:TxStore, activePG:PlaceGroup, accountsPerPlace:Long, transfersPerPlace:Long, debugProgress:Long){
@@ -81,23 +104,32 @@ public class Test {
                 
                 if (TxConfig.get().TM_DEBUG) 
                     Console.OUT.println("Tx["+ tx.id +"] " + TxConfig.txIdToString (tx.id) + " here["+here+"] STARTED ...");
-                finish {
-                    Runtime.registerFinishTx(tx);
-                    at (Place(p1)) async {
-                        var acc1:BankAccount = tx.get(randAcc1) as BankAccount;
-                        if (acc1 == null)
-                            acc1 = new BankAccount(0);
-                        acc1.account -= amount;
-                        tx.put(randAcc1, acc1);
-                        
-                        at (Place(p2)) async {
-                            var acc2:BankAccount = tx.get(randAcc2) as BankAccount;
-                            if (acc2 == null)
-                                acc2 = new BankAccount(0);
-                            acc2.account += amount;
-                            tx.put(randAcc2, acc2);
+                while (true) {
+                try {
+                    finish {
+                        Runtime.registerFinishTx(tx);
+                        at (Place(p1)) async {
+                            var acc1:BankAccount = tx.get(randAcc1) as BankAccount;
+                            if (acc1 == null)
+                                acc1 = new BankAccount(0);
+                            acc1.account -= amount;
+                            tx.put(randAcc1, acc1);
+                            
+                            at (Place(p2)) async {
+                                var acc2:BankAccount = tx.get(randAcc2) as BankAccount;
+                                if (acc2 == null)
+                                    acc2 = new BankAccount(0);
+                                acc2.account += amount;
+                                tx.put(randAcc2, acc2);
+                            }
                         }
                     }
+                    break;
+                }catch (me:MultipleExceptions) {
+                    val confExList = me.getExceptionsOfType[ConflictException]();
+                    if (confExList != null && confExList.size > 0)
+                        Console.OUT.println("Tx["+ tx.id +"] CE");
+                }
                 }
                 if (TxConfig.get().TM_DEBUG) 
                     Console.OUT.println("Tx["+ tx.id +"] " + TxConfig.txIdToString (tx.id) + " here["+here+"] ENDED ...");

@@ -163,7 +163,6 @@ public abstract class FinishState {
      * */
     def registerFinishTx(tx:Tx):void { 
         this.tx = tx;
-        Console.OUT.println("this["+this+"] register tx["+tx+"]");
     }
     
     /**
@@ -600,9 +599,7 @@ public abstract class FinishState {
             }
         }
         def registerFinishTx(tx:Tx):void { 
-            this.tx = tx;
             me.registerFinishTx(tx);
-            Console.OUT.println("this["+this+"] register tx["+tx+"]");
         }
     }
 
@@ -624,12 +621,11 @@ public abstract class FinishState {
                 remoteActivities = new HashMap[Long,Int]();
             }
         }
-       public def notifySubActivitySpawn(place:Place):void {
-            Console.OUT.println("this["+this+"] tx["+tx+"] async to " + place);
+       public def notifySubActivitySpawn(place:Place):void {            
             val p = place.parent(); // CUDA
             latch.lock();
             if (p == ref().home) {
-                count++;
+                count++;                
                 latch.unlock();
                 return;
             }
@@ -691,7 +687,7 @@ public abstract class FinishState {
             }
             latch.await(); // sit here, waiting for all child activities to complete
 
-            postRelease();
+            postQuiescent();
             
             // throw exceptions here if any were collected via the execution of child activities
             val t = MultipleExceptions.make(exceptions);
@@ -700,13 +696,11 @@ public abstract class FinishState {
             // if no exceptions, simply return
         }
 
-        def postRelease() {
+        def postQuiescent() {
             if (tx == null) {
                 addGCRequests();
-                Console.OUT.println("this["+this+"] tx["+tx+"] addGCRequests done ");
             } else {
                 finishTx();
-                Console.OUT.println("this["+this+"] tx["+tx+"] finishTx done ");
             }
         }
         
@@ -733,11 +727,29 @@ public abstract class FinishState {
                 var i:Long = 0;
                 for (p in pset)
                     places(i++) = p as Int;
-                try {
-                    tx.prepare(places);
-                    tx.commit(root, places);
-                } catch (ce:ConflictException) {
-                    tx.abort(root, places);
+                
+                var knownConflict:Boolean = false;
+                if (exceptions != null) {
+                    for (i = 0; i < exceptions.size(); i++) {
+                        val e = exceptions(i);
+                        if (e instanceof ConflictException) {
+                            knownConflict = true;
+                            break;
+                        }
+                    }
+                }
+                val includeHere = true;
+                if (knownConflict) {
+                    tx.abort(root, places, includeHere);
+                }
+                else {
+                    try {
+                        tx.prepare(places, includeHere);
+                        tx.commit(root, places, includeHere);
+                    } catch (ce:ConflictException) {
+                        tx.abort(root, places, includeHere);
+                        process(ce);
+                    }
                 }
             }
         }

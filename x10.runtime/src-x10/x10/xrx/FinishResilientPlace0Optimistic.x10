@@ -28,6 +28,9 @@ import x10.util.concurrent.Lock;
 import x10.util.resilient.concurrent.LowLevelFinish;
 import x10.util.concurrent.Condition;
 import x10.util.Timer;
+import x10.util.resilient.localstore.tx.ConflictException;
+import x10.util.resilient.localstore.TxConfig;
+
 
 //FIXME: return a dummy remote rather than a fatal RemoteCreationDenied
 /**
@@ -91,6 +94,10 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         if (verbose>=1) debug("<<<< serialize(id="+id+") returning ");
     }
     
+    def registerFinishTx(tx:Tx):void {
+        me.registerFinishTx(tx);
+    }
+    
     /**
      * State of a single finish; always stored in Place0
      */
@@ -106,16 +113,18 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         var ghostChildren:HashSet[Id] = null;  //lazily allocated in addException
         var isAdopted:Boolean = false;  //set to true when backup recreates a master
         
+        val tx:Tx;
         /**Place0 states**/
         private static val states = (here.id==0) ? new HashMap[Id, State]() : null;
         private static val statesLock = (here.id==0) ? new Lock() : null;
         private static val place0 = Place.FIRST_PLACE;
                 
-        private def this(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState]) {
+        private def this(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState], tx:Tx) {
             this.id = id;
             this.parentId = parentId; 
             this.gfs = gfs;
             this.numActive = 1;
+            this.tx = tx;
             sent.put(FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
             transit.put(FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
         }
@@ -200,7 +209,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 for (s in toRemoveState) {
                     s.releaseLatch();
                     s.notifyParent();
-                    s.addGCRequests();
                     s.removeFromStates();
                 }
                 return countingReqs;
@@ -244,7 +252,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 for (s in toRemoveState) {
                     s.releaseLatch();
                     s.notifyParent();
-                    s.addGCRequests();
                     s.removeFromStates();
                 }
             } finally {
@@ -253,7 +260,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         //P0FUNC
-        private static final def getOrCreateState(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState]):State {
+        private static final def getOrCreateState(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState], tx:Tx):State {
             var state:State = states(id);
             if (state == null) {
                 if (Place(id.home).isDead()) {
@@ -262,18 +269,18 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     //no need to handle this exception; the caller has died.
                 }
                 if (verbose>=1) debug(">>>> initializing state for id="+ id);
-                state = new State(id, parentId, gfs);
+                state = new State(id, parentId, gfs, tx);
                 if (verbose>=1) debug(">>>> creating new State id="+ id +" parentId="+parentId);
                 states.put(id, state);
             }
             return state;
         }
         
-        static def p0CreateState(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState]) {
-            Runtime.runImmediateAt(place0, ()=>{ 
+        static def p0CreateState(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState], tx:Tx) {
+            Runtime.runImmediateAt(place0, ()=>{
                 try {
                     statesLock.lock();
-                    getOrCreateState(id, parentId, gfs);
+                    getOrCreateState(id, parentId, gfs, tx);
                 } finally {
                     statesLock.unlock();
                 }
@@ -395,14 +402,14 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         static def p0RemoteSpawnSmall(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState], srcId:Int, dstId:Int, bytes:Rail[Byte],
-        		ref:GlobalRef[FinishState]) {
+        		ref:GlobalRef[FinishState], tx:Tx) {
             at (place0) @Immediate("p0opt_spawnRemoteActivity_to_zero") async {
                 if (Place(srcId).isDead()) {
                     if (verbose>=1) debug("==== spawnRemoteActivity(id="+id+") src "+srcId + "is dead; dropping async");
                 } else {
                     try {
                     	statesLock.lock();
-                    	val state = getOrCreateState(id, parentId, gfs);
+                    	val state = getOrCreateState(id, parentId, gfs, tx);
                         if (Place(dstId).isDead()) {
                             if (verbose>=1) debug("==== spawnRemoteActivity(id="+id+") destination "+dstId + "is dead; pushed DPE");
                             state.addDeadPlaceException(dstId);
@@ -434,7 +441,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         static def p0RemoteSpawnBig(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState], srcId:Int, dstId:Int, bytes:Rail[Byte],
-        		ref:GlobalRef[FinishState]) {
+        		ref:GlobalRef[FinishState], tx:Tx) {
             val wrappedBody = ()=> @AsyncClosure {
                 val deser = new Deserializer(bytes);
                 val bodyPrime = deser.readAny() as ()=>void;
@@ -448,7 +455,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 } else {
                     try {
                     	statesLock.lock();
-                    	val state = getOrCreateState(id, parentId, gfs);
+                    	val state = getOrCreateState(id, parentId, gfs, tx);
                         if (Place(dstId).isDead()) {
                             if (verbose>=1) debug("==== spawnRemoteActivity(id="+id+") destination "+dstId + "is dead; pushed DPE");
                             state.addDeadPlaceException(dstId);
@@ -481,7 +488,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         //called by root finish - may need to create the State object
-        static def p0Transit(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState], srcId:Int, dstId:Int, kind:Int) {
+        static def p0Transit(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState], srcId:Int, dstId:Int, kind:Int, tx:Tx) {
             Runtime.runImmediateAt(place0, ()=>{ 
                 if (Place(srcId).isDead()) {
                     if (verbose>=1) debug("==== notifySubActivitySpawn(id="+id+") src "+srcId + "is dead; dropping async");
@@ -490,7 +497,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                         if (verbose>=1) debug("==== notifySubActivitySpawn(id="+id+") destination "+dstId + "is dead; pushed DPE for async");
                         try {
                             statesLock.lock();
-                            val state = getOrCreateState(id, parentId, gfs);
+                            val state = getOrCreateState(id, parentId, gfs, tx);
                             state.addDeadPlaceException(dstId);
                         } finally {
                             statesLock.unlock();
@@ -501,7 +508,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 } else {
                     try {
                         statesLock.lock();
-                        val state = getOrCreateState(id, parentId, gfs);
+                        val state = getOrCreateState(id, parentId, gfs, tx);
                         state.inTransit(srcId, dstId, kind, "blocking runImmediateAt notifySubActivitySpawn");
                     } finally {
                         statesLock.unlock();
@@ -524,11 +531,11 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             });
         }
         
-        static def p0PushException(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState], t:CheckedThrowable) {
+        static def p0PushException(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState], t:CheckedThrowable, tx:Tx) {
             Runtime.runImmediateAt(place0, ()=>{ 
                 try {
                     statesLock.lock();
-                    val state = getOrCreateState(id, parentId, gfs);
+                    val state = getOrCreateState(id, parentId, gfs, tx);
                     if (!state.isAdopted) { // If adopted, the language semantics are to suppress exception.
                         state.addException(t);
                     }
@@ -556,7 +563,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             }
         }
         
-        static def p0TransitToCompleted(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState], srcId:Int, dstId:Int, kind:Int, t:CheckedThrowable) {
+        static def p0TransitToCompleted(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState], srcId:Int, dstId:Int, 
+                kind:Int, t:CheckedThrowable, tx:Tx) {
             at (place0) @Immediate("p0Opt_notifyActivityCreationFailed_to_zero") async {
                 try {
                     statesLock.lock();
@@ -564,7 +572,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                         // drop termination messages from a dead place; only simulated termination signals are accepted
                         if (verbose>=1) debug("==== notifyActivityTermination(id="+id+") suppressed: "+dstId+" kind="+kind);
                     } else {
-                        val state = getOrCreateState(id, parentId, gfs);
+                        val state = getOrCreateState(id, parentId, gfs, tx);
                         if (verbose>=1) debug(">>>> State.p0TransitToCompleted(id="+id+", srcId="+srcId+", dstId="+dstId+",t="+t+") called");
                         state.transitToCompleted(srcId, dstId, kind, t);
                         if (verbose>=1) debug("<<<< State.p0TransitToCompleted(id="+id+", srcId="+srcId+", dstId="+dstId+",t="+t+") returning");
@@ -653,7 +661,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 if (quiescent()) {
                     releaseLatch();
                     notifyParent();
-                    addGCRequests();
                     removeFromStates();
                 }
                 if (verbose>=1) debug("<<<< State(id="+id+").transitToCompleted returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
@@ -673,7 +680,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             if (quiescent()) {
                 releaseLatch();
                 notifyParent();
-                addGCRequests();
                 removeFromStates();
             }
             if (verbose>=1) debug("<<<< State(id="+id+").removeGhostChild childId=" + childId + " returning");
@@ -704,7 +710,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 if (quiescent()) {
                     releaseLatch();
                     notifyParent();
-                    addGCRequests();
                     removeFromStates();
                 }
                 if (verbose>=1) debug("<<<< State(id="+id+").transitToCompletedMul returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
@@ -726,10 +731,59 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             return quiet;
         }
         
+        def postQuiescent() {
+            if (tx == null) {
+                addGCRequests();
+            } else {
+                finishTx();
+            }
+        }
+        def finishTx() {
+            if (TxConfig.get().TM_DEBUG) 
+                Console.OUT.println("Tx["+ tx.id +"] " + TxConfig.txIdToString (tx.id) 
+                                         + " here["+here+"] finish released, start committing ...");
+            val pset = new HashSet[Int]();
+            for (e in sent.entries()) {
+                pset.add(e.getKey().dst);
+            }
+            val places = new Rail[Int](pset.size());
+            var i:Long = 0;
+            for (p in pset)
+                places(i++) = p as Int;
+            
+            var knownConflict:Boolean = false;
+            if (excs != null) {
+                for (i = 0; i < excs.size(); i++) {
+                    val e = excs(i);
+                    if (e instanceof ConflictException ||
+                        e instanceof DeadPlaceException) {
+                        knownConflict = true;
+                        break;
+                    }
+                }
+            }
+            val includeHere = false;
+            if (knownConflict) {
+                tx.res_abort(id, places, includeHere);
+                addException(new ConflictException());
+            } else {
+                try {
+                    tx.res_prepare(places, includeHere);
+                    tx.res_commit(id, places, includeHere);
+                } catch (ce:ConflictException) {
+                    tx.res_abort(id, places, includeHere);
+                    addException(ce);
+                }
+            }
+        }
+        
         def releaseLatch() {
             if (isAdopted) { //
                 if (verbose>=1) debug("releaseLatch(id="+id+") called on lost finish; not releasing latch");
             } else {
+                
+                postQuiescent();
+                
                 val exceptions = (excs == null || excs.isEmpty()) ?  null : excs.toRail();
                 if (verbose>=2) debug("releasing latch id="+id+(exceptions == null ? " no exceptions" : " with exceptions"));
 
@@ -825,15 +879,21 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         
         public static def deleteObjects(gcReqs:Set[Id]) {
             if (gcReqs == null) {
-                if (verbose>=1) debug(">>>> deleteObjects gcReqs = NULL");
                 return;
             }
             try {
                 remoteLock.lock();
                 for (id in gcReqs) {
-                    if (verbose>=1) debug(">>>> deleting object(id="+id+")");
                     remotes.delete(id);
                 }
+            } finally {
+                remoteLock.unlock();
+            }
+        }
+        public static def deleteObject(id:Id) {
+            try {
+                remoteLock.lock();
+                remotes.delete(id);
             } finally {
                 remoteLock.unlock();
             }
@@ -1176,7 +1236,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                         if (!par.isGlobal) par.globalInit();
                     }
                 }
-                State.p0CreateState(id, parentId, ref);
+                State.p0CreateState(id, parentId, ref, tx);
                 isGlobal = true;
                 if (verbose>=1) debug("<<<< globalInit(id="+id+") returning");
             }
@@ -1257,7 +1317,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 }
                 
                 if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
-            	State.p0Transit(id, parentId, ref, srcId, dstId, kind);
+            	State.p0Transit(id, parentId, ref, srcId, dstId, kind, tx);
                 if (verbose>=1) debug("<<<< Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
             }
         }
@@ -1288,10 +1348,10 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             if (bytes.size >= ASYNC_SIZE_THRESHOLD) {
             	val count = lc.incrementAndGet(); // synthetic activity to keep finish locally live during async to Place0
             	if (verbose >= 1) debug("==== Root(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting indirect (size="+ bytes.size+") localCount now " + count);
-            	State.p0RemoteSpawnBig(id, parentId, ref, srcId, dstId, bytes, gfs);
+            	State.p0RemoteSpawnBig(id, parentId, ref, srcId, dstId, bytes, gfs, tx);
             } else {
                 if (verbose >= 1) debug("====  Root(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting direct (size="+ bytes.size+") ");
-            	State.p0RemoteSpawnSmall(id, parentId, ref, srcId, dstId, bytes, gfs);
+            	State.p0RemoteSpawnSmall(id, parentId, ref, srcId, dstId, bytes, gfs, tx);
             }
             if (verbose>=1) debug("<<<< Root(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+") returning");
         }
@@ -1337,7 +1397,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             }
             
             if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
-            State.p0TransitToCompleted(id, parentId, ref, srcId, dstId, kind, t);
+            State.p0TransitToCompleted(id, parentId, ref, srcId, dstId, kind, t, tx);
             if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
         }
 
@@ -1367,7 +1427,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             
             
             if (verbose>=1) debug(">>>> Root(id="+id+").pushException(t="+t.getMessage()+") called");
-            State.p0PushException(id, parentId, ref, t);
+            State.p0PushException(id, parentId, ref, t, tx);
             if (verbose>=1) debug("<<<< Root(id="+id+").pushException(t="+t.getMessage()+") returning");
         }
 
@@ -1394,7 +1454,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 return;
             }
             if (verbose>=1) debug("==== Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
-            State.p0TransitToCompleted(id, parentId, ref, srcId, dstId, kind, null);
+            State.p0TransitToCompleted(id, parentId, ref, srcId, dstId, kind, null, tx);
             if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
         }
 

@@ -149,6 +149,15 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }
         }
         
+        public static def deleteObject(id:Id) {
+            try {
+                remoteLock.lock();
+                remotes.delete(id);
+            } finally {
+                remoteLock.unlock();
+            }
+        }
+        
         def dump() {
             val s = new x10.util.StringBuilder();
             s.add("Remote dump:\n");
