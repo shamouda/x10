@@ -751,29 +751,16 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             for (p in pset)
                 places(i++) = p as Int;
             
-            var knownConflict:Boolean = false;
-            if (excs != null) {
-                for (i = 0; i < excs.size(); i++) {
-                    val e = excs(i);
-                    if (e instanceof ConflictException ||
-                        e instanceof DeadPlaceException) {
-                        knownConflict = true;
-                        break;
-                    }
-                }
-            }
-            val includeHere = false;
-            if (knownConflict) {
-                tx.res_abort(id, places, includeHere);
-                addException(new ConflictException());
+            if (excs != null && excs.size() > 0) {
+                tx.res_abort(id, places);
             } else {
                 try {
-                    tx.res_prepare(places, includeHere);
-                    tx.res_commit(id, places, includeHere);
+                    tx.res_prepare(places);
                 } catch (ce:ConflictException) {
-                    tx.res_abort(id, places, includeHere);
+                    tx.res_abort(id, places);
                     addException(ce);
                 }
+                tx.res_commit(id, places);
             }
         }
         

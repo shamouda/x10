@@ -728,28 +728,17 @@ public abstract class FinishState {
                 for (p in pset)
                     places(i++) = p as Int;
                 
-                var knownConflict:Boolean = false;
-                if (exceptions != null) {
-                    for (i = 0; i < exceptions.size(); i++) {
-                        val e = exceptions(i);
-                        if (e instanceof ConflictException) {
-                            knownConflict = true;
-                            break;
-                        }
-                    }
-                }
-                val includeHere = true;
-                if (knownConflict) {
-                    tx.abort(root, places, includeHere);
-                }
-                else {
+                if (exceptions != null && exceptions.size() > 0) {
+                    tx.abort(root, places);
+                } else {
                     try {
-                        tx.prepare(places, includeHere);
-                        tx.commit(root, places, includeHere);
+                        tx.prepare(places);
                     } catch (ce:ConflictException) {
-                        tx.abort(root, places, includeHere);
+                        tx.abort(root, places);
                         process(ce);
+                        return;
                     }
+                    tx.commit(root, places);
                 }
             }
         }

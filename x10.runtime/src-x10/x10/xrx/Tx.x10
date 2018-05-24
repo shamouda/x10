@@ -63,16 +63,18 @@ public class Tx {
     }
     
     //finish methods//
-    public def prepare(places:Rail[Int], includeHere:Boolean) {
+    public def prepare(places:Rail[Int]) {
         if (!TxConfig.get().VALIDATION_REQUIRED)
             return;
-        if (includeHere) {
-            try {
-                plh().getMasterStore().validate(id);
-            } catch (e:Exception) {
-                throw new ConflictException();
-            }
+        
+        //prepare here
+        try {
+            plh().getMasterStore().validate(id);
+        } catch (e:Exception) {
+            throw new ConflictException();
         }
+        
+        //prepare remaining places
         val fin = LowLevelFinish.make(places);
         val closure = (gr:GlobalRef[LowLevelFinish]) => {
             for (p in places) {
@@ -107,7 +109,11 @@ public class Tx {
             throw new ConflictException();
     }
     
-    public def commit(root:GlobalRef[FinishState], places:Rail[Int], includeHere:Boolean) {
+    public def commit(root:GlobalRef[FinishState], places:Rail[Int]) {
+        //commit here
+        plh().getMasterStore().commit(id);
+        
+        //commit remaining places
         val fin = LowLevelFinish.make(places);
         val closure = (gr:GlobalRef[LowLevelFinish]) => {
             for (p in places) {
@@ -125,14 +131,16 @@ public class Tx {
                 }
             }
         };
-        if (includeHere)
-            plh().getMasterStore().commit(id);
         fin.run(closure);
         if (TxConfig.get().TM_DEBUG) 
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] COMMIT_DONE ...");
     }
     
-    public def abort(root:GlobalRef[FinishState], places:Rail[Int], includeHere:Boolean) {
+    public def abort(root:GlobalRef[FinishState], places:Rail[Int]) {
+        //abort here
+        plh().getMasterStore().abort(id);
+        
+        //abort remaining places
         val fin = LowLevelFinish.make(places);
         val closure = (gr:GlobalRef[LowLevelFinish]) => {
             for (p in places) {
@@ -151,38 +159,30 @@ public class Tx {
                 }
             }
         };
-        
-        if (includeHere)
-            plh().getMasterStore().abort(id);
         fin.run(closure);
         if (TxConfig.get().TM_DEBUG) 
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] ABORT_DONE ...");
     }
     
-    //finish methods//
-    public def res_prepare(places:Rail[Int], includeHere:Boolean) {
+    //**********************    finish methods        **********************//
+    public def res_prepare(places:Rail[Int]) {
         if (!TxConfig.get().VALIDATION_REQUIRED)
             return;
-        if (includeHere) {
-            try {
-                plh().getMasterStore().validate(id);
-            } catch (e:Exception) {
-                throw new ConflictException();
-            }
-        }
+
         val fin = LowLevelFinish.make(places);
         val closure = (gr:GlobalRef[LowLevelFinish]) => {
             for (p in places) {
                 at (Place(p)) @Immediate("res_prep_request") async {
                     if (TxConfig.get().TM_DEBUG) 
-                        Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validate ...");
-                    
+                        Console.OUT.println("Tx[" + id+"] " + TxConfig.txIdToString (id)
+                                                  + " here["+here+"] validate ...");
                     var vote:Boolean = true;
                     try {
                         plh().getMasterStore().validate(id);
                     }catch (e:Exception) {
                         if (TxConfig.get().TM_DEBUG) 
-                            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validation excp["+e.getMessage()+"] ...");
+                            Console.OUT.println("Tx["+ id + "] " + TxConfig.txIdToString (id)
+                                                     + " here["+here+"] validation excp["+e.getMessage()+"] ...");
                         vote = false;
                     }
                     val v = vote;
@@ -195,16 +195,16 @@ public class Tx {
         };
         fin.run(closure);
         if (TxConfig.get().TM_DEBUG) 
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] VALIDATION_DONE failed["+fin.failed()+"] yesVote["+fin.yesVote()+"]...");
-        
+            Console.OUT.println("Tx["+ id +"] " + TxConfig.txIdToString (id) 
+                                     + " here["+here+"] VALIDATION_DONE failed[" + fin.failed() 
+                                     + "] yesVote["+fin.yesVote()+"]...");
         if (fin.failed())
             throw new DeadPlaceException();
-        
         if (!fin.yesVote())
             throw new ConflictException();
     }
     
-    public def res_commit(fid:FinishResilient.Id, places:Rail[Int], includeHere:Boolean) {
+    public def res_commit(fid:FinishResilient.Id, places:Rail[Int]) {
         val fin = LowLevelFinish.make(places);
         val closure = (gr:GlobalRef[LowLevelFinish]) => {
             for (p in places) {
@@ -222,14 +222,13 @@ public class Tx {
                 }
             }
         };
-        if (includeHere)
-            plh().getMasterStore().commit(id);
+        
         fin.run(closure);
         if (TxConfig.get().TM_DEBUG) 
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] COMMIT_DONE ...");
     }
     
-    public def res_abort(fid:FinishResilient.Id, places:Rail[Int], includeHere:Boolean) {
+    public def res_abort(fid:FinishResilient.Id, places:Rail[Int]) {
         val fin = LowLevelFinish.make(places);
         val closure = (gr:GlobalRef[LowLevelFinish]) => {
             for (p in places) {
@@ -248,14 +247,10 @@ public class Tx {
                 }
             }
         };
-        
-        if (includeHere)
-            plh().getMasterStore().abort(id);
         fin.run(closure);
         if (TxConfig.get().TM_DEBUG) 
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] ABORT_DONE ...");
     }
-    
     
     private def optimisticGC(fid:FinishResilient.Id) {
         if (Runtime.RESILIENT_MODE == Configuration.RESILIENT_MODE_PLACE0_OPTIMISTIC) {
@@ -264,5 +259,4 @@ public class Tx {
             FinishResilientOptimistic.OptimisticRemoteState.deleteObject(fid);
         }
     }
-    
 }
