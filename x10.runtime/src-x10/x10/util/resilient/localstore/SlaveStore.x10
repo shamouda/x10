@@ -128,6 +128,16 @@ public class SlaveStore[K] {K haszero} {
         }
     }
     
+    public def isPrepared(id:Long) {
+        try {
+            slaveLock();
+            if (getLog(id) == null)
+                return false;
+            else return true;
+        } finally {
+            slaveUnlock();
+        }
+    }
     public def abort(id:Long) {
         try {
             slaveLock();

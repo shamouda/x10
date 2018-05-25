@@ -44,4 +44,13 @@ public class TxStore {
         val id = plh().getMasterStore().getNextTransactionId();
         return new Tx(plh, id);
     }
+    
+    
+    public def resetTxStatistics() {
+        if (plh().stat == null)
+            return;
+        finish for (p in plh().getActivePlaces()) at (p) async {
+            plh().stat.clear();
+        }
+    }
 }
