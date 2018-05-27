@@ -62,6 +62,9 @@ public class Activity {
      * */
     public val srcPlace:Place;
 
+    public var tx:Boolean = false;
+    public var txReadOnly:Boolean = false;
+    
     /**
      * Create activity.
      */

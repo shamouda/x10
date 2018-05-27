@@ -174,6 +174,18 @@ public abstract class FinishState {
         x10.xrx.Runtime.x10rtSendAsync(place.id, body, fs, prof, preSendAction);
     }
 
+    /**
+     * Called to indicate that the currently executing activity 
+     * is a member in the finish transaction and that it 
+     * has terminated successfully.
+     *
+     * Scheduling note: Will only be called on a full-fledged worker thread;
+     *                  this method is allowed to block/pause.
+     */
+    def notifyTxActivityTermination(srcPlace:Place, readyOnly:Boolean) {
+        notifyActivityTermination(srcPlace);
+    }
+    
     /***
      * Relevant only in optimistic counting
      */
@@ -570,9 +582,11 @@ public abstract class FinishState {
             me.notifyActivityCreatedAndTerminated(srcPlace);
         }
         public def notifyActivityTermination(srcPlace:Place) { me.notifyActivityTermination(srcPlace); }
+        public def notifyTxActivityTermination(srcPlace:Place, readyOnly:Boolean) { me.notifyTxActivityTermination(srcPlace, readyOnly); }
         public def notifyShiftedActivityCompletion(srcPlace:Place) { me.notifyShiftedActivityCompletion(srcPlace); }
         public def pushException(t:CheckedThrowable) { me.pushException(t); }
         public def waitForFinish() { me.waitForFinish(); }
+        public def registerFinishTx(tx:Tx):void { me.registerFinishTx(tx); }
     }
 
     // the default finish implementation
@@ -597,9 +611,6 @@ public abstract class FinishState {
                 val _ref = ref;
                 me = Runtime.finishStates(ref, ()=>new RemoteFinish(_ref));
             }
-        }
-        def registerFinishTx(tx:Tx):void { 
-            me.registerFinishTx(tx);
         }
     }
 

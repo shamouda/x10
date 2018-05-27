@@ -37,21 +37,27 @@ public class Tx {
     
     /***************** Get ********************/
     public def get(key:Any):Cloneable {
+        Runtime.activity().tx = true;
         return plh().getMasterStore().get(id, key);
     }
     
     /***************** PUT ********************/
     public def put(key:Any, value:Cloneable):Cloneable {
+        Runtime.activity().tx = true;
+        Runtime.activity().txReadOnly = false;
         return plh().getMasterStore().put(id, key, value);
     }
     
     /***************** Delete ********************/
     public def delete(key:Any):Cloneable {
+        Runtime.activity().tx = true;
+        Runtime.activity().txReadOnly = false;
         return plh().getMasterStore().delete(id, key);
     }
     
     /***************** KeySet ********************/
     public def keySet():Set[Any] {
+        Runtime.activity().tx = true;
         return plh().getMasterStore().keySet(id); 
     }
     
@@ -169,6 +175,12 @@ public class Tx {
     
     //**********************    finish methods        **********************//
     public def res_prepare(places:Rail[Int]) {
+        if (TxConfig.get().TM_DEBUG) {
+            var s:String = "";
+            for (x in places)
+                s += x + " ";
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ "["+Runtime.activity()+"] res_prepare places["+s+"]...");
+        }
         val pg = plh().getActivePlaces();
         val fin = LowLevelFinish.make(places);
         val closure = (gr:GlobalRef[LowLevelFinish]) => {
@@ -237,7 +249,7 @@ public class Tx {
             
             if (TxConfig.TM_DEBUG) 
                 Console.OUT.println("Tx["+ id +"] " + TxConfig.txIdToString (id) 
-                                     + " here["+here+"] going to slave ["+slave+"] to prepare ...");
+                                     + " here["+here+"] ["+Runtime.activity()+"] going to slave ["+slave+"] to prepare ...");
             rCond.run(closure);
             
             if (rCond.failed()) {
@@ -348,6 +360,13 @@ public class Tx {
     }
     
     public def res_abort(fid:FinishResilient.Id, places:Rail[Int]) {
+        if (TxConfig.get().TM_DEBUG) {
+            var s:String = "";
+            for (x in places)
+                s += x + " ";
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " res_commit places["+s+"]...");
+        }
+        
         val mastersAndSlaves = new Rail[Int](places.size * 2);
         val pg = plh().getActivePlaces();
         var i:Long = 0;
@@ -355,6 +374,13 @@ public class Tx {
             mastersAndSlaves(i) = p;
             mastersAndSlaves(i+places.size) = pg.next(Place(p)).id as Int;
             i++;
+        }
+        if (TxConfig.TM_DEBUG) {
+            var str:String = "";
+            for (x in mastersAndSlaves)
+                str += x + " ";
+            Console.OUT.println("Tx["+ id +"] " + TxConfig.txIdToString (id) 
+                + " here["+here+"] commit mastersAndSlaves ["+str+"] ...");
         }
         val fin = LowLevelFinish.make(mastersAndSlaves);
         val closure = (gr:GlobalRef[LowLevelFinish]) => {

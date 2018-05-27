@@ -53,6 +53,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
     def notifyActivityCreatedAndTerminated(srcPlace:Place):void { me.notifyActivityCreatedAndTerminated(srcPlace); }
     def pushException(t:CheckedThrowable):void { me.pushException(t); }
     def notifyActivityTermination(srcPlace:Place):void { me.notifyActivityTermination(srcPlace); }
+    def notifyTxActivityTermination(srcPlace:Place, readyOnly:Boolean) { me.notifyTxActivityTermination(srcPlace, readyOnly); }
     def notifyShiftedActivityCompletion(srcPlace:Place):void { me.notifyShiftedActivityCompletion(srcPlace); }
     def spawnRemoteActivity(place:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void { me.spawnRemoteActivity(place, body, prof); }
     def waitForFinish():void { me.waitForFinish(); }
@@ -1179,6 +1180,11 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning");
         }
 
+        def notifyTxActivityTermination(srcPlace:Place, readyOnly:Boolean) {
+            //TODO implement this
+            //add a member in the finish tx set and record if the transaction is ready only
+        }
+        
         def waitForFinish():void {
             assert false : "fatal, waitForFinish must not be called from a remote finish" ;
         }
