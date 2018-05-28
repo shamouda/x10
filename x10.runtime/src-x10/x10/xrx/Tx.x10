@@ -30,10 +30,40 @@ public class Tx {
     public val id:Long;
     static resilient = Runtime.RESILIENT_MODE > 0;
     
+    
+    private var members:Set[Int] = null;
+    private var readOnly:Boolean = true;
+    
+    private var count:Int = 0n;
+    private var vote:Boolean = true;
+    
+    private var prep:Boolean = false;
+    private var comp:Boolean = false;
+    
     public def this(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     	this.plh = plh;
         this.id = id;
     }
+    
+    public def addMember(m:Int, ro:Boolean){
+        if (TxConfig.get().TM_DEBUG) 
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] add member["+m+"] readOnly["+ro+"] ...");
+        if (members == null)
+            members = new HashSet[Int]();
+        members.add(m);
+        readOnly = readOnly & ro; 
+    }
+    
+    public def contains(place:Int) {
+        if (members == null)
+            return false;
+        return members.contains(place);
+    }
+    
+    public def getMembers() = members;
+    public def isComplete() = comp;
+    public def isPrepared() = prep;
+    public def isEmpty() = members == null || members.size() == 0;
     
     /***************** Get ********************/
     public def get(key:Any):Cloneable {
@@ -71,106 +101,104 @@ public class Tx {
         return at (pl) closure();
     }
     
-    //finish methods//
-    public def prepare(places:Rail[Int]) {
-        if (!TxConfig.get().VALIDATION_REQUIRED)
-            return;
-        
-        //prepare here
-        try {
-            plh().getMasterStore().validate(id);
-        } catch (e:Exception) {
-            throw new ConflictException();
+    /****************non-resilient finish*********************************/
+    public def start2PC() {
+        if (TxConfig.get().VALIDATION_REQUIRED)
+            count = members.size() as Int;
+        if (count == 0n) {
+            prep = true;
+            count = members.size() as Int;
         }
-        
-        //prepare remaining places
-        val fin = LowLevelFinish.make(places);
-        val closure = (gr:GlobalRef[LowLevelFinish]) => {
-            for (p in places) {
-                at (Place(p)) @Immediate("prep_request") async {
-                    if (TxConfig.get().TM_DEBUG) 
-                        Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validate ...");
-                    
-                    var vote:Boolean = true;
-                    try {
-                        plh().getMasterStore().validate(id);
-                    }catch (e:Exception) {
-                        if (TxConfig.get().TM_DEBUG) 
-                            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validation excp["+e.getMessage()+"] ...");
-                        vote = false;
-                    }
-                    val v = vote;
-                    val me = here.id as Int;
-                    at (gr) @Immediate("prep_response") async {
-                        gr().notifyTermination(me, v);
-                    }
-                }
-            }
-        };
-        fin.run(closure);
-        if (TxConfig.get().TM_DEBUG) 
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] VALIDATION_DONE failed["+fin.failed()+"] yesVote["+fin.yesVote()+"]...");
-        
-        if (fin.failed())
-            throw new DeadPlaceException();
-        
-        if (!fin.yesVote())
-            throw new ConflictException();
     }
     
-    public def commit(root:GlobalRef[FinishState], places:Rail[Int]) {
-        //commit here
-        plh().getMasterStore().commit(id);
-        
-        //commit remaining places
-        val fin = LowLevelFinish.make(places);
-        val closure = (gr:GlobalRef[LowLevelFinish]) => {
-            for (p in places) {
-                at (Place(p)) @Immediate("comm_request") async {
+    public def prepare(gr:GlobalRef[FinishState]) {
+        for (p in members) {
+            at (Place(p)) @Immediate("prep_request") async {
+                if (TxConfig.get().TM_DEBUG) 
+                    Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validate ...");
+                
+                var vote:Boolean = true;
+                try {
+                    plh().getMasterStore().validate(id);
+                }catch (e:Exception) {
                     if (TxConfig.get().TM_DEBUG) 
-                        Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] commit ...");
-                    //gc
-                    Runtime.finishStates.remove(root);
-                    
-                    plh().getMasterStore().commit(id);
-                    val me = here.id as Int;
-                    at (gr) @Immediate("comm_response") async {
-                        gr().notifyTermination(me);
-                    }
+                        Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validation excp["+e.getMessage()+"] ...");
+                    vote = false;
+                }
+                val v = vote;
+                val me = here.id as Int;
+                at (gr) @Immediate("prep_response") async {
+                    gr().notifyTxPrepare(me, true, v);
                 }
             }
-        };
-        fin.run(closure);
-        if (TxConfig.get().TM_DEBUG) 
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] COMMIT_DONE ...");
+        }
     }
     
-    public def abort(root:GlobalRef[FinishState], places:Rail[Int]) {
-        //abort here
-        plh().getMasterStore().abort(id);
-        
-        //abort remaining places
-        val fin = LowLevelFinish.make(places);
-        val closure = (gr:GlobalRef[LowLevelFinish]) => {
-            for (p in places) {
-                at (Place(p)) @Immediate("abort_request") async {
-                    if (TxConfig.get().TM_DEBUG) 
-                        Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] abort ...");
-                    
-                    //gc
-                    Runtime.finishStates.remove(root);
-                    
-                    plh().getMasterStore().abort(id);
-                    val me = here.id as Int;
-                    at (gr) @Immediate("abort_response") async {
-                        gr().notifyTermination(me);
-                    }
+    public def complete(gr:GlobalRef[FinishState]) {
+        if (vote)
+            commit(gr);
+        else
+            abort(gr);
+    }
+    
+    public def commit(gr:GlobalRef[FinishState]) {
+        for (p in members) {
+            at (Place(p)) @Immediate("comm_request") async {
+                if (TxConfig.get().TM_DEBUG) 
+                    Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] commit ...");
+                //gc
+                Runtime.finishStates.remove(gr);
+                
+                plh().getMasterStore().commit(id);
+                val me = here.id as Int;
+                at (gr) @Immediate("comm_response") async {
+                    gr().notifyTxCommit(me, true);
                 }
             }
-        };
-        fin.run(closure);
+        }        
+    }
+    
+    public def abort(gr:GlobalRef[FinishState]) {
+        for (p in members) {
+            at (Place(p)) @Immediate("abort_request") async {
+                if (TxConfig.get().TM_DEBUG) 
+                    Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] abort ...");
+                
+                //gc
+                Runtime.finishStates.remove(gr);
+                
+                plh().getMasterStore().abort(id);
+                val me = here.id as Int;
+                at (gr) @Immediate("abort_response") async {
+                    gr().notifyTxAbort(me, true);
+                }
+            }
+        }
+    }
+    
+    public def notifyPrepare(v:Boolean) {
+        count--;
+        vote = vote & v;
+        if (count == 0n) {
+            prep = true;
+            count = members.size() as Int;
+        }
+    }
+    
+    public def notifyCommit() {
+        count--;
         if (TxConfig.get().TM_DEBUG) 
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] ABORT_DONE ...");
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"]notifyCommit count["+count+"]...");
+        if (count == 0n) {
+            comp = true;
+        }
+    }
+    
+    public def notifyAbort() {
+        count--;
+        if (count == 0n) {
+            comp = true;
+        }
     }
     
     //**********************    finish methods        **********************//

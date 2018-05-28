@@ -103,7 +103,7 @@ public abstract class FinishState {
      * Scheduling note: May be called on @Immediate worker.
      *                  This method must not block or pause.
      */
-    abstract def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void; 
+    abstract def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void;
 
     /**
      * Called at the Place where a synthetic activity created for 
@@ -114,7 +114,7 @@ public abstract class FinishState {
      * Scheduling note: May be called on @Immediate worker.
      *                  This method must not block or pause.
      */
-    abstract def notifyActivityCreatedAndTerminated(srcPlace:Place):void; 
+    abstract def notifyActivityCreatedAndTerminated(srcPlace:Place):void;
 
     /**
      * Called to indicate that the currently executing activity 
@@ -157,14 +157,20 @@ public abstract class FinishState {
      * Transactional Finish variables and functions
      * */
     protected var tx:Tx;
-    
+
     /**
      * Must be called as a first statement in a finish block
      * */
     def registerFinishTx(tx:Tx):void { 
         this.tx = tx;
     }
-    
+
+    public def notifyTxPrepare(place:Int, isMaster:Boolean, vote:Boolean) { }
+
+    public def notifyTxCommit(place:Int, isMaster:Boolean) { }
+
+    public def notifyTxAbort(place:Int, isMaster:Boolean) { }
+
     /**
      * Spawn a remote activity.
      */
@@ -185,7 +191,7 @@ public abstract class FinishState {
     def notifyTxActivityTermination(srcPlace:Place, readyOnly:Boolean) {
         notifyActivityTermination(srcPlace);
     }
-    
+
     /***
      * Relevant only in optimistic counting
      */
@@ -587,6 +593,10 @@ public abstract class FinishState {
         public def pushException(t:CheckedThrowable) { me.pushException(t); }
         public def waitForFinish() { me.waitForFinish(); }
         public def registerFinishTx(tx:Tx):void { me.registerFinishTx(tx); }
+        
+        public def notifyTxPrepare(place:Int, isMaster:Boolean, vote:Boolean) { me.notifyTxPrepare(place, isMaster, vote); }
+        public def notifyTxCommit(place:Int, isMaster:Boolean) { me.notifyTxCommit(place, isMaster); }
+        public def notifyTxAbort(place:Int, isMaster:Boolean) { me.notifyTxAbort(place, isMaster); }
     }
 
     // the default finish implementation
@@ -656,8 +666,16 @@ public abstract class FinishState {
             pushException(t);
             notifyActivityTermination(srcPlace);
         }
+        
         public def notifyActivityTermination(srcPlace:Place):void {
+            notifyTxActivityTermination(srcPlace, true);
+        }
+        
+        public def notifyTxActivityTermination(srcPlace:Place, readOnly:Boolean):void {
             latch.lock();
+            if (tx != null) {
+                tx.addMember(here.id as Int, readOnly);
+            }
             if (--count != 0n) {
                 latch.unlock();
                 return;
@@ -671,8 +689,40 @@ public abstract class FinishState {
                 }
             }
             latch.unlock();
-            latch.release();
+            tryRelease();
         }
+        
+        public def notifyTxPrepare(place:Int, isMaster:Boolean, vote:Boolean) {
+            if (tx != null) {
+                latch.lock();
+                tx.notifyPrepare(vote);
+                val prep = tx.isPrepared();
+                latch.unlock();
+                if (prep)
+                    tx.complete(ref());
+            }
+        }
+        public def notifyTxCommit(place:Int, isMaster:Boolean) {
+            if (tx != null) {
+                latch.lock();
+                tx.notifyCommit();
+                val comp = tx.isComplete();
+                latch.unlock();
+                if (comp)
+                    latch.release();
+            }
+        }
+        public def notifyTxAbort(place:Int, isMaster:Boolean) {
+            if (tx != null) {
+                latch.lock();
+                tx.notifyAbort();
+                val comp = tx.isComplete();
+                latch.unlock();
+                if (comp)
+                    latch.release();
+            }
+        }
+        
         public def notifyShiftedActivityCompletion(srcPlace:Place) {
             notifyActivityTermination(srcPlace);
         }
@@ -692,13 +742,18 @@ public abstract class FinishState {
             latch.unlock();
         }
         public def waitForFinish():void {
-            notifyActivityTermination(here); // remove our own activity from count
+            // remove our own activity from count
+            if (Runtime.activity().tx)
+                notifyTxActivityTermination(here, Runtime.activity().txReadOnly);
+            else
+                notifyActivityTermination(here);
+            
             if ((!Runtime.STRICT_FINISH) && (Runtime.STATIC_THREADS || remoteActivities == null)) {
                 Runtime.worker().join(latch);
             }
             latch.await(); // sit here, waiting for all child activities to complete
 
-            postQuiescent();
+            gc();
             
             // throw exceptions here if any were collected via the execution of child activities
             val t = MultipleExceptions.make(exceptions);
@@ -706,59 +761,36 @@ public abstract class FinishState {
             
             // if no exceptions, simply return
         }
-
-        def postQuiescent() {
-            if (tx == null) {
-                addGCRequests();
-            } else {
-                finishTx();
-            }
-        }
         
-        def addGCRequests() {
+        def gc() {
             if (GC_DISABLED) return;
+            
             // if there were remote activities spawned, clean up the RemoteFinish objects which tracked them
             if (remoteActivities != null && remoteActivities.size() != 0) {
                 val root = ref();
                 remoteActivities.remove(here.id);
-                val places = remoteActivities.keySet();
-                FinishGC.addGCReady(root, places);    
-            }
-        }
-        
-        def finishTx() {
-            if (remoteActivities != null && remoteActivities.size() != 0) {
-                if (TxConfig.get().TM_DEBUG) 
-                    Console.OUT.println("Tx["+ tx.id +"] " + TxConfig.txIdToString (tx.id) 
-                                             + " here["+here+"] finish released, start committing ...");
-                val root = ref();
-                remoteActivities.remove(here.id);
-                val pset = remoteActivities.keySet();
-                val places = new Rail[Int](pset.size());
-                var i:Long = 0;
-                for (p in pset)
-                    places(i++) = p as Int;
-                
-                if (exceptions != null && exceptions.size() > 0) {
-                    tx.abort(root, places);
-                } else {
-                    try {
-                        tx.prepare(places);
-                    } catch (ce:ConflictException) {
-                        tx.abort(root, places);
-                        process(ce);
-                        return;
+                if (tx == null || tx.isEmpty()) {
+                    for (placeId in remoteActivities.keySet()) {                    
+                        at(Place(placeId)) @Immediate("remoteFinishCleanup1") async Runtime.finishStates.remove(root);
                     }
-                    tx.commit(root, places);
+                } else {
+                    for (placeId in remoteActivities.keySet()) {
+                        if (tx.contains(placeId as Int))
+                            continue;
+                        at(Place(placeId)) @Immediate("remoteFinishCleanup2") async Runtime.finishStates.remove(root);
+                    }
                 }
             }
         }
-        
-        protected def process(remoteMap:HashMap[Long, Int]):void {
+                
+        protected def process(remoteMap:HashMap[Long, Int], isTx:Boolean, txRO:Boolean):void {
             ensureRemoteActivities();
+            var src:Int = -1n;
             // add the remote set of records to the local set
             for (remoteEntry in remoteMap.entries()) {
                 remoteActivities.put(remoteEntry.getKey(), remoteActivities.getOrElse(remoteEntry.getKey(), 0n)+remoteEntry.getValue());
+                if (remoteEntry.getValue() < 0)
+                    src = remoteEntry.getKey() as Int;
             }
         
             // add anything in the remote set which ran here to my local count, and remove from the remote set
@@ -772,27 +804,39 @@ public abstract class FinishState {
             for (entry in remoteActivities.entries()) {
                 if (entry.getValue() != 0n) return;
             }
-            
+            if (isTx && tx != null) {
+                if (src == -1n)
+                    Console.OUT.println(here + " FATAL error >> src = " + src);
+                tx.addMember(src, txRO);
+            }
             // nothing is pending.  Release the latch
-            latch.release();
+            tryRelease();
         }
 
         def notify(remoteMapBytes:Rail[Byte]):void {
+            notify(remoteMapBytes, false, false);
+        }
+        
+        def notify(remoteMapBytes:Rail[Byte], isTx:Boolean, txRO:Boolean):void {
             remoteMap:HashMap[Long, Int] = new x10.io.Deserializer(remoteMapBytes).readAny() as HashMap[Long, Int]; 
             latch.lock();
-            process(remoteMap);
+            process(remoteMap, isTx, txRO);
             latch.unlock();
         }
 
         def notify(remoteMapBytes:Rail[Byte], excs:Rail[CheckedThrowable]):void {
+            notify(remoteMapBytes, excs, false, false);
+        }
+        
+        def notify(remoteMapBytes:Rail[Byte], excs:Rail[CheckedThrowable], isTx:Boolean, txRO:Boolean):void {
             remoteMap:HashMap[Long, Int] = new x10.io.Deserializer(remoteMapBytes).readAny() as HashMap[Long, Int];
             latch.lock();
             process(excs);
-            process(remoteMap);
+            process(remoteMap, isTx, txRO);
             latch.unlock();
         }
         
-        protected def process(remoteEntry:Pair[Long, Int]):void {
+        protected def process(remoteEntry:Pair[Long, Int], isTx:Boolean, txRO:Boolean):void {
             ensureRemoteActivities();
             // add the remote record to the local set
             remoteActivities.put(remoteEntry.first, remoteActivities.getOrElse(remoteEntry.first, 0n)+remoteEntry.second);
@@ -805,21 +849,42 @@ public abstract class FinishState {
                 if (entry.getValue() != 0n) return;
             }
         
+            if (isTx && tx != null) {
+                tx.addMember(remoteEntry.first as Int, txRO);
+            }
             // nothing is pending.  Release the latch
-            latch.release();
+            tryRelease();
         }
 
-        def notify(remoteEntry:Pair[Long, Int]):void {
+        def notify(remoteEntry:Pair[Long, Int]) {
+            notify(remoteEntry, false, false);
+        }
+        def notify(remoteEntry:Pair[Long, Int], isTx:Boolean, txRO:Boolean):void {
             latch.lock();
-            process(remoteEntry);
+            process(remoteEntry, isTx, txRO);
             latch.unlock();
         }
-
-        def notify(remoteEntry:Pair[Long, Int], excs:Rail[CheckedThrowable]):void {
+        def notify(remoteEntry:Pair[Long, Int], excs:Rail[CheckedThrowable]) {
+            notify(remoteEntry, excs, false, false);
+        }
+        def notify(remoteEntry:Pair[Long, Int], excs:Rail[CheckedThrowable], isTx:Boolean, txRO:Boolean):void {
             latch.lock();
             process(excs);
-            process(remoteEntry);
+            process(remoteEntry, isTx, txRO);
             latch.unlock();
+        }
+        
+        def tryRelease() {
+            if (tx == null || tx.isEmpty()) {
+                latch.release();
+            } else {
+                tx.start2PC();
+                if (!tx.isPrepared()) {
+                    tx.prepare(ref());
+                } else {
+                    tx.complete(ref());
+                }
+            }
         }
     }
 
@@ -829,7 +894,10 @@ public abstract class FinishState {
         protected var count:Int = 0n;
         protected var remoteActivities:HashMap[Long,Int]; // key is place id, value is count for that place.
         @Embed protected val local = @Embed new AtomicInteger(0n); // local count
-
+        
+        private var tx:Boolean = false;
+        private var txReadOnly:Boolean = true;
+        
         def this(ref:GlobalRef[FinishState]) {
             super(ref);
         }
@@ -877,12 +945,19 @@ public abstract class FinishState {
             lock.unlock();
         }
         public def notifyActivityTermination(srcPlace:Place):void {
+            notifyTxActivityTermination(srcPlace, true);
+        }
+        public def notifyTxActivityTermination(srcPlace:Place, readOnly:Boolean):void {
             lock.lock();
+            tx = true;
+            txReadOnly = txReadOnly & readOnly;
             count--;
             if (local.decrementAndGet() > 0) {
                 lock.unlock();
                 return;
             }
+            val cTx = tx;
+            val cTxReadyOnly = txReadOnly;
             val excs = exceptions == null || exceptions.isEmpty() ? null : exceptions.toRail();
             exceptions = null;
             val ref = this.ref();
@@ -896,21 +971,22 @@ public abstract class FinishState {
                 count = 0n;
                 lock.unlock();
                 if (null != excs) {
-                    at(ref.home) @Immediate("notifyActivityTermination_1") async deref[RootFinish](ref).notify(serializedTable, excs);
+                    at(ref.home) @Immediate("notifyActivityTermination_1") async deref[RootFinish](ref).notify(serializedTable, excs, cTx, cTxReadyOnly);
                 } else {
-                    at(ref.home) @Immediate("notifyActivityTermination_2") async deref[RootFinish](ref).notify(serializedTable);
+                    at(ref.home) @Immediate("notifyActivityTermination_2") async deref[RootFinish](ref).notify(serializedTable, cTx, cTxReadyOnly);
                 }
             } else {
                 val message = new Pair[Long, Int](here.id, count);
                 count = 0n;
                 lock.unlock();
                 if (null != excs) {
-                    at(ref.home) @Immediate("notifyActivityTermination_3") async deref[RootFinish](ref).notify(message, excs);
+                    at(ref.home) @Immediate("notifyActivityTermination_3") async deref[RootFinish](ref).notify(message, excs, cTx, cTxReadyOnly);
                 } else {
-                    at(ref.home) @Immediate("notifyActivityTermination_4") async deref[RootFinish](ref).notify(message);
+                    at(ref.home) @Immediate("notifyActivityTermination_4") async deref[RootFinish](ref).notify(message, cTx, cTxReadyOnly);
                 }
             }
         }
+        
         public def notifyShiftedActivityCompletion(srcPlace:Place) {
             notifyActivityTermination(srcPlace);
         }
@@ -1121,13 +1197,13 @@ public abstract class FinishState {
             remoteMap:HashMap[Long, Int] = new x10.io.Deserializer(remoteMapBytes).readAny() as HashMap[Long, Int];
             latch.lock();
             sr.accept(v);
-            process(remoteMap);
+            process(remoteMap, false, false);
             latch.unlock();
         }
         def notifyValue(remoteEntry:Pair[Long, Int], v:T):void {
             latch.lock();
             sr.accept(v);
-            process(remoteEntry);
+            process(remoteEntry, false, false);
             latch.unlock();
         }
         final public def waitForFinishExpr():T {
