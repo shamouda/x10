@@ -238,8 +238,8 @@ public class SimpleResTxBench {
                         Console.OUT.println(here + " >>> end tx " + tx.id);
                         break;
                     }catch (me:MultipleExceptions) { 
-                        Console.OUT.println(here + " >>> " + me.getMessage()); 
-                        me.printStackTrace(); 
+                        //Console.OUT.println(here + " >>> " + me.getMessage()); 
+                        //me.printStackTrace(); 
                     }
                 }
             }
