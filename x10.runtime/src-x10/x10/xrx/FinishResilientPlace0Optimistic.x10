@@ -1249,7 +1249,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         private var txReadOnlyFlag:Boolean = true;
         
         def registerFinishTx(tx:Tx):void {
-            this.txFlag = tx;
+            this.tx = tx;
             tx.set(id);
         }
         

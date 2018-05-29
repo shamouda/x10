@@ -213,15 +213,6 @@ public class SimpleResTxBench {
                 }
             };
             
-            val localClosure = (tx:Tx) => {
-                for (var x:Long = 0; x < o; x++) {
-                    val key = keys(x);
-                    val read = readFlags(x);
-                    val value = values(x);
-                    read? tx.get(key): tx.put(key, new CloneableLong(value));
-                }
-            };
-            
             //time starts here
             val start = System.nanoTime();
             var includeTx:Boolean = true;
@@ -230,10 +221,12 @@ public class SimpleResTxBench {
                 while (true) {
                     try {
                         val tx = store.makeTx();
+                        //Console.OUT.println(here + " startTx " + tx.id); 
                         finish {
                             Runtime.registerFinishTx(tx);
                             distClosure(tx);
                         }
+                        //Console.OUT.println(here + " endTx " + tx.id);
                         break;
                     }catch (me:MultipleExceptions) {
                         var str:String = "";
@@ -255,6 +248,7 @@ public class SimpleResTxBench {
                     Console.OUT.println(here + " Progress "+myVirtualPlaceId+"x"+producerId + ":" + myThroughput.txCount );
             }
         }
+        Console.OUT.println(here + " >>> completed ");
         //Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
     }
 

@@ -22,25 +22,22 @@ import x10.util.resilient.concurrent.LowLevelFinish;
 import x10.compiler.Immediate;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.tx.ConflictException;
-import x10.util.concurrent.Condition;
-import x10.util.resilient.concurrent.ResilientCondition;
+import x10.util.concurrent.Lock;
 
 public class Tx {
-    private val txGR = GlobalRef[Tx](this);
+    private val gr = GlobalRef[Tx](this);
 	private val plh:PlaceLocalHandle[LocalStore[Any]];
-    private val id:Long;
+    public val id:Long;
     static resilient = Runtime.RESILIENT_MODE > 0;
     
-    private var finishObj:Releasable = null;
-    
-    private var members:Set[Int] = null;
-    private var readOnly:Boolean = true;
-    
-    private var count:Int = 0n;
-    private var vote:Boolean = true;
-
-    private var gcFinGR:GlobalRef[FinishState];
-    private var gcFinId:FinishResilient.Id;
+    private transient var finishObj:Releasable = null;
+    private transient var members:Set[Int] = null;
+    private transient var readOnly:Boolean = true;
+    private transient var lock:Lock = null;
+    private transient var count:Int = 0n;
+    private transient var vote:Boolean = true;
+    private transient var gcGR:GlobalRef[FinishState];
+    private transient var gcId:FinishResilient.Id;
     
     public def this(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     	this.plh = plh;
@@ -48,21 +45,25 @@ public class Tx {
     }
     
     public def set(fgr:GlobalRef[FinishState]) {
-        gcFinGR = fgr;
+        gcGR = fgr;
+        lock = new Lock();
     }
     
     public def set(fid:FinishResilient.Id) {
-        gcFinId = fid;
+        gcId = fid;
+        lock = new Lock();
     }
     
     /***************** Members *****************/
     public def addMember(m:Int, ro:Boolean){
         if (TxConfig.get().TM_DEBUG) 
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] add member["+m+"] readOnly["+ro+"] ...");
+        lock.lock();
         if (members == null)
             members = new HashSet[Int]();
         members.add(m);
-        readOnly = readOnly & ro; 
+        readOnly = readOnly & ro;
+        lock.unlock();
     }
     
     public def contains(place:Int) {
@@ -121,22 +122,20 @@ public class Tx {
     }
     
     public def prepare() {
-        val gr = txGR;
+        //don't copy this
+        val gr = this.gr;
+        val id = this.id;
+        val plh = this.plh;
+        
         for (p in members) {
             at (Place(p)) @Immediate("prep_request") async {
-                if (TxConfig.get().TM_DEBUG) 
-                    Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validate ...");
-                
                 var vote:Boolean = true;
                 try {
                     plh().getMasterStore().validate(id);
                 }catch (e:Exception) {
-                    if (TxConfig.get().TM_DEBUG) 
-                        Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validation excp["+e.getMessage()+"] ...");
                     vote = false;
                 }
                 val v = vote;
-                val me = here.id as Int;
                 at (gr) @Immediate("prep_response") async {
                     gr().notifyPrepare(v);
                 }
@@ -145,21 +144,18 @@ public class Tx {
     }
     
     public def commit() {
-        val gr = txGR;
-        val gcGR = gcFinGR;
+        //don't copy this
+        val gr = this.gr;
+        val id = this.id;
+        val gcGR = this.gcGR;
+        val plh = this.plh;
+        
         for (p in members) {
             at (Place(p)) @Immediate("comm_request") async {
-                if (TxConfig.get().TM_DEBUG) 
-                    Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] commit ...");
-                
                 //gc
                 Runtime.finishStates.remove(gcGR);
                 
-                if (TxConfig.get().TM_DEBUG) 
-                    Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] GC done");
-
                 plh().getMasterStore().commit(id);
-                val me = here.id as Int;
                 at (gr) @Immediate("comm_response") async {
                     gr().notifyCommit();
                 }
@@ -168,21 +164,18 @@ public class Tx {
     }
     
     public def abort() {
-        val gr = txGR;
-        val gcGR = gcFinGR;
+        //don't copy this
+        val gr = this.gr;
+        val id = this.id;
+        val gcGR = this.gcGR;
+        val plh = this.plh;
+        
         for (p in members) {
             at (Place(p)) @Immediate("abort_request") async {
-                if (TxConfig.get().TM_DEBUG) 
-                    Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] abort ...");
-                
                 //gc
                 Runtime.finishStates.remove(gcGR);
 
-                if (TxConfig.get().TM_DEBUG) 
-                    Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] GC done");
-
                 plh().getMasterStore().abort(id);
-                val me = here.id as Int;
                 at (gr) @Immediate("abort_response") async {
                     gr().notifyAbort();
                 }
@@ -191,32 +184,56 @@ public class Tx {
     }
     
     public def notifyPrepare(v:Boolean) {
+        var prep:Boolean = false;
+        var success:Boolean = false;
+    
+        lock.lock();
         count--;
         vote = vote & v;
         if (count == 0n) {
+            prep = true;
             count = members.size() as Int;
-            if (vote)
+            success = vote;
+        }
+        lock.unlock();
+        
+        if (prep) {
+            if (success) 
                 commit();
-            else
-                abort();
+            else 
+                abort() ;
         }
     }
     
     public def notifyCommit() {
+        var rel:Boolean = false;
+    
+        lock.lock();
         count--;
-        if (TxConfig.get().TM_DEBUG)
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"]notifyCommit count["+count+"]...");
         if (count == 0n) {
+            rel = true;
+        }
+        lock.unlock();
+        
+        if (rel) {
             finishObj.releaseFinish();
-            (txGR as GlobalRef[Tx]{self.home == here}).forget();
+            (gr as GlobalRef[Tx]{self.home == here}).forget();
         }
     }
     
     public def notifyAbort() {
+        var rel:Boolean = false;
+        
+        lock.lock();
         count--;
         if (count == 0n) {
+            rel = true;
+        }
+        lock.unlock();
+        
+        if (rel) {
             finishObj.releaseFinish();
-            (txGR as GlobalRef[Tx]{self.home == here}).forget();
+            (gr as GlobalRef[Tx]{self.home == here}).forget();
         }
     }
     

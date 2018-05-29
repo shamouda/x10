@@ -854,14 +854,6 @@ public abstract class FinishState {
                     abort = true;
                 }
                 tx.finalize(this, abort);
-                
-                /*
-                tx.start2PC(abort);
-                if (!tx.isPrepared()) {
-                    tx.prepare(ref());
-                } else {
-                    tx.complete(ref());
-                }*/
             }
         }
     }
