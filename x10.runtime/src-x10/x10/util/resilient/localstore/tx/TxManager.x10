@@ -394,6 +394,7 @@ public abstract class TxManager[K] {K haszero} {
         try {
             log = lockAndGetTxLog(id, key, false);
         } catch(ex:Exception) {
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] put_RL_EA_UL completed with Ex, key["+key+"] exception["+ex.getMessage()+"] ");
             throw ex;
         }
         

@@ -26,25 +26,36 @@ import x10.util.concurrent.Condition;
 import x10.util.resilient.concurrent.ResilientCondition;
 
 public class Tx {
-	public val plh:PlaceLocalHandle[LocalStore[Any]];
-    public val id:Long;
+    private val txGR = GlobalRef[Tx](this);
+	private val plh:PlaceLocalHandle[LocalStore[Any]];
+    private val id:Long;
     static resilient = Runtime.RESILIENT_MODE > 0;
     
+    private var finishObj:Releasable = null;
     
     private var members:Set[Int] = null;
     private var readOnly:Boolean = true;
     
     private var count:Int = 0n;
     private var vote:Boolean = true;
-    
-    private var prep:Boolean = false;
-    private var comp:Boolean = false;
+
+    private var gcFinGR:GlobalRef[FinishState];
+    private var gcFinId:FinishResilient.Id;
     
     public def this(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     	this.plh = plh;
         this.id = id;
     }
     
+    public def set(fgr:GlobalRef[FinishState]) {
+        gcFinGR = fgr;
+    }
+    
+    public def set(fid:FinishResilient.Id) {
+        gcFinId = fid;
+    }
+    
+    /***************** Members *****************/
     public def addMember(m:Int, ro:Boolean){
         if (TxConfig.get().TM_DEBUG) 
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] add member["+m+"] readOnly["+ro+"] ...");
@@ -61,8 +72,7 @@ public class Tx {
     }
     
     public def getMembers() = members;
-    public def isComplete() = comp;
-    public def isPrepared() = prep;
+    
     public def isEmpty() = members == null || members.size() == 0;
     
     /***************** Get ********************/
@@ -78,40 +88,40 @@ public class Tx {
         return plh().getMasterStore().put(id, key, value);
     }
     
-    /***************** Delete ********************/
+    /***************** Delete *****************/
     public def delete(key:Any):Cloneable {
         Runtime.activity().tx = true;
         Runtime.activity().txReadOnly = false;
         return plh().getMasterStore().delete(id, key);
     }
     
-    /***************** KeySet ********************/
+    /***************** KeySet *****************/
     public def keySet():Set[Any] {
         Runtime.activity().tx = true;
         return plh().getMasterStore().keySet(id); 
     }
     
-    public def asyncAt(virtualPlace:Long, closure:()=>void) {
-        val pl = plh().getPlace(virtualPlace);
-        at (pl) async closure();
+    /********** Non-resilient finish **********/
+    public def finalize(finObj:Releasable, abort:Boolean) {
+        this.finishObj = finObj;
+        nonResilient2PC(abort);
     }
     
-    public def evalAt(virtualPlace:Long, closure:()=>Any) {
-        val pl = plh().getPlace(virtualPlace);
-        return at (pl) closure();
-    }
-    
-    /****************non-resilient finish*********************************/
-    public def start2PC() {
-        if (TxConfig.get().VALIDATION_REQUIRED)
-            count = members.size() as Int;
-        if (count == 0n) {
-            prep = true;
-            count = members.size() as Int;
+    public def nonResilient2PC(abort:Boolean) {
+        count = members.size() as Int;
+        
+        if (abort) {
+            abort();
+        } else {
+            if (TxConfig.get().VALIDATION_REQUIRED)
+                prepare();
+            else
+                commit();
         }
     }
     
-    public def prepare(gr:GlobalRef[FinishState]) {
+    public def prepare() {
+        val gr = txGR;
         for (p in members) {
             at (Place(p)) @Immediate("prep_request") async {
                 if (TxConfig.get().TM_DEBUG) 
@@ -128,49 +138,53 @@ public class Tx {
                 val v = vote;
                 val me = here.id as Int;
                 at (gr) @Immediate("prep_response") async {
-                    gr().notifyTxPrepare(me, true, v);
+                    gr().notifyPrepare(v);
                 }
             }
         }
     }
     
-    public def complete(gr:GlobalRef[FinishState]) {
-        if (vote)
-            commit(gr);
-        else
-            abort(gr);
-    }
-    
-    public def commit(gr:GlobalRef[FinishState]) {
+    public def commit() {
+        val gr = txGR;
+        val gcGR = gcFinGR;
         for (p in members) {
             at (Place(p)) @Immediate("comm_request") async {
                 if (TxConfig.get().TM_DEBUG) 
                     Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] commit ...");
-                //gc
-                Runtime.finishStates.remove(gr);
                 
+                //gc
+                Runtime.finishStates.remove(gcGR);
+                
+                if (TxConfig.get().TM_DEBUG) 
+                    Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] GC done");
+
                 plh().getMasterStore().commit(id);
                 val me = here.id as Int;
                 at (gr) @Immediate("comm_response") async {
-                    gr().notifyTxCommit(me, true);
+                    gr().notifyCommit();
                 }
             }
         }        
     }
     
-    public def abort(gr:GlobalRef[FinishState]) {
+    public def abort() {
+        val gr = txGR;
+        val gcGR = gcFinGR;
         for (p in members) {
             at (Place(p)) @Immediate("abort_request") async {
                 if (TxConfig.get().TM_DEBUG) 
                     Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] abort ...");
                 
                 //gc
-                Runtime.finishStates.remove(gr);
-                
+                Runtime.finishStates.remove(gcGR);
+
+                if (TxConfig.get().TM_DEBUG) 
+                    Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] GC done");
+
                 plh().getMasterStore().abort(id);
                 val me = here.id as Int;
                 at (gr) @Immediate("abort_response") async {
-                    gr().notifyTxAbort(me, true);
+                    gr().notifyAbort();
                 }
             }
         }
@@ -180,28 +194,162 @@ public class Tx {
         count--;
         vote = vote & v;
         if (count == 0n) {
-            prep = true;
             count = members.size() as Int;
+            if (vote)
+                commit();
+            else
+                abort();
         }
     }
     
     public def notifyCommit() {
         count--;
-        if (TxConfig.get().TM_DEBUG) 
+        if (TxConfig.get().TM_DEBUG)
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"]notifyCommit count["+count+"]...");
         if (count == 0n) {
-            comp = true;
+            finishObj.releaseFinish();
+            (txGR as GlobalRef[Tx]{self.home == here}).forget();
         }
     }
     
     public def notifyAbort() {
         count--;
         if (count == 0n) {
-            comp = true;
+            finishObj.releaseFinish();
+            (txGR as GlobalRef[Tx]{self.home == here}).forget();
         }
     }
     
-    //**********************    finish methods        **********************//
+    /*
+    var masters:Set[Int] = null;
+    var slaves:Set[Int] = null;
+
+    def initMastersAndSlaves() {
+        val pg = plh().getActivePlaces();
+        for (m in members) {
+            masters.add(m);
+            slaves.add(pg.next(Place(m)));
+        }
+    }
+    
+
+    def initMasters() {
+        val pg = plh().getActivePlaces();
+        for (m in members) {
+            masters.add(m);
+        }
+    }
+    
+    public def start2PCRes(abort:Boolean) {
+        if (abort) {
+            count = members.size() as Int;
+            initMasters();
+            prep = true;
+            vote = false;
+        } else {
+            if (readOnly) {
+                count = members.size() as Int ;
+                initMasters();
+            } else {
+                count = members.size() as Int * 2n;
+                initMastersAndSlaves();
+            }
+        }
+    }
+    
+    public def notifyPlaceDeath() {
+        val toRemove = new HashSet[Int]();
+        if (masters != null) {
+            for (m in masters) {
+                if (Place(m as Long).isDead()) {
+                    toRemove.add(m);
+                }
+            }
+        }
+        for (t in toRemove) {
+            masters.remove(t);
+            count--;
+        }
+        toRemove.clear();
+        if (slaves != null) {
+            for (s in slaves) {
+                if (Place(s as Long).isDead()) {
+                    toRemove.add(s);
+                }
+            }
+        }
+        for (t in toRemove) {
+            slaves.remove(t);
+            count--;
+        }
+
+        if (count == 0)
+            finishObj.releaseFinish();
+    }
+    
+    public def prepareRes(gr:GlobalRef[TxCoordinator]) {
+        val ro = this.readOnly;
+        val pg = plh().getActivePlaces();
+        for (p in members) {
+            val slaveId = pg.next(Place(p)).id as Int;
+            at (Place(p)) @Immediate("prep_request_res") async {
+                if (TxConfig.get().TM_DEBUG) 
+                    Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validate ...");
+                
+                var vote:Boolean = true;
+                if (TxConfig.get().VALIDATION_REQUIRED) {
+                    try {
+                        plh().getMasterStore().validate(id);
+                    }catch (e:Exception) {
+                        if (TxConfig.get().TM_DEBUG) 
+                            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validation excp["+e.getMessage()+"] ...");
+                        vote = false;
+                    }
+                }        
+                var localReadOnly:Boolean = false;
+                if (!ro) {
+                    val ownerPlaceIndex = plh().virtualPlaceId;
+                    val log = plh().getMasterStore().getTxCommitLog(id);
+                    if (log != null && log.size() > 0) {
+                        at (Place(slaveId as Long)) @Immediate("slave_prep") async {
+                            plh().slaveStore.prepare(id, log, ownerPlaceIndex);
+                            at (gr) @Immediate("slave_prep_response") async {
+                                gr().notifyTxPrepare(slaveId, false, true);
+                            }
+                        }
+                    }
+                    else 
+                        localReadOnly = true;
+                }
+                val localRO = localReadOnly;
+                val v = vote;
+                val me = here.id as Int;
+                at (gr) @Immediate("prep_response_res") async {
+                    gr().notifyTxPrepare(me, true, v);
+                    if (localRO)
+                        gr().notifyTxPrepare(slaveId, false, true);    
+                }
+            }
+        }
+    }
+    
+    public def completeRes(gr:GlobalRef[FinishState]) {
+        if (vote)
+            commit(gr);
+        else
+            abort(gr);
+    }
+    
+    public def commitRes(gr:GlobalRef[TxCoordinator]) {
+        
+                
+    }
+
+    
+    public def abortRes(gr:GlobalRef[TxCoordinator]) {
+        
+    }
+    
     public def res_prepare(places:Rail[Int]) {
         if (TxConfig.get().TM_DEBUG) {
             var s:String = "";
@@ -258,38 +406,6 @@ public class Tx {
         }
     }
     
-    private def validateMaster(slave:Place) {
-        if (TxConfig.get().VALIDATION_REQUIRED)
-            plh().getMasterStore().validate(id);        
-        var ex:Exception = null;
-        val ownerPlaceIndex = plh().virtualPlaceId;
-        val log = plh().getMasterStore().getTxCommitLog(id);
-        if (log != null && log.size() > 0) {
-            val rCond = ResilientCondition.make(slave);
-            val closure = (gr:GlobalRef[Condition]) => {
-                at (slave) @Immediate("cmthandler_prepare") async {
-                    plh().slaveStore.prepare(id, log, ownerPlaceIndex);
-                    at (gr) @Immediate("cmthandler_prepare_response") async {
-                        gr().release();
-                    }
-                }
-            };
-            
-            if (TxConfig.TM_DEBUG) 
-                Console.OUT.println("Tx["+ id +"] " + TxConfig.txIdToString (id) 
-                                     + " here["+here+"] ["+Runtime.activity()+"] going to slave ["+slave+"] to prepare ...");
-            rCond.run(closure);
-            
-            if (rCond.failed()) {
-                ex = new DeadPlaceException(slave); //dead slave not fatal
-            }
-            rCond.forget();
-        } else {
-            if (TxConfig.TM_DEBUG) 
-                Console.OUT.println("Tx["+ id +"] " + TxConfig.txIdToString (id) 
-                                     + " here["+here+"] log is empty, don't go to slave ["+slave+"] to prepare ...");
-        }
-    }
     
     
     private def checkSlavesPreparation(places:Rail[Int], pg:PlaceGroup) {
@@ -449,4 +565,5 @@ public class Tx {
             FinishResilientOptimistic.OptimisticRemoteState.deleteObject(fid);
         }
     }
+    */ 
 }

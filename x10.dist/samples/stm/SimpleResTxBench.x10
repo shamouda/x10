@@ -230,15 +230,16 @@ public class SimpleResTxBench {
                 while (true) {
                     try {
                         val tx = store.makeTx();
-                        Console.OUT.println(here + " >>> start tx " + tx.id); 
                         finish {
                             Runtime.registerFinishTx(tx);
                             distClosure(tx);
                         }
-                        Console.OUT.println(here + " >>> end tx " + tx.id);
                         break;
-                    }catch (me:MultipleExceptions) { 
-                        //Console.OUT.println(here + " >>> " + me.getMessage()); 
+                    }catch (me:MultipleExceptions) {
+                        var str:String = "";
+                        for ( x in me.exceptions )
+                            str += x.getMessage() + " ";
+                        //Console.OUT.println(here + " >>> txExcps " + str); 
                         //me.printStackTrace(); 
                     }
                 }

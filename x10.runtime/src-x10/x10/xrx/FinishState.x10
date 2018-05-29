@@ -164,13 +164,7 @@ public abstract class FinishState {
     def registerFinishTx(tx:Tx):void { 
         this.tx = tx;
     }
-
-    public def notifyTxPrepare(place:Int, isMaster:Boolean, vote:Boolean) { }
-
-    public def notifyTxCommit(place:Int, isMaster:Boolean) { }
-
-    public def notifyTxAbort(place:Int, isMaster:Boolean) { }
-
+    
     /**
      * Spawn a remote activity.
      */
@@ -593,10 +587,6 @@ public abstract class FinishState {
         public def pushException(t:CheckedThrowable) { me.pushException(t); }
         public def waitForFinish() { me.waitForFinish(); }
         public def registerFinishTx(tx:Tx):void { me.registerFinishTx(tx); }
-        
-        public def notifyTxPrepare(place:Int, isMaster:Boolean, vote:Boolean) { me.notifyTxPrepare(place, isMaster, vote); }
-        public def notifyTxCommit(place:Int, isMaster:Boolean) { me.notifyTxCommit(place, isMaster); }
-        public def notifyTxAbort(place:Int, isMaster:Boolean) { me.notifyTxAbort(place, isMaster); }
     }
 
     // the default finish implementation
@@ -624,7 +614,7 @@ public abstract class FinishState {
         }
     }
 
-    static class RootFinish extends RootFinishSkeleton {
+    static class RootFinish extends RootFinishSkeleton implements Releasable {
         @Embed protected transient var latch:SimpleLatch;
         protected var count:Int = 1n; // locally created activities
         protected var exceptions:GrowableRail[CheckedThrowable]; // captured remote exceptions.  lazily initialized
@@ -692,37 +682,6 @@ public abstract class FinishState {
             tryRelease();
         }
         
-        public def notifyTxPrepare(place:Int, isMaster:Boolean, vote:Boolean) {
-            if (tx != null) {
-                latch.lock();
-                tx.notifyPrepare(vote);
-                val prep = tx.isPrepared();
-                latch.unlock();
-                if (prep)
-                    tx.complete(ref());
-            }
-        }
-        public def notifyTxCommit(place:Int, isMaster:Boolean) {
-            if (tx != null) {
-                latch.lock();
-                tx.notifyCommit();
-                val comp = tx.isComplete();
-                latch.unlock();
-                if (comp)
-                    latch.release();
-            }
-        }
-        public def notifyTxAbort(place:Int, isMaster:Boolean) {
-            if (tx != null) {
-                latch.lock();
-                tx.notifyAbort();
-                val comp = tx.isComplete();
-                latch.unlock();
-                if (comp)
-                    latch.release();
-            }
-        }
-        
         public def notifyShiftedActivityCompletion(srcPlace:Place) {
             notifyActivityTermination(srcPlace);
         }
@@ -762,6 +721,11 @@ public abstract class FinishState {
             // if no exceptions, simply return
         }
         
+        public def registerFinishTx(tx:Tx):void { 
+            this.tx = tx;
+            tx.set(ref());
+        }
+        
         def gc() {
             if (GC_DISABLED) return;
             
@@ -789,8 +753,14 @@ public abstract class FinishState {
             // add the remote set of records to the local set
             for (remoteEntry in remoteMap.entries()) {
                 remoteActivities.put(remoteEntry.getKey(), remoteActivities.getOrElse(remoteEntry.getKey(), 0n)+remoteEntry.getValue());
-                if (remoteEntry.getValue() < 0)
+                if (remoteEntry.getValue() < 0) {
                     src = remoteEntry.getKey() as Int;
+                }
+            }
+            if (isTx && tx != null) {
+                if (src == -1n)
+                    Console.OUT.println(here + " FATAL error >> src = " + src);
+                tx.addMember(src, txRO);
             }
         
             // add anything in the remote set which ran here to my local count, and remove from the remote set
@@ -804,11 +774,7 @@ public abstract class FinishState {
             for (entry in remoteActivities.entries()) {
                 if (entry.getValue() != 0n) return;
             }
-            if (isTx && tx != null) {
-                if (src == -1n)
-                    Console.OUT.println(here + " FATAL error >> src = " + src);
-                tx.addMember(src, txRO);
-            }
+            
             // nothing is pending.  Release the latch
             tryRelease();
         }
@@ -841,6 +807,10 @@ public abstract class FinishState {
             // add the remote record to the local set
             remoteActivities.put(remoteEntry.first, remoteActivities.getOrElse(remoteEntry.first, 0n)+remoteEntry.second);
         
+            if (isTx && tx != null) {
+                tx.addMember(remoteEntry.first as Int, txRO);
+            }
+            
             // check if anything is pending locally
             if (count != 0n) return;
         
@@ -848,10 +818,7 @@ public abstract class FinishState {
             for (entry in remoteActivities.entries()) {
                 if (entry.getValue() != 0n) return;
             }
-        
-            if (isTx && tx != null) {
-                tx.addMember(remoteEntry.first as Int, txRO);
-            }
+
             // nothing is pending.  Release the latch
             tryRelease();
         }
@@ -874,16 +841,27 @@ public abstract class FinishState {
             latch.unlock();
         }
         
+        public def releaseFinish() {
+            latch.release();
+        }
+        
         def tryRelease() {
             if (tx == null || tx.isEmpty()) {
-                latch.release();
+                releaseFinish();
             } else {
-                tx.start2PC();
+                var abort:Boolean = false;
+                if (exceptions != null && exceptions.size() > 0) {
+                    abort = true;
+                }
+                tx.finalize(this, abort);
+                
+                /*
+                tx.start2PC(abort);
                 if (!tx.isPrepared()) {
                     tx.prepare(ref());
                 } else {
                     tx.complete(ref());
-                }
+                }*/
             }
         }
     }
@@ -945,11 +923,14 @@ public abstract class FinishState {
             lock.unlock();
         }
         public def notifyActivityTermination(srcPlace:Place):void {
-            notifyTxActivityTermination(srcPlace, true);
+            notifyTermination(srcPlace, false, false);
         }
         public def notifyTxActivityTermination(srcPlace:Place, readOnly:Boolean):void {
+            notifyTermination(srcPlace, true, readOnly);
+        }
+        public def notifyTermination(srcPlace:Place, isTx:Boolean, readOnly:Boolean):void {
             lock.lock();
-            tx = true;
+            tx = tx | isTx;
             txReadOnly = txReadOnly & readOnly;
             count--;
             if (local.decrementAndGet() > 0) {

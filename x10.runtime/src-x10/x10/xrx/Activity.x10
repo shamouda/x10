@@ -152,10 +152,12 @@ public class Activity {
         }
         if (null != clockPhases) clockPhases.drop();
         try {
-            if (tx)
+            if (tx) {
                 finishState.notifyTxActivityTermination(srcPlace, txReadOnly);
-            else
+            }
+            else {
                 finishState.notifyActivityTermination(srcPlace);
+            }
         } catch (DeadPlaceException) {}
         if (DEALLOC_BODY) Unsafe.dealloc(body);
     }
