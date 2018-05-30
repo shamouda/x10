@@ -23,6 +23,8 @@ import x10.compiler.Immediate;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.tx.ConflictException;
 import x10.util.concurrent.Lock;
+import x10.util.HashMap;
+import x10.util.resilient.localstore.tx.FatalTransactionException;
 
 public class Tx {
     private val gr = GlobalRef[Tx](this);
@@ -39,23 +41,13 @@ public class Tx {
     private transient var gcGR:GlobalRef[FinishState];
     private transient var gcId:FinishResilient.Id;
     
-    //pending indirect communication through master
-    // Link<a,b> -> 0 if a is dead
-    // Link<a,b> -> 1 if b is dead
-    // Link<a,b> -> 2 if a and b are alive
-    private transient var indirectMap:HashMap[LinkId, Int];
+    private transient var masterSlave:HashMap[Int, Int];
     
-    //pending direct communication
-    // a -> 0 if a is dead
-    // a -> 1 or more if a is alive 
-    private transient var directMap:HashMap[Int, Int]; 
+    //pending resilient communication
+    private transient var pending:HashMap[Int, Int];
     
-    public static struct LinkId(master:Int, slave:Int) {
-        public def toString() {
-            return "";
-        }
-    }
-    
+    private transient var exception:CheckedThrowable; //Fatal exception or Conflict exception
+        
     public def this(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     	this.plh = plh;
         this.id = id;
@@ -216,6 +208,8 @@ public class Tx {
             prep = true;
             count = members.size() as Int;
             success = vote;
+            if (!vote)
+                exception = new ConflictException();
         }
         lock.unlock();
         
@@ -238,7 +232,7 @@ public class Tx {
         lock.unlock();
         
         if (rel) {
-            finishObj.releaseFinish();
+            finishObj.releaseFinish(exception);
             (gr as GlobalRef[Tx]{self.home == here}).forget();
         }
     }
@@ -254,7 +248,7 @@ public class Tx {
         lock.unlock();
         
         if (rel) {
-            finishObj.releaseFinish();
+            finishObj.releaseFinish(exception);
             (gr as GlobalRef[Tx]{self.home == here}).forget();
         }
     }
@@ -262,102 +256,157 @@ public class Tx {
     
     
     /********** Resilient finish **********/
-    public def resilient2PC(abort:Boolean) {
-        if (abort) {
-            abortMastersOnly();
-        } else {
-            prepare();
-        }
-    }
-    
+    //TODO: if both master and slave died, add Fatal exception
     public def notifyPlaceDead() {
         var rel:Boolean = false;
         lock.lock();
         
         val toRemove = new HashSet[Int]();
-        if (directMap != null) {
-            for (m in directMap.keySet()) {
-                if (Place(m as Long).isDead())
+        if (pending != null) {
+            for (m in pending.keySet()) {
+                if (Place(m as Long).isDead()) {
                     toRemove.add(m);
-            }
-        }
-        for (t in toRemove) {
-            val cnt = directMap.remove(t);
-            count -= cnt;
-        }
-
-        val decrementLinks = new HashMap[LinkId, Int]();
-        if (indirectMap != null) {
-            for (e in indirectMap.entries()) {
-                val link = e.getKey();
-                if (Place(e.master as Long).isDead()) {
-                    decrementLinks.put(link, e.getValue());
-                } else if (Place(e.slave as Long).isDead()) { //when the slave responds, we change m->s  to m->m
-                    decrementLinks.put(link, 1n);
+                    if (masterSlave != null) {
+                        val slave = masterSlave.getOrElse(m, -1n);
+                        if (slave != -1n && Place(slave as Long).isDead()) {
+                            exception = new FatalTransactionException("Tx["+id+"] lost both master["+m+"] and slave["+slave+"] ");
+                        }
+                    }
                 }
             }
         }
-        
-        for (t in decrementLinks.entries()) {
-            ResilientMap.deduct(indirectMap, t.getKey(), t.getValue());
-            count -= t.getValue();
+        for (t in toRemove) {
+            val cnt = pending.remove(t);
+            count -= cnt;
         }
         
         if (count == 0n) {
-            directMap = null;
-            indirectMap = null;
+            pending = null;
             rel = true;
         }
         lock.unlock();
         
         if (rel) {
-            finishObj.releaseFinish();
+            finishObj.releaseFinish(exception);
             (gr as GlobalRef[Tx]{self.home == here}).forget();
         }
     }
     
-    public def prepare() {
-        //don't copy this
-        val gr = this.gr;
-        val id = this.id;
-        val plh = this.plh;
-        
-        for (p in members) {
-            
+    public def resilient2PC(abort:Boolean) {
+        if (abort) {
+            abortMastersOnly();
+        } else {
+            prepareResilient();
         }
     }
     
-    public def commit() {
+    //fills the masters and slaves map
+    //start the preparation
+    public def prepareResilient() {
         //don't copy this
         val gr = this.gr;
         val id = this.id;
-        val gcGR = this.gcGR;
         val plh = this.plh;
+        val readOnly = this.readOnly;
         
-        for (p in members) {
-            
-        }        
+        var switchToAbort:Boolean = false;
+        val pg = plh().activePlacesUnsafe();
+        val liveMasters:Set[Int] = new HashSet[Int]();
+        val liveSlaves:Set[Int] = new HashSet[Int]();
+        
+        lock.lock(); //altering the counts must be within lock/unlock
+        pending = new HashMap[Int,Int]();
+        masterSlave = new HashMap[Int,Int]();
+        count = 0n;
+        for (m in members) {
+            if (Place(m as Long).isDead()) {
+                switchToAbort = true;
+                continue;
+            } else {
+                count++;
+                FinishResilient.increment(pending, m);
+                liveMasters.add(m);
+                
+                if (!readOnly) { //we don't except acknowledgements from slaves in RO transactions
+                    val slave = pg.next(Place(m));
+                    masterSlave.put(m, slave.id as Int);
+                    if (!slave.isDead()) {
+                        count++;
+                        FinishResilient.increment(pending, slave.id as Int);
+                        liveSlaves.add(slave.id as Int);
+                    }
+                }
+            }
+        }
+        lock.unlock();
+        
+        if (switchToAbort) { //if any of the masters is dead, abort the transaction
+            abort(liveMasters);
+        } else {
+            for (p in liveMasters) {
+                val slaveId = masterSlave.getOrThrow(p);
+                at (Place(p)) @Immediate("prep_request_res") async {
+                    var vote:Boolean = true;
+                    if (TxConfig.get().VALIDATION_REQUIRED) {
+                        try {
+                            plh().getMasterStore().validate(id);
+                        }catch (e:Exception) {
+                            if (TxConfig.get().TM_DEBUG) 
+                                Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validation excp["+e.getMessage()+"] ...");
+                            vote = false;
+                        }
+                    }        
+                    var localReadOnly:Boolean = false;
+                    if (!readOnly) {
+                        val ownerPlaceIndex = plh().virtualPlaceId;
+                        val log = plh().getMasterStore().getTxCommitLog(id);
+                        if (log != null && log.size() > 0) {
+                            at (Place(slaveId as Long)) @Immediate("slave_prep") async {
+                                plh().slaveStore.prepare(id, log, ownerPlaceIndex);
+                                at (gr) @Immediate("slave_prep_response") async {
+                                    gr().notifyPrepare(slaveId, true); 
+                                }
+                            }
+                        }
+                        else 
+                            localReadOnly = true;
+                    }
+                    val localRO = localReadOnly;
+                    val v = vote;
+                    val masterId = here.id as Int;
+                    at (gr) @Immediate("prep_response_res") async {
+                        gr().notifyPrepare(masterId, v);
+                        if (localRO)
+                            gr().notifyPrepare(slaveId, true);
+                    }
+                }
+            }
+        }
     }
     
-    public def abortMastersOnly() {
-        //don't copy this
-        val gr = this.gr;
-        val id = this.id;
-        val gcId = this.gcId;
-        val plh = this.plh;
-        
+    public def abortMastersOnly() {        
         val liveMasters:Set[Int] = new HashSet[Int]();
         lock.lock(); //altering the counts must be within lock/unlock
-        directMap = new HashMap[Int,Int]();
+        pending = new HashMap[Int,Int]();
         count = 0n;
         for (m in members) {
             if (Place(m as Long).isDead())
                 continue;
             count++;
-            FinishResilient.increment(directMap, m);
+            FinishResilient.increment(pending, m);
             liveMasters.add(m);
         }
         lock.unlock();
+        
+        abort(liveMasters);
+    }
+    
+    private def abort(liveMasters:Set[Int]) {
+        //don't copy this
+        val gr = this.gr;
+        val id = this.id;
+        val gcId = this.gcId;
+        val plh = this.plh;
         
         for (p in liveMasters) {
             at (Place(p)) @Immediate("abort_mastersOnly_request") async {
@@ -367,13 +416,13 @@ public class Tx {
                 plh().getMasterStore().abort(id);
                 val me = here.id as Int;
                 at (gr) @Immediate("abort_mastersOnly_response") async {
-                    gr().notifyAbort(me);
+                    gr().notifyAbortOrCommit(me);
                 }
             }
         }
     }
     
-    public def abort() {
+    private def abortOrCommit(isCommit:Boolean) {
         //don't copy this
         val gr = this.gr;
         val id = this.id;
@@ -384,14 +433,22 @@ public class Tx {
         val liveSlaves:Set[Int] = new HashSet[Int]();
         
         lock.lock(); //altering the counts must be within lock/unlock
-        directMap = new HashMap[Int,Int]();
+        pending = new HashMap[Int,Int]();
         count = 0n;
-        for (m in members) {
-            if (Place(m as Long).isDead())
-                continue;
-            count++;
-            FinishResilient.increment(directMap, m);
-            liveMasters.add(m);
+        for (e in masterSlave.entries()) {
+            val m = e.getKey();
+            val s = e.getValue();
+            
+            if (!Place(m as Long).isDead()) {
+                count++;
+                FinishResilient.increment(pending, m);
+                liveMasters.add(m);
+            }
+            if (!Place(s as Long).isDead()) {
+                count++;
+                FinishResilient.increment(pending, s);
+                liveMasters.add(s);
+            }
         }
         lock.unlock();
         
@@ -400,43 +457,71 @@ public class Tx {
                 //gc
                 optimisticGC(gcId);
 
-                plh().getMasterStore().abort(id);
+                if (isCommit)
+                    plh().getMasterStore().commit(id);
+                else
+                    plh().getMasterStore().abort(id);
                 
                 val me = here.id as Int;
                 at (gr) @Immediate("abort_master_response") async {
-                    gr().notifyAbort(me);
+                    gr().notifyAbortOrCommit(me);
                 }
             }            
         }
         
         for (p in liveSlaves) {
             at (Place(p)) @Immediate("abort_slave_request") async {
-                plh().slaveStore.abort(id);
+                if (isCommit)
+                    plh().slaveStore.commit(id);
+                else
+                    plh().slaveStore.abort(id);
                 val me = here.id as Int;
                 at (gr) @Immediate("abort_slave_response") async {
-                    gr().notifyAbort(me);
+                    gr().notifyAbortOrCommit(me);
                 }
             }            
         }
     }
     
+    public def notifyPrepare(place:Int, v:Boolean) {
+        var prep:Boolean = false;
+        var isCommit:Boolean = false;
     
-    public def notifyAbort(place:Int) {
+        lock.lock();
+        if (!Place(place as Long).isDead()) {
+            count--;
+            FinishResilient.decrement(pending, place);
+            vote = vote & v;
+            if (count == 0n) {
+                prep = true;
+                isCommit = vote;
+                if (!vote && exception == null) //don't overwrite fatal exceptions
+                    exception = new ConflictException();
+            }
+        }
+        lock.unlock();
+        
+        if (prep) {
+            abortOrCommit(isCommit);
+        }
+    }
+    
+    public def notifyAbortOrCommit(place:Int) {
         var rel:Boolean = false;
         
         lock.lock(); //altering the counts must be within lock/unlock
         if (!Place(place as Long).isDead()) {
             count--;
-            FinishResilient.decrement(directMap, place);
+            FinishResilient.decrement(pending, place);
             if (count == 0n) {
                 rel = true;
-                directMap = null;
+                pending = null;
             }
         }
         lock.unlock();
         
         if (rel) {
-            finishObj.releaseFinish();
+            finishObj.releaseFinish(exception);
             (gr as GlobalRef[Tx]{self.home == here}).forget();
         }
     }
@@ -448,344 +533,5 @@ public class Tx {
             FinishResilientOptimistic.OptimisticRemoteState.deleteObject(fid);
         }
     }
-    
-    /*
-    var masters:Set[Int] = null;
-    var slaves:Set[Int] = null;
-
-    def initMastersAndSlaves() {
-        val pg = plh().getActivePlaces();
-        for (m in members) {
-            masters.add(m);
-            slaves.add(pg.next(Place(m)));
-        }
-    }
-    
-
-    def initMasters() {
-        val pg = plh().getActivePlaces();
-        for (m in members) {
-            masters.add(m);
-        }
-    }
-    
-    public def start2PCRes(abort:Boolean) {
-        if (abort) {
-            count = members.size() as Int;
-            initMasters();
-            prep = true;
-            vote = false;
-        } else {
-            if (readOnly) {
-                count = members.size() as Int ;
-                initMasters();
-            } else {
-                count = members.size() as Int * 2n;
-                initMastersAndSlaves();
-            }
-        }
-    }
-    
-    public def notifyPlaceDeath() {
-        val toRemove = new HashSet[Int]();
-        if (masters != null) {
-            for (m in masters) {
-                if (Place(m as Long).isDead()) {
-                    toRemove.add(m);
-                }
-            }
-        }
-        for (t in toRemove) {
-            masters.remove(t);
-            count--;
-        }
-        toRemove.clear();
-        if (slaves != null) {
-            for (s in slaves) {
-                if (Place(s as Long).isDead()) {
-                    toRemove.add(s);
-                }
-            }
-        }
-        for (t in toRemove) {
-            slaves.remove(t);
-            count--;
-        }
-
-        if (count == 0)
-            finishObj.releaseFinish();
-    }
-    
-    public def prepareRes(gr:GlobalRef[TxCoordinator]) {
-        val ro = this.readOnly;
-        val pg = plh().getActivePlaces();
-        for (p in members) {
-            val slaveId = pg.next(Place(p)).id as Int;
-            at (Place(p)) @Immediate("prep_request_res") async {
-                if (TxConfig.get().TM_DEBUG) 
-                    Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validate ...");
-                
-                var vote:Boolean = true;
-                if (TxConfig.get().VALIDATION_REQUIRED) {
-                    try {
-                        plh().getMasterStore().validate(id);
-                    }catch (e:Exception) {
-                        if (TxConfig.get().TM_DEBUG) 
-                            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validation excp["+e.getMessage()+"] ...");
-                        vote = false;
-                    }
-                }        
-                var localReadOnly:Boolean = false;
-                if (!ro) {
-                    val ownerPlaceIndex = plh().virtualPlaceId;
-                    val log = plh().getMasterStore().getTxCommitLog(id);
-                    if (log != null && log.size() > 0) {
-                        at (Place(slaveId as Long)) @Immediate("slave_prep") async {
-                            plh().slaveStore.prepare(id, log, ownerPlaceIndex);
-                            at (gr) @Immediate("slave_prep_response") async {
-                                gr().notifyTxPrepare(slaveId, false, true);
-                            }
-                        }
-                    }
-                    else 
-                        localReadOnly = true;
-                }
-                val localRO = localReadOnly;
-                val v = vote;
-                val me = here.id as Int;
-                at (gr) @Immediate("prep_response_res") async {
-                    gr().notifyTxPrepare(me, true, v);
-                    if (localRO)
-                        gr().notifyTxPrepare(slaveId, false, true);    
-                }
-            }
-        }
-    }
-    
-    public def completeRes(gr:GlobalRef[FinishState]) {
-        if (vote)
-            commit(gr);
-        else
-            abort(gr);
-    }
-    
-    public def commitRes(gr:GlobalRef[TxCoordinator]) {
-        
-                
-    }
-
-    
-    public def abortRes(gr:GlobalRef[TxCoordinator]) {
-        
-    }
-    
-    public def res_prepare(places:Rail[Int]) {
-        if (TxConfig.get().TM_DEBUG) {
-            var s:String = "";
-            for (x in places)
-                s += x + " ";
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ "["+Runtime.activity()+"] res_prepare places["+s+"]...");
-        }
-        val pg = plh().getActivePlaces();
-        val fin = LowLevelFinish.make(places);
-        val closure = (gr:GlobalRef[LowLevelFinish]) => {
-            for (p in places) {
-                if (Place(p).isDead()) {
-                    (gr as GlobalRef[LowLevelFinish]{self.home == here})().notifyFailure();
-                } else {
-                    val slave = pg.next(Place(p));
-                    
-                    at (Place(p)) @Immediate("res_prep_request") async {
-                        if (TxConfig.get().TM_DEBUG) 
-                            Console.OUT.println("Tx[" + id+"] " + TxConfig.txIdToString (id)
-                                                      + " here["+here+"] validate ...");
-                        var vote:Boolean = true;
-                        try {
-                            validateMaster(slave);
-                        }catch (e:Exception) {
-                            if (TxConfig.get().TM_DEBUG) 
-                                Console.OUT.println("Tx["+ id + "] " + TxConfig.txIdToString (id)
-                                                         + " here["+here+"] validation excp["+e.getMessage()+"] ...");
-                            vote = false;
-                        }
-                        val v = vote;
-                        val me = here.id as Int;
-                        at (gr) @Immediate("res_prep_response") async {
-                            gr().notifyTermination(me, v);
-                        }
-                    }
-                }
-            }
-        };
-        fin.run(closure);
-        if (TxConfig.get().TM_DEBUG) 
-            Console.OUT.println("Tx["+ id +"] " + TxConfig.txIdToString (id) 
-                                     + " here["+here+"] VALIDATION_DONE failed[" + fin.failed() 
-                                     + "] yesVote["+fin.yesVote()+"]...");
-        // a failed master will not vote
-        if (!fin.yesVote())
-            throw new ConflictException();
-        
-        //if all active masters voted yet, check the slaves of dead master 
-        //to know if the master wanted to vote yet
-        if (fin.failed()) {
-            val slavesReady = checkSlavesPreparation(places, pg);
-            if (!slavesReady)
-                throw new ConflictException();
-        }
-    }
-    
-    
-    
-    private def checkSlavesPreparation(places:Rail[Int], pg:PlaceGroup) {
-        val slaves = new HashSet[Int]();
-        for (p in places) {
-            if (Place(p).isDead()) {
-                slaves.add(pg.next(Place(p)).id as Int);
-            }
-        }
-        val slavesRail = new Rail[Int](slaves.size());
-        var i:Long = 0;
-        for (s in slaves) {
-            slavesRail(i++) = s;
-        }
-        
-        val fin = LowLevelFinish.make(slavesRail);
-        val closure = (gr:GlobalRef[LowLevelFinish]) => {
-            for (p in slavesRail) {
-                if (Place(p).isDead()) {
-                    (gr as GlobalRef[LowLevelFinish]{self.home == here})().notifyFailure();
-                } else {
-                    at (Place(p)) @Immediate("res_check_prep_request") async {
-                        if (TxConfig.get().TM_DEBUG) 
-                            Console.OUT.println("Tx[" + id+"] " + TxConfig.txIdToString (id)
-                                                      + " here["+here+"] validate ...");
-                        var vote:Boolean = plh().slaveStore.isPrepared(id);
-                        val v = vote;
-                        val me = here.id as Int;
-                        at (gr) @Immediate("res_check_prep_response") async {
-                            gr().notifyTermination(me, v);
-                        }
-                    }
-                }
-            }
-        };
-        fin.run(closure);
-        
-        if (fin.failed() || !fin.yesVote() )
-            return false;
-        return true;
-    }
-    
-    public def res_commit(fid:FinishResilient.Id, places:Rail[Int]) {
-        val mastersAndSlaves = new Rail[Int](places.size * 2);
-        val pg = plh().getActivePlaces();
-        var i:Long = 0;
-        for (p in places) {
-            mastersAndSlaves(i) = p;
-            mastersAndSlaves(i+places.size) = pg.next(Place(p)).id as Int;
-            i++;
-        }
-        if (TxConfig.TM_DEBUG) {
-            var str:String = "";
-            for (x in mastersAndSlaves)
-                str += x + " ";
-            Console.OUT.println("Tx["+ id +"] " + TxConfig.txIdToString (id) 
-                + " here["+here+"] commit mastersAndSlaves ["+str+"] ...");
-        }
-        val fin = LowLevelFinish.make(mastersAndSlaves);
-        val closure = (gr:GlobalRef[LowLevelFinish]) => {
-            for (var j:Long = 0; j < mastersAndSlaves.size; j++) {
-                val p = mastersAndSlaves(j);
-                var tmp:Boolean = false;
-                if (j < places.size)
-                    tmp = true;
-                val isMaster = tmp;
-                if (Place(p).isDead()) {
-                    (gr as GlobalRef[LowLevelFinish]{self.home == here})().notifyFailure();
-                } else {
-                    if (TxConfig.get().TM_DEBUG) 
-                        Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] commit place["+p+"] isMaster["+isMaster+"] ...");
-                    at (Place(p)) @Immediate("res_comm_request") async {
-                        if (isMaster) {
-                            if (TxConfig.get().TM_DEBUG) 
-                                Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] master commit ...");
-                            // gc
-                            optimisticGC(fid);
-                            plh().getMasterStore().commit(id);
-                        } else {
-                            if (TxConfig.get().TM_DEBUG) 
-                                Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] slave commit ...");
-                            plh().slaveStore.commit(id);
-                        }
-                        val me = here.id as Int;
-                        at (gr) @Immediate("res_comm_response") async {
-                            gr().notifyTermination(me);
-                        }
-                    }
-                }
-            }
-        };
-        
-        fin.run(closure);
-        if (TxConfig.get().TM_DEBUG) 
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] COMMIT_DONE ...");
-    }
-    
-    public def res_abort(fid:FinishResilient.Id, places:Rail[Int]) {
-        if (TxConfig.get().TM_DEBUG) {
-            var s:String = "";
-            for (x in places)
-                s += x + " ";
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " res_commit places["+s+"]...");
-        }
-        
-        val mastersAndSlaves = new Rail[Int](places.size * 2);
-        val pg = plh().getActivePlaces();
-        var i:Long = 0;
-        for (p in places) {
-            mastersAndSlaves(i) = p;
-            mastersAndSlaves(i+places.size) = pg.next(Place(p)).id as Int;
-            i++;
-        }
-        if (TxConfig.TM_DEBUG) {
-            var str:String = "";
-            for (x in mastersAndSlaves)
-                str += x + " ";
-            Console.OUT.println("Tx["+ id +"] " + TxConfig.txIdToString (id) 
-                + " here["+here+"] commit mastersAndSlaves ["+str+"] ...");
-        }
-        val fin = LowLevelFinish.make(mastersAndSlaves);
-        val closure = (gr:GlobalRef[LowLevelFinish]) => {
-            for (var j:Long = 0; j < mastersAndSlaves.size; j++) {
-                val p = mastersAndSlaves(j);
-                var tmp:Boolean = false;
-                if (j < places.size)
-                    tmp = true;
-                val isMaster = tmp;
-                if (Place(p).isDead()) {
-                    (gr as GlobalRef[LowLevelFinish]{self.home == here})().notifyFailure();
-                } else {
-                    at (Place(p)) @Immediate("res_abort_request") async {
-                        if (TxConfig.get().TM_DEBUG) 
-                            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] abort ...");
-                        if (isMaster) {
-                            plh().getMasterStore().abort(id);
-                        } else {
-                            plh().slaveStore.abort(id);
-                        }
-                        val me = here.id as Int;
-                        at (gr) @Immediate("res_abort_response") async {
-                            gr().notifyTermination(me);
-                        }
-                    }
-                }
-            }
-        };
-        fin.run(closure);
-        if (TxConfig.get().TM_DEBUG) 
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] ABORT_DONE ...");
-    }
-    */ 
     
 }

@@ -12,5 +12,5 @@
 package x10.xrx;
 
 public interface Releasable {
-    public def releaseFinish():void;
+    public def releaseFinish(exception:CheckedThrowable):void;
 }

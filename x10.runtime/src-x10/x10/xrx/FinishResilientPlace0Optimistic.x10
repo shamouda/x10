@@ -267,6 +267,9 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 }
                 if (verbose>=1) debug(">>>> initializing state for id="+ id);
                 state = new State(id, parentId, gfs, tx);
+                if (tx != null) {
+                    tx.setGCId(id);
+                }
                 if (verbose>=1) debug(">>>> creating new State id="+ id +" parentId="+parentId);
                 states.put(id, state);
             }
@@ -672,7 +675,10 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             }
         }
         
-        public def releaseFinish() {
+        public def releaseFinish(t:CheckedThrowable) {
+            if (t != null)
+                addException(t);
+            
             releaseLatch();
             notifyParent();
             removeFromStates();
@@ -680,7 +686,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         
         def tryRelease() {
             if (tx == null || tx.isEmpty()) {
-                releaseFinish();
+                releaseFinish(null);
             } else { //start the commit procedure
                 var abort:Boolean = false;
                 if (excs != null && excs.size() > 0) {

@@ -841,13 +841,15 @@ public abstract class FinishState {
             latch.unlock();
         }
         
-        public def releaseFinish() {
+        public def releaseFinish(t:CheckedThrowable) {
+            if (t != null) 
+                process(t);
             latch.release();
         }
         
         def tryRelease() {
             if (tx == null || tx.isEmpty()) {
-                releaseFinish();
+                releaseFinish(null);
             } else {
                 var abort:Boolean = false;
                 if (exceptions != null && exceptions.size() > 0) {

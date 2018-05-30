@@ -156,6 +156,8 @@ public class LocalStore[K] {K haszero} {
         }
     }
     
+    public def activePlacesUnsafe() = activePlaces;
+    
     public def getActivePlaces() {
         try {
             lock();

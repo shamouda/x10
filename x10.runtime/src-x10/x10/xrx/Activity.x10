@@ -154,8 +154,7 @@ public class Activity {
         try {
             if (tx) {
                 finishState.notifyTxActivityTermination(srcPlace, txReadOnly);
-            }
-            else {
+            } else {
                 finishState.notifyActivityTermination(srcPlace);
             }
         } catch (DeadPlaceException) {}
