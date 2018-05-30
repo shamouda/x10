@@ -125,7 +125,33 @@ public class Tx {
             nonResilient2PC(abort);
     }
     
+    public def finalizeLocal(finObj:Releasable, abort:Boolean) {
+    	this.finishObj = finObj;
+        if (resilient)
+        	resilient2PC(abort);
+        else
+            nonResilientLocal(abort);
+    }
+    
     /********** Non-resilient finish **********/
+    public def nonResilientLocal(abort:Boolean) {
+    	var vote:Boolean = true;
+    	if (!abort) {
+    		try {
+    			plh().getMasterStore().validate(id);
+    			plh().getMasterStore().commit(id);
+    		} catch (e:Exception) {
+    			vote = false;
+    			exception = new ConflictException();
+    		}
+    	}
+    	if (abort || !vote) {
+    		plh().getMasterStore().abort(id);
+    	}
+    	finishObj.releaseFinish(exception);
+        (gr as GlobalRef[Tx]{self.home == here}).forget();
+    }
+    
     public def nonResilient2PC(abort:Boolean) {
         count = members.size() as Int;
         
@@ -256,8 +282,6 @@ public class Tx {
             (gr as GlobalRef[Tx]{self.home == here}).forget();
         }
     }
-    
-    
     
     /********** Resilient finish **********/
     //TODO: if both master and slave died, add Fatal exception

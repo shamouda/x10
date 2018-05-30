@@ -1511,7 +1511,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
 
             if (!isGlobal) { //only one activity is here, no need to lock/unlock latch
                 if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(srcId="+srcId + " dstId="+dstId+",kind="+kind+") returning");
-                latch.release();
+                tryReleaseLocal();
                 return;
             }
             if (verbose>=1) debug("==== Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
@@ -1521,6 +1521,25 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
 
         private def forgetGlobalRefs():void {
             (ref as GlobalRef[P0OptimisticMasterState]{self.home == here}).forget();
+        }
+        
+        public def releaseFinish(t:CheckedThrowable) {
+        	if (t != null)
+        		addExceptionUnsafe(t);//unsafe: only one thread reaches this method
+        	latch.release();
+        }
+        
+        private def tryReleaseLocal() {
+        	if (!txFlag) {
+        		latch.release();
+        	} else {
+        		tx.addMember(here.id as Int, txReadOnlyFlag);
+                var abort:Boolean = false;
+                if (excs != null && excs.size() > 0) {
+                    abort = true;
+                }
+                tx.finalizeLocal(this, abort);
+        	}
         }
         
         def waitForFinish():void {
