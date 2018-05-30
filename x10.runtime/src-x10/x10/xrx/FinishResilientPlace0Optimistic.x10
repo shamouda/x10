@@ -862,6 +862,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 remoteLock.unlock();
             }
         }
+        
         public static def deleteObject(id:Id) {
             try {
                 remoteLock.lock();
@@ -946,7 +947,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         
         //Calculates the delta between received and reported
         private def getReportMapUnsafe() {
-                
                 if (verbose>=1) debug(">>>> Remote(id="+id+").getReportMap called");
                 var map:HashMap[Task,Int] = null;
                 val iter = received.keySet().iterator();
@@ -1216,14 +1216,11 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             if (map == null)
                 return;
            
-            val cTx = tmpTx;
-            val cTxRO = tmpTxRO;
-            val cMap = map;
             if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root, mapSize=" + map.size());
             if (here.id == 0)
-                State.p0HereTermMultiple(id, dstId, cMap, cTx, cTxRO);
+                State.p0HereTermMultiple(id, dstId, map, tmpTx, tmpTxRO);
             else {
-                State.p0TermMultiple(id, dstId, cMap, cTx, cTxRO);
+                State.p0TermMultiple(id, dstId, map, tmpTx, tmpTxRO);
             }
             if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning");
         }
@@ -1250,7 +1247,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         
         def registerFinishTx(tx:Tx):void {
             this.tx = tx;
-            tx.set(id);
+            tx.setGCId(id);
         }
         
         public def toString() {
