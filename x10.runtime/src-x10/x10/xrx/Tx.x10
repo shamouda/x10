@@ -39,17 +39,34 @@ public class Tx {
     private transient var gcGR:GlobalRef[FinishState];
     private transient var gcId:FinishResilient.Id;
     
+    //pending indirect communication through master
+    // Link<a,b> -> 0 if a is dead
+    // Link<a,b> -> 1 if b is dead
+    // Link<a,b> -> 2 if a and b are alive
+    private transient var indirectMap:HashMap[LinkId, Int];
+    
+    //pending direct communication
+    // a -> 0 if a is dead
+    // a -> 1 or more if a is alive 
+    private transient var directMap:HashMap[Int, Int]; 
+    
+    public static struct LinkId(master:Int, slave:Int) {
+        public def toString() {
+            return "";
+        }
+    }
+    
     public def this(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     	this.plh = plh;
         this.id = id;
     }
     
-    public def set(fgr:GlobalRef[FinishState]) {
+    public def setGCId(fgr:GlobalRef[FinishState]) {
         gcGR = fgr;
         lock = new Lock();
     }
     
-    public def set(fid:FinishResilient.Id) {
+    public def setGCId(fid:FinishResilient.Id) {
         gcId = fid;
         lock = new Lock();
     }
@@ -102,12 +119,17 @@ public class Tx {
         return plh().getMasterStore().keySet(id); 
     }
     
-    /********** Non-resilient finish **********/
+
+    /********** Finalizing a transaction **********/
     public def finalize(finObj:Releasable, abort:Boolean) {
         this.finishObj = finObj;
-        nonResilient2PC(abort);
+        if (resilient)
+            resilient2PC(abort);
+        else
+            nonResilient2PC(abort);
     }
     
+    /********** Non-resilient finish **********/
     public def nonResilient2PC(abort:Boolean) {
         count = members.size() as Int;
         
@@ -234,6 +256,196 @@ public class Tx {
         if (rel) {
             finishObj.releaseFinish();
             (gr as GlobalRef[Tx]{self.home == here}).forget();
+        }
+    }
+    
+    
+    
+    /********** Resilient finish **********/
+    public def resilient2PC(abort:Boolean) {
+        if (abort) {
+            abortMastersOnly();
+        } else {
+            prepare();
+        }
+    }
+    
+    public def notifyPlaceDead() {
+        var rel:Boolean = false;
+        lock.lock();
+        
+        val toRemove = new HashSet[Int]();
+        if (directMap != null) {
+            for (m in directMap.keySet()) {
+                if (Place(m as Long).isDead())
+                    toRemove.add(m);
+            }
+        }
+        for (t in toRemove) {
+            val cnt = directMap.remove(t);
+            count -= cnt;
+        }
+
+        val decrementLinks = new HashMap[LinkId, Int]();
+        if (indirectMap != null) {
+            for (e in indirectMap.entries()) {
+                val link = e.getKey();
+                if (Place(e.master as Long).isDead()) {
+                    decrementLinks.put(link, e.getValue());
+                } else if (Place(e.slave as Long).isDead()) { //when the slave responds, we change m->s  to m->m
+                    decrementLinks.put(link, 1n);
+                }
+            }
+        }
+        
+        for (t in decrementLinks.entries()) {
+            ResilientMap.deduct(indirectMap, t.getKey(), t.getValue());
+            count -= t.getValue();
+        }
+        
+        if (count == 0n) {
+            directMap = null;
+            indirectMap = null;
+            rel = true;
+        }
+        lock.unlock();
+        
+        if (rel) {
+            finishObj.releaseFinish();
+            (gr as GlobalRef[Tx]{self.home == here}).forget();
+        }
+    }
+    
+    public def prepare() {
+        //don't copy this
+        val gr = this.gr;
+        val id = this.id;
+        val plh = this.plh;
+        
+        for (p in members) {
+            
+        }
+    }
+    
+    public def commit() {
+        //don't copy this
+        val gr = this.gr;
+        val id = this.id;
+        val gcGR = this.gcGR;
+        val plh = this.plh;
+        
+        for (p in members) {
+            
+        }        
+    }
+    
+    public def abortMastersOnly() {
+        //don't copy this
+        val gr = this.gr;
+        val id = this.id;
+        val gcId = this.gcId;
+        val plh = this.plh;
+        
+        val liveMasters:Set[Int] = new HashSet[Int]();
+        lock.lock(); //altering the counts must be within lock/unlock
+        directMap = new HashMap[Int,Int]();
+        count = 0n;
+        for (m in members) {
+            if (Place(m as Long).isDead())
+                continue;
+            count++;
+            FinishResilient.increment(directMap, m);
+            liveMasters.add(m);
+        }
+        lock.unlock();
+        
+        for (p in liveMasters) {
+            at (Place(p)) @Immediate("abort_mastersOnly_request") async {
+                //gc
+                optimisticGC(gcId);
+
+                plh().getMasterStore().abort(id);
+                val me = here.id as Int;
+                at (gr) @Immediate("abort_mastersOnly_response") async {
+                    gr().notifyAbort(me);
+                }
+            }
+        }
+    }
+    
+    public def abort() {
+        //don't copy this
+        val gr = this.gr;
+        val id = this.id;
+        val gcGR = this.gcGR;
+        val plh = this.plh;
+        
+        val liveMasters:Set[Int] = new HashSet[Int]();
+        val liveSlaves:Set[Int] = new HashSet[Int]();
+        
+        lock.lock(); //altering the counts must be within lock/unlock
+        directMap = new HashMap[Int,Int]();
+        count = 0n;
+        for (m in members) {
+            if (Place(m as Long).isDead())
+                continue;
+            count++;
+            FinishResilient.increment(directMap, m);
+            liveMasters.add(m);
+        }
+        lock.unlock();
+        
+        for (p in liveMasters) {
+            at (Place(p)) @Immediate("abort_master_request") async {
+                //gc
+                optimisticGC(gcId);
+
+                plh().getMasterStore().abort(id);
+                
+                val me = here.id as Int;
+                at (gr) @Immediate("abort_master_response") async {
+                    gr().notifyAbort(me);
+                }
+            }            
+        }
+        
+        for (p in liveSlaves) {
+            at (Place(p)) @Immediate("abort_slave_request") async {
+                plh().slaveStore.abort(id);
+                val me = here.id as Int;
+                at (gr) @Immediate("abort_slave_response") async {
+                    gr().notifyAbort(me);
+                }
+            }            
+        }
+    }
+    
+    
+    public def notifyAbort(place:Int) {
+        var rel:Boolean = false;
+        
+        lock.lock(); //altering the counts must be within lock/unlock
+        if (!Place(place as Long).isDead()) {
+            count--;
+            FinishResilient.decrement(directMap, place);
+            if (count == 0n) {
+                rel = true;
+                directMap = null;
+            }
+        }
+        lock.unlock();
+        
+        if (rel) {
+            finishObj.releaseFinish();
+            (gr as GlobalRef[Tx]{self.home == here}).forget();
+        }
+    }
+    
+    private def optimisticGC(fid:FinishResilient.Id) {
+        if (Runtime.RESILIENT_MODE == Configuration.RESILIENT_MODE_PLACE0_OPTIMISTIC) {
+            FinishResilientPlace0Optimistic.P0OptimisticRemoteState.deleteObject(fid);
+        } else if (Runtime.RESILIENT_MODE == Configuration.RESILIENT_MODE_DIST_OPTIMISTIC){
+            FinishResilientOptimistic.OptimisticRemoteState.deleteObject(fid);
         }
     }
     
@@ -574,13 +786,6 @@ public class Tx {
         if (TxConfig.get().TM_DEBUG) 
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] ABORT_DONE ...");
     }
-    
-    private def optimisticGC(fid:FinishResilient.Id) {
-        if (Runtime.RESILIENT_MODE == Configuration.RESILIENT_MODE_PLACE0_OPTIMISTIC) {
-            FinishResilientPlace0Optimistic.P0OptimisticRemoteState.deleteObject(fid);
-        } else if (Runtime.RESILIENT_MODE == Configuration.RESILIENT_MODE_DIST_OPTIMISTIC){
-            FinishResilientOptimistic.OptimisticRemoteState.deleteObject(fid);
-        }
-    }
     */ 
+    
 }
