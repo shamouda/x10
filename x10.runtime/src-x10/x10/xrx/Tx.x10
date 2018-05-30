@@ -27,7 +27,7 @@ import x10.util.HashMap;
 import x10.util.resilient.localstore.tx.FatalTransactionException;
 
 public class Tx {
-    private val gr = GlobalRef[Tx](this);
+    
 	private val plh:PlaceLocalHandle[LocalStore[Any]];
     public val id:Long;
     static resilient = Runtime.RESILIENT_MODE > 0;
@@ -40,6 +40,8 @@ public class Tx {
     private transient var vote:Boolean = true;
     private transient var gcGR:GlobalRef[FinishState];
     private transient var gcId:FinishResilient.Id;
+    
+    private transient var gr:GlobalRef[Tx];
     
     private transient var masterSlave:HashMap[Int, Int];
     
@@ -56,11 +58,13 @@ public class Tx {
     public def setGCId(fgr:GlobalRef[FinishState]) {
         gcGR = fgr;
         lock = new Lock();
+        gr = GlobalRef[Tx](this);
     }
     
     public def setGCId(fid:FinishResilient.Id) {
         gcId = fid;
         lock = new Lock();
+        gr = GlobalRef[Tx](this);
     }
     
     /***************** Members *****************/
