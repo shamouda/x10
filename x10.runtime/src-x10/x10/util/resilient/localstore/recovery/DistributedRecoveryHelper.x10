@@ -165,63 +165,6 @@ public class DistributedRecoveryHelper[K] {K haszero} {
         debug("Recovering " + here + " slave acting as master to complete dead master's transactions done ...");
     }
     
-    private static def updateSlaveData[K](plh:PlaceLocalHandle[LocalStore[K]], oldActivePlaces:PlaceGroup) {K haszero} {
-    	debug(here+ " UpdateSlaveData: slave["+here+"] is asking other masters about the status of prepared transactions ...");
-        val committed = GlobalRef(new ArrayList[Long]());
-        val committedLock = GlobalRef(new Lock());
-        
-        //In RL_EA_*, validation is not required. Thus any transaction reaching the slav, is a committed transaction
-        //In the other schemes, a transaction reaching the slave may or may not be committed, we need to find out the status of 
-        //these transactions from their coordinators
-        if (TxConfig.get().VALIDATION_REQUIRED) {
-            val placeTxsMap = plh().slaveStore.clusterTransactions(); //get the transactions at the slave, clustered by their coordinator place
-            finish {
-                val iter = placeTxsMap.keySet().iterator();
-                while (iter.hasNext()) {
-                    val ownerPlaceIndex = iter.next();
-                    val txList = placeTxsMap.getOrThrow(ownerPlaceIndex);
-                    var pl:Place = oldActivePlaces(ownerPlaceIndex);
-                    var master:Boolean = true;
-                    if (pl.isDead()){
-                        pl = oldActivePlaces.next(pl);
-                        master = false;
-                    }
-                    val isMaster = master;
-                    val x = pl;
-                    at (pl) async {
-                        var committedList:ArrayList[Long]; 
-                        if (isMaster)
-                            committedList = plh().getMasterStore().filterCommitted(txList);
-                        else
-                            committedList = plh().slaveStore.filterCommitted(txList);
-                        val cList = committedList;
-                        at (committed) async {
-                            committedLock().lock();
-                            committed().addAll(cList);
-                            committedLock().unlock();
-                        }
-                    }
-                }
-            }
-        }
-        
-        debug(here + " updateSlaveData: slave["+here+"] got full knowledge of committed transactions ...");
-        
-        val orderedTx = plh().slaveStore.getPendingTransactions();
-        if (TxConfig.get().VALIDATION_REQUIRED) {
-            val commitTxOrdered = new ArrayList[Long]();
-            for (val tx in orderedTx){
-                if (committed().contains(tx))
-                    commitTxOrdered.add(tx);
-            }
-            plh().slaveStore.commitAll(commitTxOrdered);
-        }
-        else
-            plh().slaveStore.commitAll(orderedTx);
-        
-        debug(here + " updateSlaveData: slave["+here+"] done ...");
-    }
-    
     private static def computeNewActivePlaces(oldActivePlaces:PlaceGroup, virtualId:Long, spare:Place) {
         val size = oldActivePlaces.size();
         val rail = new Rail[Place](size);

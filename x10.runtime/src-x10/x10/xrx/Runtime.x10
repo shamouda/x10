@@ -30,6 +30,7 @@ import x10.util.concurrent.Monitor;
 import x10.util.concurrent.SimpleLatch;
 import x10.util.resilient.concurrent.ResilientCondition;
 import x10.util.resilient.concurrent.LowLevelFinish;
+import x10.util.ArrayList;
 
 /**
  * XRX invocation protocol:
@@ -1404,6 +1405,9 @@ public final class Runtime {
             GetRegistry.notifyPlaceDeath();
             ResilientCondition.notifyPlaceDeath();
             LowLevelFinish.notifyPlaceDeath();
+            for (store in txStores) {
+                store.asyncRecover();
+            }
         }
     }
 
@@ -1577,6 +1581,15 @@ public final class Runtime {
             return true;
         } catch (e:InterruptedException) {
             return false;
+        }
+    }
+    
+    
+    
+    static txStores = new ArrayList[TxStore]();
+    public static def addTxStore(store:TxStore) {
+        atomic {
+            txStores.add(store);
         }
     }
 }

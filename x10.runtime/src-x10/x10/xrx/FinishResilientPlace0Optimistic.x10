@@ -268,7 +268,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 if (verbose>=1) debug(">>>> initializing state for id="+ id);
                 state = new State(id, parentId, gfs, tx);
                 if (tx != null) {
-                    tx.setGCId(id);
+                    tx.initialize(id);
                 }
                 if (verbose>=1) debug(">>>> creating new State id="+ id +" parentId="+parentId);
                 states.put(id, state);
@@ -1261,7 +1261,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         
         def registerFinishTx(tx:Tx):void {
             this.tx = tx;
-            tx.setGCId(id);
+            tx.initialize(id);
         }
         
         public def toString() {

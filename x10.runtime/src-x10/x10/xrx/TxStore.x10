@@ -17,6 +17,16 @@ import x10.util.ArrayList;
 import x10.util.HashMap;
 import x10.util.resilient.localstore.LocalStore;
 import x10.util.resilient.localstore.Cloneable;
+import x10.util.resilient.localstore.tx.ConcurrentTransactionsLimitExceeded;
+import x10.util.resilient.localstore.tx.StorePausedException;
+import x10.util.resilient.localstore.tx.FatalTransactionException;
+import x10.util.resilient.localstore.tx.ConflictException;
+import x10.util.resilient.localstore.tx.AbortedTransactionException;
+import x10.util.resilient.localstore.TxConfig;
+import x10.util.resilient.localstore.MasterStore;
+import x10.util.resilient.localstore.SlaveStore;
+import x10.compiler.Uncounted;
+
 /**
  * A store that maintains a master + 1 backup (slave) copy
  * of the data.
@@ -35,6 +45,7 @@ public class TxStore {
         val store = new TxStore(plh);
         Place.places().broadcastFlat(()=> { 
         	plh().setPLH(plh); 
+        	Runtime.addTxStore(store);
         });
         Console.OUT.println("store created successfully ...");
         return store;
@@ -42,9 +53,74 @@ public class TxStore {
     
     public def makeTx() {
         val id = plh().getMasterStore().getNextTransactionId();
-        return new Tx(plh, id);
+        return Tx.make(plh, id);
     }
     
+    
+    public def executeTransaction(closure:(Tx)=>void) {
+        executeTransaction(closure, -1, -1);
+    }
+    
+    public def executeTransaction(closure:(Tx)=>void, maxRetries:Long, maxTimeNS:Long) {
+        val beginning = System.nanoTime();
+        var retryCount:Long = 0;
+        var tx:Tx = null;
+        while(true) {
+            if (retryCount == maxRetries || (maxTimeNS != -1 && System.nanoTime() - beginning >= maxTimeNS)) {
+                throw new FatalTransactionException("Maximum limit for retrying a transaction reached!!");
+            }
+            retryCount++;
+            try {
+                tx = makeTx();
+                finish {
+                    Runtime.registerFinishTx(tx);
+                    closure(tx);
+                }
+            } catch(ex:Exception) {
+                throwIfFatalSleepIfRequired(tx.id, ex);
+            }
+        }
+    }
+    
+    private def throwIfFatalSleepIfRequired(txId:Long, ex:Exception) {
+        val immediateRecovery = plh().immediateRecovery;
+        var dpe:Boolean = false;
+        if (ex instanceof MultipleExceptions) {
+            val deadExList = (ex as MultipleExceptions).getExceptionsOfType[DeadPlaceException]();
+            val confExList = (ex as MultipleExceptions).getExceptionsOfType[ConflictException]();
+            val pauseExList = (ex as MultipleExceptions).getExceptionsOfType[StorePausedException]();
+            val abortedExList = (ex as MultipleExceptions).getExceptionsOfType[AbortedTransactionException]();
+            val maxConcurExList = (ex as MultipleExceptions).getExceptionsOfType[ConcurrentTransactionsLimitExceeded]();
+                    
+            if ((ex as MultipleExceptions).exceptions.size > (deadExList.size + confExList.size + pauseExList.size + abortedExList.size)){
+                Console.OUT.println(here + " Unexpected MultipleExceptions   size("+(ex as MultipleExceptions).exceptions.size + ")  (" 
+                        + deadExList.size + " + " + confExList.size + " + " + pauseExList.size + " + " + abortedExList.size + " + " + maxConcurExList.size + ")");
+                ex.printStackTrace();
+                throw ex;
+            }
+            if (deadExList != null && deadExList.size != 0) {
+                for (deadEx in deadExList) {
+                    plh().replaceDeadPlace(deadEx.place);
+                }
+                System.threadSleep(TxConfig.DPE_SLEEP_MS);
+                dpe = true;
+            }
+        } else if (ex instanceof DeadPlaceException) {
+            if (!immediateRecovery) {
+                throw ex;
+            } else {
+                System.threadSleep(TxConfig.DPE_SLEEP_MS);
+                dpe = true;
+            }
+        } else if (ex instanceof StorePausedException) {
+            System.threadSleep(TxConfig.DPE_SLEEP_MS);
+        } else if (ex instanceof ConcurrentTransactionsLimitExceeded) {
+            System.threadSleep(TxConfig.DPE_SLEEP_MS);
+        } else if (!(ex instanceof ConflictException || ex instanceof AbortedTransactionException  )) {
+            throw ex;
+        }
+        return dpe;
+    }
     
     public def resetTxStatistics() {
         if (plh().stat == null)
@@ -52,5 +128,158 @@ public class TxStore {
         finish for (p in plh().getActivePlaces()) at (p) async {
             plh().stat.clear();
         }
+    }
+    
+    public def asyncRecover() {
+        val plh = this.plh;
+        val ls = plh();
+        if (!ls.immediateRecovery || !ls.slave.isDead())
+            return;
+        
+        if ( ls.slave.isDead() && ls.masterStore.isActive() ) {
+             ls.masterStore.pausing();
+            @Uncounted async recoverSlave(plh);
+        }
+    }
+    
+    public def recoverSlave(plh:PlaceLocalHandle[LocalStore[Any]]) {
+        debug("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: started ...");
+        val start = System.nanoTime();
+        val deadPlace = plh().slave;
+        val oldActivePlaces = plh().getActivePlaces();
+        val deadVirtualId = oldActivePlaces.indexOf(deadPlace);
+        val spare = allocateSparePlace(plh, deadVirtualId, oldActivePlaces);
+        recoverSlave(plh, deadPlace, spare, start);
+    }
+    
+    public def recoverSlave(plh:PlaceLocalHandle[LocalStore[Any]], deadPlace:Place, spare:Place, timeStartRecoveryNS:Long) {
+        assert (timeStartRecoveryNS != -1);
+        val startTimeNS = System.nanoTime();
+        debug("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: started given already allocated spare " + spare);
+        val deadMaster = here;
+        val oldActivePlaces = plh().getActivePlaces();
+        val deadVirtualId = oldActivePlaces.indexOf(deadPlace);
+        
+        val newActivePlaces = computeNewActivePlaces(oldActivePlaces, deadVirtualId, spare);
+        
+        if (deadVirtualId == -1)
+            throw new Exception(here + " Fatal error, slave index cannot be found in oldActivePlaces");
+        
+        val deadPlaceSlave = oldActivePlaces.next(deadPlace);
+        if (deadPlaceSlave.isDead())
+            throw new Exception(here + " Fatal error, two consecutive places died : " + deadPlace + "  and " + deadPlaceSlave);
+        
+        finish {
+            at (deadPlaceSlave) async createMasterStoreAtSpare(plh, spare, deadPlace, deadVirtualId, newActivePlaces, deadMaster);
+            createSlaveStoreAtSpare(plh, spare, deadPlace, deadVirtualId);
+        }
+        
+        plh().replace(deadPlace, spare);
+        plh().slave = spare;
+        plh().getMasterStore().reactivate();
+
+        val recoveryTime = System.nanoTime()-timeStartRecoveryNS;
+        val spareAllocTime = startTimeNS - timeStartRecoveryNS;
+        Console.OUT.printf("Recovering " + here + " DistributedRecoveryHelper.recoverSlave completed successfully: spareAllocTime %f seconds, totalRecoveryTime %f seconds\n" , (spareAllocTime/1e9), (recoveryTime/1e9));
+    }
+    
+    private def createMasterStoreAtSpare(plh:PlaceLocalHandle[LocalStore[Any]], spare:Place, deadPlace:Place, deadVirtualId:Long, newActivePlaces:PlaceGroup, deadMaster:Place) {
+        debug("Recovering " + here + " Slave of the dead master ...");
+        
+        plh().slaveStore.waitUntilPaused();
+        
+        val map = plh().slaveStore.getSlaveMasterState();
+        debug("Recovering " + here + " Slave prepared a consistent master replica to the spare master spare=["+spare+"] ...");
+        
+        val deadPlaceSlave = here;
+        at (spare) async {
+            debug("Recovering " + here + " Spare received the master replica from slave ["+deadPlaceSlave+"] ...");    
+            plh().setMasterStore (new MasterStore(map, plh().immediateRecovery));
+            plh().getMasterStore().pausing();
+            plh().getMasterStore().paused();
+            
+            waitForSlaveStore(plh, deadMaster);
+            
+            plh().initSpare(newActivePlaces, deadVirtualId, deadPlace, deadPlaceSlave);
+            plh().getMasterStore().reactivate();
+            
+            at (deadPlaceSlave) async {
+                plh().replace(deadPlace, spare);
+            }
+        }
+    }
+    
+    private def createSlaveStoreAtSpare(plh:PlaceLocalHandle[LocalStore[Any]], spare:Place, deadPlace:Place, deadVirtualId:Long) {
+        debug("Recovering " + here + " Master of the dead slave, prepare a slave replica for the spare place ...");
+        plh().getMasterStore().waitUntilPaused();
+        val masterState = plh().getMasterStore().getState().getKeyValueMap();
+        debug("Recovering " + here + " Master prepared a consistent slave replica to the spare slave ...");
+        val me = here;
+        at (spare) async {
+            debug("Recovering " + here + " Spare received the slave replica from master ["+me+"] ...");    
+            plh().slaveStore = new SlaveStore(masterState);
+        }        
+    }
+    
+    private def waitForSlaveStore(plh:PlaceLocalHandle[LocalStore[Any]], sender:Place)  {
+        if (plh().slaveStoreExists())
+            return;
+        try {
+            Runtime.increaseParallelism();
+            
+            while (!plh().slaveStoreExists()) {
+                if (sender.isDead())
+                    throw new DeadPlaceException(sender);
+                TxConfig.waitSleep();
+            }
+        }
+        finally {
+            Runtime.decreaseParallelism(1n);
+        }
+    }
+    
+    private def allocateSparePlace(plh:PlaceLocalHandle[LocalStore[Any]], deadVirtualId:Long, oldActivePlaces:PlaceGroup) {
+        val nPlaces = Place.numAllPlaces();
+        val nActive = oldActivePlaces.size();
+        var placeIndx:Long = -1;
+        for (var i:Long = nActive; i < nPlaces; i++) {
+            if (oldActivePlaces.contains(Place(i)))
+                continue;
+            
+            var allocated:Boolean = false;
+            try {
+                debug("Recovering " + here + " Try to allocate " + Place(i) );
+                allocated = at (Place(i)) plh().allocate(deadVirtualId);
+            }catch(ex:Exception) {
+            }
+            
+            if (!allocated)
+                debug("Recovering " + here + " Failed to allocate " + Place(i) + ", is it dead? " + Place(i).isDead());
+            else {
+                debug("Recovering " + here + " Succeeded to allocate " + Place(i) );
+                placeIndx = i;
+                break;
+            }
+        }
+        if(placeIndx == -1)
+            throw new Exception(here + " No available spare places to allocate ");         
+            
+        return Place(placeIndx);
+    }
+    
+    private def computeNewActivePlaces(oldActivePlaces:PlaceGroup, virtualId:Long, spare:Place) {
+        val size = oldActivePlaces.size();
+        val rail = new Rail[Place](size);
+        for (var i:Long = 0; i< size; i++) {
+            if (virtualId == i)
+                rail(i) = spare;
+            else
+                rail(i) = oldActivePlaces(i);
+        }
+        return new SparsePlaceGroup(rail);
+    }
+    
+    private def debug(msg:String) {
+        if (TxConfig.get().TMREC_DEBUG) Console.OUT.println( msg );
     }
 }

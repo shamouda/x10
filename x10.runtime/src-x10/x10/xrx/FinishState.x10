@@ -723,7 +723,7 @@ public abstract class FinishState {
         
         public def registerFinishTx(tx:Tx):void { 
             this.tx = tx;
-            tx.setGCId(ref());
+            tx.initialize(ref());
         }
         
         def gc() {

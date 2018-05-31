@@ -202,14 +202,14 @@ public class SimpleResTxBench {
                 for (var m:Long = 0; m < h; m++) {
                     val start = m*o;
                     val dest = virtualMembers(m);
-                    at (Place(dest)) async {
+                    tx.asyncAt(dest, () => {
                         for (var x:Long = 0; x < o; x++) {
                             val key = keys(start+x);
                             val read = readFlags(start+x);
                             val value = values(start+x);
                             read? tx.get(key): tx.put(key, new CloneableLong(value));
                         }
-                    }
+                    });
                 }
             };
             
@@ -218,23 +218,10 @@ public class SimpleResTxBench {
             var includeTx:Boolean = true;
             if (virtualMembers.size > 1 && TxConfig.get().STM ) { //STM distributed
                 val remainingTime =  (d*1e6 - timeNS) as Long;
-                while (true) {
-                    val tx = store.makeTx();
-                    try {
-                        //Console.OUT.println(here + " startTx " + tx.id); 
-                        finish {
-                            Runtime.registerFinishTx(tx);
-                            distClosure(tx);
-                        }
-                        //Console.OUT.println(here + " endTx " + tx.id);
-                        break;
-                    }catch (me:MultipleExceptions) {
-                        var str:String = "";
-                        for ( x in me.exceptions )
-                            str += x.getMessage() + " ";
-                        //Console.OUT.println(here + " Tx " + tx.id + " Excps " + str); 
-                        //me.printStackTrace(); 
-                    }
+                try {
+                    store.executeTransaction(distClosure, -1, remainingTime);
+                } catch(expf:FatalTransactionException) {
+                    includeTx = false;
                 }
             }
             

@@ -31,7 +31,7 @@ import x10.util.resilient.concurrent.ResilientCondition;
 public class LocalStore[K] {K haszero} {
 	public val immediateRecovery:Boolean;
     private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
-    private transient var masterStore:MasterStore[K] = null;   
+    public transient var masterStore:MasterStore[K] = null;   
     public transient var slaveStore:SlaveStore[K] = null;
     private var plh:PlaceLocalHandle[LocalStore[K]];
     private transient var lock:Lock;
@@ -87,7 +87,7 @@ public class LocalStore[K] {K haszero} {
         this.plh = plh;
         this.txDescManager = new TxDescManager[K]( plh );
     }
-    /************************Distributed Recovery Methods****************************************/
+    /************************Async Recovery Methods****************************************/
     public def allocate(vPlace:Long) {
         try {
             plh().lock();
@@ -362,6 +362,9 @@ public class LocalStore[K] {K haszero} {
     }
     
     public def replaceDeadPlace(dead:Place) {
+        if (dead.id == slave.id) //the slave is recovered asynchronously
+            return;
+        
         val plh = this.plh;
         val me = here;
         val gr = GlobalRef(new Replacement());
@@ -392,8 +395,7 @@ public class LocalStore[K] {K haszero} {
                             }
                         }
                     }
-                }
-                else {
+                } else {
                     
                     val slave = activePlaces.next(dead);
                     if (slave.id != -1) finish at (slave) async {
