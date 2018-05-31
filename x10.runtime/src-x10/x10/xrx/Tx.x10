@@ -34,10 +34,11 @@ public class Tx {
     
     private transient var finishObj:Releasable = null;
     private transient var members:Set[Int] = null;
-    private transient var readOnly:Boolean = true;
+    private transient var readOnly:Boolean = false; // transient is initialized as false by default
+    private transient var readOnlyMasters:Set[Int] = null; //read-only masters in a non ready-only transaction
     private transient var lock:Lock = null;
     private transient var count:Int = 0n;
-    private transient var vote:Boolean = true;
+    private transient var vote:Boolean = false; // transient is initialized as false by default
     private transient var gcGR:GlobalRef[FinishState];
     private transient var gcId:FinishResilient.Id;
     
@@ -59,12 +60,16 @@ public class Tx {
         gcGR = fgr;
         lock = new Lock();
         gr = GlobalRef[Tx](this);
+        vote = true;
+        readOnly = true;
     }
     
     public def setGCId(fid:FinishResilient.Id) {
         gcId = fid;
         lock = new Lock();
         gr = GlobalRef[Tx](this);
+        vote = true;
+        readOnly = true;
     }
     
     /***************** Members *****************/
@@ -118,6 +123,9 @@ public class Tx {
 
     /********** Finalizing a transaction **********/
     public def finalize(finObj:Releasable, abort:Boolean) {
+        if (TxConfig.get().TM_DEBUG) 
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] finalize abort="+abort+" ...");
+
         this.finishObj = finObj;
         if (resilient)
             resilient2PC(abort);
@@ -126,6 +134,9 @@ public class Tx {
     }
     
     public def finalizeLocal(finObj:Releasable, abort:Boolean) {
+        if (TxConfig.get().TM_DEBUG) 
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] finalizeLocal abort="+abort+" ...");
+
     	this.finishObj = finObj;
         if (resilient)
         	resilient2PC(abort);
@@ -148,20 +159,19 @@ public class Tx {
     	if (abort || !vote) {
     		plh().getMasterStore().abort(id);
     	}
-    	finishObj.releaseFinish(exception);
-        (gr as GlobalRef[Tx]{self.home == here}).forget();
+    	release();
     }
     
     public def nonResilient2PC(abort:Boolean) {
         count = members.size() as Int;
         
         if (abort) {
-            abort();
+            commitOrAbort(false);
         } else {
             if (TxConfig.get().VALIDATION_REQUIRED)
                 prepare();
             else
-                commit();
+                commitOrAbort(true);
         }
     }
     
@@ -187,7 +197,7 @@ public class Tx {
         }
     }
     
-    public def commit() {
+    public def commitOrAbort(isCommit:Boolean) {
         //don't copy this
         val gr = this.gr;
         val id = this.id;
@@ -199,37 +209,19 @@ public class Tx {
                 //gc
                 Runtime.finishStates.remove(gcGR);
                 
-                plh().getMasterStore().commit(id);
+                if (isCommit)
+                    plh().getMasterStore().commit(id);
+                else
+                    plh().getMasterStore().abort(id);
                 at (gr) @Immediate("comm_response") async {
-                    gr().notifyCommit();
+                    gr().notifyAbortOrCommit();
                 }
             }
         }        
     }
     
-    public def abort() {
-        //don't copy this
-        val gr = this.gr;
-        val id = this.id;
-        val gcGR = this.gcGR;
-        val plh = this.plh;
-        
-        for (p in members) {
-            at (Place(p)) @Immediate("abort_request") async {
-                //gc
-                Runtime.finishStates.remove(gcGR);
-
-                plh().getMasterStore().abort(id);
-                at (gr) @Immediate("abort_response") async {
-                    gr().notifyAbort();
-                }
-            }
-        }
-    }
-    
     public def notifyPrepare(v:Boolean) {
         var prep:Boolean = false;
-        var success:Boolean = false;
     
         lock.lock();
         count--;
@@ -237,21 +229,17 @@ public class Tx {
         if (count == 0n) {
             prep = true;
             count = members.size() as Int;
-            success = vote;
             if (!vote)
                 exception = new ConflictException();
         }
         lock.unlock();
         
         if (prep) {
-            if (success) 
-                commit();
-            else 
-                abort() ;
+            commitOrAbort(vote);
         }
     }
     
-    public def notifyCommit() {
+    public def notifyAbortOrCommit() {
         var rel:Boolean = false;
     
         lock.lock();
@@ -262,24 +250,7 @@ public class Tx {
         lock.unlock();
         
         if (rel) {
-            finishObj.releaseFinish(exception);
-            (gr as GlobalRef[Tx]{self.home == here}).forget();
-        }
-    }
-    
-    public def notifyAbort() {
-        var rel:Boolean = false;
-        
-        lock.lock();
-        count--;
-        if (count == 0n) {
-            rel = true;
-        }
-        lock.unlock();
-        
-        if (rel) {
-            finishObj.releaseFinish(exception);
-            (gr as GlobalRef[Tx]{self.home == here}).forget();
+            release();
         }
     }
     
@@ -315,8 +286,7 @@ public class Tx {
         lock.unlock();
         
         if (rel) {
-            finishObj.releaseFinish(exception);
-            (gr as GlobalRef[Tx]{self.home == here}).forget();
+            release();
         }
     }
     
@@ -328,8 +298,45 @@ public class Tx {
         }
     }
     
-    //fills the masters and slaves map
-    //start the preparation
+    private def abortMastersOnly() {   
+        val liveMasters:Set[Int] = new HashSet[Int]();
+        lock.lock(); //altering the counts must be within lock/unlock
+        pending = new HashMap[Int,Int]();
+        count = 0n;
+        for (m in members) {
+            if (Place(m as Long).isDead())
+                continue;
+            count++;
+            FinishResilient.increment(pending, m);
+            liveMasters.add(m);
+        }
+        if (TxConfig.get().TM_DEBUG) 
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] abortMastersOnly  count="+count+" ...");
+        lock.unlock();
+        
+        abort(liveMasters);
+    }
+    
+    private def abort(liveMasters:Set[Int]) {
+        //don't copy this
+        val gr = this.gr;
+        val id = this.id;
+        val gcId = this.gcId;
+        val plh = this.plh;
+        
+        for (p in liveMasters) {
+            at (Place(p)) @Immediate("abort_mastersOnly_request") async {
+                //gc
+                optimisticGC(gcId);
+                plh().getMasterStore().abort(id);
+                val me = here.id as Int;
+                at (gr) @Immediate("abort_mastersOnly_response") async {
+                    gr().notifyAbortOrCommit(me);
+                }
+            }
+        }
+    }
+    
     public def prepareResilient() {
         //don't copy this
         val gr = this.gr;
@@ -372,7 +379,7 @@ public class Tx {
             abort(liveMasters);
         } else {
             for (p in liveMasters) {
-                val slaveId = masterSlave.getOrThrow(p);
+                val slaveId = masterSlave.getOrElse(p, -1n);
                 at (Place(p)) @Immediate("prep_request_res") async {
                     var vote:Boolean = true;
                     if (TxConfig.get().VALIDATION_REQUIRED) {
@@ -386,71 +393,33 @@ public class Tx {
                     }        
                     var localReadOnly:Boolean = false;
                     if (!readOnly) {
+                        if (slaveId == -1n)
+                            throw new Exception("FATAL error  slaveId == -1");
                         val ownerPlaceIndex = plh().virtualPlaceId;
                         val log = plh().getMasterStore().getTxCommitLog(id);
                         if (log != null && log.size() > 0) {
                             at (Place(slaveId as Long)) @Immediate("slave_prep") async {
                                 plh().slaveStore.prepare(id, log, ownerPlaceIndex);
                                 at (gr) @Immediate("slave_prep_response") async {
-                                    gr().notifyPrepare(slaveId, true); 
+                                    gr().notifyPrepare(slaveId, true /*vote*/, false /*is master RO*/); 
                                 }
                             }
                         }
                         else 
                             localReadOnly = true;
                     }
-                    val localRO = localReadOnly;
+                    val isMasterRO = localReadOnly;
                     val v = vote;
                     val masterId = here.id as Int;
                     at (gr) @Immediate("prep_response_res") async {
-                        gr().notifyPrepare(masterId, v);
-                        if (localRO)
-                            gr().notifyPrepare(slaveId, true);
+                        gr().notifyPrepare(masterId, v, isMasterRO);
                     }
                 }
             }
         }
     }
     
-    public def abortMastersOnly() {        
-        val liveMasters:Set[Int] = new HashSet[Int]();
-        lock.lock(); //altering the counts must be within lock/unlock
-        pending = new HashMap[Int,Int]();
-        count = 0n;
-        for (m in members) {
-            if (Place(m as Long).isDead())
-                continue;
-            count++;
-            FinishResilient.increment(pending, m);
-            liveMasters.add(m);
-        }
-        lock.unlock();
-        
-        abort(liveMasters);
-    }
-    
-    private def abort(liveMasters:Set[Int]) {
-        //don't copy this
-        val gr = this.gr;
-        val id = this.id;
-        val gcId = this.gcId;
-        val plh = this.plh;
-        
-        for (p in liveMasters) {
-            at (Place(p)) @Immediate("abort_mastersOnly_request") async {
-                //gc
-                optimisticGC(gcId);
-
-                plh().getMasterStore().abort(id);
-                val me = here.id as Int;
-                at (gr) @Immediate("abort_mastersOnly_response") async {
-                    gr().notifyAbortOrCommit(me);
-                }
-            }
-        }
-    }
-    
-    private def abortOrCommit(isCommit:Boolean) {
+    private def commitOrAbortResilient(isCommit:Boolean) {
         //don't copy this
         val gr = this.gr;
         val id = this.id;
@@ -463,19 +432,31 @@ public class Tx {
         lock.lock(); //altering the counts must be within lock/unlock
         pending = new HashMap[Int,Int]();
         count = 0n;
-        for (e in masterSlave.entries()) {
-            val m = e.getKey();
-            val s = e.getValue();
-            
-            if (!Place(m as Long).isDead()) {
-                count++;
-                FinishResilient.increment(pending, m);
-                liveMasters.add(m);
+        if (readOnly) {
+            for (m in members) {
+                if (!Place(m as Long).isDead()) {
+                    count++;
+                    FinishResilient.increment(pending, m);
+                    liveMasters.add(m);
+                }
             }
-            if (!Place(s as Long).isDead()) {
-                count++;
-                FinishResilient.increment(pending, s);
-                liveMasters.add(s);
+        } else {
+            for (e in masterSlave.entries()) {
+                val m = e.getKey();
+                val s = e.getValue();
+                
+                if (!Place(m as Long).isDead()) {
+                    count++;
+                    FinishResilient.increment(pending, m);
+                    liveMasters.add(m);
+                }
+                if (readOnlyMasters == null || !readOnlyMasters.contains(m)) {
+                    if (!Place(s as Long).isDead()) {
+                        count++;
+                        FinishResilient.increment(pending, s);
+                        liveSlaves.add(s);
+                    }
+                }
             }
         }
         lock.unlock();
@@ -503,6 +484,7 @@ public class Tx {
                     plh().slaveStore.commit(id);
                 else
                     plh().slaveStore.abort(id);
+                
                 val me = here.id as Int;
                 at (gr) @Immediate("abort_slave_response") async {
                     gr().notifyAbortOrCommit(me);
@@ -511,30 +493,42 @@ public class Tx {
         }
     }
     
-    public def notifyPrepare(place:Int, v:Boolean) {
+    private def notifyPrepare(place:Int, v:Boolean, isMasterRO:Boolean) {
         var prep:Boolean = false;
-        var isCommit:Boolean = false;
     
         lock.lock();
         if (!Place(place as Long).isDead()) {
-            count--;
-            FinishResilient.decrement(pending, place);
+            if (!readOnly && isMasterRO) { //deduct master and slave
+                val slave = masterSlave.getOrThrow(place);
+                count -= 2;
+                FinishResilient.decrement(pending, place);
+                FinishResilient.decrement(pending, slave);
+            } else { //deduct master only
+                count--;
+                FinishResilient.decrement(pending, place);
+            }
             vote = vote & v;
+            if (isMasterRO) {
+                if (readOnlyMasters == null)
+                    readOnlyMasters = new HashSet[Int]();
+                readOnlyMasters.add(place);
+            }
             if (count == 0n) {
                 prep = true;
-                isCommit = vote;
                 if (!vote && exception == null) //don't overwrite fatal exceptions
                     exception = new ConflictException();
             }
         }
+        if (TxConfig.get().TM_DEBUG)
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPrepare place["+place+"] localVote["+v+"] vote["+vote+"] count="+count+" ...");
         lock.unlock();
         
         if (prep) {
-            abortOrCommit(isCommit);
+            commitOrAbortResilient(vote);
         }
     }
     
-    public def notifyAbortOrCommit(place:Int) {
+    private def notifyAbortOrCommit(place:Int) {
         var rel:Boolean = false;
         
         lock.lock(); //altering the counts must be within lock/unlock
@@ -546,12 +540,18 @@ public class Tx {
                 pending = null;
             }
         }
+        if (TxConfig.get().TM_DEBUG)
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyAbortOrCommit place["+place+"]  count="+count+" ...");
         lock.unlock();
         
         if (rel) {
-            finishObj.releaseFinish(exception);
-            (gr as GlobalRef[Tx]{self.home == here}).forget();
+            release();
         }
+    }
+    
+    private def release() {
+        finishObj.releaseFinish(exception);
+        (gr as GlobalRef[Tx]{self.home == here}).forget();
     }
     
     private def optimisticGC(fid:FinishResilient.Id) {

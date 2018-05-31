@@ -84,6 +84,8 @@ public class SlaveStore[K] {K haszero} {
     
     /*Used by Tx to commit a transaction that was previously prepared. TransLog is removed from the logs map after commit*/
     public def commit(id:Long) {
+        if (TxConfig.get().TM_DEBUG) 
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] Slave.commit ...");
         try {
             slaveLock();
             val txLog = getLog(id);
@@ -114,6 +116,8 @@ public class SlaveStore[K] {K haszero} {
     }
     
     public def prepare(id:Long, entries:HashMap[K,Cloneable], ownerPlaceIndex:Long) {
+        if (TxConfig.get().TM_DEBUG) 
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] Slave.prepare ...");
         try {
             slaveLock();
             var txSlaveLog:TxSlaveLog[K] = getLog(id);
@@ -138,7 +142,10 @@ public class SlaveStore[K] {K haszero} {
             slaveUnlock();
         }
     }
+    
     public def abort(id:Long) {
+        if (TxConfig.get().TM_DEBUG) 
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] Slave.abort ...");
         try {
             slaveLock();
             val log = getLog(id);

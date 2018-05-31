@@ -219,8 +219,8 @@ public class SimpleResTxBench {
             if (virtualMembers.size > 1 && TxConfig.get().STM ) { //STM distributed
                 val remainingTime =  (d*1e6 - timeNS) as Long;
                 while (true) {
+                    val tx = store.makeTx();
                     try {
-                        val tx = store.makeTx();
                         //Console.OUT.println(here + " startTx " + tx.id); 
                         finish {
                             Runtime.registerFinishTx(tx);
@@ -232,7 +232,7 @@ public class SimpleResTxBench {
                         var str:String = "";
                         for ( x in me.exceptions )
                             str += x.getMessage() + " ";
-                        //Console.OUT.println(here + " >>> txExcps " + str); 
+                        //Console.OUT.println(here + " Tx " + tx.id + " Excps " + str); 
                         //me.printStackTrace(); 
                     }
                 }

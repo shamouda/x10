@@ -676,17 +676,25 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         public def releaseFinish(t:CheckedThrowable) {
-            if (t != null)
-                addException(t);
-            
-            releaseLatch();
-            notifyParent();
-            removeFromStates();
+            try {
+                statesLock.lock();
+                
+                if (t != null)
+                    addException(t);
+                
+                releaseLatch();
+                notifyParent();
+                removeFromStates();
+            } finally {
+                statesLock.unlock();
+            }
         }
         
         def tryRelease() {
             if (tx == null || tx.isEmpty()) {
-                releaseFinish(null);
+                releaseLatch();
+                notifyParent();
+                removeFromStates();
             } else { //start the commit procedure
                 var abort:Boolean = false;
                 if (excs != null && excs.size() > 0) {
@@ -1237,7 +1245,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
     }
     
     //ROOT
-    public static final class P0OptimisticMasterState extends FinishResilient implements x10.io.Unserializable {
+    public static final class P0OptimisticMasterState extends FinishResilient implements x10.io.Unserializable, Releasable {
         val ref:GlobalRef[P0OptimisticMasterState] = GlobalRef[P0OptimisticMasterState](this);
         val id:Id;
         val parentId:Id;
