@@ -74,7 +74,7 @@ public class MemoryUnit[K] {K haszero} {
         version = oldVersion; 
         value = oldValue;
         deleted = false;
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " rollsetvv key["+key+"] ver["+version+"] val["+value+"]");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " here["+here+"] rollsetvv key["+key+"] ver["+version+"] val["+value+"]");
     }
        
     public def lockRead(txId:Long) {
@@ -135,7 +135,7 @@ public class MemoryUnit[K] {K haszero} {
         if (copy) {
             v = value == null?null:value.clone();
         }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " getvv key["+key+"] ver["+version+"] val["+v+"]");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " here["+here+"] getvv key["+key+"] ver["+version+"] val["+v+"]");
         return v;
     }
     
@@ -150,7 +150,7 @@ public class MemoryUnit[K] {K haszero} {
         version++;
         value = v;
         this.deleted = deleted;
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " setvv key["+key+"] ver["+version+"] val["+value+"] deleted["+deleted+"] ");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " here["+here+"] setvv key["+key+"] ver["+version+"] val["+value+"] deleted["+deleted+"] ");
         return oldValue;
     }
     

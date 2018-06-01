@@ -25,6 +25,7 @@ import x10.util.resilient.localstore.tx.ConflictException;
 import x10.util.concurrent.Lock;
 import x10.util.HashMap;
 import x10.util.resilient.localstore.tx.FatalTransactionException;
+import x10.util.GrowableRail;
 
 public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {   
     static resilient = Runtime.RESILIENT_MODE > 0;
@@ -36,7 +37,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     protected transient var count:Int = 0n;
     protected transient var vote:Boolean = false;          // transient is initialized as false by default
     protected transient var gr:GlobalRef[Tx];
-    protected transient var exception:CheckedThrowable;    //fatal exception or Conflict exception
+    protected transient var excs:GrowableRail[CheckedThrowable];    //fatal exception or Conflict exception
     
     private transient var gcGR:GlobalRef[FinishState];
     
@@ -67,6 +68,11 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
      * */
     public def initialize(dummy:FinishResilient.Id) { }
     
+    protected def addExceptionUnsafe(t:CheckedThrowable) {
+        if (excs == null) excs = new GrowableRail[CheckedThrowable]();
+        excs.add(t);
+    }
+
     /***************** Members *****************/
     public def addMember(m:Int, ro:Boolean){
         if (TxConfig.get().TM_DEBUG) 
@@ -80,14 +86,9 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     }
     
     public def contains(place:Int) {
-        try {
-            lock.lock();
-            if (members == null)
-                return false;
-            return members.contains(place);
-        } finally {
-            lock.unlock();
-        }
+        if (members == null)
+            return false;
+        return members.contains(place);
     }
     
     public def getMembers() = members;
@@ -148,7 +149,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     			plh().getMasterStore().commit(id);
     		} catch (e:Exception) {
     			vote = false;
-    			exception = new ConflictException();
+    			addExceptionUnsafe(new ConflictException());
     		}
     	}
     	if (abort || !vote) {
@@ -225,7 +226,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
             prep = true;
             count = members.size() as Int;
             if (!vote)
-                exception = new ConflictException();
+                addExceptionUnsafe(new ConflictException());
         }
         lock.unlock();
         
@@ -250,7 +251,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     }
     
     protected def release() {
-        finishObj.releaseFinish(exception);
+        finishObj.releaseFinish(excs);
         (gr as GlobalRef[Tx]{self.home == here}).forget();
     }
     

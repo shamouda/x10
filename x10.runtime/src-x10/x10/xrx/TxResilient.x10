@@ -26,11 +26,27 @@ import x10.util.concurrent.Lock;
 import x10.util.HashMap;
 import x10.util.resilient.localstore.tx.FatalTransactionException;
 
+/*
+ * Failure reporting semantics:
+ *    The last time we report an non-fatal error here is during prepare:
+ *    failures of the master leads to DPEs, and conflicts leads to CE
+ *    
+ *    We supress DPEs occuring during commit and abort
+ *    We always supress DPEs occuring to the slaves
+ * */
 public class TxResilient extends Tx {
     private transient var gcId:FinishResilient.Id;
     private transient var readOnlyMasters:Set[Int] = null; //read-only masters in a non ready-only transaction
     private transient var masterSlave:HashMap[Int, Int]; 
-    private transient var pending:HashMap[Int, Int];     //pending resilient communication
+    private transient var pending:HashMap[TxMember, Int];     //pending resilient communication
+    private transient var ph2Started:Boolean;//false
+        
+    private static val MASTER = 0n;
+    private static val SLAVE = 1n;
+    private static val DEAD_SLAVE = -1n;
+    public static struct TxMember(place:int,ptype:int) {
+        public def toString() = "<"+place+","+ptype+">";
+    }
     
     public def this(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     	super(plh, id);
@@ -42,11 +58,11 @@ public class TxResilient extends Tx {
         gr = GlobalRef[Tx](this);
         vote = true;
         readOnly = true;
+        ph2Started = false;
     }
     
     public def finalize(finObj:Releasable, abort:Boolean) {
-        if (TxConfig.get().TM_DEBUG) 
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] finalize abort="+abort+" ...");
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] finalize abort="+abort+" ...");
         this.finishObj = finObj;
         resilient2PC(abort);
     }
@@ -57,6 +73,7 @@ public class TxResilient extends Tx {
 
     public def resilient2PC(abort:Boolean) {
         if (abort) {
+            addExceptionUnsafe(new ConflictException());
             abortMastersOnly();
         } else {
             prepare();
@@ -66,17 +83,18 @@ public class TxResilient extends Tx {
     private def abortMastersOnly() {   
         val liveMasters:Set[Int] = new HashSet[Int]();
         lock.lock(); //altering the counts must be within lock/unlock
-        pending = new HashMap[Int,Int]();
+        ph2Started = true;
+        pending = new HashMap[TxMember,Int]();
         count = 0n;
         for (m in members) {
             if (Place(m as Long).isDead())
                 continue;
             count++;
-            FinishResilient.increment(pending, m);
+            FinishResilient.increment(pending, TxMember(m, MASTER));
             liveMasters.add(m);
         }
-        if (TxConfig.get().TM_DEBUG) 
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] abortMastersOnly  count="+count+" ...");
+         
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] abortMastersOnly  count="+count+" ...");
         lock.unlock();
         
         abort(liveMasters);
@@ -96,7 +114,7 @@ public class TxResilient extends Tx {
                 plh().getMasterStore().abort(id);
                 val me = here.id as Int;
                 at (gr) @Immediate("abort_mastersOnly_response") async {
-                    (gr() as TxResilient).notifyAbortOrCommit(me);
+                    (gr() as TxResilient).notifyAbortOrCommit(me, MASTER);
                 }
             }
         }
@@ -110,13 +128,13 @@ public class TxResilient extends Tx {
         val readOnly = this.readOnly;
         
         var switchToAbort:Boolean = false;
-        val pg = plh().activePlacesUnsafe();
         val liveMasters:Set[Int] = new HashSet[Int]();
         val liveSlaves:Set[Int] = new HashSet[Int]();
         
+        masterSlave = plh().getMapping(members);
+        
         lock.lock(); //altering the counts must be within lock/unlock
-        pending = new HashMap[Int,Int]();
-        masterSlave = new HashMap[Int,Int]();
+        pending = new HashMap[TxMember,Int]();
         count = 0n;
         for (m in members) {
             if (Place(m as Long).isDead()) {
@@ -124,17 +142,20 @@ public class TxResilient extends Tx {
                 continue;
             } else {
                 count++;
-                FinishResilient.increment(pending, m);
+                FinishResilient.increment(pending, TxMember(m, MASTER) );
                 liveMasters.add(m);
-                
-                if (!readOnly) { //we don't except acknowledgements from slaves in RO transactions
-                    val slave = pg.next(Place(m));
-                    masterSlave.put(m, slave.id as Int);
-                    if (!slave.isDead()) {
-                        count++;
-                        FinishResilient.increment(pending, slave.id as Int);
-                        liveSlaves.add(slave.id as Int);
-                    }
+            }
+        }
+        if (!switchToAbort && !readOnly) {
+            for (m in members) {
+                val slave = masterSlave.getOrThrow(m);
+                if (!Place(slave as Long).isDead()) {
+                    count++;
+                    FinishResilient.increment(pending, TxMember(slave, SLAVE));
+                    liveSlaves.add(slave as Int);
+                }
+                else {
+                    masterSlave.put(m, DEAD_SLAVE);
                 }
             }
         }
@@ -144,29 +165,26 @@ public class TxResilient extends Tx {
             abort(liveMasters);
         } else {
             for (p in liveMasters) {
-                val slaveId = masterSlave.getOrElse(p, -1n);
+                val slaveId = masterSlave.getOrElse(p, DEAD_SLAVE);
                 at (Place(p)) @Immediate("prep_request_res") async {
                     var vote:Boolean = true;
                     if (TxConfig.get().VALIDATION_REQUIRED) {
                         try {
                             plh().getMasterStore().validate(id);
                         }catch (e:Exception) {
-                            if (TxConfig.get().TM_DEBUG) 
-                                Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validation excp["+e.getMessage()+"] ...");
+                            debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validation excp["+e.getMessage()+"] ...");
                             vote = false;
                         }
                     }        
                     var localReadOnly:Boolean = false;
-                    if (!readOnly) {
-                        if (slaveId == -1n)
-                            throw new Exception("FATAL error  slaveId == -1");
+                    if (!readOnly && slaveId != DEAD_SLAVE) {
                         val ownerPlaceIndex = plh().virtualPlaceId;
                         val log = plh().getMasterStore().getTxCommitLog(id);
                         if (log != null && log.size() > 0) {
                             at (Place(slaveId as Long)) @Immediate("slave_prep") async {
                                 plh().slaveStore.prepare(id, log, ownerPlaceIndex);
                                 at (gr) @Immediate("slave_prep_response") async {
-                                    (gr() as TxResilient).notifyPrepare(slaveId, true /*vote*/, false /*is master RO*/); 
+                                    (gr() as TxResilient).notifyPrepare(slaveId, SLAVE, true /*vote*/, false /*is master RO*/); 
                                 }
                             }
                         }
@@ -177,12 +195,73 @@ public class TxResilient extends Tx {
                     val v = vote;
                     val masterId = here.id as Int;
                     at (gr) @Immediate("prep_response_res") async {
-                        (gr() as TxResilient).notifyPrepare(masterId, v, isMasterRO);
+                        (gr() as TxResilient).notifyPrepare(masterId, MASTER, v, isMasterRO);
                     }
                 }
             }
         }
     }
+    
+    private def notifyPrepare(place:Int, ptype:Int, v:Boolean, isMasterRO:Boolean) {
+        var prep:Boolean = false;
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPrepare1  place="+place+" ptype="+ptype+" v="+v+" isMRO="+isMasterRO+" ...");
+        lock.lock();
+        if (!Place(place as Long).isDead()) {
+            if (ptype == MASTER) {
+                count--;
+                if (pending.getOrElse(TxMember(place, MASTER),-1n) == -1n)
+                    debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPrepare1 FATALERROR place["+place+"] type["+MASTER+"] count="+count+" doesn't exist...");
+       
+                FinishResilient.decrement(pending, TxMember(place, MASTER));
+                debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPrepare2  master place="+place+" count="+count+"...");        
+                if (!readOnly && isMasterRO) { //we don't except an acknowledgement from the slave
+                    val slave = masterSlave.getOrElse(place, DEAD_SLAVE);
+                    if (slave != DEAD_SLAVE) {
+                        count--;
+                        
+                        if (pending.getOrElse(TxMember(slave, SLAVE),-1n) == -1n)
+                            debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPrepare2 FATALERROR place["+slave+"] type["+SLAVE+"] count="+count+" doesn't exist...");
+                        
+                        FinishResilient.decrement(pending, TxMember(slave, SLAVE));
+                        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPrepare3  slave place="+slave+" count="+count+"...");
+                    }
+                }
+                
+            } else { //drop preparation message from a slave whose master died
+                for (m in members) {
+                    if (masterSlave.getOrElse(m, DEAD_SLAVE) == place && !Place(m).isDead()) {
+                        count--;
+                        
+                        if (pending.getOrElse(TxMember(place, SLAVE),-1n) == -1n)
+                            debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPrepare3 FATALERROR place["+place+"] type["+SLAVE+"] count="+count+" doesn't exist...");
+                        
+                        FinishResilient.decrement(pending, TxMember(place, SLAVE));
+                        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPrepare4  slave place="+place+" count="+count+"...");
+                        break;
+                    }
+                }
+            }
+            
+            vote = vote & v;
+            if (ptype == MASTER && isMasterRO) {
+                if (readOnlyMasters == null)
+                    readOnlyMasters = new HashSet[Int]();
+                readOnlyMasters.add(place);
+            }
+            if (count == 0n) {
+                prep = true;
+                if (!vote) //don't overwrite fatal exceptions
+                    addExceptionUnsafe(new ConflictException());
+            }
+        }
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPrepare place["+place+"] localVote["+v+"] vote["+vote+"] count="+count+" ...");
+        lock.unlock();
+        
+        if (prep) {
+            commitOrAbort(vote);
+        }
+    }
+    
     
     private def commitOrAbort(isCommit:Boolean) {
         //don't copy this
@@ -195,13 +274,14 @@ public class TxResilient extends Tx {
         val liveSlaves:Set[Int] = new HashSet[Int]();
         
         lock.lock(); //altering the counts must be within lock/unlock
-        pending = new HashMap[Int,Int]();
+        ph2Started = true;
+        pending = new HashMap[TxMember,Int]();
         count = 0n;
         if (readOnly) {
             for (m in members) {
                 if (!Place(m as Long).isDead()) {
                     count++;
-                    FinishResilient.increment(pending, m);
+                    FinishResilient.increment(pending, TxMember(m, MASTER));
                     liveMasters.add(m);
                 }
             }
@@ -212,13 +292,13 @@ public class TxResilient extends Tx {
                 
                 if (!Place(m as Long).isDead()) {
                     count++;
-                    FinishResilient.increment(pending, m);
+                    FinishResilient.increment(pending, TxMember(m, MASTER));
                     liveMasters.add(m);
                 }
                 if (readOnlyMasters == null || !readOnlyMasters.contains(m)) {
                     if (!Place(s as Long).isDead()) {
                         count++;
-                        FinishResilient.increment(pending, s);
+                        FinishResilient.increment(pending, TxMember(s, SLAVE));
                         liveSlaves.add(s);
                     }
                 }
@@ -238,7 +318,7 @@ public class TxResilient extends Tx {
                 
                 val me = here.id as Int;
                 at (gr) @Immediate("abort_master_response") async {
-                    (gr() as TxResilient).notifyAbortOrCommit(me);
+                    (gr() as TxResilient).notifyAbortOrCommit(me, MASTER);
                 }
             }            
         }
@@ -252,61 +332,29 @@ public class TxResilient extends Tx {
                 
                 val me = here.id as Int;
                 at (gr) @Immediate("abort_slave_response") async {
-                    (gr() as TxResilient).notifyAbortOrCommit(me);
+                    (gr() as TxResilient).notifyAbortOrCommit(me, SLAVE);
                 }
             }            
         }
     }
     
-    private def notifyPrepare(place:Int, v:Boolean, isMasterRO:Boolean) {
-        var prep:Boolean = false;
     
-        lock.lock();
-        if (!Place(place as Long).isDead()) {
-            if (!readOnly && isMasterRO) { //deduct master and slave
-                val slave = masterSlave.getOrThrow(place);
-                count -= 2;
-                FinishResilient.decrement(pending, place);
-                FinishResilient.decrement(pending, slave);
-            } else { //deduct master only
-                count--;
-                FinishResilient.decrement(pending, place);
-            }
-            vote = vote & v;
-            if (isMasterRO) {
-                if (readOnlyMasters == null)
-                    readOnlyMasters = new HashSet[Int]();
-                readOnlyMasters.add(place);
-            }
-            if (count == 0n) {
-                prep = true;
-                if (!vote && exception == null) //don't overwrite fatal exceptions
-                    exception = new ConflictException();
-            }
-        }
-        if (TxConfig.get().TM_DEBUG)
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPrepare place["+place+"] localVote["+v+"] vote["+vote+"] count="+count+" ...");
-        lock.unlock();
-        
-        if (prep) {
-            commitOrAbort(vote);
-        }
-    }
-    
-    private def notifyAbortOrCommit(place:Int) {
+    private def notifyAbortOrCommit(place:Int, ptype:Int) {
         var rel:Boolean = false;
         
         lock.lock(); //altering the counts must be within lock/unlock
         if (!Place(place as Long).isDead()) {
             count--;
-            FinishResilient.decrement(pending, place);
+            if (pending.getOrElse(TxMember(place, ptype),-1n) == -1n)
+                debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyAbortOrCommit FATALERROR place["+place+"] type["+ptype+"] count="+count+" doesn't exist...");
+            
+            FinishResilient.decrement(pending, TxMember(place, ptype));
             if (count == 0n) {
                 rel = true;
                 pending = null;
             }
         }
-        if (TxConfig.get().TM_DEBUG)
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyAbortOrCommit place["+place+"]  count="+count+" ...");
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyAbortOrCommit place["+place+"]  count="+count+" ...");
         lock.unlock();
         
         if (rel) {
@@ -322,27 +370,44 @@ public class TxResilient extends Tx {
         }
     }
     
-    public def notifyPlaceDead() {
+    public def notifyPlaceDeath() {
         var rel:Boolean = false;
         lock.lock();
         
-        val toRemove = new HashSet[Int]();
+        val toRemove = new HashSet[TxMember]();
         if (pending != null) {
-            for (m in pending.keySet()) {
-                if (Place(m as Long).isDead()) {
-                    toRemove.add(m);
+            for (key in pending.keySet()) {
+                if (Place(key.place as Long).isDead()) {
+                    toRemove.add(key);
+                    
+                    var slave:Int = DEAD_SLAVE;
                     if (masterSlave != null) {
-                        val slave = masterSlave.getOrElse(m, -1n);
-                        if (slave != -1n && Place(slave as Long).isDead()) {
-                            exception = new FatalTransactionException("Tx["+id+"] lost both master["+m+"] and slave["+slave+"] ");
+                        slave = masterSlave.getOrElse(key.place, DEAD_SLAVE);
+                    }
+                    
+                    if (!ph2Started && key.ptype == MASTER) {
+                        vote = false;
+                    
+                        //if the master died, don't except a message from the slave 
+                        if (slave != DEAD_SLAVE && pending.getOrElse(TxMember(slave, SLAVE), -1000n) != -1000n) {
+                            toRemove.add(TxMember(slave, SLAVE));
                         }
+                    }
+                    
+                    if (slave != DEAD_SLAVE && Place(slave as Long).isDead()) {
+                        addExceptionUnsafe(new FatalTransactionException("Tx["+id+"] lost both master["+key.place+"] and slave["+slave+"] "));
                     }
                 }
             }
         }
+        
         for (t in toRemove) {
+            if (!ph2Started && t.ptype == MASTER)
+                addExceptionUnsafe( new DeadPlaceException( Place(t.place as Long) ) );
+            
             val cnt = pending.remove(t);
             count -= cnt;
+            debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPlaceDead remove place="+t.place+" type="+t.ptype+" cnt="+cnt+" count="+count+"...");
         }
         
         if (count == 0n) {
@@ -351,8 +416,14 @@ public class TxResilient extends Tx {
         }
         lock.unlock();
         
-        if (rel) {
+        if (rel && ph2Started) {
             release();
+        } else {
+            commitOrAbort(vote);
         }
+    }
+    
+    private static def debug(msg:String) {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println( msg );
     }
 }

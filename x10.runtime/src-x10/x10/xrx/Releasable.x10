@@ -10,7 +10,7 @@
  */
 
 package x10.xrx;
-
+import x10.util.GrowableRail;
 public interface Releasable {
-    public def releaseFinish(exception:CheckedThrowable):void;
+    public def releaseFinish(excs:GrowableRail[CheckedThrowable]):void;
 }

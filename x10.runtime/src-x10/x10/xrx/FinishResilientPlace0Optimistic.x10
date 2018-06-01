@@ -115,6 +115,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         var isAdopted:Boolean = false;  //set to true when backup recreates a master
         
         val tx:Tx;
+        var txStarted:Boolean = false;
         /**Place0 states**/
         private static val states = (here.id==0) ? new HashMap[Id, State]() : null;
         private static val statesLock = (here.id==0) ? new Lock() : null;
@@ -128,6 +129,17 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             this.tx = tx;
             sent.put(FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
             transit.put(FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
+        }
+        
+        def gc() {
+            if (GC_DISABLED) return;
+            val id = this.id; //don't copy this
+            if (sent.size() != 0) {
+                for (key in sent.keySet()) {
+                    if (key.dst != id.home && (tx == null || tx.isEmpty() || !tx.contains(key.dst)))
+                        at(Place(key.dst)) @Immediate("OP0_remoteFinishCleanup") async FinishResilientPlace0Optimistic.P0OptimisticRemoteState.deleteObject(id);
+                }
+            }
         }
         
         /*********************************************************************/
@@ -208,7 +220,10 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 }
                 
                 for (s in toRemoveState) {
-                    s.tryRelease();
+                    if (s.txStarted)
+                        (s.tx as TxResilient).notifyPlaceDeath();
+                    else
+                        s.tryRelease();
                 }
                 return countingReqs;
             } finally {
@@ -249,7 +264,10 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 }
                 
                 for (s in toRemoveState) {
-                    s.tryRelease();
+                    if (s.txStarted)
+                        (s.tx as TxResilient).notifyPlaceDeath();
+                    else
+                        s.tryRelease();
                 }
             } finally {
                 statesLock.unlock();
@@ -674,14 +692,14 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 if (verbose>=1) debug("<<<< State(id="+id+").transitToCompleted returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
             }
         }
-        
-        public def releaseFinish(t:CheckedThrowable) {
+
+        public def releaseFinish(excs:GrowableRail[CheckedThrowable]) {
             try {
                 statesLock.lock();
-                
-                if (t != null)
-                    addException(t);
-                
+                if (excs != null) {
+                    for (t in excs.toRail())
+                        addException(t);
+                }
                 releaseLatch();
                 notifyParent();
                 removeFromStates();
@@ -696,6 +714,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 notifyParent();
                 removeFromStates();
             } else { //start the commit procedure
+                txStarted = true;
                 var abort:Boolean = false;
                 if (excs != null && excs.size() > 0) {
                     abort = true;
@@ -789,6 +808,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 }
             }
             if (verbose>=2) debug("releaseLatch(id="+id+") returning");
+            
+            gc();
         }
         
         def notifyParent() {
@@ -800,15 +821,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             val parentState = states(parentId);
             parentState.removeGhostChild(id);
             if (verbose>=1) debug("<<<< State(id="+id+").notifyParent(parentId=" + parentId + ", isAdopted="+isAdopted+") returning");
-        }
-
-        def addGCRequests() {
-            if (GC_DISABLED) return;
-            val places = new HashSet[Long]();
-            for (e in sent.entries()) {
-                places.add(e.getKey().dst as Long);
-            }
-            FinishGC.addGCReady(id, places);
         }
         
         def removeFromStates() {
@@ -1531,12 +1543,14 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             (ref as GlobalRef[P0OptimisticMasterState]{self.home == here}).forget();
         }
         
-        public def releaseFinish(t:CheckedThrowable) {
-        	if (t != null)
-        		addExceptionUnsafe(t);//unsafe: only one thread reaches this method
-        	latch.release();
+        public def releaseFinish(excs:GrowableRail[CheckedThrowable]) {
+            if (excs != null) {
+                for (t in excs.toRail())
+                    addExceptionUnsafe(t);//unsafe: only one thread reaches this method
+            }
+            latch.release();
         }
-        
+
         private def tryReleaseLocal() {
         	if (!txFlag) {
         		latch.release();

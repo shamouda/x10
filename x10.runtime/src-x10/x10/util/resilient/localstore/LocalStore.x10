@@ -156,7 +156,19 @@ public class LocalStore[K] {K haszero} {
         }
     }
     
-    public def activePlacesUnsafe() = activePlaces;
+    public def getMapping(members:Set[Int]) {
+        try {
+            lock();
+            val map = new HashMap[Int,Int]();
+            for (x in members) {
+                map.put(x, activePlaces.next(Place(x as Long)).id as Int);
+            }
+            return map;
+        }finally {
+            unlock();
+        }
+    }
+    
     
     public def getActivePlaces() {
         try {

@@ -841,9 +841,11 @@ public abstract class FinishState {
             latch.unlock();
         }
         
-        public def releaseFinish(t:CheckedThrowable) {
-            if (t != null) 
-                process(t);
+        public def releaseFinish(excs:GrowableRail[CheckedThrowable]) {
+            if (excs != null) {
+                for (t in excs.toRail())
+                    process(t);
+            }
             latch.release();
         }
         

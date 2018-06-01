@@ -109,7 +109,7 @@ public class SimpleResTxBench {
     public static def runIteration(store:TxStore, producersCount:Long, 
             d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, f:Boolean, victims:VictimsList, 
             throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
-        val activePlaces = store.plh().getActivePlaces();
+        val activePlaces = store.fixAndGetActivePlaces();
         try {
             
             finish for (var i:Long = 0; i < producersCount; i++) {               
@@ -216,13 +216,11 @@ public class SimpleResTxBench {
             //time starts here
             val start = System.nanoTime();
             var includeTx:Boolean = true;
-            if (virtualMembers.size > 1 && TxConfig.get().STM ) { //STM distributed
-                val remainingTime =  (d*1e6 - timeNS) as Long;
-                try {
-                    store.executeTransaction(distClosure, -1, remainingTime);
-                } catch(expf:FatalTransactionException) {
-                    includeTx = false;
-                }
+            val remainingTime =  (d*1e6 - timeNS) as Long;
+            try {
+                store.executeTransaction(distClosure, -1, remainingTime);
+            } catch(expf:FatalTransactionException) {
+                includeTx = false;
             }
             
             val elapsedNS = System.nanoTime() - start; 
@@ -232,11 +230,22 @@ public class SimpleResTxBench {
             if (includeTx) {
                 myThroughput.txCount++;
                 if (g != -1 && myThroughput.txCount%g == 0)
-                    Console.OUT.println(here + " Progress "+myVirtualPlaceId+"x"+producerId + ":" + myThroughput.txCount );
+                    Console.OUT.println(here + " Progress " + myVirtualPlaceId + "x" + producerId + ":" + myThroughput.txCount );
+            }
+            
+            val slaveChange = store.nextPlaceChange();
+            if (resilient && producerId == 0 && slaveChange.changed) {
+                val nextPlace = slaveChange.newSlave;
+                if (throughput().rightPlaceDeathTimeNS == -1)
+                    throw new TxBenchFailed(here + " assertion error, did not receive suicide note ...");
+                val oldThroughput = throughput().rightPlaceThroughput;
+                val recoveryTime = System.nanoTime() - throughput().rightPlaceDeathTimeNS;
+                oldThroughput.shiftElapsedTime(recoveryTime);
+                Console.OUT.println(here + " Calculated recovery time = " + (recoveryTime/ 1e9) + " seconds" );
+                startPlace(nextPlace, store, activePlacesCount, producersCount, d, r, u, t, h, o, g, f, victims, throughput, oldThroughput);
             }
         }
-        Console.OUT.println(here + " >>> completed ");
-        //Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
+        Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
     }
 
     public static def printThroughput(store:TxStore, producersCount:Long, iteration:Long, plh:PlaceLocalHandle[PlaceThroughput], 
@@ -246,7 +255,7 @@ public class SimpleResTxBench {
             Console.OUT.println("Collecting throughput information ..... .....");
             Console.OUT.println("========================================================================");
             
-            val activePlcs = store.plh().getActivePlaces();
+            val activePlcs = store.fixAndGetActivePlaces();
             val startReduce = System.nanoTime();
             if (producersCount > 1) {
                 val team = new Team(activePlcs);

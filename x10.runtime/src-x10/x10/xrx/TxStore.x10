@@ -28,10 +28,7 @@ import x10.util.resilient.localstore.SlaveStore;
 import x10.compiler.Uncounted;
 
 /**
- * A store that maintains a master + 1 backup (slave) copy
- * of the data.
- * The mapping between masters and slaves is specififed by
- * the next/prev operations on the activePlaces PlaceGroup.
+ * 
  */
 public class TxStore {
     public val plh:PlaceLocalHandle[LocalStore[Any]];    
@@ -50,6 +47,7 @@ public class TxStore {
         Console.OUT.println("store created successfully ...");
         return store;
     }
+    
     
     public def makeTx() {
         val id = plh().getMasterStore().getNextTransactionId();
@@ -76,6 +74,7 @@ public class TxStore {
                     Runtime.registerFinishTx(tx);
                     closure(tx);
                 }
+                break;
             } catch(ex:Exception) {
                 throwIfFatalSleepIfRequired(tx.id, ex);
             }
@@ -86,6 +85,10 @@ public class TxStore {
         val immediateRecovery = plh().immediateRecovery;
         var dpe:Boolean = false;
         if (ex instanceof MultipleExceptions) {
+            val fatalExList = (ex as MultipleExceptions).getExceptionsOfType[FatalTransactionException]();
+            if (fatalExList != null && fatalExList.size > 0)
+                throw fatalExList(0);
+            
             val deadExList = (ex as MultipleExceptions).getExceptionsOfType[DeadPlaceException]();
             val confExList = (ex as MultipleExceptions).getExceptionsOfType[ConflictException]();
             val pauseExList = (ex as MultipleExceptions).getExceptionsOfType[StorePausedException]();
@@ -129,6 +132,13 @@ public class TxStore {
             plh().stat.clear();
         }
     }
+    
+    public def fixAndGetActivePlaces() {
+        plh().replaceDeadPlaces();
+        return plh().getActivePlaces();
+    }
+    
+    public def nextPlaceChange() = plh().nextPlaceChange();
     
     public def asyncRecover() {
         val plh = this.plh;
