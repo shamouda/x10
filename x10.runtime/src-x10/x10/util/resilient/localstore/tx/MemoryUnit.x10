@@ -130,12 +130,21 @@ public class MemoryUnit[K] {K haszero} {
     
     /********  Lock based methods *********/
     public def getValueLocked(copy:Boolean, key:K, txId:Long) {
+        return getValueLocked(copy, key, txId, true);
+    }
+    
+    public def getValueLockedNoDebug(copy:Boolean, key:K, txId:Long) {
+        return getValueLocked(copy, key, txId, false);
+    }
+    
+    private def getValueLocked(copy:Boolean, key:K, txId:Long, print:Boolean) {
         ensureNotDeleted();
         var v:Cloneable = value;
         if (copy) {
             v = value == null?null:value.clone();
         }
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " here["+here+"] getvv key["+key+"] ver["+version+"] val["+v+"]");
+        if (TxConfig.get().TM_DEBUG && print) 
+            Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " here["+here+"] getvv key["+key+"] ver["+version+"] val["+v+"]");
         return v;
     }
     

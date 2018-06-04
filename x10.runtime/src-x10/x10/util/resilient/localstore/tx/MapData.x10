@@ -56,7 +56,7 @@ public class MapData[K] {K haszero} {
                 val k = iter.next();
                 val memU = metadata.getOrThrow(k);
                 if (!memU.isDeleted()) {
-                    val v = metadata.getOrThrow(k).getValueLocked(false, k, -1);
+                    val v = metadata.getOrThrow(k).getValueLockedNoDebug(false, k, -1);
                     values.put(k, v);
                 }
             }
