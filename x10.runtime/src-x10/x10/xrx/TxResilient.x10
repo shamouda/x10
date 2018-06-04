@@ -416,10 +416,11 @@ public class TxResilient extends Tx {
         }
         lock.unlock();
         
-        if (rel && ph2Started) {
-            release();
-        } else {
-            commitOrAbort(vote);
+        if (rel) {
+            if (ph2Started)
+                release();
+            else
+                commitOrAbort(vote);
         }
     }
     
