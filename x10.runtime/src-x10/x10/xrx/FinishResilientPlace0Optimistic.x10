@@ -131,6 +131,21 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             transit.put(FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
         }
         
+        static def printTxStates() {
+            try {
+                statesLock.lock();
+                for (e in states.entries()) {
+                    val state = e.getValue();
+                    if (state.tx != null) {
+                        if (TxConfig.TM_DEBUG)
+                            Console.OUT.println("Finish["+state.id+"] has Tx["+state.tx.id+"] " + TxConfig.txIdToString (state.tx.id)+ " ");
+                    }
+                }
+            } finally {
+                statesLock.unlock();
+            }
+        }
+        
         def gc() {
             if (GC_DISABLED) return;
             val id = this.id; //don't copy this
@@ -1680,6 +1695,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             }
             State.convertDeadActivities(merged);
         }
+        if (TxConfig.TM_DEBUG) State.printTxStates();
         if (verbose>=1) debug("<<<< notifyPlaceDeath returning");
         Console.OUT.println("p0FinishRecoveryTime:" + (Timer.milliTime()-start) + "ms");
     }

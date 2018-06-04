@@ -251,6 +251,8 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     }
     
     protected def release() {
+        if (TxConfig.get().TM_DEBUG) 
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] transaction releasing finish ...");
         finishObj.releaseFinish(excs);
         (gr as GlobalRef[Tx]{self.home == here}).forget();
     }
