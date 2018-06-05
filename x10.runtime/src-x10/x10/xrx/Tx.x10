@@ -20,6 +20,7 @@ import x10.util.resilient.localstore.LocalStore;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.concurrent.LowLevelFinish;
 import x10.compiler.Immediate;
+import x10.compiler.Uncounted;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.tx.ConflictException;
 import x10.util.concurrent.Lock;
@@ -178,17 +179,21 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
         val plh = this.plh;
         
         for (p in members) {
+            
             at (Place(p)) @Immediate("prep_request") async {
-                var vote:Boolean = true;
-                try {
-                    plh().getMasterStore().validate(id);
-                }catch (e:Exception) {
-                    vote = false;
-                }
-                val v = vote;
-                at (gr) @Immediate("prep_response") async {
-                    gr().notifyPrepare(v);
-                }
+                //validate may block, so we cannot do it in this immediate thread
+                Runtime.submitUncounted(()=> {
+                    var vote:Boolean = true;
+                    try {
+                        plh().getMasterStore().validate(id);
+                    } catch (e:Exception) {
+                        vote = false;
+                    }
+                    val v = vote;
+                    at (gr) @Immediate("prep_response") async {
+                        gr().notifyPrepare(v);
+                    }
+                });
             }
         }
     }

@@ -167,35 +167,43 @@ public class TxResilient extends Tx {
             for (p in liveMasters) {
                 val slaveId = masterSlave.getOrElse(p, DEAD_SLAVE);
                 at (Place(p)) @Immediate("prep_request_res") async {
-                    var vote:Boolean = true;
-                    if (TxConfig.get().VALIDATION_REQUIRED) {
-                        try {
-                            plh().getMasterStore().validate(id);
-                        }catch (e:Exception) {
-                            debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validation excp["+e.getMessage()+"] ...");
-                            vote = false;
-                        }
-                    }        
-                    var localReadOnly:Boolean = false;
-                    if (!readOnly && slaveId != DEAD_SLAVE) {
-                        val ownerPlaceIndex = plh().virtualPlaceId;
-                        val log = plh().getMasterStore().getTxCommitLog(id);
-                        if (log != null && log.size() > 0) {
-                            at (Place(slaveId as Long)) @Immediate("slave_prep") async {
-                                plh().slaveStore.prepare(id, log, ownerPlaceIndex);
-                                at (gr) @Immediate("slave_prep_response") async {
-                                    (gr() as TxResilient).notifyPrepare(slaveId, SLAVE, true /*vote*/, false /*is master RO*/); 
+                    val task = ()=> {
+                        var vote:Boolean = true;
+                        if (TxConfig.get().VALIDATION_REQUIRED) {
+                            try {
+                                plh().getMasterStore().validate(id);
+                            }catch (e:Exception) {
+                                debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validation excp["+e.getMessage()+"] ...");
+                                vote = false;
+                            }
+                        }        
+                        var localReadOnly:Boolean = false;
+                        if (!readOnly && slaveId != DEAD_SLAVE) {
+                            val ownerPlaceIndex = plh().virtualPlaceId;
+                            val log = plh().getMasterStore().getTxCommitLog(id);
+                            if (log != null && log.size() > 0) {
+                                at (Place(slaveId as Long)) @Immediate("slave_prep") async {
+                                    plh().slaveStore.prepare(id, log, ownerPlaceIndex);
+                                    at (gr) @Immediate("slave_prep_response") async {
+                                        (gr() as TxResilient).notifyPrepare(slaveId, SLAVE, true /*vote*/, false /*is master RO*/); 
+                                    }
                                 }
                             }
+                            else 
+                                localReadOnly = true;
                         }
-                        else 
-                            localReadOnly = true;
+                        val isMasterRO = localReadOnly;
+                        val v = vote;
+                        val masterId = here.id as Int;
+                        at (gr) @Immediate("prep_response_res") async {
+                            (gr() as TxResilient).notifyPrepare(masterId, MASTER, v, isMasterRO);
+                        }
+                    };
+                    if (TxConfig.get().VALIDATION_REQUIRED) {
+                        Runtime.submitUncounted(task);
                     }
-                    val isMasterRO = localReadOnly;
-                    val v = vote;
-                    val masterId = here.id as Int;
-                    at (gr) @Immediate("prep_response_res") async {
-                        (gr() as TxResilient).notifyPrepare(masterId, MASTER, v, isMasterRO);
+                    else {
+                        task();
                     }
                 }
             }

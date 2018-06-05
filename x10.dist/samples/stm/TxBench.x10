@@ -28,7 +28,7 @@ import x10.util.GrowableRail;
 
 public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements ElasticApp {
     public static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
-    public static val immediateRecovery = true;
+    public static val asyncRecovery = true;
     
     public static def main(args:Rail[String]) {
         val opts = new OptionsParser(args, [
@@ -78,7 +78,7 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements ElasticApp {
         val plh = PlaceLocalHandle.make[TxBenchState](Place.places(), ()=> new TxBenchState(here.id, r, u, n, p, t, w, d, h, o, g, s, f, vp, vt) );
         val app = new TxBench(plh);
         
-        val store = TxStore.make(mgr.activePlaces(), immediateRecovery, app);
+        val store = TxStore.make(mgr.activePlaces(), asyncRecovery, app);
         
         val startWarmup = Timer.milliTime();
         if (w == -1) {
@@ -149,7 +149,7 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements ElasticApp {
         var tmpiter:Long = i;
         var oldThroughput:TxBenchState = null;
         if (recovery) {
-            val masterState = plh() as TxBenchState; 
+            val masterState = plh(); 
             if (masterState.rightPlaceDeathTimeNS == -1)
                 throw new TxBenchFailed(here + " assertion error, did not receive suicide note ...");
             oldThroughput = masterState.rightTxBenchState;
@@ -161,7 +161,7 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements ElasticApp {
         val iter = tmpiter;
         val recoveryThroughput = oldThroughput;
         at (place) @Uncounted async {
-            val state = plh() as TxBenchState;
+            val state = plh();
             state.iteration = iter;
             val t = state.t;
             val myVirtualPlaceId = store.plh().getVirtualPlaceId();
@@ -208,8 +208,8 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements ElasticApp {
         }
     }
     
-    public def produce(store:TxStore, tmpplh:PlaceLocalHandle[TxBenchState], producerId:Long) {
-        val state = tmpplh() as TxBenchState;
+    public def produce(store:TxStore, plh:PlaceLocalHandle[TxBenchState], producerId:Long) {
+        val state = plh();
         val myVirtualPlaceId = state.virtualPlaceId;
         val h = state.h;
         val f = state.f;
@@ -278,8 +278,8 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements ElasticApp {
         Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
         val lc = state.lc.decrementAndGet();
         if (lc == 0n) {
-            at (Place(0)) {
-                val p0state = tmpplh() as TxBenchState;
+            at (Place(0)) @Uncounted async {
+                val p0state = plh();
                 p0state.notifyTermination(null);
             }
         }
@@ -297,7 +297,7 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements ElasticApp {
             if (state.p > 1) {
                 val team = new Team(activePlcs);
                 finish for (p in activePlcs) async at (p) {
-                    val plcTh = plh() as TxBenchState;
+                    val plcTh = plh();
                     val times = plcTh.mergeTimes();
                     val counts = plcTh.mergeCounts();
                     
@@ -419,6 +419,7 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements ElasticApp {
         Console.OUT.println("X10_EXIT_BY_SIGKILL=" + System.getenv("X10_EXIT_BY_SIGKILL"));
         Console.OUT.println("DISABLE_SLAVE=" + System.getenv("DISABLE_SLAVE"));
         Console.OUT.println("ENABLE_STAT=" + System.getenv("ENABLE_STAT"));
+        Console.OUT.println("BUSY_LOCK=" + System.getenv("BUSY_LOCK"));
         
         Console.OUT.println("r=" + r);
         Console.OUT.println("u=" + u);

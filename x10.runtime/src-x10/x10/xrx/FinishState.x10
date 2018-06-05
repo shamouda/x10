@@ -856,6 +856,12 @@ public abstract class FinishState {
                 var abort:Boolean = false;
                 if (exceptions != null && exceptions.size() > 0) {
                     abort = true;
+                    if (TxConfig.get().TM_DEBUG) {
+                        var str:String = "";
+                        for (var m:Long = 0; m < exceptions.size(); m++)
+                            str += exceptions(m).getMessage() + " , ";
+                        Console.OUT.println("Tx["+tx.id+"] " + TxConfig.txIdToString (tx.id)+ " here["+here+"] finalize with abort because ["+str+"] ");
+                    }
                 }
                 tx.finalize(this, abort);
             }

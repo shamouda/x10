@@ -18,6 +18,7 @@ import x10.util.concurrent.Lock;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.RailUtils;
 import x10.util.GrowableRail;
+import x10.xrx.Runtime;
 
 /*
  * The log to track actions done on a key. 
@@ -28,7 +29,7 @@ import x10.util.GrowableRail;
  * However, an abort request may occur concurrenctly with other requests, that is why we have a lock to prevent
  * interleaving between abort and other operations.
  **/
-public class TxLog[K] {K haszero} {
+public class TxLog[K] {K haszero} implements x10.io.Unserializable {
     private static class TxLogKeysList[K] {K haszero} {
         private val rdKeys:GrowableRail[TxKeyChange[K]];
         private val wtKeys:GrowableRail[TxKeyChange[K]];
@@ -176,15 +177,18 @@ public class TxLog[K] {K haszero} {
     public var aborted:Boolean = false;
     public var writeValidated:Boolean = false;
     private var id:Long = -1;
+    private var busy:Boolean = false;
     private var lock:Lock;
     
     public def id() = id;
+    
     public def setId(i:Long) {
     	if (i < 0)
     		throw new FatalTransactionException(here + " fatal error, TxLog.setId(-1)");
     	
     	id = i;
     }
+    
     //used to reduce searching for memory units after calling TxManager.logInitialIfNotLogged
     private var lastUsedMemoryUnit:MemoryUnit[K];
     private var lastUsedKeyLog:TxKeyChange[K];
@@ -323,23 +327,60 @@ public class TxLog[K] {K haszero} {
     
     public def lock(i:Long) {
         //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] ["+lock+"] <<LOCK>> "+i+"...");
-        if (!TxConfig.get().LOCK_FREE)
-            lock.lock();
+        if (!TxConfig.get().LOCK_FREE) {
+            if (!TxConfig.BUSY_LOCK)
+                lock.lock();
+            else
+                busyLock();
+        }
         //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] ["+lock+"] <<LOCK_DONE>> "+i+"...");
     }
     
     public def unlock(i:Long) {
         //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] ["+lock+"] <<UNLOCK>> "+i+"...");
-        if (!TxConfig.get().LOCK_FREE)
-            lock.unlock();
+        if (!TxConfig.get().LOCK_FREE) {
+            if (!TxConfig.BUSY_LOCK)
+                lock.unlock();
+            else 
+                busyUnlock();
+        }
         lastUsedMemoryUnit = null;
         //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] ["+lock+"] <<UNLOCK_DONE>> "+i+"...");
     }
     
+    public def busyLock() {
+        var increased:Boolean = false;
+        lock.lock();
+        while (busy) {
+            lock.unlock();
+            
+            if (!increased) {
+                increased = true;
+                Runtime.increaseParallelism();
+            }            
+            TxConfig.waitSleep();
+            lock.lock();
+        }
+        busy = true;
+        lock.unlock();
+        if (increased)
+            Runtime.decreaseParallelism(1n);
+    }
+    
+    public def busyUnlock() {
+        lock.lock();
+        busy = false;
+        lock.unlock();
+    }
+    
     public def unlock(i:Long, tmpId:Long) {
         //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tmpId+"] " + TxManager.txIdToString(tmpId) + " here["+here+"] ["+lock+"] <<UNLOCK>> "+i+"...");
-        if (!TxConfig.get().LOCK_FREE)
-            lock.unlock();
+        if (!TxConfig.get().LOCK_FREE) {
+            if (!TxConfig.BUSY_LOCK)
+                lock.unlock();
+            else 
+                busyUnlock();
+        }
         lastUsedMemoryUnit = null;
         //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+tmpId+"] " + TxManager.txIdToString(tmpId) + " here["+here+"] ["+lock+"] <<UNLOCK_DONE>> "+i+"...");
     }

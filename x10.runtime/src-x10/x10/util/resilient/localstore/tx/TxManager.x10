@@ -246,7 +246,7 @@ public abstract class TxManager[K] {K haszero} {
         val log = txLogManager.getOrAddTxLog(id);
         log.lock(6);
         try {
-            if ( log.id() == -1 /*|| txLogManager.isAborted(log.id()) */) {
+            if ( log.id() != id /*|| txLogManager.isAborted(log.id()) */) {
                 throw new AbortedTransactionException("AbortedTransactionException");
             }
             val keyLog = log.getOrAddKeyLog(key);
@@ -504,6 +504,7 @@ public abstract class TxManager[K] {K haszero} {
             /*** Read Locking ***/
             log = lockAndGetTxLog(id, key, true);
         } catch(ex:Exception) {
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RL_UL completed with Ex, key["+key+"] exception["+ex.getMessage()+"] ");
             throw ex;
         }
         
@@ -553,7 +554,7 @@ public abstract class TxManager[K] {K haszero} {
     }
     
     protected def get_RV_WB(id:Long, key:K):Cloneable {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RV_WB started");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + txIdToString (id)+ " here["+here+"] get_RV_WB started, key["+key+"] ");
         var log:TxLog[K] = null;
         try {
             /*** ReadValidatoin: DO NOT ACQUIRE READ LOCK HERE ***/

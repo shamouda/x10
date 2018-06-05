@@ -137,7 +137,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 for (e in states.entries()) {
                     val state = e.getValue();
                     if (state.tx != null) {
-                        if (TxConfig.TM_DEBUG)
+                        if (TxConfig.get().TM_DEBUG)
                             Console.OUT.println("Finish["+state.id+"] has Tx["+state.tx.id+"] " + TxConfig.txIdToString (state.tx.id)+ " ");
                     }
                 }
@@ -1695,7 +1695,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             }
             State.convertDeadActivities(merged);
         }
-        if (TxConfig.TM_DEBUG) State.printTxStates();
+        if (TxConfig.get().TM_DEBUG) State.printTxStates();
         if (verbose>=1) debug("<<<< notifyPlaceDeath returning");
         Console.OUT.println("p0FinishRecoveryTime:" + (Timer.milliTime()-start) + "ms");
     }

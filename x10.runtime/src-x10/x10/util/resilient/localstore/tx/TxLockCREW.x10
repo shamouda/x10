@@ -174,8 +174,10 @@ public class TxLockCREW extends TxLock {
     
     public def unlockRead(txId:Long) {
         lock.lock();
-        if (! (readers.contains(txId) && writer == -1))
+        if (! (readers.contains(txId) && writer == -1)) {
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " this["+this+"] unlockRead bug, unlocking an unlocked Tx[" + txId + "] writer["+writer+"] readers["+readers.toString()+"] ");
             throw new FatalTransactionException (here + " this["+this+"] unlockRead bug, unlocking an unlocked Tx[" + txId + "] writer["+writer+"] readers["+readers.toString()+"] ");
+        }
         readers.remove(txId);
         lock.unlock();
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK unlockRead done");
@@ -183,8 +185,10 @@ public class TxLockCREW extends TxLock {
     
     public def unlockWrite(txId:Long) {
         lock.lock();
-        if (! (readers.size() == 0 && writer == txId) )
+        if (! (readers.size() == 0 && writer == txId) ) {
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " this["+this+"] unlockWrite bug, unlocking an unlocked Tx[" + txId + "] writer["+writer+"] readers["+readers.toString()+"] ");
             throw new FatalTransactionException (here + " this["+this+"] unlockWrite bug, unlocking an unlocked Tx[" + txId + "] writer["+writer+"] readers["+readers.toString()+"] ");
+        }
         writer = -1;
         lock.unlock();
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK unlockWrite done");
@@ -217,11 +221,11 @@ public class TxLockCREW extends TxLock {
                 lock.lock();
                 count++;
                 if (count%1000 == 0) {
-                    Console.OUT.println(here + " - waitReaderWriterLocked  Tx["+txId+"]  writer["+writer+", {"+TxManager.txIdToString(writer)+"} ]  waitingWriter["+waitingWriter+", {"+TxManager.txIdToString(waitingWriter)+"} ] readers["+readers.toString()+"] ...");
+                    Console.OUT.println(here + " ["+Runtime.activity()+"] - waitReaderWriterLocked  Tx["+txId+"]  writer["+writer+", {"+TxManager.txIdToString(writer)+"} ]  waitingWriter["+waitingWriter+", {"+TxManager.txIdToString(waitingWriter)+"} ] readers["+readers.toString()+"] ...");
                 }
             }
             if (count >= 1000) {
-                Console.OUT.println(here + " - waitReaderWriterLocked  Tx["+txId+"]  finished wait ...");
+                Console.OUT.println(here + " ["+Runtime.activity()+"] - waitReaderWriterLocked  Tx["+txId+"]  finished wait ...");
             }
         } finally {
             Runtime.decreaseParallelism(1n);    
@@ -259,11 +263,11 @@ public class TxLockCREW extends TxLock {
                 lock.lock();
                 count++;
                 if (count%1000 == 0) {
-                    Console.OUT.println(here + " - waitWriterReadersLocked upgrade["+(minLimit == 1)+"] Tx["+txId+"]  writer["+writer+", {"+TxManager.txIdToString(writer)+"} ]  waitingWriter["+waitingWriter+", {"+TxManager.txIdToString(waitingWriter)+"} ] readers["+readers.toString()+"] ...");
+                    Console.OUT.println(here + " ["+Runtime.activity()+"] - waitWriterReadersLocked upgrade["+(minLimit == 1)+"] Tx["+txId+"]  writer["+writer+", {"+TxManager.txIdToString(writer)+"} ]  waitingWriter["+waitingWriter+", {"+TxManager.txIdToString(waitingWriter)+"} ] readers["+readers.toString()+"] ...");
                 }
             }
             if (count >= 1000) {
-                Console.OUT.println(here + " - waitWriterReadersLocked upgrade["+(minLimit == 1)+"] Tx["+txId+"]  finished wait ...");
+                Console.OUT.println(here + " ["+Runtime.activity()+"] - waitWriterReadersLocked upgrade["+(minLimit == 1)+"] Tx["+txId+"]  finished wait ...");
             }
         }finally {
             Runtime.decreaseParallelism(1n);
@@ -298,11 +302,11 @@ public class TxLockCREW extends TxLock {
                 lock.lock();
                 count++;
                 if (count%1000 == 0) {
-                    Console.OUT.println(here + " - waitWriterWriterLocked  Tx["+txId+"]  writer["+writer+"]  waitingWriter["+waitingWriter+"] readers["+readers.toString()+"] ...");
+                    Console.OUT.println(here + " ["+Runtime.activity()+"] - waitWriterWriterLocked  Tx["+txId+"]  writer["+writer+"]  waitingWriter["+waitingWriter+"] readers["+readers.toString()+"] ...");
                 }
             }
             if (count >= 1000) {
-                Console.OUT.println(here + " - waitWriterWriterLocked  Tx["+txId+"]  finished wait ...");
+                Console.OUT.println(here + " ["+Runtime.activity()+"] - waitWriterWriterLocked  Tx["+txId+"]  finished wait ...");
             }
         } finally {
             Runtime.decreaseParallelism(1n);

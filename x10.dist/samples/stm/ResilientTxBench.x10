@@ -235,7 +235,7 @@ public class ResilientTxBench {
             //time starts here
             val start = System.nanoTime();
             var includeTx:Boolean = true;
-            if (virtualMembers.size > 1 && TxConfig.get().STM ) { //STM distributed
+            if (virtualMembers.size > 1 && TxConfig.STM ) { //STM distributed
                 val remainingTime =  (d*1e6 - timeNS) as Long;
                 try {
                     if (optimized)
@@ -251,7 +251,7 @@ public class ResilientTxBench {
             else if (virtualMembers.size > 1 && TxConfig.get().LOCKING ) { //locking distributed
                 map.executeLockingTransaction(virtualMembers, keys, readFlags, o, distClosure);
             }
-            else if (virtualMembers.size == 1 && producersCount == 1 && TxConfig.get().STM ) { // STM local
+            else if (virtualMembers.size == 1 && producersCount == 1 && TxConfig.STM ) { // STM local
                 //local transaction
                 assert (virtualMembers(0) == here.id) : "local transactions are not supported at remote places in this benchmark" ;
                 map.executeLocalTransaction(localClosure, -1, -1);
