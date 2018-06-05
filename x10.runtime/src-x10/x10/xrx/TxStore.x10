@@ -32,14 +32,21 @@ import x10.compiler.Uncounted;
  */
 public class TxStore {
     public val plh:PlaceLocalHandle[LocalStore[Any]];    
-    private def this(plh:PlaceLocalHandle[LocalStore[Any]]) {
+    public val app:ElasticApp;
+
+    private def this(plh:PlaceLocalHandle[LocalStore[Any]], app:ElasticApp) {
         this.plh = plh;
+        this.app = app;
     }
     
     public static def make(pg:PlaceGroup, immediateRecovery:Boolean) {
+        return make (pg, immediateRecovery, null);
+    }
+    
+    public static def make(pg:PlaceGroup, immediateRecovery:Boolean, app:ElasticApp) {
         Console.OUT.println("Creating a transactional store with "+pg.size()+" active places, immediateRecovery = " + immediateRecovery);
         val plh = PlaceLocalHandle.make[LocalStore[Any]](Place.places(), ()=> new LocalStore[Any](pg, immediateRecovery) );
-        val store = new TxStore(plh);
+        val store = new TxStore(plh, app);
         Place.places().broadcastFlat(()=> { 
         	plh().setPLH(plh); 
         	Runtime.addTxStore(store);
@@ -160,6 +167,9 @@ public class TxStore {
         val deadVirtualId = oldActivePlaces.indexOf(deadPlace);
         val spare = allocateSparePlace(plh, deadVirtualId, oldActivePlaces);
         recoverSlave(plh, deadPlace, spare, start);
+        if (app != null) {
+            app.startPlace(spare, this, true);
+        }
     }
     
     public def recoverSlave(plh:PlaceLocalHandle[LocalStore[Any]], deadPlace:Place, spare:Place, timeStartRecoveryNS:Long) {

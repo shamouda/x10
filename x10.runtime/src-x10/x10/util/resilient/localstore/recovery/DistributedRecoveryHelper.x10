@@ -7,6 +7,10 @@ import x10.compiler.Uncounted;
 import x10.util.resilient.localstore.*;
 import x10.xrx.Runtime;
 import x10.util.resilient.localstore.tx.logging.TxDesc;
+import x10.compiler.Immediate;
+import x10.util.concurrent.AtomicInteger;
+import x10.util.concurrent.Condition;
+import x10.util.resilient.concurrent.ResilientCondition;
 
 /**
  * Should be called by the local store when it detects that its slave has died.
@@ -117,14 +121,27 @@ public class DistributedRecoveryHelper[K] {K haszero} {
         for (var i:Long = nActive; i < nPlaces; i++) {
             if (oldActivePlaces.contains(Place(i)))
                 continue;
-            
-            var allocated:Boolean = false;
-            try {
-                debug("Recovering " + here + " Try to allocate " + Place(i) );
-                allocated = at (Place(i)) plh().allocate(deadVirtualId);
-            }catch(ex:Exception) {
-            }
-            
+                        
+            // remote call
+            val dst = Place(i);
+            val allocGR = GlobalRef(new AtomicInteger(0n));
+            val rCond = ResilientCondition.make(dst);
+            val closure = (gr:GlobalRef[Condition]) => {
+                at (dst) @Immediate("alloc_spare_async") async {
+                    var success:Boolean = false;
+                    try {
+                        success = plh().allocate(deadVirtualId);
+                    } catch (t:Exception) {
+                    }
+                    val s = success ? 1n : 0n;
+                    at (gr) @Immediate("alloc_spare_async_response") async {
+                        (allocGR as GlobalRef[AtomicInteger{self!=null}]{self.home == here})().set(s);
+                        gr().release();
+                    }
+                }
+            };
+            rCond.run(closure);
+            val allocated = allocGR().get() == 1n;
             if (!allocated)
                 debug("Recovering " + here + " Failed to allocate " + Place(i) + ", is it dead? " + Place(i).isDead());
             else {
