@@ -76,7 +76,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
 
     /***************** Members *****************/
     public def addMember(m:Int, ro:Boolean){
-        if (TxConfig.get().TM_DEBUG) 
+        if (TxConfig.TM_DEBUG) 
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] add member["+m+"] readOnly["+ro+"] ...");
         lock.lock();
         if (members == null)
@@ -138,25 +138,25 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     public def finalizeLocal(finObj:Releasable, abort:Boolean) {
         if (TxConfig.get().TM_DEBUG) 
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] finalizeLocal abort="+abort+" ...");
-    	this.finishObj = finObj;
+        this.finishObj = finObj;
         nonResilientLocal(abort);
     }
     
     private def nonResilientLocal(abort:Boolean) {
-    	var vote:Boolean = true;
-    	if (!abort) {
-    		try {
-    			plh().getMasterStore().validate(id);
-    			plh().getMasterStore().commit(id);
-    		} catch (e:Exception) {
-    			vote = false;
-    			addExceptionUnsafe(new ConflictException());
-    		}
-    	}
-    	if (abort || !vote) {
-    		plh().getMasterStore().abort(id);
-    	}
-    	release();
+        var vote:Boolean = true;
+        if (!abort) {
+            try {
+                plh().getMasterStore().validate(id);
+                plh().getMasterStore().commit(id);
+            } catch (e:Exception) {
+                vote = false;
+                addExceptionUnsafe(new ConflictException());
+            }
+        }
+        if (abort || !vote) {
+            plh().getMasterStore().abort(id);
+        }
+        release();
     }
     
     private def nonResilient2PC(abort:Boolean) {
