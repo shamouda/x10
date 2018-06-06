@@ -6,7 +6,7 @@ import x10.util.resilient.localstore.ResilientStore;
 import x10.util.resilient.localstore.CloneableLong;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.tx.FatalTransactionException;
-import x10.xrx.ElasticApp;
+import x10.xrx.NonShrinkingApp;
 import x10.xrx.TxStore;
 import x10.xrx.Tx;
 import x10.xrx.Runtime;
@@ -26,7 +26,7 @@ import x10.util.concurrent.SimpleLatch;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.GrowableRail;
 
-public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements ElasticApp {
+public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinkingApp {
     public static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     public static val asyncRecovery = true;
     

@@ -32,9 +32,9 @@ import x10.compiler.Uncounted;
  */
 public class TxStore {
     public val plh:PlaceLocalHandle[LocalStore[Any]];    
-    public val app:ElasticApp;
+    public val app:NonShrinkingApp;
 
-    private def this(plh:PlaceLocalHandle[LocalStore[Any]], app:ElasticApp) {
+    private def this(plh:PlaceLocalHandle[LocalStore[Any]], app:NonShrinkingApp) {
         this.plh = plh;
         this.app = app;
     }
@@ -43,13 +43,13 @@ public class TxStore {
         return make (pg, immediateRecovery, null);
     }
     
-    public static def make(pg:PlaceGroup, immediateRecovery:Boolean, app:ElasticApp) {
+    public static def make(pg:PlaceGroup, immediateRecovery:Boolean, app:NonShrinkingApp) {
         Console.OUT.println("Creating a transactional store with "+pg.size()+" active places, immediateRecovery = " + immediateRecovery);
         val plh = PlaceLocalHandle.make[LocalStore[Any]](Place.places(), ()=> new LocalStore[Any](pg, immediateRecovery) );
         val store = new TxStore(plh, app);
         Place.places().broadcastFlat(()=> { 
-        	plh().setPLH(plh); 
-        	Runtime.addTxStore(store);
+            plh().setPLH(plh); 
+            Runtime.addTxStore(store);
         });
         Console.OUT.println("store created successfully ...");
         return store;
