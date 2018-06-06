@@ -113,7 +113,7 @@ public class DistributedRecoveryHelper[K] {K haszero} {
             Runtime.decreaseParallelism(1n);
         }
     }
-    
+
     private static def allocateSparePlace[K](plh:PlaceLocalHandle[LocalStore[K]], deadVirtualId:Long, oldActivePlaces:PlaceGroup) {K haszero} {
         val nPlaces = Place.numAllPlaces();
         val nActive = oldActivePlaces.size();
@@ -121,27 +121,18 @@ public class DistributedRecoveryHelper[K] {K haszero} {
         for (var i:Long = nActive; i < nPlaces; i++) {
             if (oldActivePlaces.contains(Place(i)))
                 continue;
-                        
-            // remote call
-            val dst = Place(i);
-            val allocGR = GlobalRef(new AtomicInteger(0n));
-            val rCond = ResilientCondition.make(dst);
-            val closure = (gr:GlobalRef[Condition]) => {
-                at (dst) @Immediate("alloc_spare_async") async {
-                    var success:Boolean = false;
-                    try {
-                        success = plh().allocate(deadVirtualId);
-                    } catch (t:Exception) {
-                    }
-                    val s = success ? 1n : 0n;
-                    at (gr) @Immediate("alloc_spare_async_response") async {
-                        (allocGR as GlobalRef[AtomicInteger{self!=null}]{self.home == here})().set(s);
-                        gr().release();
-                    }
+           
+            var allocated:Boolean = true;
+            try {
+                finish at (Place(i)) async {
+                    val success = plh().allocate(deadVirtualId);
+                    if (!success)
+                        throw new Exception("Allocation failed");
                 }
-            };
-            rCond.run(closure);
-            val allocated = allocGR().get() == 1n;
+            } catch (ex:Exception) {
+                allocated = false;
+            }
+            
             if (!allocated)
                 debug("Recovering " + here + " Failed to allocate " + Place(i) + ", is it dead? " + Place(i).isDead());
             else {
