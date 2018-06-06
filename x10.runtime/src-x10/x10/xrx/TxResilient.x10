@@ -49,7 +49,7 @@ public class TxResilient extends Tx {
     }
     
     public def this(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
-    	super(plh, id);
+        super(plh, id);
     }
     
     public def initialize(fid:FinishResilient.Id) {
@@ -62,7 +62,7 @@ public class TxResilient extends Tx {
     }
     
     public def finalize(finObj:Releasable, abort:Boolean) {
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] finalize abort="+abort+" ...");
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] finalize abort="+abort+" ...");
         this.finishObj = finObj;
         resilient2PC(abort);
     }
@@ -94,7 +94,7 @@ public class TxResilient extends Tx {
             liveMasters.add(m);
         }
          
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] abortMastersOnly  count="+count+" ...");
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] abortMastersOnly  count="+count+" ...");
         lock.unlock();
         
         abort(liveMasters);
@@ -173,7 +173,7 @@ public class TxResilient extends Tx {
                             try {
                                 plh().getMasterStore().validate(id);
                             }catch (e:Exception) {
-                                debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validation excp["+e.getMessage()+"] ...");
+                                debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] validation excp["+e.getMessage()+"] ...");
                                 vote = false;
                             }
                         }        
@@ -212,39 +212,31 @@ public class TxResilient extends Tx {
     
     private def notifyPrepare(place:Int, ptype:Int, v:Boolean, isMasterRO:Boolean) {
         var prep:Boolean = false;
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPrepare1  place="+place+" ptype="+ptype+" v="+v+" isMRO="+isMasterRO+" ...");
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPrepare place="+place+" ptype="+ptype+" v="+v+" isMRO="+isMasterRO+" ...");
         lock.lock();
         if (!Place(place as Long).isDead()) {
             if (ptype == MASTER) {
                 count--;
                 if (pending.getOrElse(TxMember(place, MASTER),-1n) == -1n)
-                    debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPrepare1 FATALERROR place["+place+"] type["+MASTER+"] count="+count+" doesn't exist...");
+                    debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPrepare FATALERROR place["+place+"] type["+MASTER+"] count="+count+" doesn't exist...");
        
                 FinishResilient.decrement(pending, TxMember(place, MASTER));
-                debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPrepare2  master place="+place+" count="+count+"...");        
                 if (!readOnly && isMasterRO) { //we don't except an acknowledgement from the slave
                     val slave = masterSlave.getOrElse(place, DEAD_SLAVE);
-                    if (slave != DEAD_SLAVE) {
+                    if (slave != DEAD_SLAVE && !Place(slave as Long).isDead()) {
                         count--;
-                        
-                        if (pending.getOrElse(TxMember(slave, SLAVE),-1n) == -1n)
-                            debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPrepare2 FATALERROR place["+slave+"] type["+SLAVE+"] count="+count+" doesn't exist...");
-                        
                         FinishResilient.decrement(pending, TxMember(slave, SLAVE));
-                        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPrepare3  slave place="+slave+" count="+count+"...");
+                    }
+                    else {
+                        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPrepare place="+place+" ptype="+ptype+" isMRO="+isMasterRO+" slave is dead, don't decrement count");
                     }
                 }
                 
-            } else { //drop preparation message from a slave whose master died
+            } else { //drop preparation message from a slave whose master died because notifyPlaceDead will remove them
                 for (m in members) {
                     if (masterSlave.getOrElse(m, DEAD_SLAVE) == place && !Place(m).isDead()) {
                         count--;
-                        
-                        if (pending.getOrElse(TxMember(place, SLAVE),-1n) == -1n)
-                            debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPrepare3 FATALERROR place["+place+"] type["+SLAVE+"] count="+count+" doesn't exist...");
-                        
                         FinishResilient.decrement(pending, TxMember(place, SLAVE));
-                        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPrepare4  slave place="+place+" count="+count+"...");
                         break;
                     }
                 }
@@ -262,7 +254,7 @@ public class TxResilient extends Tx {
                     addExceptionUnsafe(new ConflictException());
             }
         }
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPrepare place["+place+"] localVote["+v+"] vote["+vote+"] count="+count+" ...");
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPrepare place["+place+"] ptype="+ptype+" localVote["+v+"] vote["+vote+"] completed, count="+count+" ...");
         lock.unlock();
         
         if (prep) {
@@ -350,20 +342,28 @@ public class TxResilient extends Tx {
     private def notifyAbortOrCommit(place:Int, ptype:Int) {
         var rel:Boolean = false;
         
-        lock.lock(); //altering the counts must be within lock/unlock
-        if (!Place(place as Long).isDead()) {
-            count--;
-            if (pending.getOrElse(TxMember(place, ptype),-1n) == -1n)
-                debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyAbortOrCommit FATALERROR place["+place+"] type["+ptype+"] count="+count+" doesn't exist...");
-            
-            FinishResilient.decrement(pending, TxMember(place, ptype));
-            if (count == 0n) {
-                rel = true;
-                pending = null;
+        try {
+            lock.lock(); //altering the counts must be within lock/unlock
+            if (!Place(place as Long).isDead()) {
+                count--;
+                if (pending == null) {
+                    debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit FATALERROR pending is NULL");
+                    throw new FatalTransactionException("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit FATALERROR pending is NULL");
+                }
+
+                if (pending.getOrElse(TxMember(place, ptype),-1n) == -1n)
+                    debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit FATALERROR place["+place+"] type["+ptype+"] count="+count+" doesn't exist...");
+                
+                FinishResilient.decrement(pending, TxMember(place, ptype));
+                if (count == 0n) {
+                    rel = true;
+                    pending = null;
+                }
             }
+            debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit place["+place+"]  count="+count+" ...");
+        } finally {
+            lock.unlock();
         }
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyAbortOrCommit place["+place+"]  count="+count+" ...");
-        lock.unlock();
         
         if (rel) {
             release();
@@ -415,7 +415,7 @@ public class TxResilient extends Tx {
             
             val cnt = pending.remove(t);
             count -= cnt;
-            debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] notifyPlaceDead remove place="+t.place+" type="+t.ptype+" cnt="+cnt+" count="+count+"...");
+            debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead remove place="+t.place+" type="+t.ptype+" cnt="+cnt+" count="+count+"...");
         }
         
         if (count == 0n) {
