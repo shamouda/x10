@@ -541,11 +541,19 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         public def toString() {
-            return "OptimisticRoot(id="+id+", parentId="+parentId+", localCount="+lc.get()+")";
+            return "OptimisticRoot(id="+id+", parentId="+parentId+", localCount="+lc_get()+")";
         }
         
         public def getId() = id;
         public def getBackupId() = backupPlaceId;
+        
+        def lc_get() {
+            var x:Int = 0n;
+            latch.lock();
+            x = lc;
+            latch.unlock();
+            return x;
+        }
         
         def lc_incrementAndGet() {
             var x:Int = 0n;
@@ -1140,7 +1148,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (dst != here.id as Int && !set.contains(dst)) {
                     set.add(dst);
                     at(Place(dst)) @Immediate("optdist_remoteFinishCleanup") async {
-                        FinishResilientOptimistic.OptimisticRemoteState.deleteObjects(id);
+                        FinishResilientOptimistic.OptimisticRemoteState.deleteObject(id);
                     }
                 }
             }

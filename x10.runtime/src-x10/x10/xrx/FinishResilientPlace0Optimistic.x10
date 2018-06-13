@@ -841,11 +841,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             }
         }
         
-        def setTxFlagsUnsafe(isTx:Boolean, isTxRO:Boolean) {
-            txFlag = txFlag | isTx;
-            txReadOnlyFlag = txReadOnlyFlag & isTxRO;
-        }
-        
         public static def countDropped(id:Id, src:Int, kind:Int, sent:Int) {
             if (verbose>=1) debug(">>>> countDropped(id="+id+", src="+src+", kind="+kind+", sent="+sent+") called");
             var dropped:Int = 0n;
@@ -1157,7 +1152,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         var lc:Int = 1n;
         
         public def toString() {
-            return "P0OptimisticRoot(id="+id+", parentId="+parentId+", localCount="+lc.get()+")";
+            return "P0OptimisticRoot(id="+id+", parentId="+parentId+", localCount="+lc_get()+")";
         }
         
         def this(id:Id, parent:FinishState) {
@@ -1188,6 +1183,15 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 if (verbose>=1) debug("<<<< globalInit(id="+id+") returning");
             }
             latch.unlock();
+        }
+        
+        
+        def lc_get() {
+            var x:Int = 0n;
+            latch.lock();
+            x = lc;
+            latch.unlock();
+            return x;
         }
         
         def lc_incrementAndGet() {
