@@ -29,7 +29,7 @@ import x10.util.concurrent.Latch;
 import x10.util.concurrent.Monitor;
 import x10.util.concurrent.SimpleLatch;
 import x10.util.resilient.concurrent.ResilientCondition;
-import x10.util.resilient.concurrent.ResilientLowLevelFinish;
+import x10.util.resilient.concurrent.LowLevelFinish;
 
 /**
  * XRX invocation protocol:
@@ -802,7 +802,7 @@ public final class Runtime {
      */
     @Native("c++", "::x10aux::throwException(::x10aux::nullCheck(#e))")
     @Native("java", "x10.runtime.impl.java.Runtime.throwCheckedWithoutThrows(#e)")
-    static native def throwCheckedWithoutThrows (e:CheckedThrowable) : void;
+    public static native def throwCheckedWithoutThrows (e:CheckedThrowable) : void;
 
     /**
      * Transparently wrap checked exceptions at the root of an at desugared closure, and unpack later.
@@ -1397,7 +1397,7 @@ public final class Runtime {
             FinishResilient.notifyPlaceDeath();
             GetRegistry.notifyPlaceDeath();
             ResilientCondition.notifyPlaceDeath();
-            ResilientLowLevelFinish.notifyPlaceDeath();
+            LowLevelFinish.notifyPlaceDeath();
         }
     }
 

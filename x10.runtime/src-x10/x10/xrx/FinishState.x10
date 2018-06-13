@@ -33,7 +33,7 @@ abstract class FinishState {
 
     // Turn this on to debug deadlocks within the finish implementation
     static VERBOSE = Configuration.envOrElse("X10_FINISH_VERBOSE", false);
-    public static REMOTE_GC = Configuration.envOrElse("X10_FINISH_REMOTE_GC", true);
+    protected static REMOTE_GC = Configuration.envOrElse("X10_FINISH_REMOTE_GC", true);
 
     /**
      * Called by an activity running at the current Place when it
@@ -669,21 +669,24 @@ abstract class FinishState {
             }
             latch.await(); // sit here, waiting for all child activities to complete
 
-            if (REMOTE_GC) {
-                // if there were remote activities spawned, clean up the RemoteFinish objects which tracked them
-                if (remoteActivities != null && remoteActivities.size() != 0) {
-                    val root = ref();
-                    remoteActivities.remove(here.id);
-                    for (placeId in remoteActivities.keySet()) {
-                        at(Place(placeId)) @Immediate("remoteFinishCleanup") async Runtime.finishStates.remove(root);
-                    }
-                }
-            } 
+            if (REMOTE_GC) gc();
+            
             // throw exceptions here if any were collected via the execution of child activities
             val t = MultipleExceptions.make(exceptions);
             if (null != t) throw t;
             
             // if no exceptions, simply return
+        }
+        
+        def gc() {
+            // if there were remote activities spawned, clean up the RemoteFinish objects which tracked them
+            if (remoteActivities != null && remoteActivities.size() != 0) {
+                val root = ref();
+                remoteActivities.remove(here.id);
+                for (placeId in remoteActivities.keySet()) {
+                    at(Place(placeId)) @Immediate("remoteFinishCleanup") async Runtime.finishStates.remove(root);
+                }
+            }
         }
 
         protected def process(remoteMap:HashMap[Long, Int]):void {

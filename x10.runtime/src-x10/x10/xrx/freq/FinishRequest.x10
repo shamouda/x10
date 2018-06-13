@@ -47,7 +47,6 @@ public abstract class FinishRequest {
     public def getFinKind():Int = -1n;
     public def getOutAdopterId():FinishResilient.Id = FinishResilient.UNASSIGNED;
     public def getOutSubmit():Boolean = outSubmit;
-    public def gc():Boolean = false;
     
     public @Inline def isTransitRequest() {
         return this instanceof TransitRequestPes || this instanceof TransitRequestOpt; 

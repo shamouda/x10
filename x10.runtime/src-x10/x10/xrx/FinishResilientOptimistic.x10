@@ -25,7 +25,7 @@ import x10.util.HashMap;
 import x10.util.HashSet;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.concurrent.ResilientCondition;
-import x10.util.resilient.concurrent.ResilientLowLevelFinish;
+import x10.util.resilient.concurrent.LowLevelFinish;
 import x10.util.concurrent.Condition;
 import x10.xrx.freq.FinishRequest;
 import x10.xrx.freq.ExcpRequestOpt;
@@ -33,15 +33,8 @@ import x10.xrx.freq.TermMulRequestOpt;
 import x10.xrx.freq.TermRequestOpt;
 import x10.xrx.freq.RemoveGhostChildRequestOpt;
 import x10.xrx.freq.TransitRequestOpt;
+import x10.util.Set;
 
-//TODO: clean remote finishes -> design a piggybacking protocol for GC
-//TODO: bulk globalInit for a chain of finishes.
-//TODO: createBackup: repeat if backup place is dead. block until another place is found!!
-//TODO: test notifyActivityCreationFailed()
-//TODO: handle RemoteCreationDenied
-//TODO: getNewMasterBlocking() does not need to be blocking
-//TODO: delete backup in sync(...) if quiescent reached
-//TODO: DenyId, can it use the src place only without the parent Id??? consider cases when a recovered master is creating new children backups!!!!
 /**
  * Distributed Resilient Finish (records transit tasks only)
  * Implementation notes: remote objects are shared and are persisted in a static hashmap (special GC needed)
@@ -76,6 +69,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     public def this (parent:FinishState) {
         id = Id(here.id as Int, nextId.getAndIncrement());
         me = new OptimisticMasterState(id, parent);
+        FinishReplicator.addMaster(id, me as FinishMasterState);
         if (verbose>=1) debug("<<<< RootFinish(id="+id+") created");
     }
     
@@ -101,7 +95,9 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     public def serialize(ser:Serializer) {
         if (verbose>=1) debug(">>>> serialize(id="+id+") called ");
         if (me instanceof OptimisticMasterState) {
-        	(me as OptimisticMasterState).globalInit(false); 
+            val me2 = (me as OptimisticMasterState); 
+            if (!me2.isGlobal)
+                me2.globalInit(); // Once we have more than 1 copy of the finish state, we must go global
         }
         ser.writeAny(id);
         if (verbose>=1) debug("<<<< serialize(id="+id+") returning ");
@@ -137,7 +133,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             this.id = id;
         }
         
-        public static def deleteObjects(gcReqs:HashSet[Id]) {
+        public static def deleteObjects(gcReqs:Set[Id]) {
             if (gcReqs == null) {
                 if (verbose>=1) debug(">>>> deleteObjects gcReqs = NULL");
                 return;
@@ -148,6 +144,15 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     if (verbose>=1) debug(">>>> deleting object(id="+idx+")");
                     remotes.delete(idx);
                 }
+            } finally {
+                remoteLock.unlock();
+            }
+        }
+        
+        public static def deleteObject(id:Id) {
+            try {
+                remoteLock.lock();
+                remotes.delete(id);
             } finally {
                 remoteLock.unlock();
             }
@@ -478,7 +483,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         //finish variables
         val parent:FinishState; //the direct parent finish object (used in globalInit for recursive initializing)
         val latch:SimpleLatch; //latch for blocking the finish activity, and a also used as the instance lock
-        val lc:AtomicInteger;
+        var lc:Int;
         
         //resilient-finish variables
         val id:Id;
@@ -513,7 +518,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             this.latch = new SimpleLatch();
             this.isGlobal = true;
             this.backupChanged = true;
-            this.lc = new AtomicInteger(0n);
+            this.lc = 0n;
             this.isAdopted = true; // will have to call notifyParent
         }
         
@@ -522,7 +527,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             this.id = id;
             this.numActive = 1;
             this.parent = parent;
-            this.lc = new AtomicInteger(1n);
+            this.lc = 1n;
             sent = new HashMap[Edge,Int]();
             sent.put(Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
             transit = new HashMap[Edge,Int]();
@@ -542,47 +547,38 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         public def getId() = id;
         public def getBackupId() = backupPlaceId;
         
-        public def addGCRequests(pendingGC:HashMap[Int, HashSet[Id]]) {
-            if (verbose>=1) debug(">>>> addGCRequests(id="+id+") called");
-            if (REMOTE_GC) {
-                for (e in sent.entries()) {
-                    val dst = e.getKey().dst;
-                    var set:HashSet[Id] = pendingGC.getOrElse(dst, null);
-                    if (set == null) {
-                        set = new HashSet[Id]();
-                        pendingGC.put(dst, set);
-                    }
-                    set.add(id);
-                }
-            }
-            if (verbose>=1) {
-                var str:String = "";
-                for (e in pendingGC.entries()) {
-                    val placeId = e.getKey();
-                    val set = e.getValue();
-                    for (id in set) {
-                        str += "(" + placeId + " :> " + id + ") ";
-                    }
-                }
-                debug("==== addGCRequests(id="+id+") result: " + str);
-            }
-            if (verbose>=1) debug("<<<< addGCRequests(id="+id+") returning");
-        }
-        //makeBackup is true only when a parent finish if forced to be global by its child
-        //otherwise, backup is created with the first transit request
-        def globalInit(makeBackup:Boolean) {
+        def lc_incrementAndGet() {
+            var x:Int = 0n;
             latch.lock();
-            strictFinish = true;
+            x = ++lc;
+            latch.unlock();
+            return x;
+        }
+        
+        def lc_decrementAndGet() {
+            var x:Int = 0n;
+            latch.lock();
+            x = --lc;
+            latch.unlock();
+            return x;
+        }
+        
+        def globalInit() {
+            latch.lock();
             if (!isGlobal) {
+                strictFinish = true;
                 if (verbose>=1) debug(">>>> globalInit(id="+id+") called");
+                
                 if (parent instanceof FinishResilientOptimistic) {
                     val frParent = parent as FinishResilientOptimistic;
-                    if (frParent.me instanceof OptimisticMasterState) (frParent.me as OptimisticMasterState).globalInit(true);
+                    if (frParent.me instanceof OptimisticMasterState) {
+                        val par = (frParent.me as OptimisticMasterState);
+                        if (!par.isGlobal) par.globalInit();
+                    }
                 }
-                if (makeBackup)
-                    createBackup(backupPlaceId);
+                
+                createBackup(backupPlaceId);
                 isGlobal = true;
-                FinishReplicator.addMaster(id, this);
                 if (verbose>=1) debug("<<<< globalInit(id="+id+") returning");
             }
             latch.unlock();
@@ -629,7 +625,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val s = new x10.util.StringBuilder();
             s.add("Root dump:\n");
             s.add("             id:" + id); s.add('\n');
-            s.add("     localCount:"); s.add(lc.get()); s.add('\n');
+            s.add("     localCount:"); s.add(lc); s.add('\n');
             s.add("      numActive:"); s.add(numActive); s.add('\n');
             s.add("       parentId: " + parentId); s.add('\n');
             if (sent.size() > 0) {
@@ -924,10 +920,21 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
             if (srcId == dstId) {
-                lc.incrementAndGet();
+                lc_incrementAndGet();
                 if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called locally, localCount now "+lc);
             } else {
                 if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
+                
+                isGlobal = true;
+                //globalize parent if not global - cannot postpone this till sendPendingAct because it is called in an immediate thread and globalInit is blocking
+                if (parent instanceof FinishResilientOptimistic) {
+                    val frParent = parent as FinishResilientOptimistic;
+                    if (frParent.me instanceof OptimisticMasterState) {
+                        val par = (frParent.me as OptimisticMasterState);
+                        if (!par.isGlobal) par.globalInit();
+                    }
+                }
+                
                 val req = FinishRequest.makeOptTransitRequest(id, parentId, srcId, dstId, kind);
                 FinishReplicator.exec(req, this);
                 if (verbose>=1) debug("<<<< Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
@@ -938,7 +945,17 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val kind = ASYNC;
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
-            globalInit(false);//globalize parent if not global - cannot postpone this till sendPendingAct because it is called in an immediate thread and globalInit is blocking
+            
+            isGlobal = true;
+            //globalize parent if not global - cannot postpone this till sendPendingAct because it is called in an immediate thread and globalInit is blocking
+            if (parent instanceof FinishResilientOptimistic) {
+                val frParent = parent as FinishResilientOptimistic;
+                if (frParent.me instanceof OptimisticMasterState) {
+                    val par = (frParent.me as OptimisticMasterState);
+                    if (!par.isGlobal) par.globalInit();
+                }
+            }
+            
             val start = prof != null ? System.nanoTime() : 0;
             val ser = new Serializer();
             ser.writeAny(body);
@@ -960,7 +977,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     FinishReplicator.sendPendingAct(id, num);
                 }
             };
-            val count = lc.incrementAndGet(); // synthetic activity to keep finish locally live during async replication
+            val count = lc_incrementAndGet(); // synthetic activity to keep finish locally live during async replication
             FinishReplicator.asyncExec(req, this, preSendAction, postSendAction);
             if (verbose>=1) debug("<<<< Root(id="+id+").spawnRemoteActivity(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning, incremented localCount to " + count);
         }
@@ -997,6 +1014,17 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable, kind:Int):void { 
             val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
+            
+            isGlobal = true;
+            //globalize parent if not global - cannot postpone this till sendPendingAct because it is called in an immediate thread and globalInit is blocking
+            if (parent instanceof FinishResilientOptimistic) {
+                val frParent = parent as FinishResilientOptimistic;
+                if (frParent.me instanceof OptimisticMasterState) {
+                    val par = (frParent.me as OptimisticMasterState);
+                    if (!par.isGlobal) par.globalInit();
+                }
+            }
+            
             if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
             val req = FinishRequest.makeOptTermRequest(id, parentId, srcId, dstId, kind, t);
             if (DISABLE_NONBLOCKING_REPLICATION) {
@@ -1024,6 +1052,17 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 return;
             }
             assert (Runtime.activity() != null) : here + " >>>> Root(id="+id+").pushException(t="+t.getMessage()+") blocking method called within an immediate thread";
+            
+            isGlobal = true;
+            //globalize parent if not global - cannot postpone this till sendPendingAct because it is called in an immediate thread and globalInit is blocking
+            if (parent instanceof FinishResilientOptimistic) {
+                val frParent = parent as FinishResilientOptimistic;
+                if (frParent.me instanceof OptimisticMasterState) {
+                    val par = (frParent.me as OptimisticMasterState);
+                    if (!par.isGlobal) par.globalInit();
+                }
+            }
+            
             if (verbose>=1) debug(">>>> Root(id="+id+").pushException(t="+t.getMessage()+") called");
             val req = FinishRequest.makeOptExcpRequest(id, parentId, t);
             FinishReplicator.exec(req, this);
@@ -1040,7 +1079,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         def notifyActivityTermination(srcPlace:Place, kind:Int):void {
             val srcId = srcPlace.id as Int; 
             val dstId = here.id as Int;
-            val count = lc.decrementAndGet();
+            val count = lc_decrementAndGet();
             if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityTermination(srcId="+srcId + " dstId="+dstId+",kind="+kind+") called, decremented localCount to "+count);
             if (count > 0) {
                 return;
@@ -1079,6 +1118,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (verbose>=2) debug("returned from latch.await for id="+id);
 
             // no more messages will come back to this finish state 
+            if (REMOTE_GC) gc();
             
             // get exceptions and throw wrapped in a ME if there are any
             if (excs != null) {
@@ -1089,6 +1129,20 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (id == TOP_FINISH) {
                 //blocks until replication work is done at all places
                 FinishReplicator.finalizeReplication();
+            }
+        }
+        
+        def gc() {
+            val id = this.id;
+            val set = new HashSet[Int]();
+            for (e in sent.entries()) {
+                val dst = e.getKey().dst;
+                if (dst != here.id as Int && !set.contains(dst)) {
+                    set.add(dst);
+                    at(Place(dst)) @Immediate("optdist_remoteFinishCleanup") async {
+                        FinishResilientOptimistic.OptimisticRemoteState.deleteObjects(id);
+                    }
+                }
             }
         }
         
@@ -1672,15 +1726,15 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val pl = iter.next();
             places(i++) = pl;
         }
-        val fin = ResilientLowLevelFinish.make(places);
+        val fin = LowLevelFinish.make(places);
         val gr = fin.getGr();
         val outputGr = GlobalRef[HashMap[Int,OptResolveRequest]](countingReqs);
-        val closure = (gr:GlobalRef[ResilientLowLevelFinish]) => {
+        val closure = (gr:GlobalRef[LowLevelFinish]) => {
             for (p in places) {
                 val requests = countingReqs.getOrThrow(p);
                 if (verbose>=1) debug("==== processCountingRequests  moving from " + here + " to " + Place(p));
                 if (Place(p).isDead()) {
-                    (gr as GlobalRef[ResilientLowLevelFinish]{self.home == here})().notifyFailure();
+                    (gr as GlobalRef[LowLevelFinish]{self.home == here})().notifyFailure();
                 } else {
                     at (Place(p)) @Immediate("counting_request") async {
                         if (verbose>=1) debug("==== processCountingRequests  reached from " + gr.home + " to " + here);
@@ -1745,10 +1799,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             places(i++) = FinishReplicator.nominateMasterPlaceIfDead(b.placeOfMaster);
         }
         
-        val fin = ResilientLowLevelFinish.make(places);
+        val fin = LowLevelFinish.make(places);
         val gr = fin.getGr();
         val _backupPlaceId = here.id as Int;
-        val closure = (gr:GlobalRef[ResilientLowLevelFinish]) => {
+        val closure = (gr:GlobalRef[LowLevelFinish]) => {
             var i:Long = 0;
             for (bx in backups) {
                 val b = bx as OptimisticBackupState;
@@ -1762,7 +1816,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 
                 val master = Place(places(i));
                 if (master.isDead()) {
-                    (gr as GlobalRef[ResilientLowLevelFinish]{self.home == here})().notifyFailure();
+                    (gr as GlobalRef[LowLevelFinish]{self.home == here})().notifyFailure();
                 } else {
                     at (master) @Immediate("create_masters") async {
                         val newM = new OptimisticMasterState(_id, _parentId, _numActive, 
@@ -1811,10 +1865,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             m.backupChanged = true;
             i++;
         }
-        val fin = ResilientLowLevelFinish.make(places);
+        val fin = LowLevelFinish.make(places);
         val gr = fin.getGr();
         val placeOfMaster = here.id as Int;
-        val closure = (gr:GlobalRef[ResilientLowLevelFinish]) => {
+        val closure = (gr:GlobalRef[LowLevelFinish]) => {
             for (mx in masters) {
                 val m = mx as OptimisticMasterState;
                 val backup = Place(m.backupPlaceId);
@@ -1826,7 +1880,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 val ghosts = m.ghostChildren;
                 val excs = m.excs;
                 if (backup.isDead()) {
-                    (gr as GlobalRef[ResilientLowLevelFinish]{self.home == here})().notifyFailure();
+                    (gr as GlobalRef[LowLevelFinish]{self.home == here})().notifyFailure();
                 } else {
                     at (backup) @Immediate("create_or_sync_backup") async {
                         FinishReplicator.createOptimisticBackupOrSync(id, parentId, numActive, 
