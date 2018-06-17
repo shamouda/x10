@@ -16,7 +16,7 @@ import x10.util.Team;
  * Benchmarks performance of Team.bcast for varying data size
  */
 public class BenchmarkBcast extends x10Test {
-    private static ITERS = 10;
+    private static ITERS = 30;
     //private static MAX_SIZE = 2<<19;
     private static MAX_SIZE = 2<<10; 
     private static VALIDATE = false;
@@ -29,7 +29,6 @@ public class BenchmarkBcast extends x10Test {
             //for (var s:Long= 1; s <= MAX_SIZE; s *= 2) 
             val s = MAX_SIZE;
             {
-                var timesStr:String = "";
                 val src = new Rail[Double](s, (i:Long) => i as Double);
                 val dst = new Rail[Double](s);
                 val start = System.nanoTime();
@@ -37,7 +36,9 @@ public class BenchmarkBcast extends x10Test {
                     val startX = System.nanoTime();
                     Team.WORLD.bcast(root, src, 0, dst, 0, s);
                     val stopX = System.nanoTime();
-                    timesStr += (((stopX-startX) as Double) / 1e6) + ":";
+                    if (here == Place.FIRST_PLACE) {
+                        Console.OUT.printf("["+iter+"] bcast %d: %g ms\n", s, ((stopX-startX) as Double) / 1e6);
+                    }
                 }
                 val stop = System.nanoTime();
 
@@ -49,8 +50,7 @@ public class BenchmarkBcast extends x10Test {
                 }
 
                 if (here == Place.FIRST_PLACE) {
-                    Console.OUT.printf("bcast %d: %g ms\n", s, ((stop-start) as Double) / 1e6 / ITERS);
-                    Console.OUT.println("bcastAllValues (ms):" + timesStr);
+                    Console.OUT.printf("average bcast %d: %g ms\n", s, ((stop-start) as Double) / 1e6 / ITERS);
                 }
             }
         }

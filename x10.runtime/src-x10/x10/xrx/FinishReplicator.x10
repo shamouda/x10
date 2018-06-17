@@ -241,10 +241,10 @@ public final class FinishReplicator {
                 if (req == null)
                     throw new Exception(here + " SER_FATAL at master => req is null");
                 if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncExecInternal remote reached master ");
-                val mFin = findMaster(req.id); 
+                val mFin = findMaster(req.id);
                 if (mFin == null) 
                     throw new Exception(here + " fatal error, master(id="+req.id+") is null2 while processing req["+req+"]");
-                val mresp = mFin.exec(req);                
+                val mresp = mFin.exec(req);
                 if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncExecInternal remote master moving to caller " + caller);
 
                 val prof2 = null;

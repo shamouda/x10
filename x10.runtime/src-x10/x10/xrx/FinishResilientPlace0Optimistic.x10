@@ -116,11 +116,12 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         
         val tx:Tx;
         var txStarted:Boolean = false;
+        
         /**Place0 states**/
         private static val states = (here.id==0) ? new HashMap[Id, State]() : null;
         private static val statesLock = (here.id==0) ? new Lock() : null;
         private static val place0 = Place.FIRST_PLACE;
-                
+
         private def this(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState], tx:Tx) {
             this.id = id;
             this.parentId = parentId; 
@@ -149,12 +150,15 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         def gc() {
-            if (GC_DISABLED) return;
-            val id = this.id; //don't copy this
-            if (sent.size() != 0) {
-                for (key in sent.keySet()) {
-                    if (key.dst != id.home && (tx == null || tx.isEmpty() || !tx.contains(key.dst)))
-                        at(Place(key.dst)) @Immediate("OP0_remoteFinishCleanup") async FinishResilientPlace0Optimistic.P0OptimisticRemoteState.deleteObject(id);
+            val id = this.id;
+            val set = new HashSet[Int]();
+            for (e in sent.entries()) {
+                val dst = e.getKey().dst;
+                if (dst != here.id as Int && !set.contains(dst) && (tx == null || !tx.contains(dst))) {
+                    set.add(dst);
+                    at(Place(dst)) @Immediate("optp0_remoteFinishCleanup") async {
+                        FinishResilientPlace0Optimistic.P0OptimisticRemoteState.deleteObject(id);
+                    }
                 }
             }
         }
@@ -338,7 +342,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                             if (verbose>=1) debug("==== notifySubActivitySpawn(id="+id+") destination "+dstId + "is dead; dropped at");
                         }
                     } else {
-                       states(id).inTransit(srcId, dstId, kind, "runImmediateAt notifySubActivitySpawn");
+                        states(id).inTransit(srcId, dstId, kind, "runImmediateAt notifySubActivitySpawn");
                     }
                 } finally {
                     statesLock.unlock();
@@ -641,7 +645,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             
             if (verbose>=1) debug(">>>> State(id="+id+").p0HereTermMultiple [dstId=" + dstId +", mapSz="+map.size()+" ] called");
             try {
-                statesLock.lock();                
+                statesLock.lock();
                 val state = states(id);
                 if (isTx && state.tx != null) {
                     state.tx.addMember(dstId, isTxRO);
@@ -727,7 +731,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 if (excs != null && excs.size() > 0) {
                     abort = true;
                 }
-                tx.finalize(this, abort);              
+                tx.finalize(this, abort); //this also performs gc
             }
         }
         
@@ -791,6 +795,9 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
 
         def releaseLatch() {
+            
+            if (REMOTE_GC) gc();
+            
             if (isAdopted) { //
                 if (verbose>=1) debug("releaseLatch(id="+id+") called on lost finish; not releasing latch");
             } else {
@@ -816,8 +823,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 }
             }
             if (verbose>=2) debug("releaseLatch(id="+id+") returning");
-            
-            gc();
         }
         
         def notifyParent() {
@@ -1285,7 +1290,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         public def toString() {
-            return "P0OptimisticRoot(id="+id+", parentId="+parentId+", localCount="+lc+")";
+            return "P0OptimisticRoot(id="+id+", parentId="+parentId+", localCount="+lc_get()+")";
         }
         
         def this(id:Id, parent:FinishState) {
@@ -1316,6 +1321,15 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 if (verbose>=1) debug("<<<< globalInit(id="+id+") returning");
             }
             latch.unlock();
+        }
+        
+        
+        def lc_get() {
+            var x:Int = 0n;
+            latch.lock();
+            x = lc;
+            latch.unlock();
+            return x;
         }
         
         def lc_incrementAndGet() {

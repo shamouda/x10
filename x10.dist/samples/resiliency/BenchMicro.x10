@@ -22,9 +22,10 @@ import x10.compiler.Native;
  */
 public class BenchMicro {
 
-    static OUTER_ITERS = 10;
+    static OUTER_ITERS = System.getenv("BENCHMICRO_ITER") == null ? 10 : Long.parseLong(System.getenv("BENCHMICRO_ITER"));
     static INNER_ITERS = 100;
-    static MIN_NANOS = (10*1e9) as long; // require each test to run for at least 10 seconds (reduce jitter)
+    static MIN_NANOS = -1; //control the numbers of repeatitions using OUTER_ITERS only
+                      //(10*1e9) as long; // require each test to run for at least 10 seconds (reduce jitter)
 
     @Native("c++", "true")
     @Native("java", "true")
@@ -126,57 +127,66 @@ public class BenchMicro {
             time1 = System.nanoTime();
         iterCount++;
         } while (time1-time0 < minTime);
-        if (print) println(refTime, prefix+"empty finish: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
+        if (print) println(refTime, prefix+"average empty finish: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
 
         iterCount = 0;
         time0 = System.nanoTime();
         do {
             for (i in 1..OUTER_ITERS) {
+                val t1 = System.nanoTime();
                 finish {
                     for (j in 1..INNER_ITERS) { 
                         async { think(t); };
                     }
                 }
+                val t2 = System.nanoTime();
+                if (print) println(refTime, prefix+"["+i+"] local termination of "+INNER_ITERS+" activities: "+(t2-t1)/1E9+" seconds");
             }
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) println(refTime, prefix+"local termination of "+INNER_ITERS+" activities: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
+        if (print) println(refTime, prefix+"average local termination of "+INNER_ITERS+" activities: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
 
         iterCount = 0;
         time0 = System.nanoTime();
         val next = Place.places().next(home);
         do {
             for (i in 1..OUTER_ITERS) {
+                val t1 = System.nanoTime();
                 finish {
                     at (next) async { think(t); }
                 }
+                val t2 = System.nanoTime();
+                if (print) println(refTime, prefix+"["+i+"] single activity: "+(t2-t1)/1E9+" seconds");
             }
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) println(refTime, prefix+"single activity: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
+        if (print) println(refTime, prefix+"average single activity: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
 
         iterCount = 0;
         time0 = System.nanoTime();
         do {
             for (i in 1..OUTER_ITERS) {
+                val t1 = System.nanoTime();
                 finish {
                     for (p in Place.places()) {
                         at (p) async { think(t); }
                     }
                 }
+                val t2 = System.nanoTime();
+                if (print) println(refTime, prefix+"["+i+"] flat fan out: "+(t2-t1)/1E9+" seconds");        
             }
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) println(refTime, prefix+"flat fan out: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
+        if (print) println(refTime, prefix+"average flat fan out: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
 
         iterCount = 0;
         time0 = System.nanoTime();
-        //do 
-        {
+        do {
             for (i in 1..OUTER_ITERS) {
+                val t1 = System.nanoTime();
                 finish {
                     for (p in Place.places()) {
                         at (p) async {
@@ -184,17 +194,19 @@ public class BenchMicro {
                         }
                     }
                 }
+                val t2 = System.nanoTime();
+                if (print) println(refTime, prefix+"["+i+"] flat fan out - message back: "+(t2-t1)/1E9+" seconds");
             }
             time1 = System.nanoTime();
             iterCount++;
-        } 
-        //while (time1-time0 < minTime);
-        if (print) println(refTime, prefix+"flat fan out - message back: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
+        } while (time1-time0 < minTime);
+        if (print) println(refTime, prefix+"average flat fan out - message back: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
         
         iterCount = 0;
         time0 = System.nanoTime();
         do {
             for (i in 1..OUTER_ITERS) {
+                val t1 = System.nanoTime();
                 finish {
                     for (p in Place.places()) {
                         at (p) async {
@@ -206,57 +218,74 @@ public class BenchMicro {
                         }
                     }
                 }
+                val t2 = System.nanoTime();
+                if (print) println(refTime, prefix+"["+i+"] fan out - internal work "+INNER_ITERS+" activities: "+(t2-t1)/1E9+" seconds");
             }
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) println(refTime, prefix+"fan out - internal work "+INNER_ITERS+" activities: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
+        if (print) println(refTime, prefix+"average fan out - internal work "+INNER_ITERS+" activities: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
 
         iterCount = 0;
         time0 = System.nanoTime();
         do {
-            finish {
-                for (p in Place.places()) {
-                    at (p) async {
-                        for (q in Place.places()) at (q) async {
-                            think(t);
-                        }
-                    }
-                }
-            }
-            time1 = System.nanoTime();
-            iterCount++;
-        } while (time1-time0 < minTime);
-        if (print) println(refTime, prefix+"fan out - broadcast: "+(time1-time0)/1E9/iterCount+" seconds");
-
-        iterCount = 0;
-        time0 = System.nanoTime();
-        do {
-            finish {
-                for (p in Place.places()) {
-                    at (p) async {
-                        finish {
+            for (i in 1..OUTER_ITERS) {
+                val t1 = System.nanoTime();
+                finish {
+                    for (p in Place.places()) {
+                        at (p) async {
                             for (q in Place.places()) at (q) async {
                                 think(t);
                             }
                         }
                     }
                 }
+                val t2 = System.nanoTime();
+                if (print) println(refTime, prefix+"["+i+"] fan out - broadcast: "+(t2-t1)/1E9+" seconds");
             }
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) println(refTime, prefix+"fan out - nested finish broadcast: "+(time1-time0)/1E9/iterCount+" seconds");
+        if (print) println(refTime, prefix+"average fan out - broadcast: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
+
+        iterCount = 0;
+        time0 = System.nanoTime();
+        do {
+            for (i in 1..OUTER_ITERS) {
+                val t1 = System.nanoTime();
+                finish {
+                    for (p in Place.places()) {
+                        at (p) async {
+                            finish {
+                                for (q in Place.places()) at (q) async {
+                                    think(t);
+                                }
+                            }
+                        }
+                    }
+                }
+                val t2 = System.nanoTime();
+                if (print) println(refTime, prefix+"["+i+"] fan out - nested finish broadcast: "+(t2-t1)/1E9+" seconds");
+            }
+            time1 = System.nanoTime();
+            iterCount++;
+        } while (time1-time0 < minTime);
+        if (print) println(refTime, prefix+"average fan out - nested finish broadcast: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
 
         iterCount = 0;
         val endPlace = Place.places().prev(here);
         time0 = System.nanoTime();
         do {
-            ring(t, endPlace);
+            for (i in 1..OUTER_ITERS) {
+                val t1 = System.nanoTime();
+                ring(t, endPlace);
+                val t2 = System.nanoTime();
+                if (print) println(refTime, prefix+"["+i+"] ring around via at: "+(t2-t1)/1E9+" seconds");
+            }
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) println(refTime, prefix+"ring around via at: "+(time1-time0)/1E9/iterCount+" seconds");
+        if (print) println(refTime, prefix+"average ring around via at: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
         
     }
 
@@ -266,11 +295,16 @@ public class BenchMicro {
         val home = here;
         time0 = System.nanoTime();
         do {
-            downTree(t);
+            for (i in 1..OUTER_ITERS) {
+                val t1 = System.nanoTime();
+                downTree(t);
+                val t2 = System.nanoTime();
+                if (print) println(refTime, prefix+"["+i+"] tree fan out: "+(t2-t1)/1E9+" seconds");
+            }
             time1 = System.nanoTime();
             iterCount++;
         } while (time1-time0 < minTime);
-        if (print) println(refTime, prefix+"tree fan out: "+(time1-time0)/1E9/iterCount+" seconds");
+        if (print) println(refTime, prefix+"average tree fan out: "+(time1-time0)/1E9/OUTER_ITERS/iterCount+" seconds");
     }
     
     private static def downTree(thinkTime:long):void {

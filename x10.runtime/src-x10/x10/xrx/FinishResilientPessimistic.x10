@@ -418,7 +418,11 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         
         /**
          * makeBackup is true only when a parent finish is forced to be global by its child,
-         * otherwise, backup is created with the first transit request */
+         * otherwise, backup is created with the first transit request 
+         * 
+         * We couldn't avoid calling globalInit in new instaces
+         * due to the need to call add child on parents who may be remote.
+         * */
         private def globalInit(makeBackup:Boolean) {
             latch.lock();
             if (!isGlobal) {
@@ -429,7 +433,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                         val x = (frParent.me as PessimisticMasterState);
                         if (x.isGlobal) {
                             val req = FinishRequest.makePesAddChildRequest(parentId /*id*/, id /*child_id*/);
-                            FinishReplicator.exec(req);                            
+                            FinishReplicator.exec(req);
                         } else {
                             x.addChild(id);
                             x.globalInit(true);

@@ -52,6 +52,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
         else
             return new Tx(plh, id);
     }
+    
     /**
      * Initializing the transaction object.
      * Must be called at the place responsible for 2PC

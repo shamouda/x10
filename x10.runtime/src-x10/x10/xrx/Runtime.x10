@@ -25,11 +25,10 @@ import x10.io.Reader;
 import x10.io.Writer;
 
 import x10.util.concurrent.Condition;
-import x10.util.resilient.concurrent.ResilientCondition;
 import x10.util.concurrent.Latch;
 import x10.util.concurrent.Monitor;
 import x10.util.concurrent.SimpleLatch;
-
+import x10.util.resilient.concurrent.ResilientCondition;
 import x10.util.resilient.concurrent.LowLevelFinish;
 import x10.util.ArrayList;
 
@@ -1584,9 +1583,7 @@ public final class Runtime {
             return false;
         }
     }
-    
-    
-    
+
     static txStores = new ArrayList[TxStore]();
     public static def addTxStore(store:TxStore) {
         atomic {

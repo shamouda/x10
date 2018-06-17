@@ -25,19 +25,7 @@ import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.store.Store;
 
-public class SPMDResilientIterativeExecutor (home:Place) {
-    private static val VERBOSE = (System.getenv("EXECUTOR_DEBUG") != null 
-                                && System.getenv("EXECUTOR_DEBUG").equals("1"));
-
-    private val manager:GlobalRef[PlaceManager]{self.home == this.home};
-    private val resilientMap:Store[Cloneable];
-    private var plh:PlaceLocalHandle[PlaceTempData];
-    private var team:Team;
-    private val ckptInterval:Long;
-    private val isResilient:Boolean;
-    
-    // configuration parameters for killing places at different times
-    private var hammer:SimplePlaceHammer;
+public class SPMDResilientIterativeExecutor extends IterativeExecutor {
 
     private transient var ckptTimes:ArrayList[Long] = new ArrayList[Long]();
     private transient var remakeTimes:ArrayList[Long] = new ArrayList[Long]();
@@ -49,50 +37,17 @@ public class SPMDResilientIterativeExecutor (home:Place) {
     private transient var startRunTime:Long = 0;
     private transient var lastCkptVersion:Long = -1;
     private transient var lastCkptIter:Long = -1;
-    
+
+    private var plh:PlaceLocalHandle[PlaceData];
+
     public def this(ckptInterval:Long, sparePlaces:Long, supportShrinking:Boolean) {
-        property(here);
-        var thisTime:Long = 0;
-        thisTime -= Timer.milliTime();
-        isResilient = ckptInterval > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0;
-        this.ckptInterval = ckptInterval;
-        val mgr = new PlaceManager(sparePlaces, supportShrinking);
-        this.manager = GlobalRef[PlaceManager](mgr);
-        
-        var teamTime:Long = 0;
-        teamTime -= Timer.milliTime();
-        team = new Team(mgr.activePlaces());
-        teamTime += Timer.milliTime();
-        
-        var storeTime:Long = 0;
-        storeTime -= Timer.milliTime();
-        if (isResilient) {
-            this.resilientMap = Store.make[Cloneable]("_map_", mgr.activePlaces());
-            this.hammer = new SimplePlaceHammer();
-            hammer.printPlan();
-        }
-        else {        	            
-            this.resilientMap = null;
-            this.hammer = null;
-        }
-        storeTime += Timer.milliTime();
-        
-        thisTime += Timer.milliTime();
-        Console.OUT.println("SPMDResilientIterativeExecutor created successfully:teamTime:"+teamTime+":storeTime:"+storeTime+":totalTime:"+thisTime);
+        super(ckptInterval, sparePlaces, supportShrinking);
     }
 
     public def run(app:SPMDResilientIterativeApp){here == home} {
         run(app, Timer.milliTime());
     }
     
-    public def setHammer(h:SimplePlaceHammer){here == home} {
-        hammer = h;
-    }
-
-    public def activePlaces(){here == home} = manager().activePlaces();
-
-    public def team(){here == home} = team;
-
     //the startRunTime parameter is added to allow the executor to consider 
     //any initialization time done by the application before starting the executor
     public def run(app:SPMDResilientIterativeApp, startRunTime:Long){here == home} {
@@ -102,7 +57,7 @@ public class SPMDResilientIterativeExecutor (home:Place) {
         this.startRunTime = startRunTime;
         Console.OUT.println("SPMDResilientIterativeExecutor: Application start time ["+startRunTime+"] ...");
         val root = here;
-        plh = PlaceLocalHandle.make[PlaceTempData](manager().activePlaces(), ()=>new PlaceTempData());
+        plh = PlaceLocalHandle.make[PlaceData](manager().activePlaces(), ()=>new PlaceData());
         var tmpGlobalIter:Long = 0;        
         appInitTime = Timer.milliTime() - startRunTime;
         var remakeRequired:Boolean = false;
@@ -222,7 +177,7 @@ public class SPMDResilientIterativeExecutor (home:Place) {
             val p0GlobalIter = plh().globalIter;
             val p0AllCkptKeys = plh().ckptKeyVersion;
             val p0LastCkptKeys = plh().lastCkptKeys;
-            PlaceLocalHandle.addPlace[PlaceTempData](plh, p, ()=>new PlaceTempData(victimStat, p0GlobalIter, p0LastCkptKeys, p0AllCkptKeys));
+            PlaceLocalHandle.addPlace[PlaceData](plh, p, ()=>new PlaceData(victimStat, p0GlobalIter, p0LastCkptKeys, p0AllCkptKeys));
         }
 
         val startAppRemake = Timer.milliTime();
@@ -477,7 +432,7 @@ public class SPMDResilientIterativeExecutor (home:Place) {
     }
     
     
-    class PlaceTempData {
+    class PlaceData {
         private val VERBOSE_EXECUTOR_PLACE_LOCAL = (System.getenv("EXECUTOR_PLACE_LOCAL") != null 
                 && System.getenv("EXECUTOR_PLACE_LOCAL").equals("1"));
         //used by place hammer
@@ -512,7 +467,7 @@ public class SPMDResilientIterativeExecutor (home:Place) {
         }
     }
     
-    class PlaceStatistics {        
+    class PlaceStatistics {
         val restoreTimes:ArrayList[Long];
         val stepTimes:ArrayList[Long];
         
@@ -523,7 +478,7 @@ public class SPMDResilientIterativeExecutor (home:Place) {
         var placeSumRestore:Rail[Long];
         var placeSumStep:Rail[Long];
         
-        public def this() {            
+        public def this() {
             restoreTimes = new ArrayList[Long]();
             stepTimes = new ArrayList[Long]();
         }
@@ -534,4 +489,3 @@ public class SPMDResilientIterativeExecutor (home:Place) {
         }
     }
 }
-

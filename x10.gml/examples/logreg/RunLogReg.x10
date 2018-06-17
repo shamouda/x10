@@ -88,8 +88,15 @@ public class RunLogReg {
             if (sparePlaces > 0)
                 Console.OUT.println("Using "+sparePlaces+" spare place(s).");
             
+            
+            val disableAgree = System.getenv("DISABLE_TEAM_AGREE") != null && Long.parseLong(System.getenv("DISABLE_TEAM_AGREE")) == 1;
             val startTime = Timer.milliTime();
-            val executor = new SPMDResilientIterativeExecutor(checkpointFreq, sparePlaces, false);
+            val executor:IterativeExecutor;
+            if (x10.xrx.Runtime.x10rtAgreementSupport() && !disableAgree)
+                executor = new SPMDAgreeResilientIterativeExecutor(checkpointFreq, sparePlaces, false);
+            else
+                executor = new SPMDResilientIterativeExecutor(checkpointFreq, sparePlaces, false);
+            
             val places = executor.activePlaces();
             val team = executor.team();         
             

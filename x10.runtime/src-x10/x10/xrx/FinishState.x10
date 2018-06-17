@@ -36,8 +36,8 @@ public abstract class FinishState {
 
     // Turn this on to debug deadlocks within the finish implementation
     static VERBOSE = Configuration.envOrElse("X10_FINISH_VERBOSE", false);
-    static GC_DISABLED = FinishGC.GC_DISABLED;
-    
+    protected static REMOTE_GC = Configuration.envOrElse("X10_FINISH_REMOTE_GC", true);
+
     /**
      * Called by an activity running at the current Place when it
      * is initiating the spawn of an new async at dstPlace.
@@ -103,7 +103,7 @@ public abstract class FinishState {
      * Scheduling note: May be called on @Immediate worker.
      *                  This method must not block or pause.
      */
-    abstract def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void;
+    abstract def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void; 
 
     /**
      * Called at the Place where a synthetic activity created for 
@@ -114,7 +114,7 @@ public abstract class FinishState {
      * Scheduling note: May be called on @Immediate worker.
      *                  This method must not block or pause.
      */
-    abstract def notifyActivityCreatedAndTerminated(srcPlace:Place):void;
+    abstract def notifyActivityCreatedAndTerminated(srcPlace:Place):void; 
 
     /**
      * Called to indicate that the currently executing activity 
@@ -632,11 +632,11 @@ public abstract class FinishState {
                 remoteActivities = new HashMap[Long,Int]();
             }
         }
-       public def notifySubActivitySpawn(place:Place):void {            
+       public def notifySubActivitySpawn(place:Place):void {
             val p = place.parent(); // CUDA
             latch.lock();
             if (p == ref().home) {
-                count++;                
+                count++;
                 latch.unlock();
                 return;
             }
@@ -712,7 +712,7 @@ public abstract class FinishState {
             }
             latch.await(); // sit here, waiting for all child activities to complete
 
-            gc();
+            if (REMOTE_GC) gc();
             
             // throw exceptions here if any were collected via the execution of child activities
             val t = MultipleExceptions.make(exceptions);
@@ -727,14 +727,12 @@ public abstract class FinishState {
         }
         
         def gc() {
-            if (GC_DISABLED) return;
-            
             // if there were remote activities spawned, clean up the RemoteFinish objects which tracked them
             if (remoteActivities != null && remoteActivities.size() != 0) {
                 val root = ref();
                 remoteActivities.remove(here.id);
                 if (tx == null || tx.isEmpty()) {
-                    for (placeId in remoteActivities.keySet()) {                    
+                    for (placeId in remoteActivities.keySet()) {
                         at(Place(placeId)) @Immediate("remoteFinishCleanup1") async Runtime.finishStates.remove(root);
                     }
                 } else {
@@ -746,7 +744,7 @@ public abstract class FinishState {
                 }
             }
         }
-                
+
         protected def process(remoteMap:HashMap[Long, Int], isTx:Boolean, txRO:Boolean):void {
             ensureRemoteActivities();
             var src:Int = -1n;

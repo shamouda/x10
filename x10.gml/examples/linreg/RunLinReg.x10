@@ -101,8 +101,16 @@ public class RunLinReg {
             Console.OUT.println("Starting without warmpup!!");
         }
         
+        
+        
+        val disableAgree = System.getenv("DISABLE_TEAM_AGREE") != null && Long.parseLong(System.getenv("DISABLE_TEAM_AGREE")) == 1;
         val startTime = Timer.milliTime();
-        val executor = new SPMDResilientIterativeExecutor(checkpointFrequency, sparePlaces, false);
+        val executor:IterativeExecutor;
+        if (x10.xrx.Runtime.x10rtAgreementSupport() && !disableAgree)
+            executor = new SPMDAgreeResilientIterativeExecutor(checkpointFrequency, sparePlaces, false);
+        else
+            executor = new SPMDResilientIterativeExecutor(checkpointFrequency, sparePlaces, false);
+
         val places = executor.activePlaces();
         val team = executor.team();
         

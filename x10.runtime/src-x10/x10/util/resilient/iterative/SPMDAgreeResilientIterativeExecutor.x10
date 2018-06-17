@@ -25,19 +25,7 @@ import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.store.Store;
 
-public class SPMDAgreeResilientIterativeExecutor (home:Place) {
-    private static val VERBOSE = (System.getenv("EXECUTOR_DEBUG") != null 
-                                && System.getenv("EXECUTOR_DEBUG").equals("1"));
-
-    private val manager:GlobalRef[PlaceManager]{self.home == this.home};
-    private val resilientMap:Store[Cloneable];
-    private var plh:PlaceLocalHandle[PlaceTempData];
-    private var team:Team;
-    private val ckptInterval:Long;
-    private val isResilient:Boolean;
-    
-    // configuration parameters for killing places at different times
-    private var hammer:SimplePlaceHammer;
+public class SPMDAgreeResilientIterativeExecutor extends IterativeExecutor {
 
     private transient var remakeTimes:ArrayList[Long] = new ArrayList[Long]();
     private transient var appRemakeTimes:ArrayList[Long] = new ArrayList[Long]();
@@ -47,49 +35,12 @@ public class SPMDAgreeResilientIterativeExecutor (home:Place) {
     private transient var appInitTime:Long = 0;
     private transient var startRunTime:Long = 0;
     
-    public def this(ckptInterval:Long, sparePlaces:Long, supportShrinking:Boolean) {
-        property(here);
-        var thisTime:Long = 0;
-        thisTime -= Timer.milliTime();
-        isResilient = ckptInterval > 0 && x10.xrx.Runtime.RESILIENT_MODE > 0;
-        this.ckptInterval = ckptInterval;
-        val mgr = new PlaceManager(sparePlaces, supportShrinking);
-        this.manager = GlobalRef[PlaceManager](mgr);
-        
-        var teamTime:Long = 0;
-        teamTime -= Timer.milliTime();
-        team = new Team(mgr.activePlaces());
-        teamTime += Timer.milliTime();
-        
-        var storeTime:Long = 0;
-        storeTime -= Timer.milliTime();
-        if (isResilient) {
-            this.resilientMap = Store.make[Cloneable]("_map_", mgr.activePlaces());
-            this.hammer = new SimplePlaceHammer();
-            hammer.printPlan();
-        }
-        else {        	            
-            this.resilientMap = null;
-            this.hammer = null;
-        }
-        storeTime += Timer.milliTime();
-        
-        thisTime += Timer.milliTime();
-        Console.OUT.println("SPMDAgreeResilientIterativeExecutor created successfully:teamTime:"+teamTime+":storeTime:"+storeTime+":totalTime:"+thisTime);
-    }
+    private var plh:PlaceLocalHandle[PlaceDataAgree];
 
-    public def run(app:SPMDResilientIterativeApp){here == home} {
-        run(app, Timer.milliTime());
+    public def this(ckptInterval:Long, sparePlaces:Long, supportShrinking:Boolean) {
+        super(ckptInterval, sparePlaces, supportShrinking);
     }
     
-    public def setHammer(h:SimplePlaceHammer){here == home} {
-        hammer = h;
-    }
-
-    public def activePlaces(){here == home} = manager().activePlaces();
-
-    public def team(){here == home} = team;
-
     //the startRunTime parameter is added to allow the executor to consider 
     //any initialization time done by the application before starting the executor
     public def run(app:SPMDResilientIterativeApp, startRunTime:Long){here == home} {
@@ -97,9 +48,9 @@ public class SPMDAgreeResilientIterativeExecutor (home:Place) {
             hammer.scheduleTimers();
         }
         this.startRunTime = startRunTime;
-        Console.OUT.println("SPMDResilientIterativeExecutor: Application start time ["+startRunTime+"] ...");
+        Console.OUT.println("SPMDAgreeResilientIterativeExecutor: Application start time ["+startRunTime+"] ...");
         val root = here;
-        plh = PlaceLocalHandle.make[PlaceTempData](manager().activePlaces(), ()=>new PlaceTempData());
+        plh = PlaceLocalHandle.make[PlaceDataAgree](manager().activePlaces(), ()=>new PlaceDataAgree());
         var tmpGlobalIter:Long = 0;        
         appInitTime = Timer.milliTime() - startRunTime;
         var remakeRequired:Boolean = false;
@@ -218,7 +169,7 @@ public class SPMDAgreeResilientIterativeExecutor (home:Place) {
             val p0AllCkptKeys = plh().ckptKeyVersion;
             val p0LastCkptIter = plh().lastCkptIter;
             val p0LastCkptVersion = plh().lastCkptVersion;
-            PlaceLocalHandle.addPlace[PlaceTempData](plh, p, ()=>new PlaceTempData(victimStat, p0GlobalIter, p0AllCkptKeys,p0LastCkptIter, p0LastCkptVersion));
+            PlaceLocalHandle.addPlace[PlaceDataAgree](plh, p, ()=>new PlaceDataAgree(victimStat, p0GlobalIter, p0AllCkptKeys,p0LastCkptIter, p0LastCkptVersion));
         }
 
         val startAppRemake = Timer.milliTime();
@@ -529,7 +480,7 @@ public class SPMDAgreeResilientIterativeExecutor (home:Place) {
     }
     
     
-    class PlaceTempData {
+    class PlaceDataAgree {
         private val VERBOSE_EXECUTOR_PLACE_LOCAL = (System.getenv("EXECUTOR_PLACE_LOCAL") != null 
                 && System.getenv("EXECUTOR_PLACE_LOCAL").equals("1"));
         //used by place hammer
@@ -566,7 +517,7 @@ public class SPMDAgreeResilientIterativeExecutor (home:Place) {
         }
     }
     
-    class PlaceStatistics {    
+    class PlaceStatistics {
         val ckptTimes:ArrayList[Long];
         val ckptAgrTimes:ArrayList[Long];
         val restoreTimes:ArrayList[Long];
@@ -575,7 +526,7 @@ public class SPMDAgreeResilientIterativeExecutor (home:Place) {
         var placeMaxCheckpoint:Rail[Long];
         var placeMaxCkptAgr:Rail[Long];
         var placeMaxRestore:Rail[Long];
-        var placeMaxStep:Rail[Long];    
+        var placeMaxStep:Rail[Long];
         var placeMinCheckpoint:Rail[Long];
         var placeMinCkptAgr:Rail[Long];
         var placeMinRestore:Rail[Long];
@@ -585,7 +536,7 @@ public class SPMDAgreeResilientIterativeExecutor (home:Place) {
         var placeSumCkpt:Rail[Long];
         var placeSumCkptAgr:Rail[Long];
         
-        public def this() {    
+        public def this() {
             ckptTimes = new ArrayList[Long]();
             ckptAgrTimes = new ArrayList[Long]();        
             restoreTimes = new ArrayList[Long]();
