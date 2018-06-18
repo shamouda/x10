@@ -182,9 +182,9 @@ public class TxResilient extends Tx {
                             val ownerPlaceIndex = plh().virtualPlaceId;
                             val log = plh().getMasterStore().getTxCommitLog(id);
                             if (log != null && log.size() > 0) {
-                                at (Place(slaveId as Long)) @Immediate("slave_prep") async {
+                                at (Place(slaveId as Long)) @Immediate("slave_prep2") async {
                                     plh().slaveStore.prepare(id, log, ownerPlaceIndex);
-                                    at (gr) @Immediate("slave_prep_response") async {
+                                    at (gr) @Immediate("slave_prep_response2") async {
                                         (gr() as TxResilient).notifyPrepare(slaveId, SLAVE, true /*vote*/, false /*is master RO*/); 
                                     }
                                 }
@@ -195,7 +195,7 @@ public class TxResilient extends Tx {
                         val isMasterRO = localReadOnly;
                         val v = vote;
                         val masterId = here.id as Int;
-                        at (gr) @Immediate("prep_response_res") async {
+                        at (gr) @Immediate("prep_response_res2") async {
                             (gr() as TxResilient).notifyPrepare(masterId, MASTER, v, isMasterRO);
                         }
                     };
