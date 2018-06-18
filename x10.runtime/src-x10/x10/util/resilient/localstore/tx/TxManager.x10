@@ -9,6 +9,10 @@ import x10.util.resilient.localstore.MasterStore;
 import x10.xrx.Runtime;
 import x10.util.concurrent.Future;
 import x10.util.resilient.localstore.TxConfig;
+import x10.xrx.TxStoreConflictException;
+import x10.xrx.TxStorePausedException;
+import x10.xrx.TxStoreFatalException;
+import x10.xrx.TxStoreAbortedException;
 
 public abstract class TxManager[K] {K haszero} {
 	public val data:MapData[K];
@@ -112,7 +116,7 @@ public abstract class TxManager[K] {K haszero} {
         try {
             statusLock();
             if (status != STATUS_ACTIVE)
-                throw new StorePausedException(here + " MasterStore paused for recovery");
+                throw new TxStorePausedException(here + " MasterStore paused for recovery");
         }
         finally {
             statusUnlock();
@@ -247,7 +251,7 @@ public abstract class TxManager[K] {K haszero} {
         log.lock(6);
         try {
             if ( log.id() != id /*|| txLogManager.isAborted(log.id()) */) {
-                throw new AbortedTransactionException("AbortedTransactionException");
+                throw new TxStoreAbortedException("TxStoreAbortedException");
             }
             val keyLog = log.getOrAddKeyLog(key);
             var memory:MemoryUnit[K] = keyLog.getMemoryUnit();
@@ -256,7 +260,7 @@ public abstract class TxManager[K] {K haszero} {
             }
             log.setLastUsedKeyLog(keyLog);
             return log;
-        } catch(ex:AbortedTransactionException) {
+        } catch(ex:TxStoreAbortedException) {
         	log.unlock(6);
             throw ex;
         } catch(ex:Exception) {
@@ -298,7 +302,7 @@ public abstract class TxManager[K] {K haszero} {
                 /*another transaction has modified it and committed since we read the initial value*/
                 memory.unlockWrite(id);
                 //don't mark it as locked, because at abort time we return the old value for locked variables. our old value is wrong.
-                throw new ConflictException("ConflictException["+here+"] Tx["+id+"] " + txIdToString (id) , here);
+                throw new TxStoreConflictException("ConflictException["+here+"] Tx["+id+"] " + txIdToString (id) , here);
             }
             log.setAllWriteFlags(keyLog, true, delete);
         }
@@ -311,7 +315,7 @@ public abstract class TxManager[K] {K haszero} {
                 keyLog.setLockedRead(false);
             
             if (memory == null)
-            	throw new FatalTransactionException (here + " Tx["+id+"] lockWriteRL("+key+") fatal, memory ISNULL");
+            	throw new TxStoreFatalException (here + " Tx["+id+"] lockWriteRL("+key+") fatal, memory ISNULL");
             
             memory.lockWrite(id); //lockWrite unlockRead if upgrading fails 
             
@@ -620,7 +624,7 @@ public abstract class TxManager[K] {K haszero} {
                 val memory = kLog.getMemoryUnit();
                 
                 if (kLog.getReadOnly())
-                    throw new FatalTransactionException("Tx["+id+"] validate_RL_LA_WB  fatal error, key["+key+"] is read only");
+                    throw new TxStoreFatalException("Tx["+id+"] validate_RL_LA_WB  fatal error, key["+key+"] is read only");
                 val deleted = kLog.getDeleted();
                 lockWriteRL(id, key, memory, log, kLog, deleted);
                 writeTx = true;
@@ -650,7 +654,7 @@ public abstract class TxManager[K] {K haszero} {
                 val memory = kLog.getMemoryUnit();
                 
                 if (kLog.getReadOnly())
-                    throw new FatalTransactionException("Tx["+id+"] validate_RV_LA_WB  fatal error, key["+key+"] is read only");
+                    throw new TxStoreFatalException("Tx["+id+"] validate_RV_LA_WB  fatal error, key["+key+"] is read only");
 
                 memory.lockWrite(id);
                 writeTx = true;
@@ -661,7 +665,7 @@ public abstract class TxManager[K] {K haszero} {
                 //detect write after read
                 if (curVer != initVer) {
                     memory.unlockWrite(id);
-                    throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
+                    throw new TxStoreConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
                 }
                 kLog.setLockedWrite(true);
             }
@@ -678,7 +682,7 @@ public abstract class TxManager[K] {K haszero} {
                 //detect write after read
                 if (curVer != initVer) {
                     memory.unlockRead(id);
-                    throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
+                    throw new TxStoreConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
                 }
                 kLog.setLockedRead(true);
             }
@@ -711,7 +715,7 @@ public abstract class TxManager[K] {K haszero} {
                 val memory = kLog.getMemoryUnit();
                 
                 if (kLog.getLockedWrite())
-                    throw new FatalTransactionException("Tx["+id+"] validate_RV_EA  fatal error, key["+key+"] is already locked for write");
+                    throw new TxStoreFatalException("Tx["+id+"] validate_RV_EA  fatal error, key["+key+"] is already locked for write");
                 
                 //lock read only key
                 
@@ -724,7 +728,7 @@ public abstract class TxManager[K] {K haszero} {
                 //detect write after read
                 if (curVer != initVer) {
                     memory.unlockRead(id);
-                    throw new ConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
+                    throw new TxStoreConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
                 }
                 kLog.setLockedRead(true);
             }

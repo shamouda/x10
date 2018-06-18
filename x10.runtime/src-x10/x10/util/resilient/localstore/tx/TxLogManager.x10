@@ -2,6 +2,7 @@ package x10.util.resilient.localstore.tx;
 
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.concurrent.Lock;
+import x10.xrx.TxStoreConcurrencyLimitException;
 
 public class TxLogManager[K] {K haszero} {
     private val txLogs:Rail[TxLog[K]];
@@ -119,7 +120,7 @@ public class TxLogManager[K] {K haszero} {
                 }
             }
             if (obj == null) {
-                throw new ConcurrentTransactionsLimitExceeded(here + " ConcurrentTransactionsLimitExceeded");
+                throw new TxStoreConcurrencyLimitException(here + " TxStoreConcurrencyLimitException");
             }
             obj.setId(id); //allocate it
             return obj;
@@ -172,7 +173,7 @@ public class TxLogManager[K] {K haszero} {
                 }
             }
             if (obj == null) {
-                throw new ConcurrentTransactionsLimitExceeded(here + " ConcurrentTransactionsLimitExceeded");
+                throw new TxStoreConcurrencyLimitException(here + " TxStoreConcurrencyLimitException");
             }
             obj.id = id; //allocate it
             return obj;

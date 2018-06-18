@@ -10,15 +10,10 @@
  *  (C) Copyright Sara Salem Hamouda 2014-2016.
  */
 
-package x10.util.resilient.localstore.tx;
+package x10.xrx;
 
-public class ConflictException(place:Place) extends Exception {
-    public def this(message:String, place:Place) {
+public class TxStoreConcurrencyLimitException extends Exception {
+    public def this(message:String) {
         super(message);
-        property(place);
-    }
-    public def this() {
-        super("ConflictException");
-        property(here);
     }
 }

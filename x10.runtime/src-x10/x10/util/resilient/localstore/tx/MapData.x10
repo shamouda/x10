@@ -5,11 +5,12 @@ import x10.util.HashMap;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.HashSet;
 import x10.util.resilient.localstore.TxConfig;
-import x10.util.resilient.localstore.tx.SafeBucketHashMap;
 import x10.util.resilient.localstore.tx.TxManager;
 import x10.util.resilient.localstore.tx.TxLog;
 import x10.util.resilient.localstore.tx.TxKeyChange;
 import x10.util.resilient.localstore.tx.logging.TxDesc;
+import x10.xrx.TxStorePausedException;
+import x10.xrx.TxStoreFatalException;
 
 /*
  * MapData may be accessed by different transactions at the same time.
@@ -95,7 +96,7 @@ public class MapData[K] {K haszero} {
         //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " here["+here+"] MapData.initLog(" + key + ")");
         
         if (txId < 0) 
-            throw new FatalTransactionException(here + " fatal error, MapData.initLog txId = -1");
+            throw new TxStoreFatalException(here + " fatal error, MapData.initLog txId = -1");
         
         var memory:MemoryUnit[K] = null;
         var added:Boolean  = false;
@@ -104,7 +105,7 @@ public class MapData[K] {K haszero} {
             memory = metadata.getOrElse(key, null);
             if (memory == null) {
                 if (!active)
-                    throw new StorePausedException(here + " MapData can not put values while the store is paused ");
+                    throw new TxStorePausedException(here + " MapData can not put values while the store is paused ");
                 memory = new MemoryUnit[K](null);
                 metadata.put(key, memory);
                 //if (print)

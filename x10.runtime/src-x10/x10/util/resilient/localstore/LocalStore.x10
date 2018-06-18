@@ -23,7 +23,7 @@ import x10.util.resilient.localstore.tx.logging.TxDesc;
 import x10.compiler.Uncounted;
 import x10.util.resilient.localstore.recovery.DistributedRecoveryHelper;
 import x10.util.resilient.localstore.tx.logging.TxDescManager;
-import x10.util.resilient.localstore.tx.StorePausedException;
+import x10.xrx.TxStorePausedException;
 import x10.util.concurrent.Condition;
 import x10.compiler.Immediate;
 import x10.util.resilient.concurrent.ResilientCondition;
@@ -128,7 +128,7 @@ public class LocalStore[K] {K haszero} {
     
     public def getMasterStore() {
         if (masterStore == null) {
-            throw new StorePausedException(here + " MasterStore is not initialized yet");
+            throw new TxStorePausedException(here + " MasterStore is not initialized yet");
         }
         return masterStore;
     }

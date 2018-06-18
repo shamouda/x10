@@ -10,9 +10,9 @@
  *  (C) Copyright Sara Salem Hamouda 2014-2016.
  */
 
-package x10.util.resilient.localstore.tx;
+package x10.xrx;
 
-public class FatalTransactionException extends Exception {
+public class TxStorePausedException extends Exception {
     public def this(message:String) {
         super(message);
     }

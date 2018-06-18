@@ -15,6 +15,7 @@ package x10.util.resilient.localstore.tx;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.TxConfig;
+import x10.xrx.TxStoreConflictException;
 
 public class MemoryUnit[K] {K haszero} {
     
@@ -123,7 +124,7 @@ public class MemoryUnit[K] {K haszero} {
     
     public def ensureNotDeleted() {
         if (deleted)
-            throw new ConflictException("ConflictException here["+here+"] accessing a deleted memory unit ", here);
+            throw new TxStoreConflictException("ConflictException here["+here+"] accessing a deleted memory unit ", here);
     }
     
     public def isDeletedLocked() = deleted;

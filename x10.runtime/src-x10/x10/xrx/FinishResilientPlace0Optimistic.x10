@@ -28,7 +28,6 @@ import x10.util.concurrent.Lock;
 import x10.util.resilient.concurrent.LowLevelFinish;
 import x10.util.concurrent.Condition;
 import x10.util.Timer;
-import x10.util.resilient.localstore.tx.ConflictException;
 import x10.util.resilient.localstore.TxConfig;
 
 

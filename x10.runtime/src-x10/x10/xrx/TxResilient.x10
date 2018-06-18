@@ -21,10 +21,10 @@ import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.concurrent.LowLevelFinish;
 import x10.compiler.Immediate;
 import x10.util.resilient.localstore.TxConfig;
-import x10.util.resilient.localstore.tx.ConflictException;
+import x10.xrx.TxStoreConflictException;
 import x10.util.concurrent.Lock;
 import x10.util.HashMap;
-import x10.util.resilient.localstore.tx.FatalTransactionException;
+import x10.xrx.TxStoreFatalException;
 
 /*
  * Failure reporting semantics:
@@ -73,7 +73,7 @@ public class TxResilient extends Tx {
 
     public def resilient2PC(abort:Boolean) {
         if (abort) {
-            addExceptionUnsafe(new ConflictException());
+            addExceptionUnsafe(new TxStoreConflictException());
             abortMastersOnly();
         } else {
             prepare();
@@ -251,7 +251,7 @@ public class TxResilient extends Tx {
             if (count == 0n) {
                 prep = true;
                 if (!vote) //don't overwrite fatal exceptions
-                    addExceptionUnsafe(new ConflictException());
+                    addExceptionUnsafe(new TxStoreConflictException());
             }
         }
         debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPrepare place["+place+"] ptype="+ptype+" localVote["+v+"] vote["+vote+"] completed, count="+count+" ...");
@@ -348,7 +348,7 @@ public class TxResilient extends Tx {
                 count--;
                 if (pending == null) {
                     debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit FATALERROR pending is NULL");
-                    throw new FatalTransactionException("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit FATALERROR pending is NULL");
+                    throw new TxStoreFatalException("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit FATALERROR pending is NULL");
                 }
 
                 if (pending.getOrElse(TxMember(place, ptype),-1n) == -1n)
@@ -403,7 +403,7 @@ public class TxResilient extends Tx {
                     }
                     
                     if (slave != DEAD_SLAVE && Place(slave as Long).isDead()) {
-                        addExceptionUnsafe(new FatalTransactionException("Tx["+id+"] lost both master["+key.place+"] and slave["+slave+"] "));
+                        addExceptionUnsafe(new TxStoreFatalException("Tx["+id+"] lost both master["+key.place+"] and slave["+slave+"] "));
                     }
                 }
             }

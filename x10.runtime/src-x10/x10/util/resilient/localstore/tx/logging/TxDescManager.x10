@@ -15,7 +15,7 @@ package x10.util.resilient.localstore.tx.logging;
 import x10.util.resilient.localstore.tx.TxManager;
 import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.TxConfig;
-import x10.util.resilient.localstore.tx.StorePausedException;
+import x10.xrx.TxStorePausedException;
 import x10.util.resilient.localstore.LocalStore;
 import x10.compiler.Uncounted;
 import x10.compiler.Immediate;
@@ -147,7 +147,7 @@ public class TxDescManager[K] {K haszero} {
                 return getVirtualMembersFromMasterStore(id);
             else
                 return getVirtualMembersFromSlaveStore(id);
-        } catch (spe:StorePausedException) {
+        } catch (spe:TxStorePausedException) {
             return null;
         }
     }

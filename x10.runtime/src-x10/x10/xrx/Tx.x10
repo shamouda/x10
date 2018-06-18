@@ -22,11 +22,11 @@ import x10.util.resilient.concurrent.LowLevelFinish;
 import x10.compiler.Immediate;
 import x10.compiler.Uncounted;
 import x10.util.resilient.localstore.TxConfig;
-import x10.util.resilient.localstore.tx.ConflictException;
 import x10.util.concurrent.Lock;
 import x10.util.HashMap;
-import x10.util.resilient.localstore.tx.FatalTransactionException;
 import x10.util.GrowableRail;
+import x10.xrx.TxStoreConflictException;
+import x10.xrx.TxStoreFatalException;
 
 public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {   
     static resilient = Runtime.RESILIENT_MODE > 0;
@@ -151,7 +151,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
                 plh().getMasterStore().commit(id);
             } catch (e:Exception) {
                 vote = false;
-                addExceptionUnsafe(new ConflictException());
+                addExceptionUnsafe(new TxStoreConflictException());
             }
         }
         if (abort || !vote) {
@@ -232,7 +232,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
             prep = true;
             count = members.size() as Int;
             if (!vote)
-                addExceptionUnsafe(new ConflictException());
+                addExceptionUnsafe(new TxStoreConflictException());
         }
         lock.unlock();
         

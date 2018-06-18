@@ -18,6 +18,8 @@ import x10.util.HashSet;
 import x10.xrx.Runtime;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.GrowableRail;
+import x10.xrx.TxStoreConflictException;
+import x10.xrx.TxStoreFatalException;
 
 /*
  * A concurrent read exclusive write lock for transactional management.
@@ -44,7 +46,7 @@ public class TxLockCREW extends TxLock {
         
         public def add(id:Long) {
             if (id < 0) 
-                throw new FatalTransactionException(here + " fatal error, adding reader with id = -1");
+                throw new TxStoreFatalException(here + " fatal error, adding reader with id = -1");
             rdRail.add(id);
         }
         
@@ -56,7 +58,7 @@ public class TxLockCREW extends TxLock {
                     break;
             }
             if (indx == rdRail.size()) 
-                throw new FatalTransactionException(here + " this["+this+"] fatal lock bug, removing non-existing reader  Tx["+id+"] ");
+                throw new TxStoreFatalException(here + " this["+this+"] fatal lock bug, removing non-existing reader  Tx["+id+"] ");
             //swap with last
             val tmp = rdRail(indx);
             rdRail(indx) = rdRail(last);
@@ -86,7 +88,7 @@ public class TxLockCREW extends TxLock {
             var conflict:Boolean = true;
             if (writer == -1 && waitingWriter == -1) {
                 if(readers.contains(txId)) 
-                    throw new FatalTransactionException (here + " this["+this+"] lockRead bug, locking an already locked Tx[" + txId + "] writer[" + writer + "] readers ["+readers.toString() + "] ");
+                    throw new TxStoreFatalException (here + " this["+this+"] lockRead bug, locking an already locked Tx[" + txId + "] writer[" + writer + "] readers ["+readers.toString() + "] ");
                 readers.add(txId);
                 conflict = false;
             }
@@ -101,9 +103,9 @@ public class TxLockCREW extends TxLock {
                 if (resilient)
                     checkDeadLockers();
                 if (writer == txId) 
-                    throw new FatalTransactionException (here + " this["+this+"] lockRead bug, downgrade is not supported Tx[" + txId + "] writer[" + writer + "] readers ["+readers.toString() + "] ");
+                    throw new TxStoreFatalException (here + " this["+this+"] lockRead bug, downgrade is not supported Tx[" + txId + "] writer[" + writer + "] readers ["+readers.toString() + "] ");
                 if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " here["+here+"] TXLOCK lockRead CONFLICT, writer["+writer+"] waitingWriter["+waitingWriter+"] ");
-                throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId), here);
+                throw new TxStoreConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId), here);
             }
             else
                 if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " here["+here+"] TXLOCK lockRead done, writer["+writer+"] readers["+readers.toString()+"] ");              
@@ -117,7 +119,7 @@ public class TxLockCREW extends TxLock {
         try {
             lock.lock();
             if (writer == txId)
-                throw new FatalTransactionException (here + " this["+this+"] lockWrite bug, locking an already locked Tx[" + txId + "] writer[" + writer + "] readers ["+readers.toString() + "] ");
+                throw new TxStoreFatalException (here + " this["+this+"] lockWrite bug, locking an already locked Tx[" + txId + "] writer[" + writer + "] readers ["+readers.toString() + "] ");
             
             var conflict:Boolean = true;            
             if (readers.size() == 0 && writer == -1 && waitingWriter == -1) { 
@@ -162,7 +164,7 @@ public class TxLockCREW extends TxLock {
                 if (resilient)
                     checkDeadLockers();
                 if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " here["+here+"] TXLOCK lockWrite CONFLICT, writer["+writer+"] readers["+readers.toString()+"] ");
-                throw new ConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId) , here);
+                throw new TxStoreConflictException("ConflictException["+here+"] Tx["+txId+"] " + TxManager.txIdToString(txId) , here);
             }
             else
                 if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " here["+here+"] TXLOCK lockWrite done, writer["+writer+"] readers["+readers.toString()+"]");
@@ -176,7 +178,7 @@ public class TxLockCREW extends TxLock {
         lock.lock();
         if (! (readers.contains(txId) && writer == -1)) {
             if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " this["+this+"] unlockRead bug, unlocking an unlocked Tx[" + txId + "] writer["+writer+"] readers["+readers.toString()+"] ");
-            throw new FatalTransactionException (here + " this["+this+"] unlockRead bug, unlocking an unlocked Tx[" + txId + "] writer["+writer+"] readers["+readers.toString()+"] ");
+            throw new TxStoreFatalException (here + " this["+this+"] unlockRead bug, unlocking an unlocked Tx[" + txId + "] writer["+writer+"] readers["+readers.toString()+"] ");
         }
         readers.remove(txId);
         lock.unlock();
@@ -187,7 +189,7 @@ public class TxLockCREW extends TxLock {
         lock.lock();
         if (! (readers.size() == 0 && writer == txId) ) {
             if (TxConfig.get().TM_DEBUG) Console.OUT.println(here + " this["+this+"] unlockWrite bug, unlocking an unlocked Tx[" + txId + "] writer["+writer+"] readers["+readers.toString()+"] ");
-            throw new FatalTransactionException (here + " this["+this+"] unlockWrite bug, unlocking an unlocked Tx[" + txId + "] writer["+writer+"] readers["+readers.toString()+"] ");
+            throw new TxStoreFatalException (here + " this["+this+"] unlockWrite bug, unlocking an unlocked Tx[" + txId + "] writer["+writer+"] readers["+readers.toString()+"] ");
         }
         writer = -1;
         lock.unlock();

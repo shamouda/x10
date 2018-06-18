@@ -29,7 +29,6 @@ import x10.io.CustomSerialization;
 import x10.io.Deserializer;
 import x10.io.Serializer;
 
-import x10.util.resilient.localstore.tx.ConflictException;
 import x10.util.resilient.localstore.TxConfig;
 
 public abstract class FinishState {

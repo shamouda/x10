@@ -17,11 +17,11 @@ import x10.util.ArrayList;
 import x10.util.HashMap;
 import x10.util.resilient.localstore.LocalStore;
 import x10.util.resilient.localstore.Cloneable;
-import x10.util.resilient.localstore.tx.ConcurrentTransactionsLimitExceeded;
-import x10.util.resilient.localstore.tx.StorePausedException;
-import x10.util.resilient.localstore.tx.FatalTransactionException;
-import x10.util.resilient.localstore.tx.ConflictException;
-import x10.util.resilient.localstore.tx.AbortedTransactionException;
+import x10.xrx.TxStoreConcurrencyLimitException;
+import x10.xrx.TxStorePausedException;
+import x10.xrx.TxStoreAbortedException;
+import x10.xrx.TxStoreFatalException;
+import x10.xrx.TxStoreConflictException;
 import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.MasterStore;
 import x10.util.resilient.localstore.SlaveStore;
@@ -54,7 +54,21 @@ public class TxStore {
         Console.OUT.println("store created successfully ...");
         return store;
     }
+
     
+    private def makeLockingTx(members:Rail[Long], keys:Rail[Any], readFlags:Rail[Boolean], o:Long):TxLocking {
+        val id = plh().getMasterStore().getNextTransactionId();
+        return new TxLocking(plh, id, members, keys, readFlags, o);
+    }
+    
+    public def executeLockingTx(members:Rail[Long], keys:Rail[Any], readFlags:Rail[Boolean], o:Long, closure:(TxLocking)=>void) {
+        val tx = makeLockingTx(members, keys, readFlags, o);
+        tx.lock();
+        finish { 
+            closure(tx); 
+        }
+        tx.unlock();
+    }
     
     public def makeTx() {
         val id = plh().getMasterStore().getNextTransactionId();
@@ -72,7 +86,7 @@ public class TxStore {
         var tx:Tx = null;
         while(true) {
             if (retryCount == maxRetries || (maxTimeNS != -1 && System.nanoTime() - beginning >= maxTimeNS)) {
-                throw new FatalTransactionException("Maximum limit for retrying a transaction reached!!");
+                throw new TxStoreFatalException("Maximum limit for retrying a transaction reached!!");
             }
             retryCount++;
             try {
@@ -92,15 +106,15 @@ public class TxStore {
         val immediateRecovery = plh().immediateRecovery;
         var dpe:Boolean = false;
         if (ex instanceof MultipleExceptions) {
-            val fatalExList = (ex as MultipleExceptions).getExceptionsOfType[FatalTransactionException]();
+            val fatalExList = (ex as MultipleExceptions).getExceptionsOfType[TxStoreFatalException]();
             if (fatalExList != null && fatalExList.size > 0)
                 throw fatalExList(0);
             
             val deadExList = (ex as MultipleExceptions).getExceptionsOfType[DeadPlaceException]();
-            val confExList = (ex as MultipleExceptions).getExceptionsOfType[ConflictException]();
-            val pauseExList = (ex as MultipleExceptions).getExceptionsOfType[StorePausedException]();
-            val abortedExList = (ex as MultipleExceptions).getExceptionsOfType[AbortedTransactionException]();
-            val maxConcurExList = (ex as MultipleExceptions).getExceptionsOfType[ConcurrentTransactionsLimitExceeded]();
+            val confExList = (ex as MultipleExceptions).getExceptionsOfType[TxStoreConflictException]();
+            val pauseExList = (ex as MultipleExceptions).getExceptionsOfType[TxStorePausedException]();
+            val abortedExList = (ex as MultipleExceptions).getExceptionsOfType[TxStoreAbortedException]();
+            val maxConcurExList = (ex as MultipleExceptions).getExceptionsOfType[TxStoreConcurrencyLimitException]();
                     
             if ((ex as MultipleExceptions).exceptions.size > (deadExList.size + confExList.size + pauseExList.size + abortedExList.size)){
                 Console.OUT.println(here + " Unexpected MultipleExceptions   size("+(ex as MultipleExceptions).exceptions.size + ")  (" 
@@ -122,11 +136,11 @@ public class TxStore {
                 System.threadSleep(TxConfig.DPE_SLEEP_MS);
                 dpe = true;
             }
-        } else if (ex instanceof StorePausedException) {
+        } else if (ex instanceof TxStorePausedException) {
             System.threadSleep(TxConfig.DPE_SLEEP_MS);
-        } else if (ex instanceof ConcurrentTransactionsLimitExceeded) {
+        } else if (ex instanceof TxStoreConcurrencyLimitException) {
             System.threadSleep(TxConfig.DPE_SLEEP_MS);
-        } else if (!(ex instanceof ConflictException || ex instanceof AbortedTransactionException  )) {
+        } else if (!(ex instanceof TxStoreConflictException || ex instanceof TxStoreAbortedException  )) {
             throw ex;
         }
         return dpe;

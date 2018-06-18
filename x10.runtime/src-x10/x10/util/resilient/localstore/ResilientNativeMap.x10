@@ -13,6 +13,11 @@ import x10.util.Timer;
 import x10.util.resilient.localstore.tx.logging.TxDesc;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.recovery.CentralizedRecoveryHelper;
+import x10.xrx.TxStoreConflictException;
+import x10.xrx.TxStorePausedException;
+import x10.xrx.TxStoreAbortedException;
+import x10.xrx.TxStoreConcurrencyLimitException;
+import x10.xrx.TxStoreFatalException;
 
 public class ResilientNativeMap[K] {K haszero} {
     public val plh:PlaceLocalHandle[LocalStore[K]];
@@ -27,7 +32,7 @@ public class ResilientNativeMap[K] {K haszero} {
     
     private def ensurePositiveVirtualId() {
         if (plh().virtualPlaceId < 0 )
-            throw new StorePausedException(here + " LocalStore not initialized yet, vId = -1");
+            throw new TxStorePausedException(here + " LocalStore not initialized yet, vId = -1");
     }
     
     /** 
@@ -71,7 +76,7 @@ public class ResilientNativeMap[K] {K haszero} {
     public def set2(key:K, value:Cloneable, place:Place, key2:K, value2:Cloneable) {
     	val dest = plh().getPlaceIndex(place);
     	if (dest == -1)
-    	    throw new FatalTransactionException("starting a transaction at an unknown place ["+place+"] ");
+    	    throw new TxStoreFatalException("starting a transaction at an unknown place ["+place+"] ");
         val distClosure = (tx:AbstractTx[K]) => {
             tx.put(key, value);
             tx.asyncAt(dest, () => {
@@ -138,7 +143,7 @@ public class ResilientNativeMap[K] {K haszero} {
     	
         while(true) {
         	if (retryCount == maxRetries || (maxTimeNS != -1 && System.nanoTime() - beginning >= maxTimeNS)) {
-                throw new FatalTransactionException("Reached maximum limit for retrying a transaction");
+                throw new TxStoreFatalException("Reached maximum limit for retrying a transaction");
             }
             retryCount++;
             var commitCalled:Boolean = false;
@@ -224,7 +229,7 @@ public class ResilientNativeMap[K] {K haszero} {
         
         while(true) {
             if (retryCount == maxRetries || (maxTimeNS != -1 && System.nanoTime() - beginning >= maxTimeNS)) {
-                throw new FatalTransactionException("Maximum limit for retrying a transaction reached!!");
+                throw new TxStoreFatalException("Maximum limit for retrying a transaction reached!!");
             }
             retryCount++;
             var commitCalled:Boolean = false;
@@ -283,10 +288,10 @@ public class ResilientNativeMap[K] {K haszero} {
         var dpe:Boolean = false;
         if (ex instanceof MultipleExceptions) {
             val deadExList = (ex as MultipleExceptions).getExceptionsOfType[DeadPlaceException]();
-            val confExList = (ex as MultipleExceptions).getExceptionsOfType[ConflictException]();
-            val pauseExList = (ex as MultipleExceptions).getExceptionsOfType[StorePausedException]();
-            val abortedExList = (ex as MultipleExceptions).getExceptionsOfType[AbortedTransactionException]();
-            val maxConcurExList = (ex as MultipleExceptions).getExceptionsOfType[ConcurrentTransactionsLimitExceeded]();
+            val confExList = (ex as MultipleExceptions).getExceptionsOfType[TxStoreConflictException]();
+            val pauseExList = (ex as MultipleExceptions).getExceptionsOfType[TxStorePausedException]();
+            val abortedExList = (ex as MultipleExceptions).getExceptionsOfType[TxStoreAbortedException]();
+            val maxConcurExList = (ex as MultipleExceptions).getExceptionsOfType[TxStoreConcurrencyLimitException]();
                     
             if ((ex as MultipleExceptions).exceptions.size > (deadExList.size + confExList.size + pauseExList.size + abortedExList.size)){
                 Console.OUT.println(here + " Unexpected MultipleExceptions   size("+(ex as MultipleExceptions).exceptions.size + ")  (" 
@@ -308,11 +313,11 @@ public class ResilientNativeMap[K] {K haszero} {
                 System.threadSleep(TxConfig.DPE_SLEEP_MS);
                 dpe = true;
             }
-        } else if (ex instanceof StorePausedException) {
+        } else if (ex instanceof TxStorePausedException) {
             System.threadSleep(TxConfig.DPE_SLEEP_MS);
-        } else if (ex instanceof ConcurrentTransactionsLimitExceeded) {
+        } else if (ex instanceof TxStoreConcurrencyLimitException) {
             System.threadSleep(TxConfig.DPE_SLEEP_MS);
-        } else if (!(ex instanceof ConflictException || ex instanceof AbortedTransactionException  )) {
+        } else if (!(ex instanceof TxStoreConflictException || ex instanceof TxStoreAbortedException  )) {
             throw ex;
         }
         return dpe;

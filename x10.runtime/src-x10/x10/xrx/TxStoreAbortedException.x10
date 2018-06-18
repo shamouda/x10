@@ -10,9 +10,9 @@
  *  (C) Copyright Sara Salem Hamouda 2014-2016.
  */
 
-package x10.util.resilient.localstore.tx;
+package x10.xrx;
 
-public class StorePausedException extends Exception {
+public class TxStoreAbortedException extends Exception {
     public def this(message:String) {
         super(message);
     }

@@ -5,10 +5,11 @@ import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.localstore.ResilientStore;
 import x10.util.resilient.localstore.CloneableLong;
 import x10.util.resilient.localstore.TxConfig;
-import x10.util.resilient.localstore.tx.FatalTransactionException;
+import x10.xrx.TxStoreFatalException;
 import x10.xrx.NonShrinkingApp;
 import x10.xrx.TxStore;
 import x10.xrx.Tx;
+import x10.xrx.TxLocking;
 import x10.xrx.Runtime;
 import x10.util.concurrent.Future;
 import x10.xrx.Runtime;
@@ -142,7 +143,6 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
         startPlace(-1, place, store, recovery);
     }
     
-    //todo: if starting for recovery, copy the throughput from the left place
     public def startPlace(i:Long, place:Place, store:TxStore, recovery:Boolean) {
         val plh = this.plh;//don't copy this
         
@@ -166,45 +166,13 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
             val t = state.t;
             val myVirtualPlaceId = store.plh().getVirtualPlaceId();
             if (recoveryThroughput != null)
-                state.reinit(recoveryThroughput);
+                state.reinit(recoveryThroughput); //state.recovered = true
 
             for (thrd in 1..t) @Uncounted async {
                 produce(store, plh, thrd-1);
             }
             
-            if (resilient && state.vp != null && iter != -1) {
-                val arr = state.vp.split(",");
-                if (arr.size >= iter) {
-                    val victim = Long.parseLong(arr(iter-1));
-                    Console.OUT.println("Victim of iteration: " + iter + " is " + victim);
-                    if (here.id == victim) {
-                        val killTime = state.vt * -1;
-                        @Uncounted async {
-                            Console.OUT.println("Hammer kill timer at "+here+" starting sleep for "+killTime+" secs");
-                            val startedNS = System.nanoTime(); 
-                            
-                            val deadline = System.currentTimeMillis() + 1000 * killTime;
-                            while (deadline > System.currentTimeMillis()) {
-                                val sleepTime = deadline - System.currentTimeMillis();
-                                System.sleep(sleepTime);
-                            }
-                            
-                            val prev = store.plh().getMaster(here);
-                            val myThroughput = plh();
-                            myThroughput.setElapsedTime(System.nanoTime() - startedNS);
-                            val me = here;
-                            at (prev) {
-                                plh().rightTxBenchState = myThroughput;
-                                plh().rightPlaceDeathTimeNS =  System.nanoTime();
-                                Console.OUT.println(here + " Received suicide note from " + me + " througputValues: " + myThroughput);
-                            }
-                            
-                            Console.OUT.println(here + " Hammer calling killHere" );
-                            System.killHere();
-                        }
-                    }
-                }
-            }
+            killSelf(state, iter);
         }
     }
     
@@ -220,7 +188,7 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
         val t = state.t;
         val d = state.d;
         val g = state.g;
-                
+        
         state.started = true;
         if (state.recovered) {
             Console.OUT.println(here + " Spare place started to produce transactions " + state.toString());
@@ -240,29 +208,54 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
             val innerStr = nextTransactionMembers(rand, p, h, myVirtualPlaceId, virtualMembers, f);
             nextRandomOperations(rand, p, virtualMembers, r, u, o, keys, values, readFlags, tmpKeys);
             
-            val distClosure = (tx:Tx) => {
-                for (var m:Long = 0; m < h; m++) {
-                    val start = m*o;
-                    val dest = virtualMembers(m);
-                    tx.asyncAt(dest, () => {
-                        for (var x:Long = 0; x < o; x++) {
-                            val key = keys(start+x);
-                            val read = readFlags(start+x);
-                            val value = values(start+x);
-                            read? tx.get(key): tx.put(key, new CloneableLong(value));
-                        }
-                    });
-                }
-            };
-            
             //time starts here
             val start = System.nanoTime();
             var includeTx:Boolean = true;
-            val remainingTime =  (d*1e6 - timeNS) as Long;
-            try {
-                store.executeTransaction(distClosure, -1, remainingTime);
-            } catch(expf:FatalTransactionException) {
-                includeTx = false;
+            if (TxConfig.get().LOCKING) {
+                val distClosure = (tx:TxLocking) => {
+                    for (var m:Long = 0; m < h; m++) {
+                        val start = m*o;
+                        val dest = virtualMembers(m);
+                        tx.asyncAt(dest, () => {
+                            for (var x:Long = 0; x < o; x++) {
+                                val key = keys(start+x);
+                                val read = readFlags(start+x);
+                                val value = values(start+x);
+                                read? tx.get(key): tx.put(key, new CloneableLong(value));
+                            }
+                        });
+                    }
+                };
+                try {
+                    store.executeLockingTx(distClosure);
+                } catch(expf:TxStoreFatalException) {
+                    includeTx = false;
+                    expf.printStackTrace();
+                }
+            }
+            else {
+                val distClosure = (tx:Tx) => {
+                    for (var m:Long = 0; m < h; m++) {
+                        val start = m*o;
+                        val dest = virtualMembers(m);
+                        tx.asyncAt(dest, () => {
+                            for (var x:Long = 0; x < o; x++) {
+                                val key = keys(start+x);
+                                val read = readFlags(start+x);
+                                val value = values(start+x);
+                                read? tx.get(key): tx.put(key, new CloneableLong(value));
+                            }
+                        });
+                    }
+                };
+                
+                val remainingTime =  (d*1e6 - timeNS) as Long;
+                try {
+                    store.executeTransaction(distClosure, -1, remainingTime);
+                } catch(expf:TxStoreFatalException) {
+                    includeTx = false;
+                    expf.printStackTrace();
+                }
             }
             
             val elapsedNS = System.nanoTime() - start; 
@@ -401,6 +394,42 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
             
             for (var x:Long = 0; x < o; x++) {
                  keys(start+x) = baseKey + tmpKeys(x); //String.valueOf ( baseKey + tmpKeys(x) );
+            }
+        }
+    }
+    
+    private def killSelf(state:TxBenchState, iter:Long) {
+        if (resilient && state.vp != null && iter != -1) {
+            val arr = state.vp.split(",");
+            if (arr.size >= iter) {
+                val victim = Long.parseLong(arr(iter-1));
+                Console.OUT.println("Victim of iteration: " + iter + " is " + victim);
+                if (here.id == victim) {
+                    val killTime = state.vt * -1;
+                    @Uncounted async {
+                        Console.OUT.println("Hammer kill timer at "+here+" starting sleep for "+killTime+" secs");
+                        val startedNS = System.nanoTime(); 
+                        
+                        val deadline = System.currentTimeMillis() + 1000 * killTime;
+                        while (deadline > System.currentTimeMillis()) {
+                            val sleepTime = deadline - System.currentTimeMillis();
+                            System.sleep(sleepTime);
+                        }
+                        
+                        val prev = store.plh().getMaster(here);
+                        val myThroughput = plh();
+                        myThroughput.setElapsedTime(System.nanoTime() - startedNS);
+                        val me = here;
+                        finish at (prev) async {
+                            plh().rightTxBenchState = myThroughput;
+                            plh().rightPlaceDeathTimeNS =  System.nanoTime();
+                            Console.OUT.println(here + " Received suicide note from " + me + " througputValues: " + myThroughput);
+                        }
+                        
+                        Console.OUT.println(here + " Hammer calling killHere" );
+                        System.killHere();
+                    }
+                }
             }
         }
     }

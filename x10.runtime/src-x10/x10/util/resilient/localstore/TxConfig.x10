@@ -12,7 +12,7 @@
 
 package x10.util.resilient.localstore;
 
-import x10.util.resilient.localstore.tx.FatalTransactionException;
+import x10.xrx.TxStoreFatalException;
 import x10.util.resilient.localstore.tx.TxManager;
 
 public class TxConfig {
@@ -59,7 +59,7 @@ public class TxConfig {
         }
         else {
             VALIDATION_REQUIRED = false;
-            throw new FatalTransactionException ("Invalid TM value, possible values are: baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB");
+            throw new TxStoreFatalException ("Invalid TM value, possible values are: baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB");
         }
         
         WRITE_BUFFERING = TM.contains("WB");

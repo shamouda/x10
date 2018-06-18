@@ -10,10 +10,15 @@
  *  (C) Copyright Sara Salem Hamouda 2014-2016.
  */
 
-package x10.util.resilient.localstore.tx;
+package x10.xrx;
 
-public class AbortedTransactionException extends Exception {
-    public def this(message:String) {
+public class TxStoreConflictException(place:Place) extends Exception {
+    public def this(message:String, place:Place) {
         super(message);
+        property(place);
+    }
+    public def this() {
+        super("TxStoreConflictException");
+        property(here);
     }
 }

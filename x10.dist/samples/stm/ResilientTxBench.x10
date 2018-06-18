@@ -9,7 +9,7 @@ import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.LockingTx;
 import x10.util.resilient.localstore.LocalTx;
 import x10.util.resilient.localstore.AbstractTx;
-import x10.util.resilient.localstore.tx.FatalTransactionException;
+import x10.util.resilient.localstore.tx.TxStoreFatalException;
 
 import x10.util.concurrent.Future;
 import x10.xrx.Runtime;
@@ -244,7 +244,7 @@ public class ResilientTxBench {
                          map.executeFlatTransaction(null, distClosure, -1, remainingTime);
                     else
                         map.executeTransaction(null, distClosure, -1, remainingTime);
-                }catch(expf:FatalTransactionException) {
+                }catch(expf:TxStoreFatalException) {
                     includeTx = false;
                 }
             }

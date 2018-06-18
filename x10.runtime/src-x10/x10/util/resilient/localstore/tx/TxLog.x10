@@ -19,6 +19,7 @@ import x10.util.resilient.localstore.TxConfig;
 import x10.util.RailUtils;
 import x10.util.GrowableRail;
 import x10.xrx.Runtime;
+import x10.xrx.TxStoreFatalException;
 
 /*
  * The log to track actions done on a key. 
@@ -184,7 +185,7 @@ public class TxLog[K] {K haszero} implements x10.io.Unserializable {
     
     public def setId(i:Long) {
     	if (i < 0)
-    		throw new FatalTransactionException(here + " fatal error, TxLog.setId(-1)");
+    		throw new TxStoreFatalException(here + " fatal error, TxLog.setId(-1)");
     	
     	id = i;
     }
@@ -310,7 +311,7 @@ public class TxLog[K] {K haszero} implements x10.io.Unserializable {
                 val memory = log.getMemoryUnit();
                 if (memory == null) {
                     Console.OUT.println("TxLog fatal bug, key["+key+"] has null memory unit");
-                    throw new FatalTransactionException("TxLog fatal bug, key["+key+"] has null memory unit");
+                    throw new TxStoreFatalException("TxLog fatal bug, key["+key+"] has null memory unit");
                 }
                 
                 if (memory.isDeletedLocked()) {
