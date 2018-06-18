@@ -263,7 +263,7 @@ public class TxResilient extends Tx {
     }
     
     
-    private def commitOrAbort(isCommit:Boolean) {
+    protected def commitOrAbort(isCommit:Boolean) {
         //don't copy this
         val gr = this.gr;
         val id = this.id;

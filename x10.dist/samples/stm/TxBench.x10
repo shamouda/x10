@@ -172,7 +172,7 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
                 produce(store, plh, thrd-1);
             }
             
-            killSelf(state, iter);
+            killSelf(store, state, iter);
         }
     }
     
@@ -199,7 +199,7 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
 
         //pre-allocate rails
         val virtualMembers = new Rail[Long](h);
-        val keys = new Rail[Long] (h*o);
+        val keys = new Rail[Any] (h*o);
         val tmpKeys = new Rail[Long] (o);
         val values = new Rail[Long] (h*o);
         val readFlags = new Rail[Boolean] (h*o);
@@ -218,7 +218,7 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
                         val dest = virtualMembers(m);
                         tx.asyncAt(dest, () => {
                             for (var x:Long = 0; x < o; x++) {
-                                val key = keys(start+x);
+                                val key = keys(start+x) as Long;
                                 val read = readFlags(start+x);
                                 val value = values(start+x);
                                 read? tx.get(key): tx.put(key, new CloneableLong(value));
@@ -227,7 +227,7 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
                     }
                 };
                 try {
-                    store.executeLockingTx(distClosure);
+                    store.executeLockingTx(virtualMembers, keys, readFlags, o, distClosure);
                 } catch(expf:TxStoreFatalException) {
                     includeTx = false;
                     expf.printStackTrace();
@@ -240,7 +240,7 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
                         val dest = virtualMembers(m);
                         tx.asyncAt(dest, () => {
                             for (var x:Long = 0; x < o; x++) {
-                                val key = keys(start+x);
+                                val key = keys(start+x) as Long;
                                 val read = readFlags(start+x);
                                 val value = values(start+x);
                                 read? tx.get(key): tx.put(key, new CloneableLong(value));
@@ -268,7 +268,7 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
                     Console.OUT.println(here + " Progress " + myVirtualPlaceId + "x" + producerId + ":" + myThroughput.txCount );
             }
         }
-        Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
+        //Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
         val lc = state.lc.decrementAndGet();
         if (lc == 0n) {
             at (Place(0)) @Uncounted async {
@@ -360,7 +360,7 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
     }
     
     public static def nextRandomOperations(rand:Random, activePlacesCount:Long, virtualMembers:Rail[Long], r:Long, u:Float, o:Long,
-            keys:Rail[Long], values:Rail[Long], readFlags:Rail[Boolean], tmpKeys:Rail[Long]) {
+            keys:Rail[Any], values:Rail[Long], readFlags:Rail[Boolean], tmpKeys:Rail[Long]) {
         val h = virtualMembers.size;
         val keysPerPlace = r / activePlacesCount;
         
@@ -398,12 +398,11 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
         }
     }
     
-    private def killSelf(state:TxBenchState, iter:Long) {
+    private def killSelf(store:TxStore, state:TxBenchState, iter:Long) {
         if (resilient && state.vp != null && iter != -1) {
             val arr = state.vp.split(",");
             if (arr.size >= iter) {
                 val victim = Long.parseLong(arr(iter-1));
-                Console.OUT.println("Victim of iteration: " + iter + " is " + victim);
                 if (here.id == victim) {
                     val killTime = state.vt * -1;
                     @Uncounted async {

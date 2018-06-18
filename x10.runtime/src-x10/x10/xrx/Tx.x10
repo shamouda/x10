@@ -48,7 +48,10 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     
     public static def make(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
         if (resilient)
-            return new TxResilient(plh, id);
+            if (TxConfig.DISABLE_SLAVE)
+                return new TxResilientNoSlaves(plh, id);
+            else
+                return new TxResilient(plh, id);
         else
             return new Tx(plh, id);
     }
@@ -173,7 +176,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
         }
     }
     
-    private def prepare() {
+    protected def prepare() {
         //don't copy this
         val gr = this.gr;
         val id = this.id;
@@ -199,7 +202,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
         }
     }
     
-    private def commitOrAbort(isCommit:Boolean) {
+    protected def commitOrAbort(isCommit:Boolean) {
         //don't copy this
         val gr = this.gr;
         val id = this.id;
@@ -222,7 +225,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
         }        
     }
     
-    private def notifyPrepare(v:Boolean) {
+    protected def notifyPrepare(v:Boolean) {
         var prep:Boolean = false;
     
         lock.lock();
@@ -241,7 +244,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
         }
     }
     
-    private def notifyAbortOrCommit() {
+    protected def notifyAbortOrCommit() {
         var rel:Boolean = false;
     
         lock.lock();
