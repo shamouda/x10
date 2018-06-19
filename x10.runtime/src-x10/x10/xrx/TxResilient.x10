@@ -167,7 +167,7 @@ public class TxResilient extends Tx {
             for (p in liveMasters) {
                 val slaveId = masterSlave.getOrElse(p, DEAD_SLAVE);
                 at (Place(p)) @Immediate("prep_request_res") async {
-                    val task = ()=> {
+                    Runtime.submitUncounted(()=> { //some times validation blocks, so we cannot execute this body within an immediate thread.
                         var vote:Boolean = true;
                         if (TxConfig.get().VALIDATION_REQUIRED) {
                             try {
@@ -182,9 +182,9 @@ public class TxResilient extends Tx {
                             val ownerPlaceIndex = plh().virtualPlaceId;
                             val log = plh().getMasterStore().getTxCommitLog(id);
                             if (log != null && log.size() > 0) {
-                                at (Place(slaveId as Long)) @Immediate("slave_prep2") async {
+                                at (Place(slaveId as Long)) @Immediate("slave_prep11") async {
                                     plh().slaveStore.prepare(id, log, ownerPlaceIndex);
-                                    at (gr) @Immediate("slave_prep_response2") async {
+                                    at (gr) @Immediate("slave_prep_response11") async {
                                         (gr() as TxResilient).notifyPrepare(slaveId, SLAVE, true /*vote*/, false /*is master RO*/); 
                                     }
                                 }
@@ -195,16 +195,10 @@ public class TxResilient extends Tx {
                         val isMasterRO = localReadOnly;
                         val v = vote;
                         val masterId = here.id as Int;
-                        at (gr) @Immediate("prep_response_res2") async {
+                        at (gr) @Immediate("prep_response_res11") async {
                             (gr() as TxResilient).notifyPrepare(masterId, MASTER, v, isMasterRO);
                         }
-                    };
-                    if (TxConfig.get().VALIDATION_REQUIRED) {
-                        Runtime.submitUncounted(task);
-                    }
-                    else {
-                        task();
-                    }
+                    });
                 }
             }
         }
