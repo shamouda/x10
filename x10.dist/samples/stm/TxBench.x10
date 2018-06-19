@@ -230,7 +230,7 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
                     store.executeLockingTx(virtualMembers, keys, readFlags, o, distClosure);
                 } catch(expf:TxStoreFatalException) {
                     includeTx = false;
-                    expf.printStackTrace();
+                    //expf.printStackTrace();
                 }
             }
             else {
@@ -254,7 +254,7 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
                     store.executeTransaction(distClosure, -1, remainingTime);
                 } catch(expf:TxStoreFatalException) {
                     includeTx = false;
-                    expf.printStackTrace();
+                    //expf.printStackTrace();
                 }
             }
             
