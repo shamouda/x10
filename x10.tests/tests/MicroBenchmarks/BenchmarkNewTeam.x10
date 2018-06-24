@@ -16,39 +16,26 @@ import x10.util.Team;
  * Benchmarks performance of new Team()
  */
 public class BenchmarkNewTeam extends x10Test {
-    private static ITERS = 10;
+    private static ITERS = 30;
     
 	public def run(): Boolean {
 	    //warm-up
         new Team(Place.places());
         
-        var totalNative:Long = 0;
-        var totalBcast:Long = 0;
-        
-	    var times1Str:String = "";
-        var times2Str:String = "";
-        var timesTotalStr:String = "";
-        
         val start = System.nanoTime();
         for (iter in 1..ITERS) {
+            val startX = System.nanoTime();
             val team = new Team(Place.places());
+            val stopX = System.nanoTime();
             
-            totalNative += team.thisNativeCreateNano;
-            times1Str += team.thisNativeCreateNano + ":";
-            
-            totalBcast += team.thisBcastNano;
-            times2Str += team.thisBcastNano + ":";
-            
-            timesTotalStr += (team.thisNativeCreateNano + team.thisBcastNano) + ":";
+            Console.OUT.printf("["+iter+"] newTeam: %g ms : native: %g ms: emucast: %g ms \n", 
+                                ((stopX-startX) as Double) / 1e6,
+                                (team.thisNativeCreateNano as Double) / 1e6,
+                                (team.thisBcastNano as Double) / 1e6);
         }
         val stop = System.nanoTime();
-        Console.OUT.printf("newTeam %d places thisNativeCreate: %g ms \n", Place.numPlaces(), (totalNative as Double) / 1e6 / ITERS);
-        Console.OUT.printf("newTeam %d places thisBcast: %g ms \n", Place.numPlaces(), (totalBcast as Double) / 1e6 / ITERS);
         
-        Console.OUT.println("newTeamAllValues thisNativeCreate (ms):" + times1Str);
-        Console.OUT.println("newTeamAllValues thisBcast (ms):" + times2Str);
-        Console.OUT.println("newTeamAllValues total (ms):" + timesTotalStr);
-        
+        Console.OUT.printf("newTeam: %g ms\n", ((stop-start) as Double) / 1e6 / ITERS);
         return true;
 	}
 
