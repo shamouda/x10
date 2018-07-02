@@ -56,7 +56,7 @@ public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implem
     private val bias:Boolean;
     
     private var plh:PlaceLocalHandle[AppTempData];
-    private val executor:SPMDResilientIterativeExecutor;
+    private val executor:IterativeExecutor;
     private var team:Team;
     private var places:PlaceGroup;
     
@@ -89,7 +89,7 @@ public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implem
     private val LT2:DistVector(N);
     
     
-    public def this(N:Long, D:Long, x_:DistBlockMatrix, y:DistVector, it:Int, nit:Int, nzd:Float, reg:Float, bias:Boolean, executor:SPMDResilientIterativeExecutor) {
+    public def this(N:Long, D:Long, x_:DistBlockMatrix, y:DistVector, it:Int, nit:Int, nzd:Float, reg:Float, bias:Boolean, executor:IterativeExecutor) {
         property(N, D);
         
         this.nzd = nzd;
