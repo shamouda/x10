@@ -54,6 +54,33 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
     def spawnRemoteActivity(place:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void { me.spawnRemoteActivity(place, body, prof); }
     def waitForFinish():void { me.waitForFinish(); }
     
+    def notifyActivityTermination(srcPlace:Place,t:CheckedThrowable):void {
+        if (me instanceof P0OptimisticRemoteState) {
+            if (t == null) me.notifyActivityTermination(srcPlace);
+            else me.notifyActivityTermination(srcPlace, t);
+        }
+        else
+            super.notifyActivityTermination(srcPlace, t);
+    }
+    
+    def notifyActivityCreatedAndTerminated(srcPlace:Place,t:CheckedThrowable):void { 
+        if (me instanceof P0OptimisticRemoteState) {
+            if (t == null) me.notifyActivityCreatedAndTerminated(srcPlace);
+            else me.notifyActivityCreatedAndTerminated(srcPlace, t);
+        }
+        else
+            super.notifyActivityCreatedAndTerminated(srcPlace, t);
+    }
+    
+    def notifyShiftedActivityCompletion(srcPlace:Place,t:CheckedThrowable):void {
+        if (me instanceof P0OptimisticRemoteState) {
+            if (t == null) me.notifyShiftedActivityCompletion(srcPlace);
+            else me.notifyShiftedActivityCompletion(srcPlace, t);
+        }
+        else
+            super.notifyShiftedActivityCompletion(srcPlace, t);
+    }
+    
     //create root finish
     public def this (parent:FinishState) {
         id = Id(here.id as Int, nextId.getAndIncrement());
@@ -579,7 +606,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
            }
         }
         
-        static def p0TermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int]) {
+        static def p0TermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int], t:CheckedThrowable) {
             if (verbose>=1) debug(">>>> State(id="+id+").p0TermMultiple [dstId=" + dstId +", size="+map.size()+" ] called");
             at (place0) @Immediate("p0Opt_notifyTermMul_to_zero") async {
                 if (map == null )
@@ -589,6 +616,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 try {
                     statesLock.lock();
                     val state = states(id);
+                    if (t != null) state.addException(t);
                     for (e in map.entries()) {
                         val srcId = e.getKey().place;
                         val kind = e.getKey().kind;
@@ -602,14 +630,12 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
            }
         }
         
-        static def p0HereTermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int]) {
-            if (map == null)
-                throw new Exception(here + " FATAL ERROR p0HereTermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is NULL");
-            
+        static def p0HereTermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int], t:CheckedThrowable) {
             if (verbose>=1) debug(">>>> State(id="+id+").p0HereTermMultiple [dstId=" + dstId +", mapSz="+map.size()+" ] called");
             try {
                 statesLock.lock();
                 val state = states(id);
+                if (t != null) state.addException(t);
                 for (e in map.entries()) {
                     val srcId = e.getKey().place;
                     val kind = e.getKey().kind;
@@ -810,6 +836,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         private static val remotes = new HashMap[Id, P0OptimisticRemoteState](); //a cache for remote finish objects
         private static val remoteDeny = new HashSet[Id](); //remote deny list
         
+        private var ex:CheckedThrowable = null;
+        
         public def toString() {
             return "P0OptimisticRemote(id="+id+", localCount="+lc.get()+")";
         }
@@ -910,10 +938,44 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         //Calculates the delta between received and reported
-        private def getReportMap() {
+        private def getReportMapUnsafe() {
+                if (verbose>=1) debug(">>>> Remote(id="+id+").getReportMap called");
+                var map:HashMap[Task,Int] = null;
+                val iter = received.keySet().iterator();
+                while (iter.hasNext()) {
+                    val t = iter.next();
+                    if (t.place == here.id as Int) {
+                        if (verbose>=1) debug("==== Remote(id="+id+").getReportMap Task["+t+"] ignored");
+                        continue;
+                    }
+                    val rep = reported.getOrElse(t, 0n);
+                    val rec = received.getOrThrow(t);
+                    
+                    if (verbose>=1) debug("==== Remote(id="+id+").getReportMap Task["+t+"] rep="+rep + " rec = " + rec);
+                    if ( rep < rec) {
+                        if (map == null)
+                            map = new HashMap[Task,Int]();
+                        map.put(t, rec - rep);
+                        reported.put (t, rec);
+                        if (verbose>=1) debug("==== Remote(id="+id+").getReportMap Task["+t+"] reported.put("+t+","+(rec-rep)+")");
+                    }
+                }
+                
+                /*map can be null here: because notifyTerminationAndGetMap doesn't decrement lc and get the map as a one atomic action,  
+                  it is possible that two activities reach zero lc and then one of them reports all of the activities, while the other finds no activity to report */
+                if (verbose>=1) printMap(map);
+                if (verbose>=3) dump();
+                if (verbose>=1) debug("<<<< Remote(id="+id+").getReportMap returning");
+                return map;
+        }
+        
+        //Calculates the delta between received and reported
+        private def getReportMap(exp:CheckedThrowable) {
             try {
                 ilock.lock();
                 if (verbose>=1) debug(">>>> Remote(id="+id+").getReportMap called");
+                if (exp != null)
+                    ex = exp;
                 var map:HashMap[Task,Int] = null;
                 val iter = received.keySet().iterator();
                 while (iter.hasNext()) {
@@ -946,14 +1008,34 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             }
         }
         
-        public def notifyTerminationAndGetMap(t:Task) {
+        def recordExp(exp:CheckedThrowable) {
+            ilock.lock();
+            if (exp != null)
+                ex = exp;
+            ilock.unlock();
+        }
+        
+        def getRecordedExp() {
+            try {
+                ilock.lock();
+                if (ex == null)
+                    return null;
+                else
+                    return new CheckedThrowable(ex);
+            } finally {
+                ilock.unlock();
+            }
+        }
+        
+        public def notifyTerminationAndGetMap(t:Task, ex:CheckedThrowable) {
             var map:HashMap[Task,Int] = null;
             val count = lc.decrementAndGet();
             if (verbose>=1) debug(">>>> Remote(id="+id+").notifyTerminationAndGetMap called, taskFrom["+t.place+"] lc="+count);
             if (count == 0n) {
-                map = getReportMap();
+                map = getReportMap(ex);
+            } else {
+                recordExp(ex);
             }
-            else assert count > 0: here + " FATAL ERROR: notifyTerminationAndGetMap(id="+id+") reached a negative local count";
             return map;
         }
         
@@ -1077,10 +1159,10 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
 
         def notifyActivityCreatedAndTerminated(srcPlace:Place) {
-            notifyActivityCreatedAndTerminated(srcPlace, ASYNC);
+            notifyActivityCreatedAndTerminated(srcPlace, ASYNC, null);
         }
         
-        def notifyActivityCreatedAndTerminated(srcPlace:Place, kind:Int) {
+        def notifyActivityCreatedAndTerminated(srcPlace:Place, kind:Int, t:CheckedThrowable) {
             val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
             val parentId = UNASSIGNED;
@@ -1088,7 +1170,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             val count = notifyReceived(Task(srcId, ASYNC));
             if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId +",dstId="+dstId+",kind="+ASYNC+") returning, localCount = " + count);
             
-            val map = notifyTerminationAndGetMap(Task(srcId, kind));
+            val map = notifyTerminationAndGetMap(Task(srcId, kind), t);
             if (map == null) {
                 if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning, map is null");
                 return;
@@ -1096,9 +1178,9 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             
             if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root, mapSize=" + map.size());
             if (here.id == 0)
-                State.p0HereTermMultiple(id, dstId, map);
+                State.p0HereTermMultiple(id, dstId, map, getRecordedExp());
             else {
-                State.p0TermMultiple(id, dstId, map);
+                State.p0TermMultiple(id, dstId, map, getRecordedExp());
             }
             if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
         }
@@ -1110,32 +1192,65 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
 
         def notifyActivityTermination(srcPlace:Place):void {
-            notifyActivityTermination(srcPlace, ASYNC);
+            notifyActivityTermination(srcPlace, ASYNC, null);
         }
         
         def notifyShiftedActivityCompletion(srcPlace:Place):void {
-            notifyActivityTermination(srcPlace, AT);
+            notifyActivityTermination(srcPlace, AT, null);
         }
         
-        def notifyActivityTermination(srcPlace:Place, kind:Int):void {
-            val srcId = srcPlace.id as Int; 
+        def notifyActivityTermination(srcPlace:Place, kind:Int, t:CheckedThrowable):void {
+            val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
+            var map:HashMap[Task,Int] = null;
+
             if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") called ");
-            val map = notifyTerminationAndGetMap(Task(srcId, kind));
+            val count = lc.decrementAndGet();
+            if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityTermination called, taskFrom["+srcId+"] lc="+count);
+            
+            var exp:CheckedThrowable = null;
+            if (count == 0n) {
+                ilock.lock();
+                map = getReportMapUnsafe();
+                if (t != null)
+                    ex = t;
+                if (ex != null)
+                    exp = new CheckedThrowable(ex);
+                ilock.unlock();
+            } else {
+                ilock.lock();
+                if (t != null)
+                    ex = t;
+                if (ex != null)
+                    exp = new CheckedThrowable(ex);
+                ilock.unlock();
+            }
             if (map == null)
                 return;
            
             if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root, mapSize=" + map.size());
             if (here.id == 0)
-                State.p0HereTermMultiple(id, dstId, map);
+                State.p0HereTermMultiple(id, dstId, map, exp);
             else {
-                State.p0TermMultiple(id, dstId, map);
+                State.p0TermMultiple(id, dstId, map, exp);
             }
             if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning");
         }
 
         def waitForFinish():void {
             assert false : "fatal, waitForFinish must not be called from a remote finish" ;
+        }
+        
+        def notifyActivityTermination(srcPlace:Place, t:CheckedThrowable):void {
+            notifyActivityTermination(srcPlace, ASYNC, t);
+        }
+        
+        def notifyActivityCreatedAndTerminated(srcPlace:Place,t:CheckedThrowable):void {
+            notifyActivityCreatedAndTerminated(srcPlace, ASYNC, t);
+        }
+        
+        def notifyShiftedActivityCompletion(srcPlace:Place,t:CheckedThrowable):void {
+            notifyActivityTermination(srcPlace, AT, t);
         }
     }
     
