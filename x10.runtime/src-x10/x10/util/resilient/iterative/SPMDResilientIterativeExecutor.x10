@@ -24,6 +24,7 @@ import x10.util.resilient.PlaceManager;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.store.Store;
+import x10.compiler.Immediate;
 
 public class SPMDResilientIterativeExecutor extends IterativeExecutor {
 
@@ -422,16 +423,18 @@ public class SPMDResilientIterativeExecutor extends IterativeExecutor {
         return result;
     }
     
-    private def executorKillHere(op:String) {        
+    private def executorKillHere(op:String) {
         val stat = plh().stat;
         val victimId = here.id;
-        finish at (Place(0)) async {
+        val me = here;
+        at (Place(0)) @Immediate("executor_add_victim") async {
             plh().addVictim(victimId,stat);
+            at (me) @Immediate("executor_kill_victim") async {
+                Console.OUT.println("[Hammer Log] Killing ["+here+"] before "+op+" ...");
+                System.killHere();
+            }
         }
-        Console.OUT.println("[Hammer Log] Killing ["+here+"] before "+op+" ...");
-        System.killHere();
     }
-    
     
     class PlaceData {
         private val VERBOSE_EXECUTOR_PLACE_LOCAL = (System.getenv("EXECUTOR_PLACE_LOCAL") != null 
