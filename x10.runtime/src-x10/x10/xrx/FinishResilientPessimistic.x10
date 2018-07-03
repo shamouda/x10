@@ -74,6 +74,27 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
     def waitForFinish():void { me.waitForFinish(); }
     //def globalInit() /*Blocking replication*/
     
+    def notifyActivityTermination(srcPlace:Place,t:CheckedThrowable):void {
+        if (me instanceof PessimisticRemoteState)
+            me.notifyActivityTermination(srcPlace, t);
+        else
+            super.notifyActivityTermination(srcPlace, t);
+    }
+    
+    def notifyActivityCreatedAndTerminated(srcPlace:Place,t:CheckedThrowable):void { 
+        if (me instanceof PessimisticRemoteState)
+            me.notifyActivityCreatedAndTerminated(srcPlace, t);
+        else
+            super.notifyActivityCreatedAndTerminated(srcPlace, t);
+    }
+    
+    def notifyShiftedActivityCompletion(srcPlace:Place,t:CheckedThrowable):void {
+        if (me instanceof PessimisticRemoteState)
+            me.notifyShiftedActivityCompletion(srcPlace, t);
+        else
+            super.notifyShiftedActivityCompletion(srcPlace, t);
+    }
+    
     //create root finish
     public def this (parent:FinishState) {
         id = Id(here.id as Int, nextId.getAndIncrement());
@@ -575,6 +596,8 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         }
         
         def addException(t:CheckedThrowable, resp:MasterResponse) {
+            if (t == null)
+                return;
             try {
                 latch.lock();
                 addExceptionUnsafe(t);
@@ -1522,6 +1545,8 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         }
         
         def addException(t:CheckedThrowable) {
+            if (t == null)
+                return;
             try {
                 ilock.lock();
                 addExceptionUnsafe(t);

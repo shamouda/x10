@@ -60,6 +60,27 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     def waitForFinish():void { me.waitForFinish(); }
     def spawnRemoteActivity(place:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void { me.spawnRemoteActivity(place, body, prof); }
     
+    def notifyActivityTermination(srcPlace:Place,t:CheckedThrowable):void {
+        if (me instanceof OptimisticRemoteState)
+            me.notifyActivityTermination(srcPlace, t);
+        else
+            super.notifyActivityTermination(srcPlace, t);
+    }
+    
+    def notifyActivityCreatedAndTerminated(srcPlace:Place,t:CheckedThrowable):void { 
+        if (me instanceof OptimisticRemoteState)
+            me.notifyActivityCreatedAndTerminated(srcPlace, t);
+        else
+            super.notifyActivityCreatedAndTerminated(srcPlace, t);
+    }
+    
+    def notifyShiftedActivityCompletion(srcPlace:Place,t:CheckedThrowable):void {
+        if (me instanceof OptimisticRemoteState)
+            me.notifyShiftedActivityCompletion(srcPlace, t);
+        else
+            super.notifyShiftedActivityCompletion(srcPlace, t);
+    }
+    
     //create root finish
     public def this (parent:FinishState) {
         id = Id(here.id as Int, nextId.getAndIncrement());
@@ -682,6 +703,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def addException(t:CheckedThrowable, resp:MasterResponse) {
+            if (t == null)
+                return;
             try {
                 latch.lock();
                 addExceptionUnsafe(t);
@@ -787,7 +810,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         def transitToCompletedUnsafe(srcId:Long, dstId:Long, kind:Int, cnt:Int, ex:CheckedThrowable , tag:String, resp:MasterResponse) {
             if (verbose>=1) debug(">>>> Master(id="+id+").transitToCompletedMul srcId=" + srcId + ", dstId=" + dstId + " called");
             
-            addExceptionUnsafe(ex);
+            if (ex != null) addExceptionUnsafe(ex);
             
             val e = Edge(srcId, dstId, kind);
             deduct(transit, e, cnt);
@@ -1385,6 +1408,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def addException(t:CheckedThrowable) {
+            if (t == null)
+                return;
             try {
                 ilock.lock();
                 addExceptionUnsafe(t);
@@ -1458,7 +1483,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             try {
                 ilock.lock();
                 
-                addExceptionUnsafe(ex);
+                if (ex != null) addExceptionUnsafe(ex);
                 
                 if (verbose>=1) debug(">>>> Backup(id="+id+").transitToCompletedMul called (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ", cnt="+cnt+") ");
                 val e = FinishResilient.Edge(srcId, dstId, kind);
