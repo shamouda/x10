@@ -25,6 +25,7 @@ import x10.xrx.TxStoreConflictException;
 import x10.util.concurrent.Lock;
 import x10.util.HashMap;
 import x10.xrx.TxStoreFatalException;
+import x10.util.resilient.concurrent.ResilientCondition;
 
 /*
  * Failure reporting semantics:
@@ -40,7 +41,10 @@ public class TxResilient extends Tx {
     private transient var masterSlave:HashMap[Int, Int]; 
     private transient var pending:HashMap[TxMember, Int];     //pending resilient communication
     private transient var ph2Started:Boolean;//false
-        
+    
+    private transient var backupId:Int;
+    private transient var commitInProgress:Boolean = false;
+
     private static val MASTER = 0n;
     private static val SLAVE = 1n;
     private static val DEAD_SLAVE = -1n;
@@ -60,15 +64,20 @@ public class TxResilient extends Tx {
         readOnly = true;
         ph2Started = false;
     }
-    
-    public def finalize(finObj:Releasable, abort:Boolean) {
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] finalize abort="+abort+" ...");
+
+    public def finalizeWithBackup(finObj:Releasable, abort:Boolean, backupId:Int) {
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] backup["+backupId+"] finalize abort="+abort+" ...");
         this.finishObj = finObj;
+        this.backupId = backupId;
         resilient2PC(abort);
     }
     
+    public def finalize(finObj:Releasable, abort:Boolean) {
+        finalizeWithBackup(finObj, abort, -1n);
+    }
+    
     public def finalizeLocal(finObj:Releasable, abort:Boolean) {
-        finalize(finObj, abort);
+        finalizeWithBackup(finObj, abort, -1n);
     }
 
     public def resilient2PC(abort:Boolean) {
@@ -252,6 +261,10 @@ public class TxResilient extends Tx {
         lock.unlock();
         
         if (prep) {
+            if (backupId != -1n && vote)
+                syncNotifyBackup();
+            
+            
             commitOrAbort(vote);
         }
     }
@@ -428,5 +441,32 @@ public class TxResilient extends Tx {
     
     private static def debug(msg:String) {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println( msg );
+    }
+    
+    private def syncNotifyBackup() {
+        commitInProgress = true;
+        
+        val myId = gcId;
+        val backup = Place(backupId as Long);
+        val rCond = ResilientCondition.make(backup);
+        val closure = (gr:GlobalRef[Condition]) => {
+            at (backup) @Immediate("notify_backup_commit") async {
+                val bFin = findBackupOrThrow(myId) as FinishResilientOptimistic.OptimisticBackupState;
+                bFin.notifyCommit();
+                at (gr) @Immediate("notify_backup_commit_resp") async {
+                    gr().release();
+                }
+            }
+        };
+        rCond.run(closure);
+        if (rCond.failed()) {
+            Console.OUT.println("warning: backup died -- finish id="+ myId);
+        }
+        rCond.forget();
+    }
+    
+    
+    public def markAsCommitting() {
+        commitInProgress = true;
     }
 }

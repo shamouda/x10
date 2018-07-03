@@ -164,6 +164,18 @@ public abstract class FinishState {
         this.tx = tx;
     }
     
+    def notifyActivityTermination(srcPlace:Place,t:CheckedThrowable):void {
+        if (t != null) pushException(t);
+        notifyActivityTermination(srcPlace);
+    }
+    def notifyActivityCreatedAndTerminated(srcPlace:Place,t:CheckedThrowable):void {
+        if (t != null) pushException(t);
+        notifyActivityCreatedAndTerminated(srcPlace);
+    }
+    def notifyShiftedActivityCompletion(srcPlace:Place,t:CheckedThrowable):void {
+        if (t != null) pushException(t);
+        notifyShiftedActivityCompletion(srcPlace);
+    }
     /**
      * Spawn a remote activity.
      */
@@ -181,8 +193,11 @@ public abstract class FinishState {
      * Scheduling note: Will only be called on a full-fledged worker thread;
      *                  this method is allowed to block/pause.
      */
-    def notifyTxActivityTermination(srcPlace:Place, readyOnly:Boolean) {
-        notifyActivityTermination(srcPlace);
+    def notifyTxActivityTermination(srcPlace:Place, readyOnly:Boolean, t:CheckedThrowable) {
+        if (t != null)
+            notifyActivityTermination(srcPlace, t);
+        else
+            notifyActivityTermination(srcPlace);
     }
 
     /***
@@ -581,7 +596,7 @@ public abstract class FinishState {
             me.notifyActivityCreatedAndTerminated(srcPlace);
         }
         public def notifyActivityTermination(srcPlace:Place) { me.notifyActivityTermination(srcPlace); }
-        public def notifyTxActivityTermination(srcPlace:Place, readyOnly:Boolean) { me.notifyTxActivityTermination(srcPlace, readyOnly); }
+        public def notifyTxActivityTermination(srcPlace:Place, readyOnly:Boolean, t:CheckedThrowable) { me.notifyTxActivityTermination(srcPlace, readyOnly, t); }
         public def notifyShiftedActivityCompletion(srcPlace:Place) { me.notifyShiftedActivityCompletion(srcPlace); }
         public def pushException(t:CheckedThrowable) { me.pushException(t); }
         public def waitForFinish() { me.waitForFinish(); }
@@ -657,11 +672,13 @@ public abstract class FinishState {
         }
         
         public def notifyActivityTermination(srcPlace:Place):void {
-            notifyTxActivityTermination(srcPlace, true);
+            notifyTxActivityTermination(srcPlace, true, null);
         }
         
-        public def notifyTxActivityTermination(srcPlace:Place, readOnly:Boolean):void {
+        public def notifyTxActivityTermination(srcPlace:Place, readOnly:Boolean, t:CheckedThrowable):void {
             latch.lock();
+            if (t != null)
+                process(t);
             if (tx != null) {
                 tx.addMember(here.id as Int, readOnly);
             }
@@ -702,7 +719,7 @@ public abstract class FinishState {
         public def waitForFinish():void {
             // remove our own activity from count
             if (Runtime.activity().tx)
-                notifyTxActivityTermination(here, Runtime.activity().txReadOnly);
+                notifyTxActivityTermination(here, Runtime.activity().txReadOnly, null);
             else
                 notifyActivityTermination(here);
             
@@ -922,13 +939,17 @@ public abstract class FinishState {
             lock.unlock();
         }
         public def notifyActivityTermination(srcPlace:Place):void {
-            notifyTermination(srcPlace, false, false);
+            notifyTermination(srcPlace, false, false, null);
         }
-        public def notifyTxActivityTermination(srcPlace:Place, readOnly:Boolean):void {
-            notifyTermination(srcPlace, true, readOnly);
+        public def notifyTxActivityTermination(srcPlace:Place, readOnly:Boolean, t:CheckedThrowable):void {
+            notifyTermination(srcPlace, true, readOnly, t);
         }
-        public def notifyTermination(srcPlace:Place, isTx:Boolean, readOnly:Boolean):void {
+        public def notifyTermination(srcPlace:Place, isTx:Boolean, readOnly:Boolean, t:CheckedThrowable):void {
             lock.lock();
+            if (t != null) {
+                if (null == exceptions) exceptions = new GrowableRail[CheckedThrowable]();
+                exceptions.add(t);
+            }
             tx = tx | isTx;
             txReadOnly = txReadOnly & readOnly;
             count--;

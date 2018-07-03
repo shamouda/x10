@@ -11,19 +11,30 @@
 package x10.xrx.freq;
 
 import x10.xrx.FinishResilient;
+import x10.xrx.Tx;
 
 public class TermRequestOpt extends FinishRequest {
     public val srcId:Int;
     public val dstId:Int;
     public val kind:Int;
     public ex:CheckedThrowable;
+
+    public val tx:Tx;
+    public val isTx:Boolean;
+    public val isTxRO:Boolean;
  
     public def this(id:FinishResilient.Id, masterPlaceId:Int, parentId:FinishResilient.Id,
-            srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable) {
+            srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable,
+            tx:Tx, isTx:Boolean, isTxRO:Boolean) {
         super(id, masterPlaceId, parentId);
         this.srcId = srcId;
         this.dstId = dstId;
         this.kind = kind;
         this.ex = ex;
+        this.tx = tx;
+        this.isTx = isTx;
+        this.isTxRO = isTxRO;
     }
+    
+    public def getTx() = tx;
 }

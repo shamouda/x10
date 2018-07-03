@@ -86,8 +86,8 @@ final class GetRegistry {
             if (request.srcPlace.isDead()) {
                 toRemove.add(e.getKey());
                 if (request.finishState != null) {
-                    request.finishState.pushException(new DeadPlaceException(request.srcPlace, "Source place died during asyncCopy operation"));
-                    request.finishState.notifyActivityCreatedAndTerminated(here);
+                    val ex = new DeadPlaceException(request.srcPlace, "Source place died during asyncCopy operation");
+                    request.finishState.notifyActivityCreatedAndTerminated(here, ex);
                 } else {
                     if (!Configuration.silenceInternalWarnings()) {
                         Console.ERR.println("WARNING: uncounted get from "+request.srcPlace+" will never complete due to place death.");

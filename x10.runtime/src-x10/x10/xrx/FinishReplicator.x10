@@ -222,7 +222,9 @@ public final class FinishReplicator {
             val mFin = localMaster != null ? findMasterOrAdd(req.id, localMaster) : findMaster(req.id);
             if (mFin == null)
                 throw new Exception (here + " fatal error, master(id="+req.id+") is null1 while processing req["+req+"]");
+            req.isLocal = true;
             val mresp = mFin.exec(req);
+            req.isLocal = false;
             if (mresp.errMasterMigrating) {
                 if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal MasterMigrating1, try again after 10ms" );
                 Runtime.submitUncounted( ()=>{
@@ -314,10 +316,12 @@ public final class FinishReplicator {
                     if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup backup local");
                     val bFin:FinishBackupState;
                     if (createOk)
-                        bFin = findBackupOrCreate(req.id, req.parentId);
+                        bFin = findBackupOrCreate(req.id, req.parentId, req.getTx());
                     else
                         bFin = findBackupOrThrow(req.id);
+                    req.isLocal = true;
                     val bresp = bFin.exec(req);
+                    req.isLocal = false;
                     processBackupResponse(bresp, req.num, backupPlaceId);
                 } else {
                     
@@ -330,7 +334,7 @@ public final class FinishReplicator {
                         if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup reached backup ");
                         val bFin:FinishBackupState;
                         if (createOk)
-                            bFin = findBackupOrCreate(req.id, req.parentId);
+                            bFin = findBackupOrCreate(req.id, req.parentId, req.getTx());
                         else
                             bFin = findBackupOrThrow(req.id);
                         val bresp = bFin.exec(req);
@@ -531,7 +535,9 @@ public final class FinishReplicator {
             val mFin = findMasterOrAdd(req.id, localMaster);
             if (mFin == null)
                 throw new Exception (here + " fatal error, master(id="+req.id+") is null");
+            req.isLocal = true;
             val resp = mFin.exec(req);
+            req.isLocal = false;
             if (resp.errMasterMigrating) { 
                 throw new MasterMigrating();
             }
@@ -594,10 +600,12 @@ public final class FinishReplicator {
         if (req.backupPlaceId == here.id as Int) { //Local Backup
             val bFin:FinishBackupState;
             if (createOk)
-                bFin = findBackupOrCreate(req.id, req.parentId);
+                bFin = findBackupOrCreate(req.id, req.parentId, req.getTx());
             else
                 bFin = findBackupOrThrow(req.id);
+            req.isLocal = true;
             val resp = bFin.exec(req);
+            req.isLocal = false;
             if (resp.errMasterDied) { 
                 throw new MasterDied();
             }
@@ -614,7 +622,7 @@ public final class FinishReplicator {
             at (backup) @Immediate("backup_exec") async {
                 val bFin:FinishBackupState;
                 if (createOk)
-                    bFin = findBackupOrCreate(req.id, req.parentId);
+                    bFin = findBackupOrCreate(req.id, req.parentId, req.getTx());
                 else
                     bFin = findBackupOrThrow(req.id);
                 val resp = bFin.exec(req);
@@ -1163,7 +1171,7 @@ public final class FinishReplicator {
         }
     }
 
-    static def findBackupOrCreate(id:FinishResilient.Id, parentId:FinishResilient.Id):FinishBackupState {
+    static def findBackupOrCreate(id:FinishResilient.Id, parentId:FinishResilient.Id, tx:Tx):FinishBackupState {
         if (verbose>=1) debug(">>>> findOrCreateBackup(id="+id+", parentId="+parentId+") called ");
         try {
             glock.lock();
@@ -1176,7 +1184,7 @@ public final class FinishReplicator {
                 }
                 
                 if (OPTIMISTIC)
-                    bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId);
+                    bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, tx);
                 else
                     bs = new FinishResilientPessimistic.PessimisticBackupState(id, parentId);
                 fbackups.put(id, bs);
@@ -1198,7 +1206,7 @@ public final class FinishReplicator {
             glock.lock();
             val id = FinishResilient.Id(idHome, -5555n);
             if (OPTIMISTIC)
-                fbackups.put(id, new FinishResilientOptimistic.OptimisticBackupState(id, id));
+                fbackups.put(id, new FinishResilientOptimistic.OptimisticBackupState(id, id, null));
             else
                 fbackups.put(id, new FinishResilientPessimistic.PessimisticBackupState(id, id));
             
@@ -1213,7 +1221,7 @@ public final class FinishReplicator {
             sent:HashMap[FinishResilient.Edge,Int], 
             transit:HashMap[FinishResilient.Edge,Int],
             ghostChildren:HashSet[FinishResilient.Id],
-            excs:GrowableRail[CheckedThrowable], placeOfMaster:Int):FinishBackupState {
+            excs:GrowableRail[CheckedThrowable], placeOfMaster:Int, tx:Tx):FinishBackupState {
         if (verbose>=1) debug(">>>> createOptimisticBackupOrSync(id="+id+", parentId="+parentId+") called ");
         try {
             glock.lock();
@@ -1223,7 +1231,7 @@ public final class FinishReplicator {
                 if (backupDeny.contains(BackupDenyId(parentId,id.home)))
                     throw new Exception (here + " FATAL: " + id + " must not be in denyList");
                 bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, numActive, 
-                		sent, transit, ghostChildren, excs, placeOfMaster);
+                		sent, transit, ghostChildren, excs, placeOfMaster, tx);
                 fbackups.put(id, bs);
                 if (verbose>=1) debug("<<<< createOptimisticBackupOrSync(id="+id+", parentId="+parentId+") returning, created bs="+bs);
             } else {

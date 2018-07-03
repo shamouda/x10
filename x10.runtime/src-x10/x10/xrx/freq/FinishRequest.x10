@@ -15,11 +15,13 @@ import x10.xrx.FinishResilient;
 import x10.xrx.FinishReplicator;
 import x10.util.concurrent.AtomicLong;
 import x10.compiler.Inline;
+import x10.xrx.Tx;
 
 public abstract class FinishRequest {
     private static val nextReqId = new AtomicLong(0);
     public val num = nextReqId.incrementAndGet();
-
+    public var isLocal:Boolean = false;
+    
     //main identification fields
     public var id:FinishResilient.Id = FinishResilient.UNASSIGNED;  //can be changed to adopter id
     public var masterPlaceId:Int = -1n;
@@ -47,6 +49,7 @@ public abstract class FinishRequest {
     public def getFinKind():Int = -1n;
     public def getOutAdopterId():FinishResilient.Id = FinishResilient.UNASSIGNED;
     public def getOutSubmit():Boolean = outSubmit;
+    public def getTx():Tx = null;
     
     public @Inline def isTransitRequest() {
         return this instanceof TransitRequestPes || this instanceof TransitRequestOpt; 
@@ -119,9 +122,10 @@ public abstract class FinishRequest {
     }
     
     public static def makeOptTermRequest(id:FinishResilient.Id, parentId:FinishResilient.Id,
-            srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable) {
+            srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable,
+            tx:Tx, isTx:Boolean, isTxRO:Boolean) {
         val masterPlaceId = FinishReplicator.getMasterPlace(id.home);
-        return new TermRequestOpt(id, masterPlaceId, parentId, srcId, dstId, kind, ex);    
+        return new TermRequestOpt(id, masterPlaceId, parentId, srcId, dstId, kind, ex, tx, isTx, isTxRO);    
     }
     
     public static def makeOptRemoveGhostChildRequest(id:FinishResilient.Id, childId:FinishResilient.Id) {
@@ -130,14 +134,15 @@ public abstract class FinishRequest {
     }
     
     public static def makePesTermRequest(id:FinishResilient.Id, parentId:FinishResilient.Id, adopterId:FinishResilient.Id,
-            srcId:Int, dstId:Int, kind:Int) {
+            srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable) {
         val reqId = (adopterId == FinishResilient.UNASSIGNED) ? id : adopterId;
         val toAdopter = (adopterId != FinishResilient.UNASSIGNED);
-        return new TermRequestPes(reqId, reqId.home, parentId, srcId, dstId, kind, toAdopter);
+        return new TermRequestPes(reqId, reqId.home, parentId, srcId, dstId, kind, ex ,toAdopter);
     }
     
-    public static def makeOptTermMulRequest(id:FinishResilient.Id, dstId:Int, map:HashMap[FinishResilient.Task,Int]) {
+    public static def makeOptTermMulRequest(id:FinishResilient.Id, dstId:Int, map:HashMap[FinishResilient.Task,Int], ex:CheckedThrowable,
+            isTx:Boolean, isTxRO:Boolean) {
         val masterPlaceId = FinishReplicator.getMasterPlace(id.home);
-        return new TermMulRequestOpt(id, masterPlaceId, dstId, map);    
+        return new TermMulRequestOpt(id, masterPlaceId, dstId, map, ex, isTx, isTxRO);    
     }
 }

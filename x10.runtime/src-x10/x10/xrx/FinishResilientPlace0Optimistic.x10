@@ -30,7 +30,6 @@ import x10.util.concurrent.Condition;
 import x10.util.Timer;
 import x10.util.resilient.localstore.TxConfig;
 
-
 //FIXME: return a dummy remote rather than a fatal RemoteCreationDenied
 /**
  * Place0-based Resilient Finish using the optimistic counting protocol
@@ -52,10 +51,37 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
     def notifyActivityCreatedAndTerminated(srcPlace:Place):void { me.notifyActivityCreatedAndTerminated(srcPlace); }
     def pushException(t:CheckedThrowable):void { me.pushException(t); }
     def notifyActivityTermination(srcPlace:Place):void { me.notifyActivityTermination(srcPlace); }
-    def notifyTxActivityTermination(srcPlace:Place, readyOnly:Boolean) { me.notifyTxActivityTermination(srcPlace, readyOnly); }
+    def notifyTxActivityTermination(srcPlace:Place, readyOnly:Boolean, t:CheckedThrowable) { me.notifyTxActivityTermination(srcPlace, readyOnly, t); }
     def notifyShiftedActivityCompletion(srcPlace:Place):void { me.notifyShiftedActivityCompletion(srcPlace); }
     def spawnRemoteActivity(place:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void { me.spawnRemoteActivity(place, body, prof); }
     def waitForFinish():void { me.waitForFinish(); }
+    
+    def notifyActivityTermination(srcPlace:Place,t:CheckedThrowable):void {
+        if (me instanceof P0OptimisticRemoteState) {
+            if (t == null) me.notifyActivityTermination(srcPlace);
+            else me.notifyActivityTermination(srcPlace, t);
+        }
+        else
+            super.notifyActivityTermination(srcPlace, t);
+    }
+    
+    def notifyActivityCreatedAndTerminated(srcPlace:Place,t:CheckedThrowable):void { 
+        if (me instanceof P0OptimisticRemoteState) {
+            if (t == null) me.notifyActivityCreatedAndTerminated(srcPlace);
+            else me.notifyActivityCreatedAndTerminated(srcPlace, t);
+        }
+        else
+            super.notifyActivityCreatedAndTerminated(srcPlace, t);
+    }
+    
+    def notifyShiftedActivityCompletion(srcPlace:Place,t:CheckedThrowable):void {
+        if (me instanceof P0OptimisticRemoteState) {
+            if (t == null) me.notifyShiftedActivityCompletion(srcPlace);
+            else me.notifyShiftedActivityCompletion(srcPlace, t);
+        }
+        else
+            super.notifyShiftedActivityCompletion(srcPlace, t);
+    }
     
     //create root finish
     public def this (parent:FinishState) {
@@ -612,7 +638,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
            }
         }
         
-        static def p0TermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int], isTx:Boolean, isTxRO:Boolean) {
+        static def p0TermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int], t:CheckedThrowable, isTx:Boolean, isTxRO:Boolean) {
             if (verbose>=1) debug(">>>> State(id="+id+").p0TermMultiple [dstId=" + dstId +", size="+map.size()+" ] called");
             at (place0) @Immediate("p0Opt_notifyTermMul_to_zero") async {
                 if (map == null )
@@ -622,6 +648,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 try {
                     statesLock.lock();
                     val state = states(id);
+                    if (t != null) state.addException(t);
                     if (isTx && state.tx != null) {
                         state.tx.addMember(dstId, isTxRO);
                     }
@@ -638,14 +665,12 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
            }
         }
         
-        static def p0HereTermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int], isTx:Boolean, isTxRO:Boolean) {
-            if (map == null)
-                throw new Exception(here + " FATAL ERROR p0HereTermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is NULL");
-            
+        static def p0HereTermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int], t:CheckedThrowable, isTx:Boolean, isTxRO:Boolean) {           
             if (verbose>=1) debug(">>>> State(id="+id+").p0HereTermMultiple [dstId=" + dstId +", mapSz="+map.size()+" ] called");
             try {
                 statesLock.lock();
                 val state = states(id);
+                if (t != null) state.addException(t);
                 if (isTx && state.tx != null) {
                     state.tx.addMember(dstId, isTxRO);
                 }
@@ -879,6 +904,9 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         private var txFlag:Boolean = false;
         private var txReadOnlyFlag:Boolean = true;
         
+        private var ex:CheckedThrowable = null;
+        
+        
         public def toString() {
             return "P0OptimisticRemote(id="+id+", localCount="+lc.get()+")";
         }
@@ -1016,10 +1044,12 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         //Calculates the delta between received and reported
-        private def getReportMap() {
+        private def getReportMap(exp:CheckedThrowable) {
             try {
                 ilock.lock();
                 if (verbose>=1) debug(">>>> Remote(id="+id+").getReportMap called");
+                if (exp != null)
+                    ex = exp;
                 var map:HashMap[Task,Int] = null;
                 val iter = received.keySet().iterator();
                 while (iter.hasNext()) {
@@ -1052,14 +1082,35 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             }
         }
         
-        public def notifyTerminationAndGetMap(t:Task) {
+        def recordExp(exp:CheckedThrowable) {
+            ilock.lock();
+            if (exp != null)
+                ex = exp;
+            ilock.unlock();
+        }
+        
+        def getRecordedExp() {
+            try {
+                ilock.lock();
+                if (ex == null)
+                    return null;
+                else
+                    return new CheckedThrowable(ex);
+            } finally {
+                ilock.unlock();
+            }
+        }
+        
+        public def notifyTerminationAndGetMap(t:Task, ex:CheckedThrowable) {
             var map:HashMap[Task,Int] = null;
             val count = lc.decrementAndGet();
             if (verbose>=1) debug(">>>> Remote(id="+id+").notifyTerminationAndGetMap called, taskFrom["+t.place+"] lc="+count);
             if (count == 0n) {
-                map = getReportMap();
+                map = getReportMap(ex);
             }
-            else assert count > 0: here + " FATAL ERROR: notifyTerminationAndGetMap(id="+id+") reached a negative local count";
+            else {
+                recordExp(ex);
+            }
             return map;
         }
         
@@ -1183,10 +1234,10 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
 
         def notifyActivityCreatedAndTerminated(srcPlace:Place) {
-            notifyActivityCreatedAndTerminated(srcPlace, ASYNC);
+            notifyActivityCreatedAndTerminated(srcPlace, ASYNC, null);
         }
         
-        def notifyActivityCreatedAndTerminated(srcPlace:Place, kind:Int) {
+        def notifyActivityCreatedAndTerminated(srcPlace:Place, kind:Int, t:CheckedThrowable) {
             val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
             val parentId = UNASSIGNED;
@@ -1194,7 +1245,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             val count = notifyReceived(Task(srcId, ASYNC));
             if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId +",dstId="+dstId+",kind="+ASYNC+") returning, localCount = " + count);
             
-            val map = notifyTerminationAndGetMap(Task(srcId, kind));
+            val map = notifyTerminationAndGetMap(Task(srcId, kind), t);
             if (map == null) {
                 if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning, map is null");
                 return;
@@ -1202,9 +1253,9 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             
             if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root, mapSize=" + map.size());
             if (here.id == 0)
-                State.p0HereTermMultiple(id, dstId, map, false, false);
+                State.p0HereTermMultiple(id, dstId, map, getRecordedExp(), false, false);
             else {
-                State.p0TermMultiple(id, dstId, map, false, false);
+                State.p0TermMultiple(id, dstId, map, getRecordedExp(), false, false);
             }
             if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
         }
@@ -1215,19 +1266,19 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             if (verbose>=1) debug("<<<< Remote(id="+id+").pushException(t="+t.getMessage()+") returning");
         }
 
-        def notifyTxActivityTermination(srcPlace:Place, readOnly:Boolean) {
-            notifyActivityTermination(srcPlace, ASYNC, true, readOnly);
+        def notifyTxActivityTermination(srcPlace:Place, readOnly:Boolean, t:CheckedThrowable) {
+            notifyActivityTermination(srcPlace, ASYNC, t, true, readOnly);
         }
         
         def notifyActivityTermination(srcPlace:Place):void {
-            notifyActivityTermination(srcPlace, ASYNC, false, false);
+            notifyActivityTermination(srcPlace, ASYNC, null, false, false);
         }
         
         def notifyShiftedActivityCompletion(srcPlace:Place):void {
-            notifyActivityTermination(srcPlace, AT, false, false);
+            notifyActivityTermination(srcPlace, AT, null, false, false);
         }
         
-        def notifyActivityTermination(srcPlace:Place, kind:Int, isTx:Boolean, readOnly:Boolean):void {
+        def notifyActivityTermination(srcPlace:Place, kind:Int, t:CheckedThrowable, isTx:Boolean, readOnly:Boolean):void {
             val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
             var map:HashMap[Task,Int] = null;
@@ -1238,16 +1289,25 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             val count = lc.decrementAndGet();
             if (verbose>=1) debug(">>>> Remote(id="+id+").notifyTerminationAndGetMap called, taskFrom["+srcId+"] lc="+count);
             
+            var exp:CheckedThrowable = null;
             if (count == 0n) {
                 ilock.lock();
                 map = getReportMapUnsafe();
                 setTxFlagsUnsafe(isTx, readOnly);
                 tmpTx = txFlag;
                 tmpTxRO = txReadOnlyFlag;
+                if (t != null)
+                    ex = t;
+                if (ex != null)
+                    exp = new CheckedThrowable(ex);
                 ilock.unlock();
             } else if (isTx) {
                 ilock.lock();
                 setTxFlagsUnsafe(isTx, readOnly);
+                if (t != null)
+                    ex = t;
+                if (ex != null)
+                    exp = new CheckedThrowable(ex);
                 ilock.unlock();
             }
             
@@ -1256,9 +1316,9 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
            
             if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root, mapSize=" + map.size());
             if (here.id == 0)
-                State.p0HereTermMultiple(id, dstId, map, tmpTx, tmpTxRO);
+                State.p0HereTermMultiple(id, dstId, map, exp, tmpTx, tmpTxRO);
             else {
-                State.p0TermMultiple(id, dstId, map, tmpTx, tmpTxRO);
+                State.p0TermMultiple(id, dstId, map, exp, tmpTx, tmpTxRO);
             }
             if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning");
         }
@@ -1266,6 +1326,19 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         def waitForFinish():void {
             assert false : "fatal, waitForFinish must not be called from a remote finish" ;
         }
+        
+        def notifyActivityTermination(srcPlace:Place, t:CheckedThrowable):void {
+            notifyActivityTermination(srcPlace, ASYNC, t, false, false);
+        }
+        
+        def notifyActivityCreatedAndTerminated(srcPlace:Place,t:CheckedThrowable):void {
+            notifyActivityCreatedAndTerminated(srcPlace, ASYNC, t);
+        }
+        
+        def notifyShiftedActivityCompletion(srcPlace:Place,t:CheckedThrowable):void {
+            notifyActivityTermination(srcPlace, AT, t, false, false);
+        }
+        
     }
     
     //ROOT

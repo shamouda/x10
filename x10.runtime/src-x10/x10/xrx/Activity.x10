@@ -143,19 +143,20 @@ public class Activity {
      * Run activity.
      */
     def run():void {
+        var ex:CheckedThrowable = null;
         try {
             body();
         } catch (wt:WrappedThrowable) {
-            finishState.pushException(wt.getCheckedCause());
+            ex = wt.getCheckedCause();
         } catch (t:CheckedThrowable) {
-            finishState.pushException(t);
+            ex = t;
         }
         if (null != clockPhases) clockPhases.drop();
         try {
             if (tx) {
-                finishState.notifyTxActivityTermination(srcPlace, txReadOnly);
+                finishState.notifyTxActivityTermination(srcPlace, txReadOnly, ex);
             } else {
-                finishState.notifyActivityTermination(srcPlace);
+                finishState.notifyActivityTermination(srcPlace, ex);
             }
         } catch (DeadPlaceException) {}
         if (DEALLOC_BODY) Unsafe.dealloc(body);

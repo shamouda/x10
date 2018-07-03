@@ -83,9 +83,6 @@ public abstract class FinishResilient extends FinishState {
         }
     }
     
-    protected static val DISABLE_NONBLOCKING_REPLICATION:Boolean = (System.getenv("DISABLE_NONBLOCKING_REPLICATION") != null 
-            && System.getenv("DISABLE_NONBLOCKING_REPLICATION").equals("1"));
-    
     protected static struct ReplicatorResponse(submit:Boolean, adopterId:Id) {
         public def toString() = "<repResponse submit="+submit+", adopterId="+adopterId+">";
     }

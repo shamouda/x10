@@ -222,7 +222,7 @@ public abstract class TxManager[K] {K haszero} {
     
     public def abort(id:Long) {
         /*Abort may reach before normal Tx operations, wait until we have a txLog to abort*/
-        val log = txLogManager.searchTxLog(id); //searchTxLogForAbort
+        val log = txLogManager.searchTxLog(id); 
         if (log == null) {
             return;
         }

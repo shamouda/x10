@@ -17,14 +17,16 @@ public class TermRequestPes extends FinishRequest {
     public val dstId:Int;
     public val kind:Int;
     public var toAdopter:Boolean;
+    public ex:CheckedThrowable;
 
     public def this(id:FinishResilient.Id, masterPlaceId:Int, parentId:FinishResilient.Id,
-            srcId:Int, dstId:Int, kind:Int, toAdopter:Boolean) {
+            srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable, toAdopter:Boolean) {
         super(id, masterPlaceId, parentId);
         this.srcId = srcId;
         this.dstId = dstId;
         this.kind = kind;
         this.toAdopter = toAdopter;
+        this.ex = ex;
     }
     
     public var outAdopterId:FinishResilient.Id = FinishResilient.UNASSIGNED;
