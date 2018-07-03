@@ -68,7 +68,8 @@ public class PageRank implements SPMDResilientIterativeApp {
     /** Number of non-zeros in G */
     private val nnz:Float;
 
-    private val executor:SPMDResilientIterativeExecutor;
+    private val executor:IterativeExecutor;
+    
     private var plh:PlaceLocalHandle[AppTempData];
     private val root:Place;
     private var places:PlaceGroup;
@@ -89,7 +90,7 @@ public class PageRank implements SPMDResilientIterativeApp {
             it:Long,
             tolerance:Float,
             nnz:Long,
-            executor:SPMDResilientIterativeExecutor) {
+            executor:IterativeExecutor) {
         Debug.assure(DistGrid.isVertical(edges.getGrid(), edges.getMap()), 
                 "Input edges matrix does not have vertical distribution.");
 
@@ -129,7 +130,7 @@ public class PageRank implements SPMDResilientIterativeApp {
         GP = DistVector.make(G.N, G.getAggRowBs(), places, team);//G must have vertical distribution
     }
 
-    public static def makeRandom(gN:Long, nzd:Float, it:Long, tolerance:Float, numRowBs:Long, numColBs:Long, executor:SPMDResilientIterativeExecutor) {
+    public static def makeRandom(gN:Long, nzd:Float, it:Long, tolerance:Float, numRowBs:Long, numColBs:Long, executor:IterativeExecutor) {
         val numRowPs = executor.activePlaces().size();
         val numColPs = 1;
         val g = DistBlockMatrix.makeSparse(gN, gN, numRowBs, numColBs, numRowPs, numColPs, nzd, executor.activePlaces(), executor.team());
@@ -149,7 +150,7 @@ public class PageRank implements SPMDResilientIterativeApp {
      *   Pregel: a system for large-scale graph processing.
      *   http://dx.doi.org/10.1145/1807167.1807184
      */
-    public static def makeLogNormal(gN:Long, it:Long, tolerance:Float, numRowBs:Long, numColBs:Long, executor:SPMDResilientIterativeExecutor) {
+    public static def makeLogNormal(gN:Long, it:Long, tolerance:Float, numRowBs:Long, numColBs:Long, executor:IterativeExecutor) {
         val densityGuess = 0.079f;
         val numRowPs = executor.activePlaces().size();
         val numColPs = 1;

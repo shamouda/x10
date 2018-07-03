@@ -64,12 +64,12 @@ public class LinearRegression implements SPMDResilientIterativeApp {
     private val nzd:Float;
     private val root:Place;
 
-    private val executor:SPMDResilientIterativeExecutor;
+    private val executor:IterativeExecutor;
     private var plh:PlaceLocalHandle[AppTempData];
     var team:Team;
     var places:PlaceGroup;
     
-    public def this(X:DistBlockMatrix, y:DistVector(X.M), it:Long, tolerance:Float, sparseDensity:Float, regularization:Float, executor:SPMDResilientIterativeExecutor) {
+    public def this(X:DistBlockMatrix, y:DistVector(X.M), it:Long, tolerance:Float, sparseDensity:Float, regularization:Float, executor:IterativeExecutor) {
         this.X = X;
         this.y = y;
         if (it > 0) {
