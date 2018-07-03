@@ -126,7 +126,8 @@ public class SPMDResilientIterativeExecutor extends IterativeExecutor {
                 }//finish ateach
             }
             catch (iterEx:Exception) {
-                iterEx.printStackTrace();
+                Console.OUT.println("IterativeExecutor exception thrown!!! ...");
+                //iterEx.printStackTrace();
                 //exception from finish_ateach  or from restore
                 if (isResilient && containsDPE(iterEx)){
                     remakeRequired = true;
