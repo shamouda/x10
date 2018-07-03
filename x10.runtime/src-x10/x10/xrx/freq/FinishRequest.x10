@@ -131,10 +131,10 @@ public abstract class FinishRequest {
     }
     
     public static def makePesTermRequest(id:FinishResilient.Id, parentId:FinishResilient.Id, adopterId:FinishResilient.Id,
-            srcId:Int, dstId:Int, kind:Int) {
+            srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable) {
         val reqId = (adopterId == FinishResilient.UNASSIGNED) ? id : adopterId;
         val toAdopter = (adopterId != FinishResilient.UNASSIGNED);
-        return new TermRequestPes(reqId, reqId.home, parentId, srcId, dstId, kind, toAdopter);
+        return new TermRequestPes(reqId, reqId.home, parentId, srcId, dstId, kind, ex ,toAdopter);
     }
     
     public static def makeOptTermMulRequest(id:FinishResilient.Id, dstId:Int, map:HashMap[FinishResilient.Task,Int]) {

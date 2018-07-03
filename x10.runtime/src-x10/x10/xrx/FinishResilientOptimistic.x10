@@ -1158,6 +1158,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         /*******************   Failure Recovery Methods   ********************/
         /*********************************************************************/
         public def isImpactedByDeadPlaces(newDead:HashSet[Int]) {
+            if (!isGlobal)
+                return false;
             if (newDead.contains(backupPlaceId)) /*needs re-replication*/
                 return true;
             for (e in transit.entries()) {

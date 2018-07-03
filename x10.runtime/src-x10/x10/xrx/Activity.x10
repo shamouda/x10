@@ -140,16 +140,20 @@ public class Activity {
      * Run activity.
      */
     def run():void {
+        var ex:CheckedThrowable = null;
         try {
             body();
         } catch (wt:WrappedThrowable) {
-            finishState.pushException(wt.getCheckedCause());
+            ex = wt.getCheckedCause();
         } catch (t:CheckedThrowable) {
-            finishState.pushException(t);
+            ex = t;
         }
         if (null != clockPhases) clockPhases.drop();
         try {
-            finishState.notifyActivityTermination(srcPlace);
+            if (ex == null)
+                finishState.notifyActivityTermination(srcPlace);
+            else
+                finishState.notifyActivityTermination(srcPlace, ex);
         } catch (DeadPlaceException) {}
         if (DEALLOC_BODY) Unsafe.dealloc(body);
     }

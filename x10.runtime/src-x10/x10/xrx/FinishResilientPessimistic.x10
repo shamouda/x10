@@ -132,6 +132,8 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         private val grlc:GlobalRef[AtomicInteger];
         private def localCount():AtomicInteger = (grlc as GlobalRef[AtomicInteger]{self.home == here})();
         
+        private var ex:CheckedThrowable = null;
+        
         public def this (val id:Id, grlc:GlobalRef[AtomicInteger]) {
             this.id = id;
             this.grlc = grlc;
@@ -278,13 +280,15 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         }
 
         def notifyActivityCreatedAndTerminated(srcPlace:Place) {
-            notifyActivityCreatedAndTerminated(srcPlace, ASYNC);
+            notifyActivityCreatedAndTerminated(srcPlace, ASYNC, null);
         }
         
-        def notifyActivityCreatedAndTerminated(srcPlace:Place, kind:Int) {
+        def notifyActivityCreatedAndTerminated(srcPlace:Place, kind:Int, t:CheckedThrowable) {
             val srcId = srcPlace.id as Int; 
             val dstId = here.id as Int;
             val parentId = UNASSIGNED;
+            if (t != null)
+                ex = t;
             if (srcId == dstId) {
                 //perform termination steps, but use TRANSIT_TERM request rather than TERM
                 val lc = localCount().decrementAndGet();
@@ -308,7 +312,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             }
             //we cannot block in this method, because it can be called from an immediate thread
             if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityCreatedAndTerminated(parentId="+parentId+",adopterId="+adopterId+",srcId="+srcId + " dstId="+dstId+" kind="+kind+") called");
-            val req = FinishRequest.makePesTransitTermRequest(id, parentId, adopterId, srcId, dstId, kind, null);
+            val req = FinishRequest.makePesTransitTermRequest(id, parentId, adopterId, srcId, dstId, kind, ex);
             val preSendAction = ()=>{};
             val postSendAction = (submit:Boolean, adopterId:Id)=>{
                 if (adopterId != UNASSIGNED)
@@ -330,14 +334,15 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         }
 
         def notifyActivityTermination(srcPlace:Place):void {
-            notifyActivityTermination(srcPlace, ASYNC);
+            notifyActivityTermination(srcPlace, ASYNC, null);
         }
         def notifyShiftedActivityCompletion(srcPlace:Place):void {
-            notifyActivityTermination(srcPlace, AT);
+            notifyActivityTermination(srcPlace, AT, null);
         }
-        def notifyActivityTermination(srcPlace:Place, kind:Int):void {
+        def notifyActivityTermination(srcPlace:Place, kind:Int, t:CheckedThrowable):void {
             val lc = localCount().decrementAndGet();
-
+            if (t != null)
+                ex = t;
             if (lc > 0) {
                 if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityTermination called, decremented localCount to "+lc);
                 return;
@@ -356,7 +361,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             val srcId = srcPlace.id as Int; 
             val dstId = here.id as Int;
             if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityTermination(parentId="+parentId+",adopterId="+adopterId+",srcId="+srcId + " dstId="+dstId+" kind="+kind+") called");
-            val req = FinishRequest.makePesTermRequest(id, parentId, adopterId, srcId, dstId, kind);                                    
+            val req = FinishRequest.makePesTermRequest(id, parentId, adopterId, srcId, dstId, kind, ex);                                    
             val preSendAction = ()=>{};
             val postSendAction = (submit:Boolean, adopterId:Id)=>{
                 if (adopterId != UNASSIGNED)
@@ -368,6 +373,18 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
 
         def waitForFinish():void {
             assert false : "fatal, waitForFinish must not be called from a remote finish" ;
+        }
+        
+        def notifyActivityTermination(srcPlace:Place,t:CheckedThrowable):void {
+            notifyActivityTermination(srcPlace, ASYNC, t);
+        }
+        
+        def notifyActivityCreatedAndTerminated(srcPlace:Place,t:CheckedThrowable):void {
+            notifyActivityCreatedAndTerminated(srcPlace, ASYNC, t);
+        }
+        
+        def notifyShiftedActivityCompletion(srcPlace:Place,t:CheckedThrowable):void {
+            notifyActivityTermination(srcPlace, AT, t);
         }
     }
     
@@ -706,10 +723,12 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             }
         }
         
-        def liveToCompleted(srcId:Long, dstId:Long, kind:Int, tag:String, toAdopter:Boolean, resp:MasterResponse) {
+        def liveToCompleted(srcId:Long, dstId:Long, kind:Int, ex:CheckedThrowable, tag:String, toAdopter:Boolean, resp:MasterResponse) {
             if (verbose>=1) debug(">>>> Master(id="+id+").liveToCompleted(srcId=" + srcId + ",dstId=" + dstId + ") called");
             try {
                 latch.lock();
+                if (ex != null)
+                    addExceptionUnsafe(ex);
                 val t = Task(dstId, kind);
                 if (!toAdopter) {
                     decrement(live, t);
@@ -832,6 +851,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 val dstId = req.dstId;
                 val toAdopter = req.toAdopter;
                 val kind = req.kind;
+                val ex = req.ex;
                 if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=TERM, srcId=" + srcId + ", dstId=" + dstId + ", kind=" + kind + " ] called");
                 if (Place(dstId).isDead()) {
                     // NOTE: no state updates or DPE processing here.
@@ -839,7 +859,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                     //       when Place0 is notified of a dead place.
                     if (verbose>=1) debug("==== notifyActivityTermination(id="+id+") suppressed: "+dstId+" kind="+kind);
                 } else {
-                    liveToCompleted(srcId, dstId, kind, "notifyActivityTermination", toAdopter, resp);
+                    liveToCompleted(srcId, dstId, kind, ex, "notifyActivityTermination", toAdopter, resp);
                     resp.submit = true;
                 }
                 if (verbose>=1) debug("<<<< Master(id="+id+").exec [req=TERM, srcId=" + srcId + ", dstId=" + dstId + ", kind=" + kind + ", submit=" + resp.submit + " ] returning");
@@ -1068,7 +1088,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
             if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityTermination(srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
-            val req = FinishRequest.makePesTermRequest(id, parentId, UNASSIGNED, srcId, dstId, kind);
+            val req = FinishRequest.makePesTermRequest(id, parentId, UNASSIGNED, srcId, dstId, kind, null);
             FinishReplicator.asyncExec(req, this);
             if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
         }
@@ -1111,6 +1131,8 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         /*******************   Failure Recovery Methods   ********************/
         /*********************************************************************/
         public def isImpactedByDeadPlaces(newDead:HashSet[Int]) {
+            if (!isGlobal)
+                return false;
             if (newDead.contains(backupPlaceId))
                 return true;
             for (e in live.entries()) {
@@ -1594,10 +1616,12 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             if (verbose>=1) debug(">>>> Backup(id="+id+").transitToCompleted(srcId=" + srcId + ",dstId=" + dstId + ") returning");
         }
         
-        def liveToCompleted(srcId:Long, dstId:Long, kind:Int, tag:String, toAdopter:Boolean) {
+        def liveToCompleted(srcId:Long, dstId:Long, kind:Int, ex:CheckedThrowable, tag:String, toAdopter:Boolean) {
             try {
                 ilock.lock();
                 if (verbose>=1) debug(">>>> Backup(id="+id+").liveToCompleted(numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ") called");
+                if (ex != null)
+                    addExceptionUnsafe(ex);
                 val t = Task(dstId, kind);
                 if (!toAdopter) {
                     assert live.keySet().contains(t) : here + " ["+Runtime.activity()+"] FATAL ERROR Backup(id="+id+").liveToCompleted(numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ") live doesn't contain task@" + dstId;
@@ -1682,8 +1706,9 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 val dstId = req.dstId;
                 val toAdopter = req.toAdopter;
                 val kind = req.kind;
+                val ex = req.ex;
                 if (verbose>=1) debug(">>>> Backup(id="+id+").exec [req=TERM, srcId=" + srcId + ", dstId=" + dstId + ", kind=" + kind + " ] called");
-                liveToCompleted(srcId, dstId, kind, "notifyActivityTermination", toAdopter);
+                liveToCompleted(srcId, dstId, kind, ex, "notifyActivityTermination", toAdopter);
                 if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=TERM, srcId=" + srcId + ", dstId="+ dstId + ", kind=" + kind + " ] returning");
             } else if (xreq instanceof ExcpRequestPes) {
                 val req = xreq as ExcpRequestPes;

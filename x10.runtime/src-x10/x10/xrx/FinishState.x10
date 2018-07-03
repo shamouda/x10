@@ -159,6 +159,19 @@ abstract class FinishState {
         x10.xrx.Runtime.x10rtSendAsync(place.id, body, fs, prof, preSendAction);
     }
 
+    def notifyActivityTermination(srcPlace:Place,t:CheckedThrowable):void {
+        pushException(t);
+        notifyActivityTermination(srcPlace);
+    }
+    def notifyActivityCreatedAndTerminated(srcPlace:Place,t:CheckedThrowable):void {
+        pushException(t);
+        notifyActivityCreatedAndTerminated(srcPlace);
+    }
+    def notifyShiftedActivityCompletion(srcPlace:Place,t:CheckedThrowable):void {
+        pushException(t);
+        notifyShiftedActivityCompletion(srcPlace);
+    }
+    
     /***
      * Relevant only in optimistic counting
      */
