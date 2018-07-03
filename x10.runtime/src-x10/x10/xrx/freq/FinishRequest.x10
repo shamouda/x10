@@ -19,7 +19,8 @@ import x10.compiler.Inline;
 public abstract class FinishRequest {
     private static val nextReqId = new AtomicLong(0);
     public val num = nextReqId.incrementAndGet();
-
+    public var isLocal:Boolean = false;
+    
     //main identification fields
     public var id:FinishResilient.Id = FinishResilient.UNASSIGNED;  //can be changed to adopter id
     public var masterPlaceId:Int = -1n;

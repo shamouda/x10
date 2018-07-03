@@ -426,7 +426,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         private def globalInit(makeBackup:Boolean) {
             latch.lock();
             if (!isGlobal) {
-                if (verbose>=1) debug(">>>> globalInit(id="+id+") called");
+                if (verbose>=1) debug(">>>> doing globalInit for id="+id);
                 if (parent instanceof FinishResilientPessimistic) {
                     val frParent = parent as FinishResilientPessimistic;
                     if (frParent.me instanceof PessimisticMasterState) {
@@ -767,7 +767,8 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             
             try {
                 lock();
-                if (migrating) {
+                
+                if (migrating && !xreq.isLocal) {
                     resp.errMasterMigrating = true;
                     return resp;
                 }

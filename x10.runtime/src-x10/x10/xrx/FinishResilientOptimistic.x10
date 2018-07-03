@@ -575,7 +575,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             latch.lock();
             if (!isGlobal) {
                 strictFinish = true;
-                if (verbose>=1) debug(">>>> globalInit(id="+id+") called");
+                if (verbose>=1) debug(">>>> doing globalInit for id="+id);
                 
                 if (parent instanceof FinishResilientOptimistic) {
                     val frParent = parent as FinishResilientOptimistic;

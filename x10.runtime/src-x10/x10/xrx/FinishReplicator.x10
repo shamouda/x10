@@ -222,7 +222,9 @@ public final class FinishReplicator {
             val mFin = localMaster != null ? findMasterOrAdd(req.id, localMaster) : findMaster(req.id);
             if (mFin == null)
                 throw new Exception (here + " fatal error, master(id="+req.id+") is null1 while processing req["+req+"]");
+            req.isLocal = true;
             val mresp = mFin.exec(req);
+            req.isLocal = false;
             if (mresp.errMasterMigrating) {
                 if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal MasterMigrating1, try again after 10ms" );
                 Runtime.submitUncounted( ()=>{
@@ -317,7 +319,9 @@ public final class FinishReplicator {
                         bFin = findBackupOrCreate(req.id, req.parentId);
                     else
                         bFin = findBackupOrThrow(req.id);
+                    req.isLocal = true;
                     val bresp = bFin.exec(req);
+                    req.isLocal = false;
                     processBackupResponse(bresp, req.num, backupPlaceId);
                 } else {
                     
@@ -531,7 +535,9 @@ public final class FinishReplicator {
             val mFin = findMasterOrAdd(req.id, localMaster);
             if (mFin == null)
                 throw new Exception (here + " fatal error, master(id="+req.id+") is null");
+            req.isLocal = true;
             val resp = mFin.exec(req);
+            req.isLocal = false;
             if (resp.errMasterMigrating) { 
                 throw new MasterMigrating();
             }
@@ -597,7 +603,9 @@ public final class FinishReplicator {
                 bFin = findBackupOrCreate(req.id, req.parentId);
             else
                 bFin = findBackupOrThrow(req.id);
+            req.isLocal = true;
             val resp = bFin.exec(req);
+            req.isLocal = false;
             if (resp.errMasterDied) { 
                 throw new MasterDied();
             }
