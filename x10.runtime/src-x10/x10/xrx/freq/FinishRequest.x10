@@ -137,8 +137,8 @@ public abstract class FinishRequest {
         return new TermRequestPes(reqId, reqId.home, parentId, srcId, dstId, kind, ex ,toAdopter);
     }
     
-    public static def makeOptTermMulRequest(id:FinishResilient.Id, dstId:Int, map:HashMap[FinishResilient.Task,Int]) {
+    public static def makeOptTermMulRequest(id:FinishResilient.Id, dstId:Int, map:HashMap[FinishResilient.Task,Int], ex:CheckedThrowable) {
         val masterPlaceId = FinishReplicator.getMasterPlace(id.home);
-        return new TermMulRequestOpt(id, masterPlaceId, dstId, map);    
+        return new TermMulRequestOpt(id, masterPlaceId, dstId, map, ex);    
     }
 }

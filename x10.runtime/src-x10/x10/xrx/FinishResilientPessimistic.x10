@@ -35,13 +35,6 @@ import x10.xrx.freq.TermRequestPes;
 import x10.xrx.freq.TransitRequestPes;
 import x10.xrx.freq.TransitTermRequestPes;
 
-//TODO: createBackup: repeat if backup place is dead. block until another place is found!!
-//TODO: CHECK in ResilientFinishP0 -> line 174: decrement(adopterState.live, t);  should be adopterState.liveAdopted
-//TODO: does the backup need to keep the exceptions list???
-//TODO: test notifyActivityCreationFailed()
-//TODO: revise the adoption logic of nested local finishes
-//TODO: backup GC
-//TODO: remove children upon adoption
 /**
  * Distributed Resilient Finish (records transit and live tasks)
  * This version is a corrected implementation of the distributed finish described in PPoPP14,

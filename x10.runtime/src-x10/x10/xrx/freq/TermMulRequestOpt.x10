@@ -16,11 +16,13 @@ import x10.xrx.FinishResilient;
 public class TermMulRequestOpt extends FinishRequest {
     public val dstId:Int;
     public map:HashMap[FinishResilient.Task,Int];
+    public ex:CheckedThrowable;
 
     public def this(id:FinishResilient.Id, masterPlaceId:Int,
-            dstId:Int, map:HashMap[FinishResilient.Task,Int]) {
+            dstId:Int, map:HashMap[FinishResilient.Task,Int], ex:CheckedThrowable) {
         super(id, masterPlaceId, FinishResilient.UNASSIGNED);
         this.dstId = dstId;
         this.map = map;
+        this.ex = ex;
     }
 }
