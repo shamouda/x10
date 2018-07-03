@@ -86,7 +86,7 @@ public class TxStore {
         var tx:Tx = null;
         while(true) {
             if (retryCount == maxRetries || (maxTimeNS != -1 && System.nanoTime() - beginning >= maxTimeNS)) {
-                throw new TxStoreFatalException("Maximum limit for retrying a transaction reached!!");
+                throw new TxStoreFatalException("Maximum limit for retrying a transaction reached!! - retryCount["+retryCount+"] maxRetries["+maxRetries+"] maxTimeNS["+maxTimeNS+"]");
             }
             retryCount++;
             try {
