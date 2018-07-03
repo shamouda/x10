@@ -150,10 +150,7 @@ public class Activity {
         }
         if (null != clockPhases) clockPhases.drop();
         try {
-            if (ex == null)
-                finishState.notifyActivityTermination(srcPlace);
-            else
-                finishState.notifyActivityTermination(srcPlace, ex);
+            finishState.notifyActivityTermination(srcPlace, ex);
         } catch (DeadPlaceException) {}
         if (DEALLOC_BODY) Unsafe.dealloc(body);
     }

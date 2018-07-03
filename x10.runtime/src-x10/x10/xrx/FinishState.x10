@@ -160,15 +160,15 @@ abstract class FinishState {
     }
 
     def notifyActivityTermination(srcPlace:Place,t:CheckedThrowable):void {
-        pushException(t);
+        if (t != null) pushException(t);
         notifyActivityTermination(srcPlace);
     }
     def notifyActivityCreatedAndTerminated(srcPlace:Place,t:CheckedThrowable):void {
-        pushException(t);
+        if (t != null) pushException(t);
         notifyActivityCreatedAndTerminated(srcPlace);
     }
     def notifyShiftedActivityCompletion(srcPlace:Place,t:CheckedThrowable):void {
-        pushException(t);
+        if (t != null) pushException(t);
         notifyShiftedActivityCompletion(srcPlace);
     }
     
