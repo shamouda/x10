@@ -670,7 +670,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         }
         
         def inTransit(srcId:Long, dstId:Long, kind:Int, tag:String, toAdopter:Boolean, resp:MasterResponse) {
-            if (verbose>=1) debug(">>>> Master(id="+id+").inTransit(srcId=" + srcId + ",dstId=" + dstId + ") called");
+            if (verbose>=1) debug(">>>> Master(id="+id+").inTransit called (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ") ");
             try {
                 latch.lock();
                 val e = Edge(srcId, dstId, kind);
@@ -684,7 +684,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 if (verbose>=3) debug("==== Master(id="+id+").inTransit "+tag+" after update for: "+srcId + " ==> "+dstId+" kind="+kind);
                 if (verbose>=3) dump();
                 
-                if (verbose>=1) debug("<<<< Master(id="+id+").inTransit(srcId=" + srcId + ",dstId=" + dstId + ") returning" );
+                if (verbose>=1) debug("<<<< Master(id="+id+").inTransit returning (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ") ");
                 resp.backupPlaceId = backupPlaceId;
                 resp.backupChanged = backupChanged;
             } finally {
@@ -693,7 +693,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         }
         
         def transitToLive(srcId:Long, dstId:Long, kind:Int, tag:String, toAdopter:Boolean, resp:MasterResponse) {
-            if (verbose>=1) debug(">>>> Master(id="+id+").transitToLive srcId=" + srcId + ", dstId=" + dstId + " called");
+            if (verbose>=1) debug(">>>> Master(id="+id+").transitToLive called id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
             try {
                 latch.lock();
                 val e = Edge(srcId, dstId, kind);
@@ -717,7 +717,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         }
         
         def transitToCompleted(srcId:Long, dstId:Long, kind:Int, t:CheckedThrowable, toAdopter:Boolean, resp:MasterResponse) {
-            if (verbose>=1) debug(">>>> Master(id="+id+").transitToCompleted(srcId=" + srcId + ",dstId=" + dstId + ") called");
+            if (verbose>=1) debug(">>>> Master(id="+id+").transitToCompleted called (srcId=" + srcId + ",dstId=" + dstId + ") ");
             try {
                 latch.lock();
                 val e = Edge(srcId, dstId, kind);
@@ -738,7 +738,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                         FinishReplicator.removeMaster(id);
                     }
                 }
-                if (verbose>=1) debug(">>>> Master(id="+id+").transitToCompleted(srcId=" + srcId + ",dstId=" + dstId + ") returning");
+                if (verbose>=1) debug(">>>> Master(id="+id+").transitToCompleted returning (srcId=" + srcId + ",dstId=" + dstId + ")");
                 resp.backupPlaceId = backupPlaceId;
                 resp.backupChanged = backupChanged;
             } finally {
@@ -747,7 +747,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         }
         
         def liveToCompleted(srcId:Long, dstId:Long, kind:Int, ex:CheckedThrowable, tag:String, toAdopter:Boolean, resp:MasterResponse) {
-            if (verbose>=1) debug(">>>> Master(id="+id+").liveToCompleted(srcId=" + srcId + ",dstId=" + dstId + ") called");
+            if (verbose>=1) debug(">>>> Master(id="+id+").liveToCompleted called (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ")");
             try {
                 latch.lock();
                 if (ex != null)
@@ -768,7 +768,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                         FinishReplicator.removeMaster(id);
                     }
                 }
-                if (verbose>=1) debug("<<<< Master(id="+id+").liveToCompleted(srcId=" + srcId + ",dstId=" + dstId + ") returning" );
+                if (verbose>=1) debug("<<<< Master(id="+id+").liveToCompleted returning (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ")");
                 resp.backupPlaceId = backupPlaceId;
                 resp.backupChanged = backupChanged;
             } finally {
@@ -1406,6 +1406,11 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 _transit:HashMap[FinishResilient.Edge,Int], _liveAdopted:HashMap[FinishResilient.Task,Int],
                 _transitAdopted:HashMap[FinishResilient.Edge,Int], _children:HashSet[Id],
                 _excs:GrowableRail[CheckedThrowable]):void {
+            
+            if (verbose>=3) {
+                debug(">>>> Backup.sync changing numActivty from("+this.numActive+") to("+_numActive+")");
+                dump();
+            }
             this.numActive = _numActive;
             this.live = _live;
             if (live == null)
@@ -1933,6 +1938,10 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             m.backupPlaceId = places(i);
             m.backupChanged = true;
             i++;
+            if (verbose>=3) {
+                debug(">>>> sync from master to backup ("+m.id+")");
+                m.dump();
+            }
         }
         val fin = LowLevelFinish.make(places);
         val gr = fin.getGr();
@@ -1950,6 +1959,8 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 val transitAdopted = m.transitAdopted;
                 val children = m.children;
                 val excs = m.excs;
+                
+                
                 
                 if (backup.isDead()) {
                     (gr as GlobalRef[LowLevelFinish]{self.home == here})().notifyFailure();

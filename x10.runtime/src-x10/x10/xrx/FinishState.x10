@@ -193,7 +193,7 @@ public abstract class FinishState {
      * Scheduling note: Will only be called on a full-fledged worker thread;
      *                  this method is allowed to block/pause.
      */
-    def notifyTxActivityTermination(srcPlace:Place, readyOnly:Boolean, t:CheckedThrowable) {
+    def notifyTxActivityTermination(srcPlace:Place, readOnly:Boolean, t:CheckedThrowable) {
         if (t != null)
             notifyActivityTermination(srcPlace, t);
         else
@@ -596,7 +596,7 @@ public abstract class FinishState {
             me.notifyActivityCreatedAndTerminated(srcPlace);
         }
         public def notifyActivityTermination(srcPlace:Place) { me.notifyActivityTermination(srcPlace); }
-        public def notifyTxActivityTermination(srcPlace:Place, readyOnly:Boolean, t:CheckedThrowable) { me.notifyTxActivityTermination(srcPlace, readyOnly, t); }
+        public def notifyTxActivityTermination(srcPlace:Place, readOnly:Boolean, t:CheckedThrowable) { me.notifyTxActivityTermination(srcPlace, readOnly, t); }
         public def notifyShiftedActivityCompletion(srcPlace:Place) { me.notifyShiftedActivityCompletion(srcPlace); }
         public def pushException(t:CheckedThrowable) { me.pushException(t); }
         public def waitForFinish() { me.waitForFinish(); }
@@ -617,7 +617,7 @@ public abstract class FinishState {
         protected def this(ref:GlobalRef[FinishState]) {
             super(ref);
         }
-        private def this(ds:Deserializer) { 
+        private def this(ds:Deserializer) {
             super(ds.readAny() as GlobalRef[FinishState]);
             if (ref.home.id == Runtime.hereLong()) {
                 me = (ref as GlobalRef[FinishState]{home==here})();

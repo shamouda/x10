@@ -26,6 +26,7 @@ import x10.util.concurrent.Lock;
 import x10.util.HashMap;
 import x10.xrx.TxStoreFatalException;
 import x10.util.resilient.concurrent.ResilientCondition;
+import x10.util.concurrent.Condition;
 
 /*
  * Failure reporting semantics:
@@ -43,7 +44,6 @@ public class TxResilient extends Tx {
     private transient var ph2Started:Boolean;//false
     
     private transient var backupId:Int;
-    private transient var commitInProgress:Boolean = false;
 
     private static val MASTER = 0n;
     private static val SLAVE = 1n;
@@ -86,6 +86,15 @@ public class TxResilient extends Tx {
             abortMastersOnly();
         } else {
             prepare();
+        }
+    }
+    
+    public def backupFinalize(finObj:Releasable) {
+        this.finishObj = finObj;
+        if (vote) {
+            commitOrAbort(true);   
+        } else {
+            commitOrAbort(false);   
         }
     }
     
@@ -262,13 +271,11 @@ public class TxResilient extends Tx {
         
         if (prep) {
             if (backupId != -1n && vote)
-                syncNotifyBackup();
-            
-            
-            commitOrAbort(vote);
+                updateBackup();
+            else
+                commitOrAbort(vote);
         }
     }
-    
     
     protected def commitOrAbort(isCommit:Boolean) {
         //don't copy this
@@ -443,30 +450,27 @@ public class TxResilient extends Tx {
         if (TxConfig.get().TM_DEBUG) Console.OUT.println( msg );
     }
     
-    private def syncNotifyBackup() {
-        commitInProgress = true;
-        
-        val myId = gcId;
+    private def updateBackup() {
+        val gcId = this.gcId;
+        val gr = this.gr;
         val backup = Place(backupId as Long);
-        val rCond = ResilientCondition.make(backup);
-        val closure = (gr:GlobalRef[Condition]) => {
-            at (backup) @Immediate("notify_backup_commit") async {
-                val bFin = findBackupOrThrow(myId) as FinishResilientOptimistic.OptimisticBackupState;
-                bFin.notifyCommit();
-                at (gr) @Immediate("notify_backup_commit_resp") async {
-                    gr().release();
-                }
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] updateBackup place"+backup+" ...");
+        at (backup) @Immediate("notify_backup_commit") async {
+            val bFin = FinishReplicator.findBackupOrThrow(gcId) as FinishResilientOptimistic.OptimisticBackupState;
+            bFin.notifyCommit();
+            at (gr) @Immediate("notify_backup_commit_resp") async {
+                (gr() as TxResilient).notifyBackupUpdated();
             }
-        };
-        rCond.run(closure);
-        if (rCond.failed()) {
-            Console.OUT.println("warning: backup died -- finish id="+ myId);
         }
-        rCond.forget();
     }
     
+    private def notifyBackupUpdated() {
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] received notifyBackupUpdated ...");
+        commitOrAbort(vote);
+    }
     
     public def markAsCommitting() {
-        commitInProgress = true;
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] backup running markAsCommitting ...");
+        vote = true;
     }
 }

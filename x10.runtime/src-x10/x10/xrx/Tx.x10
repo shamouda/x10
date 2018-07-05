@@ -90,6 +90,14 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
         lock.unlock();
     }
     
+    public def addMembers(otherTx:Tx) {
+        lock.lock();
+        if (otherTx.members != null) {
+            this.members.addAll(otherTx.members);
+        }
+        lock.unlock();
+    }
+    
     public def contains(place:Int) {
         if (members == null)
             return false;
@@ -102,12 +110,14 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     
     /***************** Get ********************/
     public def get(key:Any):Cloneable {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] get("+key+") actvity["+Runtime.activity()+"] marked ...");
         Runtime.activity().tx = true;
         return plh().getMasterStore().get(id, key);
     }
     
     /***************** PUT ********************/
     public def put(key:Any, value:Cloneable):Cloneable {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] put("+key+") actvity["+Runtime.activity()+"] marked ...");
         Runtime.activity().tx = true;
         Runtime.activity().txReadOnly = false;
         return plh().getMasterStore().put(id, key, value);
@@ -115,6 +125,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     
     /***************** Delete *****************/
     public def delete(key:Any):Cloneable {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] delete("+key+") actvity["+Runtime.activity()+"] marked ...");
         Runtime.activity().tx = true;
         Runtime.activity().txReadOnly = false;
         return plh().getMasterStore().delete(id, key);
@@ -122,6 +133,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     
     /***************** KeySet *****************/
     public def keySet():Set[Any] {
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] keySet() actvity["+Runtime.activity()+"] marked ...");
         Runtime.activity().tx = true;
         return plh().getMasterStore().keySet(id); 
     }
