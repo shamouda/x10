@@ -123,7 +123,7 @@ public final class FinishReplicator {
             val masterPlaceId = inReq.masterPlaceId;
             val req = pendingMaster.remove(num);
             if (req == null)
-                throw new Exception(here + " FATAL ERROR masterToBackupPending  req not found in pendingMaster num="+num);
+                throw new Exception(here + " FATAL ERROR masterToBackupPending  req["+inReq.id+"] not found in pendingMaster num="+num);
             
             req.setOutSubmit(submit);   //in
             inReq.backupPlaceId = backupPlaceId; //in
