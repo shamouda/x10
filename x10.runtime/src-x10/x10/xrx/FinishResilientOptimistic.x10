@@ -914,13 +914,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def tryRelease() {
-            if (verbose>=1) debug(">>>> tryRelease(id="+id+").tryRelease called tx="+tx);
+            if (verbose>=1) debug(">>>> Master.tryRelease(id="+id+").tryRelease called tx="+tx);
             if (tx == null || tx.isEmpty()) {
                 releaseLatch();
                 notifyParent();
                 FinishReplicator.removeMaster(id);
             } else {
-                if (verbose>=1) debug("==== tryRelease(id="+id+").tryRelease calling finalizeWithBackup ");
+                if (verbose>=1) debug("==== Master.tryRelease(id="+id+").tryRelease calling finalizeWithBackup ");
                 txStarted = true;
                 var abort:Boolean = false;
                 if (excs != null && excs.size() > 0) {
@@ -928,7 +928,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 }
                 tx.finalizeWithBackup(this, abort, backupPlaceId); //this also performs gc
             }
-            if (verbose>=1) debug("<<<< tryRelease(id="+id+").tryRelease returning tx="+tx);
+            if (verbose>=1) debug("<<<< Master.tryRelease(id="+id+").tryRelease returning tx="+tx);
         }
         
         public def releaseFinish(excs:GrowableRail[CheckedThrowable]) {
@@ -937,7 +937,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 val myId = id;
                 at (Place(backupPlaceId)) @Immediate("optdist_release_backup") async {
                     if (verbose>=1) debug("==== releaseFinish(id="+myId+") reached backup");
-                    FinishReplicator.removeBackup(myId);
+                    FinishReplicator.removeBackupOrMarkToDelete(myId);
                 }
             }
             if (excs != null) {
@@ -1451,6 +1451,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         var migrating:Boolean = false;
         var placeOfMaster:Int = -1n; //will be updated during adoption
         var isReleased:Boolean = false;
+        var canDelete:Boolean = false;
         val tx:Tx;
         
         def this(id:FinishResilient.Id, parentId:FinishResilient.Id, tx:Tx) {
@@ -1483,12 +1484,22 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             this.excs = _excs;
             this.tx = _tx;
         }
+
+        def removeBackupOrMarkToDelete():void {
+            ilock.lock();
+            if (isReleased)
+                FinishReplicator.removeBackup(id);
+            else
+                canDelete = true;
+            ilock.unlock();
+        }
         
         def notifyCommit() {
             if (tx != null) {
                 (tx as TxResilient).markAsCommitting();
             }
         }
+        
         def dump() {
             val s = new x10.util.StringBuilder();
             s.add("Backup dump:\n");
@@ -1611,7 +1622,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (ex != null) addExceptionUnsafe(ex);
                 if (quiescent()) {
                     isReleased = true;
-                    if (tx != null) FinishReplicator.removeBackup(id);
+                    if (tx != null || canDelete) FinishReplicator.removeBackup(id);
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").transitToCompleted returning (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ") ");
             } finally {
@@ -1633,7 +1644,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (ex != null) addExceptionUnsafe(ex);
                 if (quiescent()) {
                     isReleased = true;
-                    if (tx != null) FinishReplicator.removeBackup(id);
+                    if (tx != null || canDelete) FinishReplicator.removeBackup(id);
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").removeGhostChild returning (childId="+childId+", ex=" + ex + ") ");
             } finally {
@@ -1656,7 +1667,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (verbose>=3) dump();
                 if (quiescent()) {
                     isReleased = true;
-                    if (tx != null) FinishReplicator.removeBackup(id);
+                    if (tx != null || canDelete) FinishReplicator.removeBackup(id);
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").transitToCompletedMul returning (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ", cnt="+cnt+") ");
             } finally {

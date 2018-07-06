@@ -1066,6 +1066,20 @@ public final class FinishReplicator {
         }
     }
     
+    static def removeBackupOrMarkToDelete(id:FinishResilient.Id) {
+        try {
+            glock.lock();
+            val bFin = fbackups.getOrElse(id, null);
+            if (bFin != null) {
+                bFin.removeBackupOrMarkToDelete();
+            }
+            if (verbose>=1) debug("<<<< removeBackup(id="+id+") returning");
+        } finally {
+            glock.unlock();
+        }
+        
+    }
+    
     static def removeBackup(id:FinishResilient.Id) {
         try {
             glock.lock();

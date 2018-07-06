@@ -23,5 +23,6 @@ public abstract class FinishBackupState {
     abstract def unlock():void;
     abstract def getParentId():FinishResilient.Id;
     abstract def getPlaceOfMaster():Int;
+    def removeBackupOrMarkToDelete():void {}
 }
 
