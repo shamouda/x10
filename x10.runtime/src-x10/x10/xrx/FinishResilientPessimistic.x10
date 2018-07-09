@@ -1931,7 +1931,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         while (iter.hasNext()) {
             val m = iter.next() as PessimisticMasterState;
             val newB = FinishReplicator.nominateBackupPlaceIfDead(m.id.home);
-            places(i) = newB == -1n? m.backupPlaceId : newB;
+            places(i) = newB;
             //don't update m.backupPlaceId until the recovered backups are created. Otherwise, pleases that are calling getNewBackup may reach the backup before it is created
             newBackups.put(m.id, newB); 
             i++;
@@ -1947,8 +1947,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         val closure = (gr:GlobalRef[LowLevelFinish]) => {
             for (mx in masters) {
                 val m = mx as PessimisticMasterState;
-                val newB2 = newBackups.getOrThrow(m.id);
-                val backup = newB2 == -1n? Place(m.backupPlaceId) : Place(newB2 as Long);
+                val backup = Place(newBackups.getOrThrow(m.id));
                 val id = m.id;
                 val parentId = m.parentId;
                 val numActive = m.numActive;
@@ -1988,7 +1987,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             val m = mx as PessimisticMasterState;
             m.lock();
             val newB2 = newBackups.getOrThrow(m.id);
-            if (newB2 != -1n) {
+            if (newB2 != m.backupPlaceId) {
                 m.backupPlaceId = newB2;
                 m.backupChanged = true;
             }

@@ -1002,7 +1002,6 @@ public final class FinishReplicator {
     }
     
     static def nominateBackupPlaceIfDead(idHome:Int) {
-        var isNewBackup:Boolean = false;
         var b:Int;
         var maxIter:Int = NUM_PLACES;
         var i:Int = 0n;
@@ -1012,7 +1011,6 @@ public final class FinishReplicator {
             if (b == -1n)
                 b = ((idHome + 1)%NUM_PLACES) as Int;
             while(allDead.contains(b) && i < maxIter) {
-                isNewBackup = true;
                 b = ((b + 1)%NUM_PLACES) as Int;
                 i++;
             }
@@ -1023,8 +1021,6 @@ public final class FinishReplicator {
             glock.unlock();
         }
         if (verbose>=1) debug("<<<< nominateBackupPlace(idHome="+idHome+") returning b="+b);
-        if (!isNewBackup)
-            return -1n;
         return b;
     }
     
