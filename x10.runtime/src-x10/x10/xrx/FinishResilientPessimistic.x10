@@ -1872,6 +1872,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             for (p in places) {
                 if (verbose>=1) debug("==== acquireChildrenBackups  moving from " + here + " to " + Place(p));
                 if (Place(p).isDead()) {
+                    if (verbose>=1) debug("==== acquireChildrenBackups  moving from " + here + " to " + Place(p) + "  failed - place is dead");
                     (gr as GlobalRef[LowLevelFinish]{self.home == here})().notifyFailure();
                 } else {
                     val preq = reqs_resps.getOrThrow(p);
@@ -1915,7 +1916,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         if (verbose>=1) debug("LOW_LEVEL_FINISH.waiting ended");
         
         if (fin.failed())
-            throw new Exception("FATAL ERROR: another place failed during recovery ...");
+            throw new Exception(here + " activity["+Runtime.activity()+"] FATAL ERROR in acquireChildrenBackups: another place failed during recovery ...");
 
         //add grandchildren children to master, and try again
     }
@@ -1936,7 +1937,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             i++;
             
             if (verbose>=3) {
-                debug(">>>> sync from master to backup ("+m.id+") m.backupPlaceId["+m.backupPlaceId+"] m.backupChanged["+m.backupChanged+"]");
+                debug(">>>> sync from master to backup ("+m.id+") newB["+newB+"] m.backupPlaceId["+m.backupPlaceId+"] m.backupChanged["+m.backupChanged+"]");
                 m.dump();
             }
         }
@@ -1958,7 +1959,10 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 val children = m.children;
                 val excs = m.excs;
                 
+                if (verbose>=1) debug("==== createOrSyncBackups id="+id+" going to backup["+backup+"]");
+                
                 if (backup.isDead()) {
+                    if (verbose>=1) debug("==== createOrSyncBackups id="+id+" going to backup["+backup+"] FAILED, backup is dead");
                     (gr as GlobalRef[LowLevelFinish]{self.home == here})().notifyFailure();
                 } else {
                     at (backup) @Immediate("create_or_sync_backup") async {
@@ -1978,7 +1982,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         if (verbose>=1) debug("LOW_LEVEL_FINISH.waiting ended");
         
         if (fin.failed())
-            throw new Exception("FATAL ERROR: another place failed during recovery ...");
+            throw new Exception(here + " activity["+Runtime.activity()+"] FATAL ERRORin createOrSyncBackups: another place failed during recovery ...");
         
         for (mx in masters) {
             val m = mx as PessimisticMasterState;
