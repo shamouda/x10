@@ -1924,18 +1924,19 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
     static def createOrSyncBackups(newDead:HashSet[Int], masters:HashSet[FinishMasterState]) {
         if (verbose>=1) debug(">>>> createOrSyncBackups(size="+masters.size()+") called");
         val places = new Rail[Int](masters.size());
+        val newBackups = new HashMap[Id,Int](); //id to backup, -1n means 
         val iter = masters.iterator();
         var i:Long = 0;
         while (iter.hasNext()) {
             val m = iter.next() as PessimisticMasterState;
             val newB = FinishReplicator.nominateBackupPlaceIfDead(m.id.home);
             places(i) = newB == -1n? m.backupPlaceId : newB;
-            m.backupPlaceId = places(i);
-            m.backupChanged = newB != -1n;
+            //don't update m.backupPlaceId until the recovered backups are created. Otherwise, pleases that are calling getNewBackup may reach the backup before it is created
+            newBackups.put(m.id, newB); 
             i++;
             
             if (verbose>=3) {
-                debug(">>>> sync from master to backup ("+m.id+")");
+                debug(">>>> sync from master to backup ("+m.id+") m.backupPlaceId["+m.backupPlaceId+"] m.backupChanged["+m.backupChanged+"]");
                 m.dump();
             }
         }
@@ -1945,7 +1946,8 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         val closure = (gr:GlobalRef[LowLevelFinish]) => {
             for (mx in masters) {
                 val m = mx as PessimisticMasterState;
-                val backup = Place(m.backupPlaceId);
+                val newB2 = newBackups.getOrThrow(m.id);
+                val backup = newB2 == -1n? Place(m.backupPlaceId) : Place(newB2 as Long);
                 val id = m.id;
                 val parentId = m.parentId;
                 val numActive = m.numActive;
@@ -1981,6 +1983,11 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         for (mx in masters) {
             val m = mx as PessimisticMasterState;
             m.lock();
+            val newB2 = newBackups.getOrThrow(m.id);
+            if (newB2 != -1n) {
+                m.backupPlaceId = newB2;
+                m.backupChanged = true;
+            }
             m.migrating = false;
             m.unlock();
         }
