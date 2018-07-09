@@ -1908,9 +1908,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         var i:Long = 0;
         while (iter.hasNext()) {
             val m = iter.next() as OptimisticMasterState;
-            places(i) = FinishReplicator.nominateBackupPlaceIfDead(m.id.home);
+            val newB = FinishReplicator.nominateBackupPlaceIfDead(m.id.home);
+            places(i) = newB == -1n? m.backupPlaceId : newB;
             m.backupPlaceId = places(i);
-            m.backupChanged = true;
+            m.backupChanged = newB != -1n;
             i++;
         }
         val fin = LowLevelFinish.make(places);
@@ -2018,17 +2019,20 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             createOrSyncBackups(newDead, masters);
         else {
             val hereId = here.id as Int;
-            val newBackup = Place(FinishReplicator.nominateBackupPlaceIfDead(hereId));
-            val rCond = ResilientCondition.make(newBackup);
-            val closure = (gr:GlobalRef[Condition]) => {
-                at (newBackup) @Immediate("dummy_backup") async {
-                    FinishReplicator.createDummyBackup(hereId);
-                    at (gr) @Immediate("dummy_backup_response") async {
-                        gr().release();
+            val newB = FinishReplicator.nominateBackupPlaceIfDead(hereId);
+            if (newB != -1n) {
+                val newBackup = Place(newB);
+                val rCond = ResilientCondition.make(newBackup);
+                val closure = (gr:GlobalRef[Condition]) => {
+                    at (newBackup) @Immediate("dummy_backup") async {
+                        FinishReplicator.createDummyBackup(hereId);
+                        at (gr) @Immediate("dummy_backup_response") async {
+                            gr().release();
+                        }
                     }
-                }
-            };
-            rCond.run(closure);
+                };
+                rCond.run(closure);
+            }
         }
 
         val newMasters = new HashSet[FinishMasterState]();

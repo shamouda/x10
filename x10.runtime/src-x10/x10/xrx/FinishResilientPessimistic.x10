@@ -1928,9 +1928,10 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         var i:Long = 0;
         while (iter.hasNext()) {
             val m = iter.next() as PessimisticMasterState;
-            places(i) = FinishReplicator.nominateBackupPlaceIfDead(m.id.home);
+            val newB = FinishReplicator.nominateBackupPlaceIfDead(m.id.home);
+            places(i) = newB == -1n? m.backupPlaceId : newB;
             m.backupPlaceId = places(i);
-            m.backupChanged = true;
+            m.backupChanged = newB != -1n;
             i++;
             
             if (verbose>=3) {
@@ -2049,19 +2050,21 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             createOrSyncBackups(newDead, masters);
         else {
             val hereId = here.id as Int;
-            val newBackup = Place(FinishReplicator.nominateBackupPlaceIfDead(hereId));
-            val rCond = ResilientCondition.make(newBackup);
-            val closure = (gr:GlobalRef[Condition]) => {
-                at (newBackup) @Immediate("dummy_backup") async {
-                    FinishReplicator.createDummyBackup(hereId);
-                    at (gr) @Immediate("dummy_backup_response") async {
-                        gr().release();
+            val newB = FinishReplicator.nominateBackupPlaceIfDead(hereId);
+            if (newB != -1n) {
+                val newBackup = Place(newB);                
+                val rCond = ResilientCondition.make(newBackup);
+                val closure = (gr:GlobalRef[Condition]) => {
+                    at (newBackup) @Immediate("dummy_backup") async {
+                        FinishReplicator.createDummyBackup(hereId);
+                        at (gr) @Immediate("dummy_backup_response") async {
+                            gr().release();
+                        }
                     }
-                }
-            };
-            rCond.run(closure);
+                };
+                rCond.run(closure);
+            }
         }
-        
         if (verbose>=1) debug("==== handling non-blocking pending requests ====");
         FinishReplicator.submitDeadBackupPendingRequests(newDead);
         FinishReplicator.submitDeadMasterPendingRequests(newDead);
