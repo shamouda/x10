@@ -1904,15 +1904,21 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         if (verbose>=1) debug(">>>> createOrSyncBackups(size="+masters.size()+") called");
         
         val places = new Rail[Int](masters.size());
+        val newBackups = new HashMap[Id,Int](); //id to backup, -1n means 
         val iter = masters.iterator();
         var i:Long = 0;
         while (iter.hasNext()) {
             val m = iter.next() as OptimisticMasterState;
             val newB = FinishReplicator.nominateBackupPlaceIfDead(m.id.home);
-            places(i) = newB == -1n? m.backupPlaceId : newB;
-            m.backupPlaceId = places(i);
-            m.backupChanged = newB != -1n;
+            places(i) = newB;
+            //don't update m.backupPlaceId until the recovered backups are created. Otherwise, pleases that are calling getNewBackup may reach the backup before it is created
+            newBackups.put(m.id, newB); 
             i++;
+            
+            if (verbose>=3) {
+                debug(">>>> sync from master to backup ("+m.id+") newB["+newB+"] m.backupPlaceId["+m.backupPlaceId+"] m.backupChanged["+m.backupChanged+"]");
+                m.dump();
+            }
         }
         val fin = LowLevelFinish.make(places);
         val gr = fin.getGr();
@@ -1920,7 +1926,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         val closure = (gr:GlobalRef[LowLevelFinish]) => {
             for (mx in masters) {
                 val m = mx as OptimisticMasterState;
-                val backup = Place(m.backupPlaceId);
+                val backup = Place(newBackups.getOrThrow(m.id));
                 val id = m.id;
                 val parentId = m.parentId;
                 val numActive = m.numActive;
@@ -1953,6 +1959,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         for (mx in masters) {
             val m = mx as OptimisticMasterState;
             m.lock();
+            val newB2 = newBackups.getOrThrow(m.id);
+            if (newB2 != m.backupPlaceId) {
+                m.backupPlaceId = newB2;
+                m.backupChanged = true;
+            }
             m.migrating = false;
             m.unlock();
         }
@@ -1968,10 +1979,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         val newDead = FinishReplicator.getNewDeadPlaces();
         if (newDead == null || newDead.size() == 0) //occurs at program termination
             return;
+        val hereId = here.id as Int;
         
         val masters = FinishReplicator.getImpactedMasters(newDead); //any master who contacted the dead place or whose backup was lost
         val backups = FinishReplicator.getImpactedBackups(newDead); //any backup who lost its master.
-        
+        val myBackupDied = newDead.contains(FinishReplicator.getBackupPlace(hereId));
+        if (myBackupDied)
+            debug(">>>> notifyPlaceDeath my backup died");
         //prevent updates on backups since they are based on decisions made by a dead master
         for (bx in backups) {
             val b = bx as OptimisticBackupState;
@@ -2018,10 +2032,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         if (masters.size() > 0)
             createOrSyncBackups(newDead, masters);
         else {
-            val hereId = here.id as Int;
-            val newB = FinishReplicator.nominateBackupPlaceIfDead(hereId);
-            if (newB != -1n) {
-                val newBackup = Place(newB);
+            if (myBackupDied) {
+                val newBackup = Place(FinishReplicator.nominateBackupPlaceIfDead(hereId));
                 val rCond = ResilientCondition.make(newBackup);
                 val closure = (gr:GlobalRef[Condition]) => {
                     at (newBackup) @Immediate("dummy_backup") async {

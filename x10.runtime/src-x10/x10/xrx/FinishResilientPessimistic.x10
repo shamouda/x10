@@ -2006,9 +2006,13 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         val newDead = FinishReplicator.getNewDeadPlaces();
         if (newDead == null || newDead.size() == 0) //occurs at program termination
             return;
+        val hereId = here.id as Int;
         
         val masters = FinishReplicator.getImpactedMasters(newDead); //any master who contacted the dead place or whose backup was lost or his child was lost
         val backups = FinishReplicator.getImpactedBackups(newDead); //any backup who lost its master.
+        val myBackupDied = newDead.contains(FinishReplicator.getBackupPlace(hereId));
+        if (myBackupDied)
+            debug(">>>> notifyPlaceDeath my backup died");
         
         //prevent updates on backups since they are based on decisions made by a dead master
         for (bx in backups) {
@@ -2059,10 +2063,8 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         if (masters.size() > 0)
             createOrSyncBackups(newDead, masters);
         else {
-            val hereId = here.id as Int;
-            val newB = FinishReplicator.nominateBackupPlaceIfDead(hereId);
-            if (newB != -1n) {
-                val newBackup = Place(newB);                
+            if (myBackupDied) {
+                val newBackup = Place(FinishReplicator.nominateBackupPlaceIfDead(hereId));                
                 val rCond = ResilientCondition.make(newBackup);
                 val closure = (gr:GlobalRef[Condition]) => {
                     at (newBackup) @Immediate("dummy_backup") async {
