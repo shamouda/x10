@@ -388,7 +388,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             } else {
                 val parentId = UNASSIGNED;
                 if (verbose>=1) debug(">>>> Remote(id="+id+").notifySubActivitySpawn(srcId="+srcId+",dstId="+dstId+",kind="+kind+") called");
-                val req = FinishRequest.makeOptTransitRequest(id, parentId, srcId, dstId, kind);
+                val req = FinishRequest.makeOptTransitRequest(id, parentId, srcId, dstId, kind, null);
                 FinishReplicator.exec(req);
                 if (verbose>=1) debug("<<<< Remote(id="+id+").notifySubActivitySpawn(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning");
             }
@@ -411,7 +411,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val bytes = ser.toRail();
             
             if (verbose>=1) debug(">>>> Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+",kind="+kind+",bytes="+bytes.size+") called");
-            val req = FinishRequest.makeOptTransitRequest(id, parentId, srcId, dstId, kind);
+            val req = FinishRequest.makeOptTransitRequest(id, parentId, srcId, dstId, kind, null);
             val num = req.num;
             val fs = Runtime.activity().finishState(); //the outer finish
             val preSendAction = ()=>{FinishReplicator.addPendingAct(id, num, dstId, fs, bytes, prof);};
@@ -909,7 +909,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         
             val quiet = numActive == 0;
             if (verbose>=3) dump();
-            if (verbose>=2 || (verbose>=1 && quiet)) debug("<<<< Master(id="+id+").quiescent returning " + quiet);
+            if (verbose>=2 || (verbose>=1 && quiet)) debug("<<<< Master(id="+id+").quiescent returning " + quiet + " tx="+tx);
             return quiet;
         }
         
@@ -1099,7 +1099,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     }
                 }
                 
-                val req = FinishRequest.makeOptTransitRequest(id, parentId, srcId, dstId, kind);
+                val req = FinishRequest.makeOptTransitRequest(id, parentId, srcId, dstId, kind, tx);
                 FinishReplicator.exec(req, this);
                 if (verbose>=1) debug("<<<< Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
             }
@@ -1131,7 +1131,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val bytes = ser.toRail();
             
             if (verbose>=1) debug(">>>> Root(id="+id+").spawnRemoteActivity(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
-            val req = FinishRequest.makeOptTransitRequest(id, parentId, srcId, dstId, kind);
+            val req = FinishRequest.makeOptTransitRequest(id, parentId, srcId, dstId, kind, tx);
             val num = req.num;
             val fs = Runtime.activity().finishState(); //the outer finish
             val preSendAction = ()=>{FinishReplicator.addPendingAct(id, num, dstId, fs, bytes, prof);};
@@ -1462,7 +1462,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             transit.put(FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
             this.placeOfMaster = id.home;
             this.tx = tx;
-        }        
+            if (tx != null) {
+                tx.initialize(id);
+            }
+        }
         
         def this(id:FinishResilient.Id, _parentId:FinishResilient.Id, _numActive:Long, 
                 _sent:HashMap[FinishResilient.Edge,Int],
@@ -1483,6 +1486,9 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             this.placeOfMaster = _placeOfMaster;
             this.excs = _excs;
             this.tx = _tx;
+            if (this.tx != null) {
+                this.tx.initialize(id);
+            }
         }
 
         def removeBackupOrMarkToDelete():void {
@@ -1688,7 +1694,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }
         
             val quiet = numActive == 0;
-            if (verbose>=2 || (verbose>=1 && quiet)) debug("<<<< Backup(id="+id+").quiescent returning " + quiet);
+            if (verbose>=2 || (verbose>=1 && quiet)) debug("<<<< Backup(id="+id+").quiescent returning " + quiet + "  tx="+tx);
             return quiet;
         }
         

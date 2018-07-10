@@ -82,9 +82,9 @@ public abstract class FinishRequest {
     }
     
     public static def makeOptTransitRequest(id:FinishResilient.Id, parentId:FinishResilient.Id,
-            srcId:Int, dstId:Int, kind:Int) {
+            srcId:Int, dstId:Int, kind:Int, tx:Tx) {
         val masterPlaceId = FinishReplicator.getMasterPlace(id.home);
-        return new TransitRequestOpt(id, masterPlaceId, parentId, srcId, dstId, kind);    
+        return new TransitRequestOpt(id, masterPlaceId, parentId, srcId, dstId, kind, tx);    
     }
     
     public static def makePesTransitRequest(id:FinishResilient.Id, parentId:FinishResilient.Id, adopterId:FinishResilient.Id,
