@@ -1930,16 +1930,19 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
     static def createOrSyncBackups(newDead:HashSet[Int], masters:HashSet[FinishMasterState]) {
         if (verbose>=1) debug(">>>> createOrSyncBackups(size="+masters.size()+") called");
         val places = new Rail[Int](masters.size());
+        val newBackups = new HashMap[Id,Int](); //id to backup, -1n means 
         val iter = masters.iterator();
         var i:Long = 0;
         while (iter.hasNext()) {
             val m = iter.next() as PessimisticMasterState;
-            places(i) = FinishReplicator.nominateBackupPlaceIfDead(m.id.home);
-            m.backupPlaceId = places(i);
-            m.backupChanged = true;
+            val newB = FinishReplicator.nominateBackupPlaceIfDead(m.id.home);
+            places(i) = newB;
+            //don't update m.backupPlaceId until the recovered backups are created. Otherwise, pleases that are calling getNewBackup may reach the backup before it is created
+            newBackups.put(m.id, newB); 
             i++;
+            
             if (verbose>=3) {
-                debug(">>>> sync from master to backup ("+m.id+")");
+                debug(">>>> sync from master to backup ("+m.id+") newB["+newB+"] m.backupPlaceId["+m.backupPlaceId+"] m.backupChanged["+m.backupChanged+"]");
                 m.dump();
             }
         }
@@ -1949,7 +1952,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         val closure = (gr:GlobalRef[LowLevelFinish]) => {
             for (mx in masters) {
                 val m = mx as PessimisticMasterState;
-                val backup = Place(m.backupPlaceId);
+                val backup = Place(newBackups.getOrThrow(m.id));
                 val id = m.id;
                 val parentId = m.parentId;
                 val numActive = m.numActive;
@@ -1959,8 +1962,6 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                 val transitAdopted = m.transitAdopted;
                 val children = m.children;
                 val excs = m.excs;
-                
-                
                 
                 if (backup.isDead()) {
                     (gr as GlobalRef[LowLevelFinish]{self.home == here})().notifyFailure();
@@ -1987,6 +1988,11 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         for (mx in masters) {
             val m = mx as PessimisticMasterState;
             m.lock();
+            val newB2 = newBackups.getOrThrow(m.id);
+            if (newB2 != m.backupPlaceId) {
+                m.backupPlaceId = newB2;
+                m.backupChanged = true;
+            }
             m.migrating = false;
             m.unlock();
         }
@@ -2002,9 +2008,12 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         val newDead = FinishReplicator.getNewDeadPlaces();
         if (newDead == null || newDead.size() == 0) //occurs at program termination
             return;
-        
+        val hereId = here.id as Int;
         val masters = FinishReplicator.getImpactedMasters(newDead); //any master who contacted the dead place or whose backup was lost or his child was lost
         val backups = FinishReplicator.getImpactedBackups(newDead); //any backup who lost its master.
+        val myBackupDied = newDead.contains(FinishReplicator.getBackupPlace(hereId));
+        if (myBackupDied)
+            debug(">>>> notifyPlaceDeath my backup died");
         
         //prevent updates on backups since they are based on decisions made by a dead master
         for (bx in backups) {
@@ -2055,18 +2064,19 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         if (masters.size() > 0)
             createOrSyncBackups(newDead, masters);
         else {
-            val hereId = here.id as Int;
-            val newBackup = Place(FinishReplicator.nominateBackupPlaceIfDead(hereId));
-            val rCond = ResilientCondition.make(newBackup);
-            val closure = (gr:GlobalRef[Condition]) => {
-                at (newBackup) @Immediate("dummy_backup") async {
-                    FinishReplicator.createDummyBackup(hereId);
-                    at (gr) @Immediate("dummy_backup_response") async {
-                        gr().release();
+            if (myBackupDied) {
+                val newBackup = Place(FinishReplicator.nominateBackupPlaceIfDead(hereId));                
+                val rCond = ResilientCondition.make(newBackup);
+                val closure = (gr:GlobalRef[Condition]) => {
+                    at (newBackup) @Immediate("dummy_backup") async {
+                        FinishReplicator.createDummyBackup(hereId);
+                        at (gr) @Immediate("dummy_backup_response") async {
+                            gr().release();
+                        }
                     }
-                }
-            };
-            rCond.run(closure);
+                };
+                rCond.run(closure);
+            }
         }
         
         if (verbose>=1) debug("==== handling non-blocking pending requests ====");

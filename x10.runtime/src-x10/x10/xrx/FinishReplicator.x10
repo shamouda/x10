@@ -123,7 +123,7 @@ public final class FinishReplicator {
             val masterPlaceId = inReq.masterPlaceId;
             val req = pendingMaster.remove(num);
             if (req == null)
-                throw new Exception(here + " FATAL ERROR masterToBackupPending  req not found in pendingMaster num="+num);
+                throw new Exception(here + " FATAL ERROR masterToBackupPending  req["+inReq.id+"] not found in pendingMaster num="+num);
             
             req.setOutSubmit(submit);   //in
             inReq.backupPlaceId = backupPlaceId; //in
@@ -236,10 +236,8 @@ public final class FinishReplicator {
                 asyncMasterToBackup(caller, req, mresp);
             }
         } else {
-            val prof = null;
-            val preSendAction = ()=> { };
             if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncExecInternal remote moving to master " + master);
-            val closure = ()=> @x10.compiler.RemoteInvocation("runMasterAsync") { 
+            at (master) @Immediate("async_master_exec") async {
                 if (req == null)
                     throw new Exception(here + " SER_FATAL at master => req is null");
                 if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncExecInternal remote reached master ");
@@ -248,10 +246,7 @@ public final class FinishReplicator {
                     throw new Exception(here + " fatal error, master(id="+req.id+") is null2 while processing req["+req+"]");
                 val mresp = mFin.exec(req);
                 if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncExecInternal remote master moving to caller " + caller);
-
-                val prof2 = null;
-                val preSendAction2 = ()=> { };
-                val closure2 = ()=> @x10.compiler.RemoteInvocation("runMasterAsyncResp") {
+                at (caller) @Immediate("async_master_exec_response") async {
                     if (mresp == null || req == null)
                         throw new Exception(here + " SER_FATAL at caller => mresp is null? "+(mresp == null)+", req is null? " + (req==null));
                     if (mresp.errMasterMigrating) {
@@ -265,28 +260,8 @@ public final class FinishReplicator {
                     else {
                         asyncMasterToBackup(caller, req, mresp);
                     }
-                };
-                Runtime.x10rtSendMessage(caller.id, closure2, prof2, preSendAction2);
-                Unsafe.dealloc(closure2);
-            };
-            Runtime.x10rtSendMessage(master.id, closure, prof, preSendAction);
-            Unsafe.dealloc(closure);
-        }
-    }
-    
-    public static def masterResponseReceived(req:FinishRequest, mresp:MasterResponse) {
-        if (mresp == null || req == null)
-            throw new Exception(here + " SER_FATAL at caller => mresp is null? "+(mresp == null)+", req is null? " + (req==null));
-        if (mresp.errMasterMigrating) {
-            if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncExecInternal MasterMigrating2, try again after 10ms" );
-            //we cannot block within an immediate thread
-            Runtime.submitUncounted( ()=>{
-                System.threadSleep(10); 
-                asyncExecInternal(req, null);
-            });
-        }
-        else {
-            asyncMasterToBackup(here, req, mresp);
+                }
+            }
         }
     }
     
@@ -324,11 +299,8 @@ public final class FinishReplicator {
                     req.isLocal = false;
                     processBackupResponse(bresp, req.num, backupPlaceId);
                 } else {
-                    
-                    val prof = null;
-                    val preSendAction = ()=> { };
                     if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup moving to backup " + backup);
-                    val closure = ()=> @x10.compiler.RemoteInvocation("runBackupAsync") { 
+                    at (backup) @Immediate("async_backup_exec") async {
                         if (req == null)
                             throw new Exception(here + " SER_FATAL at backup => req is null");
                         if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup reached backup ");
@@ -340,20 +312,12 @@ public final class FinishReplicator {
                         val bresp = bFin.exec(req);
                         if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup backup moving to caller " + caller);
                         val num = req.num;
-                        
-                        val prof2 = null;
-                        val preSendAction2 = ()=> { };
-                        val closure2 = ()=> @x10.compiler.RemoteInvocation("runBackupAsyncResp") { 
+                        at (caller) @Immediate("async_backup_exec_response") async {
                             if (bresp == null)
                                 throw new Exception(here + " SER_FATAL at caller => bresp is null");
                             processBackupResponse(bresp, num, backupPlaceId);
-                        };
-                        
-                        Runtime.x10rtSendMessage(caller.id, closure2, prof2, preSendAction2);
-                        Unsafe.dealloc(closure2);
-                    };
-                    Runtime.x10rtSendMessage(backup.id, closure, prof, preSendAction);
-                    Unsafe.dealloc(closure);
+                        }
+                    }
                 }                
             } //else is LEGAL ABSENCE => backup death is being handled by notifyPlaceDeath
         } else {
@@ -966,6 +930,10 @@ public final class FinishReplicator {
             }
         } finally {
             glock.unlock();
+        }
+        if (newDead.contains(0n)){
+            Console.OUT.println(here + " detected the failure of place0 -- terminating!!");
+            System.killHere();
         }
         if (verbose>=1) debug("<<<< getNewDeadPlaces returning");
         return newDead;
