@@ -1548,8 +1548,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 val dstId = req.dstId;
                 val kind = req.kind;
                 if (verbose>=1) debug(">>>> Backup(id="+id+").exec [req=TRANSIT, srcId=" + srcId + ", dstId="+ dstId + ",kind=" + kind + " ] called");
-                inTransit(srcId, dstId, kind, "notifySubActivitySpawn");
-                if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=TRANSIT, srcId=" + srcId + ", dstId="+ dstId + ",kind=" + kind + " ] returning");
+                if (req.transitSubmitDPE) {
+                    addDeadPlaceException(dstId);
+                    if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=TRANSIT-transitSubmitDPE, srcId=" + srcId + ", dstId="+ dstId + ",kind=" + kind + " ] returning");
+                } else {
+                    inTransit(srcId, dstId, kind, "notifySubActivitySpawn");
+                    if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=TRANSIT, srcId=" + srcId + ", dstId="+ dstId + ",kind=" + kind + " ] returning");
+                }
             } else if (xreq instanceof TermRequestOpt) {
                 val req = xreq as TermRequestOpt;
                 val srcId = req.srcId;

@@ -761,7 +761,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                         FinishReplicator.removeMaster(id);
                     }
                 }
-                if (verbose>=1) debug(">>>> Master(id="+id+").liveToCompleted returning (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ")");
+                if (verbose>=1) debug("<<<< Master(id="+id+").liveToCompleted returning (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ")");
                 resp.backupPlaceId = backupPlaceId;
                 resp.backupChanged = backupChanged;
             } finally {
