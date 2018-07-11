@@ -268,7 +268,7 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
                     Console.OUT.println(here + " Progress " + myVirtualPlaceId + "x" + producerId + ":" + myThroughput.txCount );
             }
         }
-        //Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
+        Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
         val lc = state.lc.decrementAndGet();
         if (lc == 0n) {
             at (Place(0)) @Uncounted async {
@@ -602,6 +602,7 @@ class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
                 p0Excs = new GrowableRail[CheckedThrowable]();
         }
         lc = --p0Cnt;
+        Console.OUT.println(here + " TxBench.notifyTermination -> count=" + lc );
         p0Latch.unlock();
         if (lc == 0)
             p0Latch.release();

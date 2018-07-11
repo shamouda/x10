@@ -236,16 +236,18 @@ public final class FinishReplicator {
                 asyncMasterToBackup(caller, req, mresp);
             }
         } else {
-            if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncExecInternal remote moving to master " + master);
+            if (verbose>=1) debug("==== Replicator(id="+req.id+",num="+req.num+").asyncExecInternal remote moving to master " + master);
             at (master) @Immediate("async_master_exec") async {
                 if (req == null)
                     throw new Exception(here + " SER_FATAL at master => req is null");
-                if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncExecInternal remote reached master ");
+                if (verbose>=1) debug("==== Replicator(id="+req.id+",num="+req.num+").asyncExecInternal remote reached master ");
                 val mFin = findMaster(req.id);
-                if (mFin == null) 
-                    throw new Exception(here + " fatal error, master(id="+req.id+") is null2 while processing req["+req+"]");
+                if (mFin == null)  {
+                    Console.OUT.println(here + " FATAL ERROR, master(id="+req.id+",num="+req.num+") is null2 while processing req["+req+"]");
+                    System.killHere();
+                }
                 val mresp = mFin.exec(req);
-                if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncExecInternal remote master moving to caller " + caller);
+                if (verbose>=1) debug("==== Replicator(id="+req.id+",num="+req.num+").asyncExecInternal remote master moving to caller " + caller);
                 at (caller) @Immediate("async_master_exec_response") async {
                     if (mresp == null || req == null)
                         throw new Exception(here + " SER_FATAL at caller => mresp is null? "+(mresp == null)+", req is null? " + (req==null));
@@ -267,7 +269,7 @@ public final class FinishReplicator {
     
     static def asyncMasterToBackup(caller:Place, req:FinishRequest, mresp:MasterResponse) {
         val submit = mresp.submit;
-        if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncMasterToBackup => backupPlaceId = " + mresp.backupPlaceId + " submit = " + submit );
+        if (verbose>=1) debug(">>>> Replicator(id="+req.id+",num="+req.num+").asyncMasterToBackup => backupPlaceId = " + mresp.backupPlaceId + " submit = " + submit + " parentId="+req.parentId + " req="+req);
         if (mresp.backupPlaceId == -1n)
             throw new Exception (here + " FATAL ERROR ["+req+"], backup -1 means master had a fatal error before reporting its backup value");
         if (mresp.backupChanged) {
@@ -965,7 +967,8 @@ public final class FinishReplicator {
             for (e in fbackups.entries()) {
                 val id = e.getKey();
                 val bFin = e.getValue();
-                if ( bFin.getId().id != -5555n && ( OPTIMISTIC && newDead.contains(bFin.getPlaceOfMaster()) || 
+                if ( bFin.getId().id != -5555n && ( 
+                     OPTIMISTIC && (newDead.contains(bFin.getPlaceOfMaster()) || bFin.getTxStarted() )  || 
                     !OPTIMISTIC && newDead.contains(bFin.getId().home) ) ) {
                     result.add(bFin);
                 }
@@ -1041,7 +1044,6 @@ public final class FinishReplicator {
             if (bFin != null) {
                 bFin.removeBackupOrMarkToDelete();
             }
-            if (verbose>=1) debug("<<<< removeBackup(id="+id+") returning");
         } finally {
             glock.unlock();
         }

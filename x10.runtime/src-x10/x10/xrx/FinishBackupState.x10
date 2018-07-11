@@ -24,5 +24,6 @@ public abstract class FinishBackupState {
     abstract def getParentId():FinishResilient.Id;
     abstract def getPlaceOfMaster():Int;
     def removeBackupOrMarkToDelete():void {}
+    def getTxStarted():Boolean { return false; }
 }
 

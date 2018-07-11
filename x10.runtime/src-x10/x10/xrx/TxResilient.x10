@@ -44,6 +44,7 @@ public class TxResilient extends Tx {
     private transient var ph2Started:Boolean;//false
     
     private transient var backupId:Int;
+    private transient var pendingOnBackup:Boolean = false;
 
     private static val MASTER = 0n;
     private static val SLAVE = 1n;
@@ -89,13 +90,16 @@ public class TxResilient extends Tx {
         }
     }
     
+    public def markAsCommitting() {
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] backup running markAsCommitting ...");
+        vote = true;
+    }
+    
     public def backupFinalize(finObj:Releasable) {
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] backupFinalize vote["+vote+"] ...");
+        masterSlave = plh().getMapping(members);
         this.finishObj = finObj;
-        if (vote) {
-            commitOrAbort(true);   
-        } else {
-            commitOrAbort(false);   
-        }
+        commitOrAbort(vote);
     }
     
     private def abortMastersOnly() {   
@@ -270,8 +274,10 @@ public class TxResilient extends Tx {
         lock.unlock();
         
         if (prep) {
-            if (backupId != -1n && vote)
+            if (backupId != -1n && vote) {
+                markPendingOnBackup();
                 updateBackup();
+            }
             else
                 commitOrAbort(vote);
         }
@@ -392,7 +398,24 @@ public class TxResilient extends Tx {
         }
     }
     
+    public def isImpactedByDeadPlaces(newDead:HashSet[Int]) {
+        try {
+            lock.lock();
+            if (pending != null) {
+                for (key in pending.keySet()) {
+                    if (Place(key.place as Long).isDead()) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        } finally {
+            lock.unlock();
+        }
+    }
+    
     public def notifyPlaceDeath() {
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead started");
         var rel:Boolean = false;
         lock.lock();
         
@@ -436,6 +459,7 @@ public class TxResilient extends Tx {
             pending = null;
             rel = true;
         }
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead completed, pending count=" + count);
         lock.unlock();
         
         if (rel) {
@@ -464,13 +488,26 @@ public class TxResilient extends Tx {
         }
     }
     
+    private def markPendingOnBackup() {
+        lock.lock();
+        pendingOnBackup = true;
+        lock.unlock();
+    }
+    
+    public def notifyBackupChange(newBackupId:Int) {
+        val restart:Boolean;
+        lock.lock();
+        val old = backupId;
+        backupId = newBackupId;
+        restart = pendingOnBackup;
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyBackupChange newBackup["+newBackupId+"] restart["+restart+"] ...");
+        lock.unlock();
+        if (restart)
+            updateBackup();
+    }
+    
     private def notifyBackupUpdated() {
         debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] received notifyBackupUpdated ...");
         commitOrAbort(vote);
-    }
-    
-    public def markAsCommitting() {
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] backup running markAsCommitting ...");
-        vote = true;
     }
 }
