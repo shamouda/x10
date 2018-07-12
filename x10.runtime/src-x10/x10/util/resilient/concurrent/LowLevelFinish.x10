@@ -85,7 +85,7 @@ public class LowLevelFinish implements Unserializable {
     public def failed() = failure;
     
     public def yesVote() = vote;
-    
+
     public def forget() {
         glock.lock();
         (gr as GlobalRef[LowLevelFinish]{self.home == here}).forget();
@@ -108,10 +108,16 @@ public class LowLevelFinish implements Unserializable {
     }
     
     public static def notifyPlaceDeath() {
+        val tmp = new ArrayList[LowLevelFinish]();
         glock.lock();
         for (inst in all) {
-            inst.notifyFailure();
+            tmp.add(inst);
         }
         glock.unlock();
+        
+        for (inst in tmp) {
+            inst.notifyFailure();    
+        }
+        
     }
 }

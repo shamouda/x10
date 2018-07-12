@@ -34,6 +34,7 @@ import x10.xrx.freq.TermRequestOpt;
 import x10.xrx.freq.RemoveGhostChildRequestOpt;
 import x10.xrx.freq.TransitRequestOpt;
 import x10.util.Set;
+import x10.util.resilient.localstore.LocalStore;
 
 /**
  * Distributed Resilient Finish (records transit tasks only)
@@ -399,6 +400,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
             val parentId = UNASSIGNED;
+            val id = this.id; //don't serialize this
             
             val start = prof != null ? System.nanoTime() : 0;
             val ser = new Serializer();
@@ -413,6 +415,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (verbose>=1) debug(">>>> Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+",kind="+kind+",bytes="+bytes.size+") called");
             val req = FinishRequest.makeOptTransitRequest(id, parentId, srcId, dstId, kind, null);
             val num = req.num;
+            
             val fs = Runtime.activity().finishState(); //the outer finish
             val preSendAction = ()=>{FinishReplicator.addPendingAct(id, num, dstId, fs, bytes, prof);};
             val postSendAction = (submit:Boolean, adopterId:Id)=>{
@@ -614,7 +617,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         //initialize from backup values
         def this(_id:Id, _parentId:Id, _numActive:Long, _sent:HashMap[Edge,Int],
         		_transit:HashMap[Edge,Int], ghostChildren:HashSet[Id],
-                _excs:GrowableRail[CheckedThrowable], _backupPlaceId:Int) {
+                _excs:GrowableRail[CheckedThrowable], _backupPlaceId:Int, _tx:Tx,
+                _tx_mem:Set[Int], _tx_excs:GrowableRail[CheckedThrowable], _tx_ro:Boolean) {
             this.id = _id;
             this.parentId = _parentId;
             this.numActive = _numActive;
@@ -630,6 +634,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             this.backupChanged = true;
             this.lc = 0n;
             this.isRecovered = true; // will have to call notifyParent
+            if (_tx != null) {
+                this.tx = _tx;
+                this.tx.initializeNewMaster(_id, _tx_mem, _tx_excs, _tx_ro);
+            }
         }
         
         def this(id:Id, parent:FinishState) {
@@ -1100,6 +1108,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val kind = ASYNC;
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
+            val id = this.id;
             
             isGlobal = true;
             //globalize parent if not global - cannot postpone this till sendPendingAct because it is called in an immediate thread and globalInit is blocking
@@ -2098,6 +2107,20 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 val _transit = b.transit;
                 val _ghosts = b.ghostChildren;
                 val _excs = b.excs;
+                val _tx = b.tx;
+                
+                var mem:Set[Int] = null;
+                var excs:GrowableRail[CheckedThrowable] = null;
+                var ro:Boolean = false;
+                if (_tx != null) {
+                    val o = b.tx.getBackupClone();
+                    mem = o.members;
+                    excs = o.excs;
+                    ro = o.readOnly;
+                }
+                val _tx_mem = mem;
+                val _tx_excs = excs;
+                val _tx_ro = ro;
                 
                 val master = Place(places(i));
                 if (master.isDead()) {
@@ -2105,7 +2128,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 } else {
                     at (master) @Immediate("create_masters") async {
                         val newM = new OptimisticMasterState(_id, _parentId, _numActive, 
-                        		_sent, _transit, _ghosts, _excs, _backupPlaceId);
+                        		_sent, _transit, _ghosts, _excs, _backupPlaceId, _tx, _tx_mem, _tx_excs, _tx_ro);
                         FinishReplicator.addMaster(_id, newM);
                         val me = here.id as Int;
                         at (gr) @Immediate("create_masters_response") async {

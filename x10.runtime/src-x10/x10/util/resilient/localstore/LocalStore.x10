@@ -91,13 +91,13 @@ public class LocalStore[K] {K haszero} {
     public def allocate(vPlace:Long) {
         try {
             plh().lock();
-            Console.OUT.println("Recovering " + here + " received allocation request to replace virtual place ["+vPlace+"] ");
+            Console.OUT.println("Activity["+Runtime.activity()+"] Recovering " + here + " received allocation request to replace virtual place ["+vPlace+"] ");
             if (plh().virtualPlaceId == -1) {
                 plh().virtualPlaceId = vPlace;
-                Console.OUT.println("Recovering " + here + " allocation request succeeded");
+                Console.OUT.println("Activity["+Runtime.activity()+"] Recovering " + here + " allocation request succeeded");
                 return true;
             }
-            Console.OUT.println("Recovering " + here + " allocation request failed, already allocated for virtual place ["+plh().virtualPlaceId+"] ");
+            Console.OUT.println("Activity["+Runtime.activity()+"] Recovering " + here + " allocation request failed, already allocated for virtual place ["+plh().virtualPlaceId+"] ");
             return false;
         } finally {
             plh().unlock();

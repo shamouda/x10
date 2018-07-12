@@ -134,7 +134,9 @@ public class MasterStore[K] {K haszero} {
     }
     
     public def pausing() {
+        if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " MasterStore.pasuing started");
     	txManager.pausing();
+    	if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " MasterStore.pasuing completed");
     }
     
     public def paused() {

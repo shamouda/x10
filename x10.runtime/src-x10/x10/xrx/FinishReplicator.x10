@@ -640,15 +640,14 @@ public final class FinishReplicator {
             if (curBackup == here.id as Int) { 
                 val bFin = findBackup(id);
                 if (bFin != null) {
-                    req.id = bFin.getNewMasterBlocking();
+                    resp.found = true;
+                    resp.newMasterId = bFin.getNewMasterBlocking();
                     if (req.id == FinishResilient.Id(0n,0n))
-                        req.masterPlaceId = 0n;  /**AT_FINISH HACK**/
+                        resp.newMasterPlace = 0n;  /**AT_FINISH HACK**/
                     else
-                        req.masterPlaceId = bFin.getPlaceOfMaster();
-                    req.setToAdopter(true);
+                        resp.newMasterPlace = bFin.getPlaceOfMaster();
                     break;
-                } else {
-                }
+                } 
             } else {
                 val backup = Place(curBackup);
                 val me = here;
@@ -1301,9 +1300,24 @@ public final class FinishReplicator {
     }
     
     static def waitForZeroPending() {
+        var count:Long = 0;
         if (verbose>=1) debug(">>>> waitForZeroPending called" );
         while (pending.get() != 0n || pendingAsyncRequestsExists() ) {
             System.threadSleep(100); // release the CPU to more productive pursuits
+            count++;
+            if (count%10000 == 0) {
+                glock.lock();
+                var str:String = "pendingMaster = ";
+                for (e in pendingMaster.entries()) {
+                    str += e.getKey() + ":" + e.getValue().id + " , ";
+                }
+                var str2:String = "pendingBackup = ";
+                for (e in pendingBackup.entries()) {
+                    str2 += e.getKey() + ":" + e.getValue().id + " , ";
+                }
+                glock.unlock();
+                if (verbose>=1) debug("==== waitForZeroPending waiting for: " + str + " : " + str2 );
+            }
         }
         pending.set(-2000n); //this means the main finish has completed its work
         if (verbose>=1) debug("<<<< waitForZeroPending returning" );

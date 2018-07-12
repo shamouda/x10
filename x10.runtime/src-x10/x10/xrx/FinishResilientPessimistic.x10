@@ -202,6 +202,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
             val parentId = UNASSIGNED;
+            val id = this.id;
             
             val start = prof != null ? System.nanoTime() : 0;
             val ser = new Serializer();
@@ -942,6 +943,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             val kind = ASYNC;
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
+            val id = this.id;
             
             val start = prof != null ? System.nanoTime() : 0;
             val ser = new Serializer();

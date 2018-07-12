@@ -27,6 +27,7 @@ import x10.util.HashMap;
 import x10.xrx.TxStoreFatalException;
 import x10.util.resilient.concurrent.ResilientCondition;
 import x10.util.concurrent.Condition;
+import x10.util.GrowableRail;
 
 /*
  * Failure reporting semantics:
@@ -49,6 +50,7 @@ public class TxResilient extends Tx {
     private static val MASTER = 0n;
     private static val SLAVE = 1n;
     private static val DEAD_SLAVE = -1n;
+    
     public static struct TxMember(place:int,ptype:int) {
         public def toString() = "<"+place+","+ptype+">";
     }
@@ -66,6 +68,38 @@ public class TxResilient extends Tx {
         ph2Started = false;
     }
 
+    public def initializeNewMaster(fid:FinishResilient.Id,
+            _mem:Set[Int], _excs:GrowableRail[CheckedThrowable], _ro:Boolean) {
+        gcId = fid;
+        lock = new Lock();
+        gr = GlobalRef[Tx](this);
+        vote = true;
+        ph2Started = false;
+        members = _mem;
+        excs = _excs;
+        readOnly = _ro;
+    }
+    
+    public def getBackupClone():Tx { 
+        try {
+            lock.lock();
+            val o = new TxResilient(plh,id);
+            o.readOnly = readOnly;
+            if (members != null) {
+                o.members = new HashSet[Int]();
+                for (mem in members)
+                    o.members.add(mem);
+            }
+            if (excs != null) {
+                o.excs = new GrowableRail[CheckedThrowable](excs.size());
+                o.excs.addAll(excs);
+            }
+            return o;
+        } finally {
+            lock.unlock();
+        }
+    }
+    
     public def finalizeWithBackup(finObj:Releasable, abort:Boolean, backupId:Int) {
         debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] backup["+backupId+"] finalize abort="+abort+" ...");
         this.finishObj = finObj;
@@ -142,6 +176,14 @@ public class TxResilient extends Tx {
         }
     }
     
+    private def printPending(tag:String) {
+        var str:String = "";
+        for (e in pending.entries()) {
+            str += e.getKey() + " : " + e.getValue() + " , ";
+        }
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] tag["+tag+"] pending["+str+"] count["+count+"] ...");
+    }
+    
     public def prepare() {
         //don't copy this
         val gr = this.gr;
@@ -181,6 +223,7 @@ public class TxResilient extends Tx {
                 }
             }
         }
+        printPending("PREPARE");
         lock.unlock();
         
         if (switchToAbort) { //if any of the masters is dead, abort the transaction
@@ -324,6 +367,7 @@ public class TxResilient extends Tx {
                 }
             }
         }
+        printPending("COMMIT_OR_ABORT");
         lock.unlock();
         
         for (p in liveMasters) {
@@ -418,7 +462,7 @@ public class TxResilient extends Tx {
         debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead started");
         var rel:Boolean = false;
         lock.lock();
-        
+        val oldCnt = count;
         val toRemove = new HashSet[TxMember]();
         if (pending != null) {
             for (key in pending.keySet()) {
@@ -455,7 +499,7 @@ public class TxResilient extends Tx {
             debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead remove place="+t.place+" type="+t.ptype+" cnt="+cnt+" count="+count+"...");
         }
         
-        if (count == 0n) {
+        if (oldCnt > 0 && count == 0n) {
             pending = null;
             rel = true;
         }

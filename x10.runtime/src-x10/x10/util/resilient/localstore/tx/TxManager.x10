@@ -129,8 +129,7 @@ public abstract class TxManager[K] {K haszero} {
     		assert(status == STATUS_ACTIVE);
     		status = STATUS_PAUSING;
     		if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxManager changed status from STATUS_ACTIVE to STATUS_PAUSING");
-    	}
-    	finally {
+    	} finally {
     		statusUnlock();
     	}
     }
@@ -141,8 +140,7 @@ public abstract class TxManager[K] {K haszero} {
     		assert(status == STATUS_PAUSING);
     		status = STATUS_PAUSED;
     		if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxManager changed status from STATUS_PAUSING to STATUS_PAUSED");
-    	}
-    	finally {
+    	} finally {
     		statusUnlock();
     	}
     }
@@ -153,8 +151,7 @@ public abstract class TxManager[K] {K haszero} {
     		assert(status == STATUS_PAUSED);
     		status = STATUS_ACTIVE;
     		if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxManager changed status from STATUS_PAUSED to STATUS_ACTIVE");
-    	}
-    	finally {
+    	} finally {
     		statusUnlock();
     	}
     }
@@ -163,8 +160,7 @@ public abstract class TxManager[K] {K haszero} {
     	try {
     		statusLock();
     		return status == STATUS_ACTIVE;
-    	}
-    	finally {
+    	} finally {
     		statusUnlock();
     	}
     }

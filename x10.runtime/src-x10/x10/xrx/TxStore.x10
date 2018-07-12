@@ -162,11 +162,15 @@ public class TxStore {
     public def nextPlaceChange() = plh().nextPlaceChange();
     
     public def asyncRecover() {
+       
         val plh = this.plh;
         val ls = plh();
-        if (!ls.immediateRecovery || !ls.slave.isDead())
+        if (!ls.immediateRecovery || !ls.slave.isDead()) {
+            debug("Recovering " + here + " Runtime.asyncRecover returning  immediate["+ls.immediateRecovery+"] slaveDead["+ls.slave.isDead()+"] ...");
             return;
+        }
         
+        debug("Recovering " + here + " Runtime.asyncRecover starting  immediate["+ls.immediateRecovery+"] slaveDead["+ls.slave.isDead()+"] masterActive["+ls.masterStore.isActive()+"] ...");
         if ( ls.slave.isDead() && ls.masterStore.isActive() ) {
              ls.masterStore.pausing();
             @Uncounted async recoverSlave(plh);
