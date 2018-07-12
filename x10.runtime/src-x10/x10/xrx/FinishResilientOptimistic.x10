@@ -368,6 +368,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
             val parentId = UNASSIGNED;
+            val id = this.id;
             
             val start = prof != null ? System.nanoTime() : 0;
             val ser = new Serializer();
@@ -994,6 +995,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val kind = ASYNC;
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
+            val id = this.id;
             
             isGlobal = true;
             //globalize parent if not global - cannot postpone this till sendPendingAct because it is called in an immediate thread and globalInit is blocking
