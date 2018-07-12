@@ -64,10 +64,6 @@ public class LowLevelFinish implements Unserializable {
     }
     
     public def notifyFailure() {
-        notifyFailure(false);
-    }
-    
-    private def notifyFailure(unsafeForget:Boolean) {
     	try {
     		ilock.lock();
     		for (var i:Long = 0; i < places.size; i++) {
@@ -79,10 +75,7 @@ public class LowLevelFinish implements Unserializable {
     		}
     		if (count == 0n) {
     			cond.release();
-    			if (unsafeForget)
-                    forgetUnsafe();
-                else
-                    forget();
+    			forget();
     		}
     	} finally {
     		ilock.unlock();
@@ -92,12 +85,7 @@ public class LowLevelFinish implements Unserializable {
     public def failed() = failure;
     
     public def yesVote() = vote;
-    
-    private def forgetUnsafe() {
-        (gr as GlobalRef[LowLevelFinish]{self.home == here}).forget();
-        all.remove(this);
-    }
-    
+
     public def forget() {
         glock.lock();
         (gr as GlobalRef[LowLevelFinish]{self.home == here}).forget();
@@ -120,10 +108,16 @@ public class LowLevelFinish implements Unserializable {
     }
     
     public static def notifyPlaceDeath() {
+        val tmp = new ArrayList[LowLevelFinish]();
         glock.lock();
         for (inst in all) {
-            inst.notifyFailure(true);
+            tmp.add(inst);
         }
         glock.unlock();
+        
+        for (inst in tmp) {
+            inst.notifyFailure();    
+        }
+        
     }
 }

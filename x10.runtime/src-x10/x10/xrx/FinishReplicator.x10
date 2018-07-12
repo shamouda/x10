@@ -638,15 +638,14 @@ public final class FinishReplicator {
             if (curBackup == here.id as Int) { 
                 val bFin = findBackup(id);
                 if (bFin != null) {
-                    req.id = bFin.getNewMasterBlocking();
+                    resp.found = true;
+                    resp.newMasterId = bFin.getNewMasterBlocking();
                     if (req.id == FinishResilient.Id(0n,0n))
-                        req.masterPlaceId = 0n;  /**AT_FINISH HACK**/
+                        resp.newMasterPlace = 0n;  /**AT_FINISH HACK**/
                     else
-                        req.masterPlaceId = bFin.getPlaceOfMaster();
-                    req.setToAdopter(true);
+                        resp.newMasterPlace = bFin.getPlaceOfMaster();
                     break;
-                } else {
-                }
+                } 
             } else {
                 val backup = Place(curBackup);
                 val me = here;
