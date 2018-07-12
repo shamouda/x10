@@ -532,6 +532,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         val sent:HashMap[Edge,Int]; //increasing counts    
         val transit:HashMap[Edge,Int];
         var ghostChildren:HashSet[Id] = null;  //lazily allocated in addException
+        var ghostsNotifiedEarly:HashSet[Id] = null; //used to save racing (remove ghost requests when the master is yet to calculate the ghostChildren)
         var isAdopted:Boolean = false; //set to true when backup recreates a master
         
         var migrating:Boolean = false; //used to stop updates to the object during recovery
@@ -783,23 +784,27 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 latch.unlock();
             }
         }
-
+        
         def removeGhostChild(childId:Id, t:CheckedThrowable, resp:MasterResponse) {
             try {
                 latch.lock();
                 if (verbose>=1) debug(">>>> Master(id="+id+").removeGhostChild childId=" + childId + ", t=" + t + " called");
-                if (ghostChildren == null || !ghostChildren.contains(childId))
-                    throw new Exception(here + " FATAL error, State(id="+id+") does not has the ghost child " + childId);
-                ghostChildren.remove(childId);
-                numActive--;
-                assert numActive>=0 : here + " FATAL error, Master(id="+id+").numActive reached -ve value";
-                if (t != null) addExceptionUnsafe(t);
-                if (quiescent()) {
-                    releaseLatch();
-                    notifyParent();
-                    FinishReplicator.removeMaster(id);
+                if (ghostChildren == null || !ghostChildren.contains(childId)) {
+                    if (ghostsNotifiedEarly == null)
+                        ghostsNotifiedEarly = new HashSet[Id]();
+                    ghostsNotifiedEarly.add(childId);
+                    if (verbose>=1) debug("<<<< Master(id="+id+").removeGhostChild returning - child buffered (childId="+childId+", ex=" + t + ") ");
+                } else {
+                    ghostChildren.remove(childId);
+                    numActive--;
+                    assert numActive>=0 : here + " FATAL error, Master(id="+id+").numActive reached -ve value";
+                    if (t != null) addExceptionUnsafe(t);
+                    if (quiescent()) {
+                        releaseLatch();
+                        notifyParent();
+                        FinishReplicator.removeMaster(id);
+                    }
                 }
-                
                 if (verbose>=1) debug("<<<< Master(id="+id+").removeGhostChild childId=" + childId + ", t=" + t + " returning");
                 resp.backupPlaceId = backupPlaceId;
                 resp.backupChanged = backupChanged;
@@ -1208,12 +1213,17 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (verbose>=1) debug(">>>> Master(id="+id+").convertToDead called");
             val ghosts = countChildrenBackups.get(id);
             if (ghosts != null && ghosts.size() > 0) {
-                if (ghostChildren == null)
+                if (ghostsNotifiedEarly != null) {
+                    ghosts.removeAll(ghostsNotifiedEarly); // these are already notified
+                }
+                if (ghostChildren == null) {
                     ghostChildren = new HashSet[Id]();
+                }
                 ghostChildren.addAll(ghosts);
                 if (verbose>=1) debug("==== Master(id="+id+").convertToDead adding ["+ghosts.size()+"] ghosts");
                 numActive += ghosts.size();
             }
+            ghostsNotifiedEarly = null;
             val toRemove = new HashSet[Edge]();
             for (e in transit.entries()) {
                 val edge = e.getKey();
@@ -1299,6 +1309,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         val sent = new HashMap[FinishResilient.Edge,Int](); //always increasing   
         val transit = new HashMap[FinishResilient.Edge,Int]();
         var ghostChildren:HashSet[Id] = null;  //lazily allocated in addException
+        var ghostsNotifiedEarly:HashSet[Id] = null; //used to save racing (remove ghost requests when the master is yet to calculate the ghostChildren)
         var excs:GrowableRail[CheckedThrowable]; 
         var isAdopted:Boolean = false;
         var migrating:Boolean = false;
@@ -1463,19 +1474,24 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             try {
                 ilock.lock();
                 if (verbose>=1) debug(">>>> Backup(id="+id+").removeGhostChild called (childId="+childId+", ex=" + ex + ") ");
-                if (ghostChildren == null || !ghostChildren.contains(childId))
-                    throw new Exception(here + " FATAL error, State(id="+id+") does not has the ghost child " + childId);
-                ghostChildren.remove(childId);
-                numActive--;
-                
-                if (verbose>=3) debug("==== Backup(id="+id+").removeGhostChild called (childId="+childId+", ex=" + ex + ") dumping after update");
-                if (verbose>=3) dump();
-                if (ex != null) addExceptionUnsafe(ex);
-                if (quiescent()) {
-                    isReleased = true;
-                    FinishReplicator.removeBackup(id);
+                if (ghostChildren == null || !ghostChildren.contains(childId)) {
+                    if (ghostsNotifiedEarly == null)
+                        ghostsNotifiedEarly = new HashSet[Id]();
+                    ghostsNotifiedEarly.add(childId);
+                    if (verbose>=1) debug("<<<< Backup(id="+id+").removeGhostChild returning - child buffered (childId="+childId+", ex=" + ex + ") ");
+                } else {
+                    ghostChildren.remove(childId);
+                    numActive--;
+                    
+                    if (verbose>=3) debug("==== Backup(id="+id+").removeGhostChild called (childId="+childId+", ex=" + ex + ") dumping after update");
+                    if (verbose>=3) dump();
+                    if (ex != null) addExceptionUnsafe(ex);
+                    if (quiescent()) {
+                        isReleased = true;
+                        FinishReplicator.removeBackup(id);
+                    }
+                    if (verbose>=1) debug("<<<< Backup(id="+id+").removeGhostChild returning (childId="+childId+", ex=" + ex + ") ");
                 }
-                if (verbose>=1) debug("<<<< Backup(id="+id+").removeGhostChild returning (childId="+childId+", ex=" + ex + ") ");
             } finally {
                 ilock.unlock();
             }
@@ -1623,13 +1639,18 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         public def convertToDead(newDead:HashSet[Int], countChildrenBackups:HashMap[FinishResilient.Id, HashSet[FinishResilient.Id]]) {
             if (verbose>=1) debug(">>>> Backup(id="+id+").convertToDead called");
             val ghosts = countChildrenBackups.get(id);
-            if (ghosts != null && ghosts.size() > 0 ) {
-                if (ghostChildren == null)
+            if (ghosts != null && ghosts.size() > 0) {
+                if (ghostsNotifiedEarly != null) {
+                    ghosts.removeAll(ghostsNotifiedEarly); // these are already notified
+                }
+                if (ghostChildren == null) {
                     ghostChildren = new HashSet[Id]();
+                }
                 ghostChildren.addAll(ghosts);
-                if (verbose>=1) debug("==== Backup(id="+id+").convertToDead adding ["+ghosts.size()+"] ghosts");    
+                if (verbose>=1) debug("==== Backup(id="+id+").convertToDead adding ["+ghosts.size()+"] ghosts");
                 numActive += ghosts.size();
             }
+            ghostsNotifiedEarly = null;
             
             val toRemove = new HashSet[Edge]();
             for (e in transit.entries()) {
