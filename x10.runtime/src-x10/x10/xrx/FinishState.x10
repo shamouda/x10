@@ -344,6 +344,7 @@ abstract class FinishState {
     // a finish guarding a unique async
     static class FinishAsync extends FinishSkeleton implements CustomSerialization {
         def this() {
+            Console.OUT.println("FinishAsync");
             super(new RootFinishAsync());
         }
         protected def this(ref:GlobalRef[FinishState]) {

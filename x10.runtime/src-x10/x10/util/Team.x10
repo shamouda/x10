@@ -107,7 +107,7 @@ public struct Team {
             for (var i:Long=0; i<count; i++)
                 placeRail(i) = places(i).id() as Int;
             val start1 = System.nanoTime();
-            finish nativeMake(placeRail, count as Int, result);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeMake(placeRail, count as Int, result);
             val stop1 = System.nanoTime();
             thisNativeCreateNano = stop1 - start1;
             this.id = result(0);
@@ -197,7 +197,7 @@ public struct Team {
     public def barrier () : void {
         if (collectiveSupportLevel >= X10RT_COLL_NONBLOCKINGBARRIER) {
             if (DEBUG) Runtime.println(here + " entering native barrier on team "+id);
-            finish nativeBarrier(id, (id==0n?here.id() as Int:Team.roles(id)));
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeBarrier(id, (id==0n?here.id() as Int:Team.roles(id)));
         }
         else {
             if (DEBUG) Runtime.println(here + " entering Team.x10 barrier on team "+id);
@@ -208,7 +208,7 @@ public struct Team {
     
     /** @deprecated use {@link barrier() instead} */
     public def nativeBarrier () : void {
-        finish nativeBarrier(id, (id==0n?here.id() as Int:Team.roles(id)));
+        @Pragma(Pragma.FINISH_ASYNC) finish nativeBarrier(id, (id==0n?here.id() as Int:Team.roles(id)));
     }
 
     private static def nativeBarrier (id:Int, role:Int) : void {
@@ -235,10 +235,10 @@ public struct Team {
         val dst = new Rail[Int](1, flag);
         if (Runtime.x10rtAgreementSupport()){
             if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
-                finish nativeAgree(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
+                @Pragma(Pragma.FINISH_ASYNC) finish nativeAgree(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
             else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
                 preBlockingBarrierIgnoreExceptions();
-                finish nativeAgree(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
+                @Pragma(Pragma.FINISH_ASYNC) finish nativeAgree(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
             }
         } else {
             throw new UnsupportedOperationException("Emulated agreement not supported");
@@ -274,10 +274,10 @@ public struct Team {
         if (CompilerFlags.checkBounds() && here == root) checkBounds(src_off + (size() * count) -1, src.size);
         checkBounds(dst_off+count-1, dst.size); 
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
-            finish nativeScatter(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);        
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeScatter(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);        
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             preBlockingBarrierIgnoreExceptions();
-            finish nativeScatter(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeScatter(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
         }
         else
             state(id).collective_impl[T](LocalTeamState.COLL_SCATTER, root, src, src_off, dst, dst_off, count, 0n, null, null);
@@ -322,10 +322,10 @@ public struct Team {
             RailUtils.scanExclusive(scounts, (x:Int, y:Int) => x+y, 0n);
                 
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
-            finish nativeScatterv(id, my_role, root.id() as Int, src, src_off as Int, scounts, soffsets, dst, dst_off as Int);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeScatterv(id, my_role, root.id() as Int, src, src_off as Int, scounts, soffsets, dst, dst_off as Int);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             preBlockingBarrierIgnoreExceptions();
-            finish nativeScatterv(id, my_role, root.id() as Int, src, src_off as Int, scounts, soffsets, dst, dst_off as Int);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeScatterv(id, my_role, root.id() as Int, src, src_off as Int, scounts, soffsets, dst, dst_off as Int);
         }
         else{
             state(id).collective_impl[T](LocalTeamState.COLL_SCATTERV, root, src, src_off, dst, dst_off, 0n, 0n, soffsets, scounts);
@@ -344,10 +344,10 @@ public struct Team {
         if (CompilerFlags.checkBounds() && here == root) checkBounds(dst_off + (size() * count) -1, dst.size);
         checkBounds(src_off+count-1, src.size); 
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
-            finish nativeGather(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeGather(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             preBlockingBarrierIgnoreExceptions();
-            finish nativeGather(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeGather(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
         }
         else
             state(id).collective_impl[T](LocalTeamState.COLL_GATHER, root, src, src_off, dst, dst_off, count, 0n, null, null);
@@ -388,10 +388,10 @@ public struct Team {
             RailUtils.scanExclusive(dcounts, (x:Int, y:Int) => x+y, 0n);
 
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
-            finish nativeGatherv(id, my_role, root.id() as Int, src, src_off as Int, dst, dst_off as Int, dcounts, doffsets);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeGatherv(id, my_role, root.id() as Int, src, src_off as Int, dst, dst_off as Int, dcounts, doffsets);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             preBlockingBarrierIgnoreExceptions();
-            finish nativeGatherv(id, my_role, root.id() as Int, src, src_off as Int, dst, dst_off as Int, dcounts, doffsets);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeGatherv(id, my_role, root.id() as Int, src, src_off as Int, dst, dst_off as Int, dcounts, doffsets);
         }
         else{
             state(id).collective_impl[T](LocalTeamState.COLL_GATHERV, root, src, src_off, dst, dst_off, 0n, 0n, doffsets, dcounts);
@@ -422,10 +422,10 @@ public struct Team {
         if (here == root) checkBounds(src_off+count-1, src.size);
         checkBounds(dst_off+count-1, dst.size); 
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
-            finish nativeBcast(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeBcast(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             preBlockingBarrierIgnoreExceptions();
-            finish nativeBcast(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeBcast(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int);
         }
          else
              state(id).collective_impl[T](LocalTeamState.COLL_BROADCAST, root, src, src_off, dst, dst_off, count, 0n, null, null);
@@ -461,12 +461,12 @@ public struct Team {
         }
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES) {
             if (DEBUG) Runtime.println(here + " entering native alltoall of team "+id);
-            finish nativeAlltoall(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeAlltoall(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int);
         } else /*if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) */ {
             if (DEBUG) Runtime.println(here + " entering pre-alltoall barrier of team "+id);
             preBlockingBarrierIgnoreExceptions();
             if (DEBUG) Runtime.println(here + " entering native alltoall of team "+id);
-            finish nativeAlltoall(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeAlltoall(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int);
         }
 // XTENLANG-3434 X10 alltoall is broken
 /*
@@ -570,12 +570,12 @@ public struct Team {
         checkBounds(src_off+count-1, src.size);
         if (here == root) checkBounds(dst_off+count-1, dst.size); 
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES) {
-            finish nativeReduce(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int, op);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeReduce(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int, op);
         } else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             if (DEBUG) Runtime.println(here + " entering pre-reduce barrier on team "+id);
             preBlockingBarrierIgnoreExceptions();
             if (DEBUG) Runtime.println(here + " entering native reduce on team "+id);
-            finish nativeReduce(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int, op);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeReduce(id, id==0n?here.id() as Int:Team.roles(id), root.id() as Int, src, src_off as Int, dst, dst_off as Int, count as Int, op);
             if (DEBUG) Runtime.println(here + " Finished native reduce on team "+id);
         } else {
             state(id).collective_impl[T](LocalTeamState.COLL_REDUCE, root, src, src_off, dst, dst_off, count, op, null, null);
@@ -744,12 +744,12 @@ public struct Team {
         checkBounds(dst_off+count-1, dst.size);
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES) {
             if (DEBUG) Runtime.println(here + " entering native allreduce on team "+id);
-            finish nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
         } else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             if (DEBUG) Runtime.println(here + " entering pre-allreduce barrier on team "+id);
             preBlockingBarrierIgnoreExceptions();
             if (DEBUG) Runtime.println(here + " entering native allreduce on team "+id);
-            finish nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeAllreduce(id, id==0n?here.id() as Int:Team.roles(id), src, src_off as Int, dst, dst_off as Int, count as Int, op);
         } else {
             if (DEBUG) Runtime.println(here + " entering Team.x10 allreduce on team "+id);
             state(id).collective_impl[T](LocalTeamState.COLL_ALLREDUCE, state(id).places(0), src, src_off, dst, dst_off, count, op, null, null);
@@ -864,10 +864,10 @@ public struct Team {
         val src = new Rail[DoubleIdx](1, DoubleIdx(v, idx));
         val dst = new Rail[DoubleIdx](1, DoubleIdx(0.0, -1n));
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
-            finish nativeIndexOfMax(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeIndexOfMax(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             preBlockingBarrierIgnoreExceptions();
-            finish nativeIndexOfMax(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeIndexOfMax(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
         }
         else
             state(id).collective_impl[DoubleIdx](LocalTeamState.COLL_INDEXOFMAX, state(id).places(0), src, 0, dst, 0, 1, 0n, null, null);
@@ -891,10 +891,10 @@ public struct Team {
         val src = new Rail[DoubleIdx](1, DoubleIdx(v, idx));
         val dst = new Rail[DoubleIdx](1, DoubleIdx(0.0, -1n));
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
-            finish nativeIndexOfMin(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeIndexOfMin(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             preBlockingBarrierIgnoreExceptions();
-            finish nativeIndexOfMin(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeIndexOfMin(id, id==0n?here.id() as Int:Team.roles(id), src, dst);
         }
         else
             state(id).collective_impl[DoubleIdx](LocalTeamState.COLL_INDEXOFMIN, state(id).places(0), src, 0, dst, 0, 1, 0n, null, null);
@@ -922,7 +922,7 @@ public struct Team {
         val result = new Rail[Int](1);
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES) {
             if (DEBUG) Runtime.println(here + " calling native split on team "+id+" color="+color+" new_role="+new_role);        
-            finish nativeSplit(id, id==0n?here.id() as Int:Team.roles(id), color, new_role as Int, result);
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeSplit(id, id==0n?here.id() as Int:Team.roles(id), color, new_role as Int, result);
             if (DEBUG) Runtime.println(here + " finished native split on team "+id+" color="+color+" new_role="+new_role);
             return Team(result(0), null, new_role);
         }
@@ -963,7 +963,7 @@ public struct Team {
                 if (DEBUGINTERNALS) Runtime.println(here + " calling pre-native split barrier on team "+id+" color="+color+" new_role="+new_role);
                 preBlockingBarrierIgnoreExceptions();
                 if (DEBUGINTERNALS) Runtime.println(here + " calling native split on team "+id+" color="+color+" new_role="+new_role);
-                finish nativeSplit(id, id==0n?here.id() as Int:Team.roles(id), color, new_role as Int, result);
+                @Pragma(Pragma.FINISH_ASYNC) finish nativeSplit(id, id==0n?here.id() as Int:Team.roles(id), color, new_role as Int, result);
                 if (DEBUG) Runtime.println(here + " finished native split on team "+id+" color="+color+" new_role="+new_role);
                 return Team(result(0), newTeamPlaceGroup, new_role);
             }
@@ -985,10 +985,10 @@ public struct Team {
     public def delete () : void {
         if (this == WORLD) throw new IllegalArgumentException("Cannot delete Team.WORLD");
         if (collectiveSupportLevel == X10RT_COLL_ALLNONBLOCKINGCOLLECTIVES)
-            finish nativeDel(id, id==0n?here.id() as Int:Team.roles(id));
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeDel(id, id==0n?here.id() as Int:Team.roles(id));
         else if (collectiveSupportLevel == X10RT_COLL_ALLBLOCKINGCOLLECTIVES || collectiveSupportLevel == X10RT_COLL_NONBLOCKINGBARRIER) {
             preBlockingBarrierIgnoreExceptions();
-            finish nativeDel(id, id==0n?here.id() as Int:Team.roles(id));
+            @Pragma(Pragma.FINISH_ASYNC) finish nativeDel(id, id==0n?here.id() as Int:Team.roles(id));
         }
         // TODO - see if there is something useful to delete with the local team implementation
     }
