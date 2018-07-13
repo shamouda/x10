@@ -1545,9 +1545,9 @@ x10rt_error x10rt_net_blocking_probe (void) {
 	if (sleepMicrosEnv && atoi(sleepMicrosEnv) > 0) {
 		sleep_microseconds = atoi(sleepMicrosEnv);
 	}
-	int iter = 10;
+	int iter = 100;
 	while (iter--) {
-		int counter = 100;
+		int counter = 10;
 		while (!x10rt_net_probe_ex(false) && counter--) {
 			sched_yield();
 		}
