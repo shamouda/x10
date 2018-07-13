@@ -1540,17 +1540,18 @@ x10rt_error x10rt_net_blocking_probe (void) {
 	// although CPU utilization will still show 100%, so thinks like the CPU automatically going into
 	// a low-power state when idle won't work.
 
-	int sleep_microseconds = -1;
+	int sleep_microseconds = 5000;
 	char* sleepMicrosEnv = getenv(X10RT_MPI_PROBE_SLEEP_MICROSECONDS);
 	if (sleepMicrosEnv && atoi(sleepMicrosEnv) > 0) {
 		sleep_microseconds = atoi(sleepMicrosEnv);
 	}
-	int counter = 1000;
-	while (!x10rt_net_probe_ex(false) && counter--) {
-		if (sleep_microseconds > 0)
-			usleep(sleep_microseconds);
-		else
+	int iter = 10;
+	while (iter--) {
+		int counter = 100;
+		while (!x10rt_net_probe_ex(false) && counter--) {
 			sched_yield();
+		}
+		usleep(sleep_microseconds);
 	}
     return X10RT_ERR_OK;
 }
