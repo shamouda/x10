@@ -25,112 +25,32 @@ import x10.xrx.Runtime;
  * When it comes back, it can use a different thread than the one used while locking the semaphor. 
  * */
 public class TxLockCREWBlocking extends TxLock {
-    
     private var sem:ReadWriteSemaphoreBlocking;
-    private var readers:Int; // 0 ... N
-    private var writer:Int; //0 or 1
-    private var lock:Lock;
-    private var BWSleepTime:Long;
-    private val BWEnabled:Boolean;
-    
     public def this() {
-        if (TxConfig.get().TM.startsWith("lockingBW")) {
-            lock = new Lock();
-            readers = 0n;
-            writer = 0n;
-            val mode = TxConfig.get().TM;
-            BWSleepTime = Long.parseLong(mode.substring(9n, mode.length()));
-            BWEnabled = true;
-        }
-        else {
-            sem = new ReadWriteSemaphoreBlocking();
-            BWEnabled = false;
-        }
+        sem = new ReadWriteSemaphoreBlocking();
     }
     public def lockRead(txId:Long) {
-        if (BWEnabled) 
-            lockReadBW(txId);
-        else
-            lockReadSem(txId);
-    }
-    
-    public def unlockRead(txId:Long) {
-        if (BWEnabled) 
-            unlockReadBW(txId);
-        else
-            unlockReadSem(txId);
-    }
-    
-    public def lockWrite(txId:Long) {
-        if (BWEnabled)
-            lockWriteBW(txId);
-        else
-            lockWriteSem(txId);
-    }
-  
-    public def unlockWrite(txId:Long) {
-        if (BWEnabled)
-            unlockWriteBW(txId);
-        else
-            unlockWriteSem(txId);
-    }
-
-    private def lockReadBW(txId:Long) {
-        lock.lock();
-        while (writer > 0n) {
-            lock.unlock();
-            System.threadSleep(BWSleepTime);
-            lock.lock();
-        }
-        readers++;
-        lock.unlock();
-    }
-    
-    private def unlockReadBW(txId:Long) {
-        lock.lock();
-        readers--;
-        lock.unlock();
-    }
-    
-    private def lockWriteBW(txId:Long) {
-        lock.lock();
-        while (readers > 0n) {
-            lock.unlock();
-            System.threadSleep(BWSleepTime);
-            lock.lock();
-        }
-        writer++;
-        lock.unlock();
-    }
-  
-    private def unlockWriteBW(txId:Long) {
-        lock.lock();
-        writer--;
-        lock.unlock();
-    }
-    
-    private def lockReadSem(txId:Long) {
         sem.acquireRead();
     }
     
-    private def unlockReadSem(txId:Long) {
+    public def unlockRead(txId:Long) {
         sem.releaseRead();
     }
     
-    private def lockWriteSem(txId:Long) {
+    public def lockWrite(txId:Long) {
         sem.acquireWrite();
     }
   
-    private def unlockWriteSem(txId:Long) {
+    public def unlockWrite(txId:Long) {
         sem.releaseWrite();
     }
     
     public def tryLockRead(txId:Long):Boolean {
-        throw new UnsupportedOperationException("TxLockCREWBlocking.tryLockRead() not supported ...");
+        return sem.tryAcquireRead();
     }
     
     public def tryLockWrite(txId:Long):Boolean {
-        throw new UnsupportedOperationException("TxLockCREWBlocking.tryLockWrite() not supported ...");
+        return sem.tryAcquireWrite();
     }
     
 }

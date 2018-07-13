@@ -46,4 +46,22 @@ import x10.io.Unserializable;
     public def releaseWrite() {
         wrt.release();
     }
+    
+    public def tryAcquireWrite() {
+        return wrt.tryAcquire();
+    }
+    
+    public def tryAcquireRead() {
+        if (!mutex.tryLock())
+            return false;
+        var success:Boolean = true;
+        readCount ++;
+        if (readCount == 1n) {
+            success = wrt.tryAcquire();
+        }
+        if (!success)
+            readCount --;
+        mutex.unlock();
+        return success;
+    }
 }

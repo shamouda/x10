@@ -23,6 +23,9 @@ import x10.util.concurrent.SimpleLatch;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.GrowableRail;
 
+//assumptions:
+//graph generated using the R-MAT algorithm
+//all edge costs are considered equal
 public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements NonShrinkingApp {
     public static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     public static val asyncRecovery = true;
