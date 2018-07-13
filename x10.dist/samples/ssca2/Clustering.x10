@@ -42,9 +42,9 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
     private def getAdjacentVertecesPlaces(v:Int, edgeStart:Int, edgeEnd:Int, verticesPerPlace:Long, graph:Graph) {
         val map = new HashMap[Long,HashSet[Int]]();
         var dest:Long = v / verticesPerPlace;
-        var set:HashSet[Int] = new HashSet[Int]();
-        set.add(v);
-        map.put (dest, set);
+        var set:HashSet[Int] = null;// = new HashSet[Int]();
+        //set.add(v);
+        //map.put (dest, set);
         
         // Iterate over all its neighbors
         for(var wIndex:Int=edgeStart; wIndex<edgeEnd; ++wIndex) {
@@ -77,7 +77,16 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         Console.OUT.println(str);
     } 
     
+    //create a cluster rooted by vertic v. If v is taken, return immediately.
+    //otherwise, look v and all its adjacent vertices (what if they are already taken?  should we overwrite them)
     private def processVertex(v:Int, placeId:Long, clusterId:Long, tx:Tx, accum:Long, plh:PlaceLocalHandle[ClusteringState]):Long {
+        //check the root of the cluster
+        val color = tx.get(v);
+        if (color != null) {
+            return 0;
+        }
+        tx.put(v, new Color(placeId, clusterId));
+        
         val state = plh();
         val graph = state.graph;
         val random = state.random;
@@ -90,6 +99,8 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         
         var innerCount:Long = 0;
         var outerCount:Long = 0;
+        
+        //map doesn't include the root of the cluster v
         val map = getAdjacentVertecesPlaces(v, edgeStart, edgeEnd, verticesPerPlace, graph);
         if (verbose > 1n) {
             printVertexPlaceMap(v, map);
