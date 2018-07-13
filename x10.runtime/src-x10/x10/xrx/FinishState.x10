@@ -345,11 +345,9 @@ abstract class FinishState {
     static class FinishAsync extends FinishSkeleton implements CustomSerialization {
         def this() {
             super(new RootFinishAsync());
-            Console.OUT.println("FinishAsync");
         }
         protected def this(ref:GlobalRef[FinishState]) {
             super(ref);
-            Console.OUT.println("FinishAsync");
         }
         private def this(ds:Deserializer) {
             super(ds.readAny() as GlobalRef[FinishState]);
