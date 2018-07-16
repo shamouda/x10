@@ -76,13 +76,6 @@ public class MapData[K] {K haszero} {
             if (res == null) {
                 res = new MemoryUnit[K](null);
                 metadata.put(k, res);
-                //if (print)
-                //    Console.OUT.println(here + " MapData.put ("+k+")");
-                val size = metadata.size(); 
-                if (size %10000 == 0) {
-                    Console.OUT.println(here + " MapData.size = " + size);
-                    //print = true;
-                }
             }
             res.ensureNotDeleted();
             return res;

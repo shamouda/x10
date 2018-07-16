@@ -41,6 +41,15 @@ public class TxLocking(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
         this.readFlags = readFlags;
         this.opPerPlace = opPerPlace;
     }
+    
+    protected def this(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
+        property(plh, id);
+        this.members = null;
+        this.keys = null;
+        this.readFlags = null;
+        this.opPerPlace = -1;
+    }
+    
 
     /***************** Get ********************/
     public def get(key:Any):Cloneable {
@@ -67,7 +76,21 @@ public class TxLocking(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
         at (pl) async closure();
     }
 
+    public def tryLockWrite(key:Any) {
+        return plh().getMasterStore().tryLockWrite(id, key);
+    }
     
+    public def tryLockRead(key:Any) {
+        return plh().getMasterStore().tryLockRead(id, key);
+    }
+    
+    public def unlockRead(key:Any) {
+        plh().getMasterStore().unlockRead(id, key);
+    }
+    
+    public def unlockWrite(key:Any) {
+        plh().getMasterStore().unlockWrite(id, key);
+    }
     /****************lock and unlock all keys**********************/
 
     public def lock() {

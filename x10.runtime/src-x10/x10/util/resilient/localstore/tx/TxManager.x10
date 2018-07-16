@@ -897,6 +897,26 @@ public abstract class TxManager[K] {K haszero} {
         
     
     /*******   TxManager_Locking methods *********/
+    public def tryLockWrite(id:Long, key:K) {
+        val memory = data.getMemoryUnit(key);
+        return memory.tryLockWrite(id);
+    }
+    
+    public def tryLockRead(id:Long, key:K) {
+        val memory = data.getMemoryUnit(key);
+        return memory.tryLockRead(id);
+    }
+    
+    public def unlockRead(id:Long, key:K) {
+        val memory = data.getMemoryUnit(key);
+        memory.unlockRead(id);
+    }
+    
+    public def unlockWrite(id:Long, key:K) {
+        val memory = data.getMemoryUnit(key);
+        memory.unlockWrite(id);
+    }
+    
     public def lock(id:Long, start:Long, opPerPlace:Long, keys:Rail[K],readFlags:Rail[Boolean]) {
         val log = txLogManager.getOrAddLockingLog(id);
         for (var x:Long = 0; x < opPerPlace ; x++) {

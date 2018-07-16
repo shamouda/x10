@@ -42,12 +42,15 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         public def clone() = new Color(placeId, clusterId);
     };
 
+    
+    static class LocalResult {
+        var vCount:Long = 0;
+    }
+    
     private def getAdjacentVertecesPlaces(v:Int, edgeStart:Int, edgeEnd:Int, verticesPerPlace:Long, graph:Graph) {
         val map = new HashMap[Long,HashSet[Int]]();
         var dest:Long = v / verticesPerPlace;
-        var set:HashSet[Int] = null;// = new HashSet[Int]();
-        //set.add(v);
-        //map.put (dest, set);
+        var set:HashSet[Int] = null;
         
         // Iterate over all its neighbors
         for(var wIndex:Int=edgeStart; wIndex<edgeEnd; ++wIndex) {
@@ -103,50 +106,46 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         val edgeCount:Int = edgeEnd-edgeStart ;
         val verticesPerPlace = state.verticesPerPlace;
         
-        var innerCount:Long = 0;
-        var outerCount:Long = 0;
+        
+        var clusterSize:Long = 0;
         
         //get the adjacent vertices to v (and exclude v)
         val map = getAdjacentVertecesPlaces(v, edgeStart, edgeEnd, verticesPerPlace, graph);
         if (verbose > 1n) {
             printVertexPlaceMap(v, map);
         }
-        //occupy the adjacent vertices that are not occupied
-        val iter = map.keySet().iterator();
-        { 
+        
+        val result = GlobalRef(new Result());
+        val subTx = Tx.makeSubTx(tx);
+        finish {
+            Runtime.registerFinishTx(subTx);
+            //occupy the adjacent vertices that are not occupied
+            val iter = map.keySet().iterator();
             while (iter.hasNext()) {
                 val dest = iter.next();
                 val vertices = map.getOrThrow(dest);
-                innerCount += vertices.size();
-                
-                //Console.OUT.println("Tx["+tx.id+"] " + TxConfig.txIdToString (tx.id)+ " here["+here+"].asyncAt("+dest+") started");
-                if (verbose > 1n) Console.OUT.println(here + " tx["+tx.id+"].asyncAt("+dest+") started");
                 tx.asyncAt(dest, () => {
-                    val used = new HashSet[Int]();
+                    var localCnt:Long = 0;
+                    val used = new HashSet[Int](); //to avoid checking the same vertex multiple times
                     for (s in vertices) {
                         if (used.contains(s))
                             continue;
-                        //Console.OUT.println("Tx["+tx.id+"] " + TxConfig.txIdToString (tx.id)+ " here["+here+"] get("+s+") started <<");
-                        val color = tx.get(s);
-                        //Console.OUT.println("Tx["+tx.id+"] " + TxConfig.txIdToString (tx.id)+ " here["+here+"] get("+s+") ended >>");
-                        if (color == null) {
-                            try {
-                          //      Console.OUT.println("Tx["+tx.id+"] " + TxConfig.txIdToString (tx.id)+ " here["+here+"] put("+s+") started <<");
-                                tx.put(s, new Color(placeId, clusterId));
-                                
-                            } finally {
-                           //     Console.OUT.println("Tx["+tx.id+"] " + TxConfig.txIdToString (tx.id)+ " here["+here+"] put("+s+") ended >>");
-                            }
-                        }
                         used.add(s);
-                        //else if (! ((color as Color).placeId == placeId && (color as Color).clusterId == clusterId ) )
-                        //    throw new ConflictException("Tx[" + tx.id + "] " + here + " vertex " + s + " allocated by place " + (color as Color).placeId, here);
+                        val color = tx.get(s);
+                        if (color == null) {
+                            tx.put(s, new Color(placeId, clusterId));
+                            localCnt++;
+                        }
+                    }
+                    val lc = localCnt;
+                    at (result) async {
+                        atomic result().vCount += lc; 
                     }
                 });
             }
         }
         
-        outerCount = accum + innerCount;
+        clusterSize = accum + result().vCount;
         
         if (verbose > 1n) Console.OUT.println(here + " tx["+tx.id+"] edgeCount="+edgeCount + " outerCount["+outerCount+"] < clusterSize["+state.clusterSize+"]=" + (outerCount < state.clusterSize));
         if (edgeCount > 0 && outerCount < state.clusterSize) {

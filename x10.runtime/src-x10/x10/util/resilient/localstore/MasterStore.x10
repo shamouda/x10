@@ -80,6 +80,22 @@ public class MasterStore[K] {K haszero} {
         return txManager.keySet(id);
     }
     
+    public def tryLockWrite(id:Long, key:K) {
+        return txManager.tryLockWrite(id, key);
+    }
+
+    public def tryLockRead(id:Long, key:K) {
+        return txManager.tryLockRead(id, key);
+    }
+    
+    public def unlockRead(id:Long, key:K) {
+        txManager.unlockRead(id, key);
+    }
+    
+    public def unlockWrite(id:Long, key:K) {
+        txManager.unlockWrite(id, key);
+    }
+
     public def getState() = txManager.data;
     
     public def getNextTransactionId() {

@@ -91,6 +91,38 @@ public class MemoryUnit[K] {K haszero} {
         }
     }
     
+    public def tryLockRead(txId:Long):Boolean {
+        if (TxConfig.get().LOCK_FREE) {
+            return true;
+        }
+        val s  = txLock.tryLockRead(txId);
+        if (s) {
+            try {
+                ensureNotDeleted();
+            } catch(ex:Exception) {
+                txLock.unlockRead(txId);
+                throw ex;
+            }
+        }
+        return s;
+    }
+    
+    public def tryLockWrite(txId:Long):Boolean {
+        if (TxConfig.get().LOCK_FREE) {
+            return true;
+        }
+        val s  = txLock.tryLockWrite(txId);
+        if (s) {
+            try {
+                ensureNotDeleted();
+            } catch(ex:Exception) {
+                txLock.unlockWrite(txId);
+                throw ex;
+            }
+        }
+        return s;
+    }
+    
     public def unlockRead(txId:Long) {
         if (!TxConfig.get().LOCK_FREE)
             txLock.unlockRead(txId);

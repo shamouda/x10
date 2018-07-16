@@ -56,6 +56,11 @@ public class TxStore {
     }
 
     
+    public def makeLockingTx():TxLocking {
+        val id = plh().getMasterStore().getNextTransactionId();
+        return new TxLocking(plh, id);
+    }
+    
     private def makeLockingTx(members:Rail[Long], keys:Rail[Any], readFlags:Rail[Boolean], o:Long):TxLocking {
         val id = plh().getMasterStore().getNextTransactionId();
         return new TxLocking(plh, id, members, keys, readFlags, o);
