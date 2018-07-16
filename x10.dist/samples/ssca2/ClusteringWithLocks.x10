@@ -26,7 +26,7 @@ import x10.util.GrowableRail;
 //assumptions:
 //graph generated using the R-MAT algorithm
 //all edge costs are considered equal
-public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements NonShrinkingApp {
+public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) implements NonShrinkingApp {  
     public static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     public static val asyncRecovery = true;
     
@@ -42,12 +42,39 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         public def clone() = new Color(placeId, clusterId);
     };
 
-    
     static class Result {
-        var vCount:Long = 0;
+        val locked:HashMap[Long,HashSet[Int]] = new HashMap[Long,HashSet[Int]]();
+        val lockedLast:HashMap[Long,HashSet[Int]] = new HashMap[Long,HashSet[Int]]();
+        var lockedLastTotal:Long = 0;
+        var total:Long = 0;
+    
+        public def merge() {
+            for (e in lockedLast.entries()) {
+                var set:HashSet[Int] = locked.getOrElse(e.getKey(), null);
+                if (set == null)
+                    set = new HashSet[Int]();
+                set.addAll(e.getValue());
+                locked.put(e.getKey(), set);
+            }
+            lockedLast.clear();
+            lockedLastTotal = 0;    
+        }
+        
+        public def print(txId:Long) {
+            var str:String = "Tx["+txId+"] result -> ";
+            for (e in locked.entries()) {
+                str += " dst["+e.getKey()+"] values { " ;
+                for (v in e.getValue()) {
+                    str += v + ",";
+                }
+                str += " }";
+            }
+            Console.OUT.println(str);
+        }
     }
     
-    private def getAdjacentVertecesPlaces(v:Int, edgeStart:Int, edgeEnd:Int, verticesPerPlace:Long, graph:Graph) {
+    private def getAdjacentVertecesPlaces(v:Int, edgeStart:Int, edgeEnd:Int, verticesPerPlace:Long, 
+            graph:Graph, result:GlobalRef[Result{self!=null}]{result.home==here}) {
         val map = new HashMap[Long,HashSet[Int]]();
         var dest:Long = v / verticesPerPlace;
         var set:HashSet[Int] = null;
@@ -58,18 +85,21 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
             val w:Int = graph.getAdjacentVertexFromIndex(wIndex);
             dest = w / verticesPerPlace;
         
-            set = map.getOrElse(dest, null);
-            if (set == null) {
-                set = new HashSet[Int]();
-                map.put(dest, set);
+            val k = result().locked.getOrElse(dest, null);
+            if (k == null || !k.contains(w)) { //ensure that we didn't lock it before
+                set = map.getOrElse(dest, null);
+                if (set == null) {
+                    set = new HashSet[Int]();
+                    map.put(dest, set);
+                }
+                set.add(w);
             }
-            set.add(w);
         }        
         return map;
     }
     
-    private def printVertexPlaceMap(v:Int, map:HashMap[Long,HashSet[Int]]) {
-        var str:String = "vertexMap v=" + v + ":";
+    private def printVertexPlaceMap(v:Int, map:HashMap[Long,HashSet[Int]], txId:Long) {
+        var str:String = "Tx["+txId+"] vertexMap v=" + v + ":";
         val iter = map.keySet().iterator();
         while (iter.hasNext()) {
             val pl = iter.next();
@@ -85,17 +115,8 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
     
     //create a cluster rooted by vertic v. If v is taken, return immediately.
     //otherwise, look v and all its adjacent vertices (what if they are already taken?  don't overwrite them)
-    private def processVertex(v:Int, placeId:Long, clusterId:Long, tx:Tx, accum:Long, plh:PlaceLocalHandle[ClusteringState]):Long {
-        //check the root of the cluster
-        val color = tx.get(v);
-        if (color == null) {
-            //if the root is not taken, take it
-            tx.put(v, new Color(placeId, clusterId));
-        } else {
-            //if the root is taken, end this iteration
-            return 0;
-        }
-        
+    private def processVertex(v:Int, placeId:Long, clusterId:Long, tx:TxLocking, 
+            plh:PlaceLocalHandle[ClusteringState], result:GlobalRef[Result{self!=null}]{result.home==here}):Int {
         val state = plh();
         val graph = state.graph;
         val random = state.random;
@@ -106,55 +127,152 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         val edgeCount:Int = edgeEnd-edgeStart ;
         val verticesPerPlace = state.verticesPerPlace;
         
-        
-        var clusterSize:Long = 0;
-        
-        //get the adjacent vertices to v (and exclude v)
-        val map = getAdjacentVertecesPlaces(v, edgeStart, edgeEnd, verticesPerPlace, graph);
+        //get the adjacent vertices to v (excluding v)
+        val map = getAdjacentVertecesPlaces(v, edgeStart, edgeEnd, verticesPerPlace, graph, result);
         if (verbose > 1n) {
-            printVertexPlaceMap(v, map);
+            printVertexPlaceMap(v, map, tx.id);
         }
         
-        val result = GlobalRef(new Result());
-        val subTx = Tx.makeSubTx(tx);
+        //occupy the adjacent vertices that are not occupied
         finish {
-            Runtime.registerFinishTx(subTx);
-            //occupy the adjacent vertices that are not occupied
             val iter = map.keySet().iterator();
             while (iter.hasNext()) {
                 val dest = iter.next();
                 val vertices = map.getOrThrow(dest);
                 tx.asyncAt(dest, () => {
-                    var localCnt:Long = 0;
-                    val used = new HashSet[Int](); //to avoid checking the same vertex multiple times
+                    var success:Boolean = true;
+                    val locked = new HashSet[Int]();
+                    var failedV:Int = 0n;
                     for (s in vertices) {
-                        if (used.contains(s))
+                        if (locked.contains(s))
                             continue;
-                        used.add(s);
+                        
+                        if (!tx.tryLockWrite(s)) {
+                            success = false;
+                            failedV = s;
+                            if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] failed to lock ["+s+"] ");
+                            break;
+                        }
                         val color = tx.get(s);
                         if (color == null) {
                             tx.put(s, new Color(placeId, clusterId));
-                            localCnt++;
+                            locked.add(s);
+                            if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] locked ["+s+"] ");
+                        } else {
+                            tx.unlockWrite(s);
                         }
                     }
-                    val lc = localCnt;
-                    at (result) async {
-                        atomic result().vCount += lc; 
+                    if (!success) {
+                        for (s in locked) {
+                            tx.put(s, null);
+                            tx.unlockWrite(s);
+                        }
+                        throw new TxStoreConflictException("["+here+"] failed to lock key["+failedV+"]", here);
+                    } else {
+                        val me = here.id;
+                        at (result) async {
+                            atomic {
+                                result().lockedLast.put(me, locked);
+                                result().lockedLastTotal += locked.size();
+                                result().total += locked.size();
+                            }
+                        }
                     }
                 });
             }
         }
         
-        clusterSize = accum + result().vCount;
-        
-        if (verbose > 1n) Console.OUT.println(here + " tx["+tx.id+"] edgeCount="+edgeCount + " outerCount["+outerCount+"] < clusterSize["+state.clusterSize+"]=" + (outerCount < state.clusterSize));
-        if (edgeCount > 0 && outerCount < state.clusterSize) {
-            val indx = Math.abs(random.nextInt()) % edgeCount; //we pick a random adjacent node
-            val nextV:Int = graph.getAdjacentVertexFromIndex(edgeStart + indx);
-            outerCount = processVertex(nextV, placeId, clusterId, tx, accum + innerCount, plh) ;
+        if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] size["+result().total+"] sizeLast["+result().lockedLastTotal+"] target[" + state.clusterSize 
+                + "] edgeCount["+edgeCount+"] oldMapSize["+map.size()+"] ");
+
+        var nextV:Int = -1n;
+        if (result().total < state.clusterSize && result().lockedLastTotal > 0) {
+            //pick the next vertex from the vertices locked last
+            val plIndx = Math.abs(random.nextInt()) % result().lockedLast.size();
+            var i:Long = 0;
+            for (e in result().lockedLast.entries()) {
+                if (i == plIndx) {
+                    val tmpLocked = e.getValue();
+                    val indx = Math.abs(random.nextInt()) % tmpLocked.size(); //we pick a random adjacent node
+                    var m:Long = 0;
+                    for (x in tmpLocked) {
+                        if (m == indx) {
+                            nextV = x;
+                            break;
+                        }
+                        m++;
+                    }
+                    break;
+                }
+                i++;
+            }
+        } 
+        result().merge();
+        result().print(tx.id);
+        return nextV;
+    }
+    
+    private def unlockObtainedKeys(result:Result, tx:TxLocking, success:Boolean, verbose:Int) {
+        result.merge();
+        if (verbose > 1n) Console.OUT.println(here + " Tx["+tx.id+"] unlock all start  success["+success+"]");
+        if (verbose > 1n) result.print(tx.id);
+        //unlock all obtained locks and try again
+        finish {
+            for (e in result.locked.entries()) {
+                val dest = e.getKey(); //physical key
+                val keys = e.getValue();
+                var str:String = "";
+                for (tmp in keys) {
+                    str += tmp + "-";
+                }
+                if (verbose > 1n) Console.OUT.println(here + " Tx["+tx.id+"] dest["+dest+"] keys["+str+"]");
+                at (Place(dest)) async {
+                    for (k in keys) {
+                        if (verbose > 1n) Console.OUT.println(here + " Tx["+tx.id+"] dest["+dest+"] key["+k+"]");
+                        tx.unlockWrite(k);
+                    }
+                }
+            }
         }
-        
-        return outerCount;
+    }
+    
+    private def createCluster(store:TxStore, root:Int, placeId:Long, clusterId:Long, 
+            plh:PlaceLocalHandle[ClusteringState], verbose:Int) {
+        var success:Boolean = false;
+        while (!success) {
+            val result = GlobalRef(new Result());
+            val tx = store.makeLockingTx();
+            try {
+                //handle the root
+                if (!tx.tryLockWrite(root))
+                    throw new TxStoreConflictException("Failed to lock root ["+root+"]", here); // retry
+                
+                val color = tx.get(root);
+                if (color == null) {
+                    //if the root is not taken, take it
+                    tx.put(root, new Color(placeId, clusterId));
+                    val k = new HashSet[Int]();
+                    k.add(root);
+                    result().locked.put(here.id, k);
+                    result().total = 1;
+                    Console.OUT.println(here + " cluster["+clusterId+"] locked root ["+root+"] ");
+                } else {
+                    tx.unlockWrite(root);
+                    //if the root is taken, end this iteration
+                    return;
+                }
+                
+                var nextV:Int = root;
+                while (nextV != -1n) {
+                    nextV = processVertex(nextV, placeId, clusterId, tx, plh, result);
+                }
+                success = true;
+            } catch (ex:Exception) {
+                success = false;
+                System.threadSleep(here.id % 10);
+            }
+            unlockObtainedKeys(result(), tx, success, verbose);
+        }
     }
     
     /**
@@ -175,36 +293,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
             val startVertex = (N as Long*placeId/max) as Int;
             val endVertex = (N as Long*(placeId+1)/max) as Int;
             
-            
-            Console.OUT.println(here + " " + startVertex + "-" + endVertex);
-            
-            /** Scheduler a hammer activity to kill the place at the specified time **/
-            if (resilient && state.vp != null && state.vt != null) {
-                val arr = state.vp.split(",");
-                var indx:Long = -1;
-                for (var c:Long = 0; c < arr.size ; c++) {
-                    if (Long.parseLong(arr(c)) == here.id) {
-                        indx = c;
-                        break;
-                    }
-                }
-                if (indx != -1) {
-                    val times = state.vt.split(",");
-                    val killTime = Long.parseLong(times(indx));
-                    @Uncounted async {
-                        Console.OUT.println("Hammer kill timer at "+here+" starting sleep for "+killTime+" secs");
-                        val startedNS = System.nanoTime(); 
-                        
-                        val deadline = System.currentTimeMillis() + 1000 * killTime;
-                        while (deadline > System.currentTimeMillis()) {
-                            val sleepTime = deadline - System.currentTimeMillis();
-                            System.sleep(sleepTime);
-                        }
-                        Console.OUT.println(here + " Hammer calling killHere" );
-                        System.killHere();
-                    }
-                }
-            }
+            Console.OUT.println(here + " starting: " + startVertex + "-" + endVertex);
             
             finish {
                 // Iterate over each of the vertices in my portion.
@@ -214,32 +303,19 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
                     val s:Int = state.verticesToWorkOn(vertexIndex);
                     val dest = s / verticesPerPlace;
                     val clusterId = c;
-                    val closure = (tx:Tx) => {
-                        processVertex(s, placeId, clusterId, tx, 0, plh);
-                    };
-                    
                     if (par == 1n) { //process the vertices in parallel
-                        async { 
-                            try {
-                                if (verbose > 0) Console.OUT.println(here + " vertex["+s+"] cluster started   ["+clusterId+"/"+vCount+"]");
-                                store.executeTransaction(closure);
-                                if (g > 0 && clusterId%g == 0) Console.OUT.println(here + " vertex["+s+"] cluster succeeded ["+clusterId+"/"+vCount+"]");
-                            } catch (ex:Exception) {
-                                if (verbose > 0) Console.OUT.println(here + " vertex["+s+"] cluster failed    ["+clusterId+"/"+vCount+"]   msg["+ex.getMessage()+"] ");
-                            }
+                        async {
+                            createCluster(store, s, placeId, clusterId, plh, verbose);
+                            if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] created successfully ...");
                         }
                     } else { //process the vertices in sequence
-                        try {
-                            if (verbose > 0) Console.OUT.println(here + " vertex["+s+"] cluster started   ["+clusterId+"/"+vCount+"]");
-                            store.executeTransaction(closure);
-                            if (g > 0 && clusterId%g == 0) Console.OUT.println(here + " vertex["+s+"] cluster succeeded ["+clusterId+"/"+vCount+"]");
-                        } catch (ex:Exception) {
-                            if (verbose > 0) Console.OUT.println(here + " vertex["+s+"] cluster failed    ["+clusterId+"/"+vCount+"]   msg["+ex.getMessage()+"] ");
-                        }
+                        createCluster(store, s, placeId, clusterId, plh, verbose);
+                        if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] created successfully ...");
                     }
                 }
             }
             
+            Console.OUT.println(here + " ==> completed successfully ");
             at (Place(0)) @Uncounted async {
                 val p0state = plh();
                 p0state.notifyTermination(null);
@@ -393,8 +469,8 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         Console.OUT.println("d = " + d);
         Console.OUT.println("p = " + permute);
         
-        if (!TxConfig.BUSY_LOCK) {
-            Console.OUT.println("!!!!ERROR: you must set BUSY_LOCK=1 in this program!!!!");
+        if (System.getenv("TM") == null || !System.getenv("TM").equals("locking")) {
+            Console.OUT.println("!!!!ERROR: you must set TM=locking in this program!!!!");
             return;
         }
         
@@ -404,8 +480,20 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         val activePlaces = mgr.activePlaces();
         val rmat = Rmat(seed, n, a, b, c, d);
         val places = activePlaces.size();
-        val plh = PlaceLocalHandle.make[ClusteringState](Place.places(), ()=>ClusteringState.make(rmat, par, permute, places, new Random(here.id), verbose, clusterSize, g, vp, vt));
-        val app = new Clustering(plh);
+        
+        val graph = rmat.generate();
+        if (verbose > 0) {
+            Console.OUT.println(graph.toString());
+        }
+        graph.compress();
+        val N = graph.numVertices();
+        val verticesToWorkOn = new Rail[Int](N, (i:Long)=>i as Int);
+        if (permute > 0n)
+            permuteVertices(N, verticesToWorkOn);
+        
+        val plh = PlaceLocalHandle.make[ClusteringState](Place.places(), ()=>new ClusteringState(graph, verticesToWorkOn, par, places, verbose, clusterSize, g, vp, vt));
+        
+        val app = new ClusteringWithLocks(plh);
         val store = TxStore.make(activePlaces, asyncRecovery, app);
         Console.OUT.println("spare places = " + spare);
         Console.OUT.println("active places = " + activePlaces.size());
@@ -425,13 +513,27 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
 
         Console.OUT.println("Places: " + places + "  N: " + plh().N + "  Setup: " + distTime + "s  Processing: " + procTime + "s  Total: " + totalTime + "s  (proc: " + procPct  +  "%).");
     }
+    
+    /**
+     * A function to shuffle the vertices randomly to give better work dist.
+     */
+    private static def permuteVertices(N:Int, verticesToWorkOn:Rail[Int]) {
+        val prng = new Random(1);
+
+        for(var i:Int=0n; i<N; i++) {
+            val indexToPick = prng.nextInt(N-i);
+            val v = verticesToWorkOn(i);
+            verticesToWorkOn(i) = verticesToWorkOn(i+indexToPick);
+            verticesToWorkOn(i+indexToPick) = v;
+        }
+    }
 }
 
 class ClusteringState(N:Int) {
     val graph:Graph;
     val verbose:Int;
     val par:Int;
-    val verticesToWorkOn = new Rail[Int](N, (i:Long)=>i as Int);
+    val verticesToWorkOn:Rail[Int];// = new Rail[Int](N, (i:Long)=>i as Int);
     val places:Long;
     val verticesPerPlace:Long;
     val random:Random;
@@ -445,45 +547,20 @@ class ClusteringState(N:Int) {
     var p0Latch:SimpleLatch = null;
     var p0Excs:GrowableRail[CheckedThrowable] = null;
     
-    private def this(graph:Graph, par:Int, places:Long, random:Random, verbose:Int, clusterSize:Long, g:Long, vp:String, vt:String) {
+    public def this(graph:Graph, verticesToWorkOn:Rail[Int], par:Int, places:Long, 
+            verbose:Int, clusterSize:Long, g:Long, vp:String, vt:String) {
         property(graph.numVertices());
         this.graph = graph;
         this.places = places;
         this.verbose = verbose;
         this.par = par;
         this.verticesPerPlace = Math.ceil((graph.numVertices() as Double)/places) as Long;
-        this.random = random;
+        this.random = new Random(here.id);
         this.clusterSize = clusterSize;
         this.g = g;
         this.vp = vp;
         this.vt = vt;
-    }
-    
-    static def make(rmat:Rmat, par:Int, permute:Int, places:Long, random:Random, verbose:Int, 
-            clusterSize:Long, g:Long, vp:String, vt:String) {
-        val graph = rmat.generate();
-        if (verbose > 0 && here.id == 0) {
-            Console.OUT.println(graph.toString());
-            Console.OUT.println("=========================");
-        }
-        graph.compress();
-        val s = new ClusteringState(graph, par, places, random, verbose, clusterSize, g, vp, vt);
-        if (permute > 0) s.permuteVertices();
-        return s;
-    }
-    
-    /**
-     * A function to shuffle the vertices randomly to give better work dist.
-     */
-    private def permuteVertices() {
-        val prng = new Random(1);
-
-        for(var i:Int=0n; i<N; i++) {
-            val indexToPick = prng.nextInt(N-i);
-            val v = verticesToWorkOn(i);
-            verticesToWorkOn(i) = verticesToWorkOn(i+indexToPick);
-            verticesToWorkOn(i+indexToPick) = v;
-        }
+        this.verticesToWorkOn = verticesToWorkOn;
     }
     
     public def notifyTermination(ex:CheckedThrowable) {

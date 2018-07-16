@@ -6,7 +6,6 @@ import x10.xrx.TxStoreConcurrencyLimitException;
 
 public class TxLogManager[K] {K haszero} {
     private val txLogs:Rail[TxLog[K]];
-    private val lockingTxLogs:Rail[LockingTxLog[K]];
 
     private val lock:Lock;
     private var insertIndex:Long;
@@ -19,12 +18,7 @@ public class TxLogManager[K] {K haszero} {
             for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
                 txLogs(i) = new TxLog[K]();
             }
-            lockingTxLogs = null;
         } else {
-            lockingTxLogs = new Rail[LockingTxLog[K]](TxConfig.MAX_CONCURRENT_TXS);
-            for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
-                lockingTxLogs(i) = new LockingTxLog[K]();
-            }
             txLogs = null;
         }
         
@@ -84,44 +78,6 @@ public class TxLogManager[K] {K haszero} {
     public def deleteAbortedTxLog(log:TxLog[K]) {
         //SS_CHECK keep track of aborted transactions
         deleteTxLog(log);
-    }
-    
-    
-    public def deleteLockingLog(log:LockingTxLog[K]) {
-        try {
-            lock();
-            log.reset();
-        }
-        finally {
-            unlock();
-        }
-    }
-    
-    public def getOrAddLockingLog(id:Long) {
-        try {
-            lock();
-            for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
-                if (lockingTxLogs(i).id == id)
-                    return lockingTxLogs(i);
-            }
-            var s:String = "";
-            var obj:LockingTxLog[K] = null;
-            for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
-                s += lockingTxLogs(i).id + " , ";
-                if (lockingTxLogs(i).id == -1) {
-                    obj = lockingTxLogs(i);                  
-                    break;
-                }
-            }
-            if (obj == null) {
-                throw new TxStoreConcurrencyLimitException(here + " TxStoreConcurrencyLimitException");
-            }
-            obj.id = id; //allocate it
-            return obj;
-        }
-        finally {
-            unlock();
-        }
     }
     
     public def activeTransactionsExist() {

@@ -49,7 +49,6 @@ public class LockingTx[K] {K haszero} extends AbstractTx[K] {
     }
 
     /****************lock and unlock all keys**********************/
-
     public def lock() {
         //don't copy this in remote operations
         val members = this.members;
