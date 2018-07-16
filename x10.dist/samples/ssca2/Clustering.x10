@@ -81,14 +81,17 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
     } 
     
     //create a cluster rooted by vertic v. If v is taken, return immediately.
-    //otherwise, look v and all its adjacent vertices (what if they are already taken?  should we overwrite them)
+    //otherwise, look v and all its adjacent vertices (what if they are already taken?  don't overwrite them)
     private def processVertex(v:Int, placeId:Long, clusterId:Long, tx:Tx, accum:Long, plh:PlaceLocalHandle[ClusteringState]):Long {
         //check the root of the cluster
         val color = tx.get(v);
-        if (color != null) {
+        if (color == null) {
+            //if the root is not taken, take it
+            tx.put(v, new Color(placeId, clusterId));
+        } else {
+            //if the root is taken, end this iteration
             return 0;
         }
-        tx.put(v, new Color(placeId, clusterId));
         
         val state = plh();
         val graph = state.graph;
@@ -103,11 +106,12 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         var innerCount:Long = 0;
         var outerCount:Long = 0;
         
-        //map doesn't include the root of the cluster v
+        //get the adjacent vertices to v (and exclude v)
         val map = getAdjacentVertecesPlaces(v, edgeStart, edgeEnd, verticesPerPlace, graph);
         if (verbose > 1n) {
             printVertexPlaceMap(v, map);
         }
+        //occupy the adjacent vertices that are not occupied
         val iter = map.keySet().iterator();
         { 
             while (iter.hasNext()) {
@@ -146,7 +150,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         
         if (verbose > 1n) Console.OUT.println(here + " tx["+tx.id+"] edgeCount="+edgeCount + " outerCount["+outerCount+"] < clusterSize["+state.clusterSize+"]=" + (outerCount < state.clusterSize));
         if (edgeCount > 0 && outerCount < state.clusterSize) {
-            val indx = Math.abs(random.nextInt()) % edgeCount;
+            val indx = Math.abs(random.nextInt()) % edgeCount; //we pick a random adjacent node
             val nextV:Int = graph.getAdjacentVertexFromIndex(edgeStart + indx);
             outerCount = processVertex(nextV, placeId, clusterId, tx, accum + innerCount, plh) ;
         }
@@ -166,6 +170,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
             val N = state.N;
             val max = state.places;
             val g = state.g;
+            val par = state.par;
             val verbose = state.verbose;
             val verticesPerPlace = state.verticesPerPlace;
             val startVertex = (N as Long*placeId/max) as Int;
@@ -174,7 +179,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
             
             Console.OUT.println(here + " " + startVertex + "-" + endVertex);
             
-            
+            /** Scheduler a hammer activity to kill the place at the specified time **/
             if (resilient && state.vp != null && state.vt != null) {
                 val arr = state.vp.split(",");
                 var indx:Long = -1;
@@ -202,26 +207,38 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
                 }
             }
             
-            // Iterate over each of the vertices in my portion.
-            var c:Long = 1;
-            val vCount = endVertex - startVertex;
-            for(var vertexIndex:Int=startVertex; vertexIndex<endVertex; ++vertexIndex, ++c) { 
-                val s:Int = state.verticesToWorkOn(vertexIndex);
-                val dest = s / verticesPerPlace;
-    
-                val clusterId = c;
-                val closure = (tx:Tx) => {
-                    processVertex(s, placeId, clusterId, tx, 0, plh);
-                };
-                
-                try {
-                    if (verbose > 0) Console.OUT.println(here + " vertex["+s+"] cluster started   ["+clusterId+"/"+vCount+"]");
-                    store.executeTransaction(closure);
-                    if (g > 0 && clusterId%g == 0) Console.OUT.println(here + " vertex["+s+"] cluster succeeded ["+clusterId+"/"+vCount+"]");
-                } catch (ex:Exception) {
-                    if (verbose > 0) Console.OUT.println(here + " vertex["+s+"] cluster failed    ["+clusterId+"/"+vCount+"]   msg["+ex.getMessage()+"] ");
+            finish {
+                // Iterate over each of the vertices in my portion.
+                var c:Long = 1;
+                val vCount = endVertex - startVertex;
+                for(var vertexIndex:Int=startVertex; vertexIndex<endVertex; ++vertexIndex, ++c) { 
+                    val s:Int = state.verticesToWorkOn(vertexIndex);
+                    val dest = s / verticesPerPlace;
+                    val clusterId = c;
+                    val closure = (tx:Tx) => {
+                        processVertex(s, placeId, clusterId, tx, 0, plh);
+                    };
+                    
+                    if (par == 1n) { //process the vertices in parallel
+                        async { 
+                            try {
+                                if (verbose > 0) Console.OUT.println(here + " vertex["+s+"] cluster started   ["+clusterId+"/"+vCount+"]");
+                                store.executeTransaction(closure);
+                                if (g > 0 && clusterId%g == 0) Console.OUT.println(here + " vertex["+s+"] cluster succeeded ["+clusterId+"/"+vCount+"]");
+                            } catch (ex:Exception) {
+                                if (verbose > 0) Console.OUT.println(here + " vertex["+s+"] cluster failed    ["+clusterId+"/"+vCount+"]   msg["+ex.getMessage()+"] ");
+                            }
+                        }
+                    } else { //process the vertices in sequence
+                        try {
+                            if (verbose > 0) Console.OUT.println(here + " vertex["+s+"] cluster started   ["+clusterId+"/"+vCount+"]");
+                            store.executeTransaction(closure);
+                            if (g > 0 && clusterId%g == 0) Console.OUT.println(here + " vertex["+s+"] cluster succeeded ["+clusterId+"/"+vCount+"]");
+                        } catch (ex:Exception) {
+                            if (verbose > 0) Console.OUT.println(here + " vertex["+s+"] cluster failed    ["+clusterId+"/"+vCount+"]   msg["+ex.getMessage()+"] ");
+                        }
+                    }
                 }
-                
             }
             
             at (Place(0)) @Uncounted async {
@@ -333,6 +350,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
             Option("p", "", "Permutation"),
             Option("g", "", "Progress"),
             Option("r", "", "Print resulting clusters"),
+            Option("par", "", "Parallel processing of vertices"),
             Option("vp","victims","victim places to kill (comma separated)"),
             Option("vt","victimsTimes","times to kill victim places(comma separated)"),
             Option("v", "", "Verbose")]);
@@ -351,6 +369,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         val verbose:Int = cmdLineParams("-v", 0n); // off by default
         val vp = cmdLineParams("vp", "");
         val vt = cmdLineParams("vt", "");
+        val par:Int = cmdLineParams("-par", 1n); // on by default
         
         Console.OUT.println("Running SSCA2 with the following parameters:");
         Console.OUT.println("X10_NPLACES="  + Place.numPlaces());
@@ -367,6 +386,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         
         Console.OUT.println("clusterSize = " + clusterSize);
         Console.OUT.println("seed = " + seed);
+        Console.OUT.println("parallel processing of vertices = " + par);
         Console.OUT.println("N = " + (1<<n));
         Console.OUT.println("a = " + a);
         Console.OUT.println("b = " + b);
@@ -385,7 +405,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         val activePlaces = mgr.activePlaces();
         val rmat = Rmat(seed, n, a, b, c, d);
         val places = activePlaces.size();
-        val plh = PlaceLocalHandle.make[ClusteringState](Place.places(), ()=>ClusteringState.make(rmat, permute, places, new Random(here.id), verbose, clusterSize, g, vp, vt));
+        val plh = PlaceLocalHandle.make[ClusteringState](Place.places(), ()=>ClusteringState.make(rmat, par, permute, places, new Random(here.id), verbose, clusterSize, g, vp, vt));
         val app = new Clustering(plh);
         val store = TxStore.make(activePlaces, asyncRecovery, app);
         Console.OUT.println("spare places = " + spare);
@@ -411,6 +431,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
 class ClusteringState(N:Int) {
     val graph:Graph;
     val verbose:Int;
+    val par:Int;
     val verticesToWorkOn = new Rail[Int](N, (i:Long)=>i as Int);
     val places:Long;
     val verticesPerPlace:Long;
@@ -425,11 +446,12 @@ class ClusteringState(N:Int) {
     var p0Latch:SimpleLatch = null;
     var p0Excs:GrowableRail[CheckedThrowable] = null;
     
-    private def this(graph:Graph, places:Long, random:Random, verbose:Int, clusterSize:Long, g:Long, vp:String, vt:String) {
+    private def this(graph:Graph, par:Int, places:Long, random:Random, verbose:Int, clusterSize:Long, g:Long, vp:String, vt:String) {
         property(graph.numVertices());
         this.graph = graph;
         this.places = places;
         this.verbose = verbose;
+        this.par = par;
         this.verticesPerPlace = Math.ceil((graph.numVertices() as Double)/places) as Long;
         this.random = random;
         this.clusterSize = clusterSize;
@@ -438,7 +460,7 @@ class ClusteringState(N:Int) {
         this.vt = vt;
     }
     
-    static def make(rmat:Rmat, permute:Int, places:Long, random:Random, verbose:Int, 
+    static def make(rmat:Rmat, par:Int, permute:Int, places:Long, random:Random, verbose:Int, 
             clusterSize:Long, g:Long, vp:String, vt:String) {
         val graph = rmat.generate();
         if (verbose > 0 && here.id == 0) {
@@ -446,7 +468,7 @@ class ClusteringState(N:Int) {
             Console.OUT.println("=========================");
         }
         graph.compress();
-        val s = new ClusteringState(graph, places, random, verbose, clusterSize, g, vp, vt);
+        val s = new ClusteringState(graph, par, places, random, verbose, clusterSize, g, vp, vt);
         if (permute > 0) s.permuteVertices();
         return s;
     }
