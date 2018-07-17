@@ -23,9 +23,15 @@ import x10.util.concurrent.SimpleLatch;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.GrowableRail;
 
-//assumptions:
-//graph generated using the R-MAT algorithm
-//all edge costs are considered equal
+/* 
+Assumptions:
+ - graph generated using the R-MAT algorithm
+ - all edge costs are considered equal
+To use locking, we needed to handle the following:
+ - avoid locking the same key twice
+ - maintain the list of acquired keys in the application to unlock them
+*/
+
 public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) implements NonShrinkingApp {  
     public static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     public static val asyncRecovery = true;
@@ -208,7 +214,7 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
             }
         } 
         result().merge();
-        result().print(tx.id);
+        if (verbose > 1n) result().print(tx.id);
         return nextV;
     }
     
@@ -255,7 +261,7 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
                     k.add(root);
                     result().locked.put(here.id, k);
                     result().total = 1;
-                    Console.OUT.println(here + " cluster["+clusterId+"] locked root ["+root+"] ");
+                    if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] locked root ["+root+"] ");
                 } else {
                     tx.unlockWrite(root);
                     //if the root is taken, end this iteration
@@ -269,9 +275,19 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
                 success = true;
             } catch (ex:Exception) {
                 success = false;
-                System.threadSleep(here.id % 10);
             }
             unlockObtainedKeys(result(), tx, success, verbose);
+        }
+    }
+    
+    private def execute(state:ClusteringState, placeId:Long, workerId:Long, start:Int, end:Int, 
+            store:TxStore, plh:PlaceLocalHandle[ClusteringState], verbose:Int) {
+        Console.OUT.println(here + " worder["+workerId+"] starting: " + start + "-" + (end-1));
+        // Iterate over each of the vertices in my portion.
+        var clusterId:Long = 1;
+        for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++clusterId) { 
+            val s:Int = state.verticesToWorkOn(vertexIndex);
+            createCluster(store, s, placeId, clusterId, plh, verbose);
         }
     }
     
@@ -287,31 +303,19 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
             val N = state.N;
             val max = state.places;
             val g = state.g;
-            val par = state.par;
             val verbose = state.verbose;
             val verticesPerPlace = state.verticesPerPlace;
+            val verticesPerWorker = Math.ceil((state.verticesPerPlace as Double)/state.workersPerPlace) as Long;
             val startVertex = (N as Long*placeId/max) as Int;
             val endVertex = (N as Long*(placeId+1)/max) as Int;
             
-            Console.OUT.println(here + " starting: " + startVertex + "-" + endVertex);
+            Console.OUT.println(here + " starting: " + startVertex + "-" + (endVertex-1));
             
             finish {
-                // Iterate over each of the vertices in my portion.
-                var c:Long = 1;
-                val vCount = endVertex - startVertex;
-                for(var vertexIndex:Int=startVertex; vertexIndex<endVertex; ++vertexIndex, ++c) { 
-                    val s:Int = state.verticesToWorkOn(vertexIndex);
-                    val dest = s / verticesPerPlace;
-                    val clusterId = c;
-                    if (par == 1n) { //process the vertices in parallel
-                        async {
-                            createCluster(store, s, placeId, clusterId, plh, verbose);
-                            if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] created successfully ...");
-                        }
-                    } else { //process the vertices in sequence
-                        createCluster(store, s, placeId, clusterId, plh, verbose);
-                        if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] created successfully ...");
-                    }
+                for (workerId in 1..state.workersPerPlace) {
+                    val start = startVertex + (workerId-1) * verticesPerWorker;
+                    val end = start + verticesPerWorker;
+                    async execute(state, placeId, workerId, start as Int, end as Int, store, plh, verbose);
                 }
             }
             
@@ -425,7 +429,7 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
             Option("p", "", "Permutation"),
             Option("g", "", "Progress"),
             Option("r", "", "Print resulting clusters"),
-            Option("par", "", "Parallel processing of vertices"),
+            Option("w", "", "Workers"),
             Option("vp","victims","victim places to kill (comma separated)"),
             Option("vt","victimsTimes","times to kill victim places(comma separated)"),
             Option("v", "", "Verbose")]);
@@ -444,7 +448,7 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         val verbose:Int = cmdLineParams("-v", 0n); // off by default
         val vp = cmdLineParams("vp", "");
         val vt = cmdLineParams("vt", "");
-        val par:Int = cmdLineParams("-par", 1n); // on by default
+        val workers:Int = cmdLineParams("-w", Runtime.NTHREADS); 
         
         Console.OUT.println("Running SSCA2 with the following parameters:");
         Console.OUT.println("X10_NPLACES="  + Place.numPlaces());
@@ -461,7 +465,7 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         
         Console.OUT.println("clusterSize = " + clusterSize);
         Console.OUT.println("seed = " + seed);
-        Console.OUT.println("parallel processing of vertices = " + par);
+        Console.OUT.println("workers = " + workers);
         Console.OUT.println("N = " + (1<<n));
         Console.OUT.println("a = " + a);
         Console.OUT.println("b = " + b);
@@ -491,7 +495,7 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         if (permute > 0n)
             permuteVertices(N, verticesToWorkOn);
         
-        val plh = PlaceLocalHandle.make[ClusteringState](Place.places(), ()=>new ClusteringState(graph, verticesToWorkOn, par, places, verbose, clusterSize, g, vp, vt));
+        val plh = PlaceLocalHandle.make[ClusteringState](Place.places(), ()=>new ClusteringState(graph, verticesToWorkOn, places, workers, verbose, clusterSize, g, vp, vt));
         
         val app = new ClusteringWithLocks(plh);
         val store = TxStore.make(activePlaces, asyncRecovery, app);
@@ -532,9 +536,9 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
 class ClusteringState(N:Int) {
     val graph:Graph;
     val verbose:Int;
-    val par:Int;
     val verticesToWorkOn:Rail[Int];// = new Rail[Int](N, (i:Long)=>i as Int);
     val places:Long;
+    val workersPerPlace:Long;
     val verticesPerPlace:Long;
     val random:Random;
     val clusterSize:Long;
@@ -547,13 +551,13 @@ class ClusteringState(N:Int) {
     var p0Latch:SimpleLatch = null;
     var p0Excs:GrowableRail[CheckedThrowable] = null;
     
-    public def this(graph:Graph, verticesToWorkOn:Rail[Int], par:Int, places:Long, 
+    public def this(graph:Graph, verticesToWorkOn:Rail[Int], places:Long, workersPerPlace:Long,
             verbose:Int, clusterSize:Long, g:Long, vp:String, vt:String) {
         property(graph.numVertices());
         this.graph = graph;
         this.places = places;
+        this.workersPerPlace = workersPerPlace;
         this.verbose = verbose;
-        this.par = par;
         this.verticesPerPlace = Math.ceil((graph.numVertices() as Double)/places) as Long;
         this.random = new Random(here.id);
         this.clusterSize = clusterSize;
