@@ -28,10 +28,9 @@ Assumptions:
  - graph generated using the R-MAT algorithm
  - all edge costs are considered equal
 To use locking, we needed to handle the following:
- - avoid locking the same key twice
+ - avoid locking the same key twice by remembering all acquired keys
  - maintain the list of acquired keys in the application to unlock them
 */
-
 public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) implements NonShrinkingApp {  
     public static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     public static val asyncRecovery = true;
@@ -91,8 +90,10 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
             val w:Int = graph.getAdjacentVertexFromIndex(wIndex);
             dest = w / verticesPerPlace;
         
+            //in the locking implementation, we need to ensure that 
+            //we didn't lock it before
             val k = result().locked.getOrElse(dest, null);
-            if (k == null || !k.contains(w)) { //ensure that we didn't lock it before
+            if (k == null || !k.contains(w)) {
                 set = map.getOrElse(dest, null);
                 if (set == null) {
                     set = new HashSet[Int]();
@@ -120,7 +121,8 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
     } 
     
     //create a cluster rooted by vertic v. If v is taken, return immediately.
-    //otherwise, look v and all its adjacent vertices (what if they are already taken?  don't overwrite them)
+    //otherwise, look v and all its adjacent vertices
+    //don't overwrite already taken keys
     private def processVertex(v:Int, placeId:Long, clusterId:Long, tx:TxLocking, 
             plh:PlaceLocalHandle[ClusteringState], result:GlobalRef[Result{self!=null}]{result.home==here}):Int {
         val state = plh();
@@ -150,9 +152,6 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
                     val locked = new HashSet[Int]();
                     var failedV:Int = 0n;
                     for (s in vertices) {
-                        if (locked.contains(s))
-                            continue;
-                        
                         if (!tx.tryLockWrite(s)) {
                             success = false;
                             failedV = s;
@@ -188,11 +187,17 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
             }
         }
         
-        if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] size["+result().total+"] sizeLast["+result().lockedLastTotal+"] target[" + state.clusterSize 
+        if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] size["+result().total+"] sizeLast["
+                + result().lockedLastTotal+"] target[" + state.clusterSize 
                 + "] edgeCount["+edgeCount+"] oldMapSize["+map.size()+"] ");
 
+        return chooseNextVertex(state.clusterSize, state.random, state.verbose, result, tx.id);
+    }
+            
+    private def chooseNextVertex(clusterSize:Long, random:Random, verbose:Int, 
+            result:GlobalRef[Result{self!=null}]{result.home==here}, txId:Long):Int {
         var nextV:Int = -1n;
-        if (result().total < state.clusterSize && result().lockedLastTotal > 0) {
+        if (result().total < clusterSize && result().lockedLastTotal > 0) {
             //pick the next vertex from the vertices locked last
             val plIndx = Math.abs(random.nextInt()) % result().lockedLast.size();
             var i:Long = 0;
@@ -214,7 +219,7 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
             }
         } 
         result().merge();
-        if (verbose > 1n) result().print(tx.id);
+        if (verbose > 1n) result().print(txId);
         return nextV;
     }
     
