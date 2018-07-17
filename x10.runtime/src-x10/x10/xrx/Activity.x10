@@ -11,6 +11,8 @@
 
 package x10.xrx;
 
+import x10.util.Set;
+
 /**
  * Runtime representation of an async. Only to be used in the runtime implementation.
  */
@@ -64,6 +66,10 @@ public class Activity {
 
     public var tx:Boolean = false;
     public var txReadOnly:Boolean = true;
+    
+    //sub transaction
+    public var subMembers:Set[Int] = null;
+    public var subReadyOnly:Boolean = true;
     
     /**
      * Create activity.
@@ -160,6 +166,13 @@ public class Activity {
             }
         } catch (DeadPlaceException) {}
         if (DEALLOC_BODY) Unsafe.dealloc(body);
+    }
+    
+    public def setSubTransaction(subMembers:Set[Int], subReadyOnly:Boolean) {
+        if (subMembers != null) {
+            this.subMembers = subMembers;
+            this.subReadyOnly = subReadyOnly;
+        }
     }
 }
 
