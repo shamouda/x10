@@ -60,6 +60,7 @@ public class TxResilient extends Tx {
     }
     
     public def initialize(fid:FinishResilient.Id) {
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+fid+"] here["+here+"] activity["+Runtime.activity()+"] initialize called ...");
         gcId = fid;
         lock = new Lock();
         gr = GlobalRef[Tx](this);

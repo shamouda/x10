@@ -57,13 +57,13 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     }
     
     public static def clone(old:Tx) {
-        if (old instanceof Tx) {
-            return new Tx(old.plh, old.id);
-        } else if (old instanceof TxResilientNoSlaves) {
+        if (old instanceof TxResilientNoSlaves) {
             return new TxResilientNoSlaves(old.plh, old.id);
         } else if (old instanceof TxResilient) {
             return new TxResilient(old.plh, old.id);
-        } else
+        } else if (old instanceof Tx) {
+            return new Tx(old.plh, old.id);
+        } else 
             return null;
     }
     /**
