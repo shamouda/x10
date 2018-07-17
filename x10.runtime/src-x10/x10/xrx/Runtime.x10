@@ -589,10 +589,10 @@ public final class Runtime {
         return watcher;
     }
 
-    public static def registerFinishTx(tx:Tx):void {
+    public static def registerFinishTx(tx:Tx, rootTx:Boolean):void {
         val a = activity();
         val state = a.finishState();
-        state.registerFinishTx(tx);
+        state.registerFinishTx(tx, rootTx);
     }
     
     // asyncat, async, at statement, and at expression implementation

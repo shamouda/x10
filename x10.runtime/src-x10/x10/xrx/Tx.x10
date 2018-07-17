@@ -56,6 +56,16 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
             return new Tx(plh, id);
     }
     
+    public static def clone(old:Tx) {
+        if (old instanceof Tx) {
+            return new Tx(old.plh, old.id);
+        } else if (old instanceof TxResilientNoSlaves) {
+            return new TxResilientNoSlaves(old.plh, old.id);
+        } else if (old instanceof TxResilient) {
+            return new TxResilient(old.plh, old.id);
+        } else
+            return null;
+    }
     /**
      * Initializing the transaction object.
      * Must be called at the place responsible for 2PC
@@ -83,12 +93,27 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     /***************** Members *****************/
     public def addMember(m:Int, ro:Boolean){
         if (TxConfig.TM_DEBUG) 
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] add member["+m+"] readOnly["+ro+"] ...");
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] add member["+m+"] readOnly["+ro+"] ...");
         lock.lock();
         if (members == null)
             members = new HashSet[Int]();
         members.add(m);
         readOnly = readOnly & ro;
+        lock.unlock();
+    }
+    
+    public def addSubMembers(subMembers:Set[Int], subReadyOnly:Boolean) {
+        if (subMembers == null)
+            return;
+        lock.lock();
+        if (members == null)
+            members = new HashSet[Int]();
+        for (s in subMembers) {
+            if (TxConfig.TM_DEBUG) 
+                Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] add sub member["+s+"] readOnly["+subReadyOnly+"] ...");
+            members.add(s);
+        }
+        readOnly = readOnly & subReadyOnly;
         lock.unlock();
     }
     
@@ -108,18 +133,20 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     
     public def getMembers() = members;
     
+    public def isReadOnly() = readOnly;
+    
     public def isEmpty() = members == null || members.size() == 0;
     
     /***************** Get ********************/
     public def get(key:Any):Cloneable {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] get("+key+") actvity["+Runtime.activity()+"] marked ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] get("+key+") actvity["+Runtime.activity()+"] marked ...");
         Runtime.activity().tx = true;
         return plh().getMasterStore().get(id, key);
     }
     
     /***************** PUT ********************/
     public def put(key:Any, value:Cloneable):Cloneable {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] put("+key+") actvity["+Runtime.activity()+"] marked ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] put("+key+") actvity["+Runtime.activity()+"] marked ...");
         Runtime.activity().tx = true;
         Runtime.activity().txReadOnly = false;
         return plh().getMasterStore().put(id, key, value);
@@ -127,7 +154,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     
     /***************** Delete *****************/
     public def delete(key:Any):Cloneable {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] delete("+key+") actvity["+Runtime.activity()+"] marked ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] delete("+key+") actvity["+Runtime.activity()+"] marked ...");
         Runtime.activity().tx = true;
         Runtime.activity().txReadOnly = false;
         return plh().getMasterStore().delete(id, key);
@@ -135,7 +162,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     
     /***************** KeySet *****************/
     public def keySet():Set[Any] {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] keySet() actvity["+Runtime.activity()+"] marked ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] keySet() actvity["+Runtime.activity()+"] marked ...");
         Runtime.activity().tx = true;
         return plh().getMasterStore().keySet(id); 
     }
@@ -148,14 +175,14 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     /********** Finalizing a transaction **********/
     public def finalize(finObj:Releasable, abort:Boolean) {
         if (TxConfig.get().TM_DEBUG) 
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] finalize abort="+abort+" ...");
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] finalize abort="+abort+" ...");
         this.finishObj = finObj;
         nonResilient2PC(abort);
     }
     
     public def finalizeLocal(finObj:Releasable, abort:Boolean) {
         if (TxConfig.get().TM_DEBUG) 
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] finalizeLocal abort="+abort+" ...");
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] finalizeLocal abort="+abort+" ...");
         this.finishObj = finObj;
         nonResilientLocal(abort);
     }

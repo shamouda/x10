@@ -127,8 +127,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         if (verbose>=1) debug("<<<< serialize(id="+id+") returning ");
     }
     
-    def registerFinishTx(tx:Tx):void {
-        me.registerFinishTx(tx);
+    def registerFinishTx(tx:Tx, rootTx:Boolean):void {
+        me.registerFinishTx(tx, rootTx);
     }
     
     /* Because we record only the transit tasks with src-dst, we must record the
@@ -610,9 +610,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     
         private var txStarted:Boolean = false; //if true - this.notifyPlaceDeath() will call tx.notifyPlaceDeath();
     
-        def registerFinishTx(tx:Tx):void {
-            this.tx = tx;
-            tx.initialize(id);
+        public def registerFinishTx(old:Tx, rootTx:Boolean):void {
+            this.isRootTx = rootTx;
+            if (rootTx)
+                this.tx = old;
+            else
+                this.tx = Tx.clone(old);
+            this.tx.initialize(id);
         }
     
         //initialize from backup values

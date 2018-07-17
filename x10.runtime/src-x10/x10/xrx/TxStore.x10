@@ -97,7 +97,7 @@ public class TxStore {
             try {
                 tx = makeTx();
                 finish {
-                    Runtime.registerFinishTx(tx);
+                    Runtime.registerFinishTx(tx, true);
                     closure(tx);
                 }
                 break;
