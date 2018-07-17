@@ -69,7 +69,7 @@ public class Activity {
     
     //sub transaction
     public var subMembers:Set[Int] = null;
-    public var subReadyOnly:Boolean = true;
+    public var subReadOnly:Boolean = true;
     
     /**
      * Create activity.
@@ -168,10 +168,10 @@ public class Activity {
         if (DEALLOC_BODY) Unsafe.dealloc(body);
     }
     
-    public def setSubTransaction(subMembers:Set[Int], subReadyOnly:Boolean) {
+    public def setSubTransaction(subMembers:Set[Int], subReadOnly:Boolean) {
         if (subMembers != null) {
             this.subMembers = subMembers;
-            this.subReadyOnly = subReadyOnly;
+            this.subReadOnly = subReadOnly;
         }
     }
 }

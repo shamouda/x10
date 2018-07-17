@@ -102,7 +102,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
         lock.unlock();
     }
     
-    public def addSubMembers(subMembers:Set[Int], subReadyOnly:Boolean) {
+    public def addSubMembers(subMembers:Set[Int], subReadOnly:Boolean) {
         if (subMembers == null)
             return;
         lock.lock();
@@ -110,10 +110,10 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
             members = new HashSet[Int]();
         for (s in subMembers) {
             if (TxConfig.TM_DEBUG) 
-                Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] add sub member["+s+"] readOnly["+subReadyOnly+"] ...");
+                Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] add sub member["+s+"] readOnly["+subReadOnly+"] ...");
             members.add(s);
         }
-        readOnly = readOnly & subReadyOnly;
+        readOnly = readOnly & subReadOnly;
         lock.unlock();
     }
     

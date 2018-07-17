@@ -293,7 +293,7 @@ public final class FinishReplicator {
                     if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup backup local");
                     val bFin:FinishBackupState;
                     if (createOk)
-                        bFin = findBackupOrCreate(req.id, req.parentId, req.getTx());
+                        bFin = findBackupOrCreate(req.id, req.parentId, req.getTx(), req.isRootTx());
                     else
                         bFin = findBackupOrThrow(req.id);
                     req.isLocal = true;
@@ -308,7 +308,7 @@ public final class FinishReplicator {
                         if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup reached backup ");
                         val bFin:FinishBackupState;
                         if (createOk)
-                            bFin = findBackupOrCreate(req.id, req.parentId, req.getTx());
+                            bFin = findBackupOrCreate(req.id, req.parentId, req.getTx(), req.isRootTx());
                         else
                             bFin = findBackupOrThrow(req.id);
                         val bresp = bFin.exec(req);
@@ -566,7 +566,7 @@ public final class FinishReplicator {
         if (req.backupPlaceId == here.id as Int) { //Local Backup
             val bFin:FinishBackupState;
             if (createOk)
-                bFin = findBackupOrCreate(req.id, req.parentId, req.getTx());
+                bFin = findBackupOrCreate(req.id, req.parentId, req.getTx(), req.isRootTx());
             else
                 bFin = findBackupOrThrow(req.id);
             req.isLocal = true;
@@ -588,7 +588,7 @@ public final class FinishReplicator {
             at (backup) @Immediate("backup_exec") async {
                 val bFin:FinishBackupState;
                 if (createOk)
-                    bFin = findBackupOrCreate(req.id, req.parentId, req.getTx());
+                    bFin = findBackupOrCreate(req.id, req.parentId, req.getTx(), req.isRootTx());
                 else
                     bFin = findBackupOrThrow(req.id);
                 val resp = bFin.exec(req);
@@ -1154,7 +1154,7 @@ public final class FinishReplicator {
         }
     }
 
-    static def findBackupOrCreate(id:FinishResilient.Id, parentId:FinishResilient.Id, tx:Tx):FinishBackupState {
+    static def findBackupOrCreate(id:FinishResilient.Id, parentId:FinishResilient.Id, tx:Tx, rootTx:Boolean):FinishBackupState {
         if (verbose>=1) debug(">>>> findOrCreateBackup(id="+id+", parentId="+parentId+") called ");
         try {
             glock.lock();
@@ -1167,7 +1167,7 @@ public final class FinishReplicator {
                 }
                 
                 if (OPTIMISTIC)
-                    bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, tx);
+                    bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, tx, rootTx);
                 else
                     bs = new FinishResilientPessimistic.PessimisticBackupState(id, parentId);
                 fbackups.put(id, bs);
@@ -1189,7 +1189,7 @@ public final class FinishReplicator {
             glock.lock();
             val id = FinishResilient.Id(idHome, -5555n);
             if (OPTIMISTIC)
-                fbackups.put(id, new FinishResilientOptimistic.OptimisticBackupState(id, id, null));
+                fbackups.put(id, new FinishResilientOptimistic.OptimisticBackupState(id, id, null, false));
             else
                 fbackups.put(id, new FinishResilientPessimistic.PessimisticBackupState(id, id));
             
@@ -1204,7 +1204,7 @@ public final class FinishReplicator {
             sent:HashMap[FinishResilient.Edge,Int], 
             transit:HashMap[FinishResilient.Edge,Int],
             ghostChildren:HashSet[FinishResilient.Id],
-            excs:GrowableRail[CheckedThrowable], placeOfMaster:Int, tx:Tx):FinishBackupState {
+            excs:GrowableRail[CheckedThrowable], placeOfMaster:Int, tx:Tx, rootTx:Boolean):FinishBackupState {
         if (verbose>=1) debug(">>>> createOptimisticBackupOrSync(id="+id+", parentId="+parentId+") called ");
         try {
             glock.lock();
@@ -1214,7 +1214,7 @@ public final class FinishReplicator {
                 if (backupDeny.contains(BackupDenyId(parentId,id.home)))
                     throw new Exception (here + " FATAL: " + id + " must not be in denyList");
                 bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, numActive, 
-                		sent, transit, ghostChildren, excs, placeOfMaster, tx);
+                		sent, transit, ghostChildren, excs, placeOfMaster, tx, rootTx);
                 fbackups.put(id, bs);
                 if (verbose>=1) debug("<<<< createOptimisticBackupOrSync(id="+id+", parentId="+parentId+") returning, created bs="+bs);
             } else {

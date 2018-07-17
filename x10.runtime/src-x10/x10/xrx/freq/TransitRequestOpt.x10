@@ -20,15 +20,18 @@ public class TransitRequestOpt extends FinishRequest {
     
     public var transitSubmitDPE:Boolean;
     public val tx:Tx;
+    public val rootTx:Boolean;
 
     public def this(id:FinishResilient.Id, masterPlaceId:Int, parentId:FinishResilient.Id, 
-            srcId:Int, dstId:Int, kind:Int, tx:Tx) {
+            srcId:Int, dstId:Int, kind:Int, tx:Tx, rootTx:Boolean) {
         super(id, masterPlaceId, parentId);
         this.srcId = srcId;
         this.dstId = dstId;
         this.kind = kind;
         this.tx = tx;
+        this.rootTx = rootTx;
     }
+    
     public def setSubmitDPE(r:Boolean) {
         this.transitSubmitDPE = r;
     }
@@ -36,4 +39,5 @@ public class TransitRequestOpt extends FinishRequest {
     public def gc():Boolean = true;
     
     public def getTx() = tx;
+    public def isRootTx():Boolean = rootTx;
 }
