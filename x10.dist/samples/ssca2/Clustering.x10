@@ -121,9 +121,8 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         }
         
         //occupy the adjacent vertices that are not occupied
-        //val subTx = Tx.makeSubTx(tx);
         finish {
-            //Runtime.registerFinishTx(subTx);
+            Runtime.registerFinishTx(tx, false);
             val iter = map.keySet().iterator();
             while (iter.hasNext()) {
                 val dest = iter.next();
@@ -418,8 +417,9 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         Console.OUT.println("d = " + d);
         Console.OUT.println("p = " + permute);
         
-        if (!TxConfig.BUSY_LOCK) {
-            Console.OUT.println("!!!!ERROR: you must set BUSY_LOCK=1 in this program!!!!");
+        
+        if (System.getenv("TM") != null && System.getenv("TM").equals("locking")) {
+            Console.OUT.println("!!!!ERROR: TM=locking is not accepted in this program!!!!");
             return;
         }
         
