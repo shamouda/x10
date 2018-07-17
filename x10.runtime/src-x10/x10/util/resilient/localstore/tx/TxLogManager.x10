@@ -30,12 +30,12 @@ public class TxLogManager[K] {K haszero} {
         try {
             lock();
             for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
-                if (txLogs(i).id() == id)
+                if (txLogs(i).id() == id) {
                     return txLogs(i);
+                }
             }
             return null;
-        }
-        finally {
+        } finally {
             unlock();
         }
     }
@@ -76,7 +76,6 @@ public class TxLogManager[K] {K haszero} {
     }
     
     public def deleteAbortedTxLog(log:TxLog[K]) {
-        //SS_CHECK keep track of aborted transactions
         deleteTxLog(log);
     }
     
