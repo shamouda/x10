@@ -82,7 +82,7 @@ public class TxStore {
     
     
     public def executeTransaction(closure:(Tx)=>void) {
-        executeTransaction(closure, -1, -1);
+        return executeTransaction(closure, -1, -1);
     }
     
     public def executeTransaction(closure:(Tx)=>void, maxRetries:Long, maxTimeNS:Long) {
@@ -93,7 +93,6 @@ public class TxStore {
             if (retryCount == maxRetries || (maxTimeNS != -1 && System.nanoTime() - beginning >= maxTimeNS)) {
                 throw new TxStoreFatalException("Maximum limit for retrying a transaction reached!! - retryCount["+retryCount+"] maxRetries["+maxRetries+"] maxTimeNS["+maxTimeNS+"]");
             }
-            retryCount++;
             try {
                 tx = makeTx();
                 finish {
@@ -104,7 +103,9 @@ public class TxStore {
             } catch(ex:Exception) {
                 throwIfFatalSleepIfRequired(tx.id, ex);
             }
+            retryCount++;
         }
+        return retryCount;
     }
     
     private def throwIfFatalSleepIfRequired(txId:Long, ex:Exception) {

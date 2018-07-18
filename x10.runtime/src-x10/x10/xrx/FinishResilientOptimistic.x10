@@ -1276,11 +1276,24 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def setTxFlags(isTx:Boolean, isTxRO:Boolean) {
-            latch.lock();
-            tx.addMember(here.id as Int, isTxRO);
-            txFlag = txFlag | isTx;
-            txReadOnlyFlag = txReadOnlyFlag & isTxRO;
-            latch.unlock();
+            if (verbose>=1) debug(">>>> Root(id="+id+").setTxFlags("+isTx+","+isTxRO+")");
+            if (tx == null) {
+                if (verbose>=1) debug("<<<< Root(id="+id+").setTxFlags("+isTx+","+isTxRO+") returning, tx is null");
+                return;
+            }
+            
+            try {
+                latch.lock();
+                tx.addMember(here.id as Int, isTxRO);
+                txFlag = txFlag | isTx;
+                txReadOnlyFlag = txReadOnlyFlag & isTxRO;
+                if (verbose>=1) debug("<<<< Root(id="+id+").setTxFlags("+isTx+","+isTxRO+") returning ");
+            } catch (e:Exception) {
+                if (verbose>=1) debug("<<<< Root(id="+id+").setTxFlags("+isTx+","+isTxRO+") returning with exception " + e.getMessage());
+                throw e;
+            } finally {
+                latch.unlock();
+            }
         }
         
         def notifyTxActivityTermination(srcPlace:Place, readOnly:Boolean, t:CheckedThrowable) {
@@ -1367,14 +1380,17 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (tx != null && !tx.isEmpty() && !isRootTx) {
                 if (verbose>=1) debug(">>>> Root(id="+id+").notifyRootTx called");
                 val req = FinishRequest.makeOptMergeSubTxRequest(parentId, tx.getMembers(), tx.isReadOnly());
-                FinishReplicator.exec(req, this);
-                if (verbose>=1) debug("<<<< Root(id="+id+").notifyRootTx returning");
-                
                 val myId = id;
-                at (Place(backupPlaceId)) @Immediate("optdist_release_backup2") async {
-                    if (verbose>=1) debug("==== releaseFinish(id="+myId+") reached backup");
-                    FinishReplicator.removeBackupOrMarkToDelete(myId);
-                }
+                val myBackupId = backupPlaceId;
+                val preSendAction = ()=>{};
+                val postSendAction = (submit:Boolean, adopterId:Id)=>{
+                    at (Place(myBackupId)) @Immediate("optdist_release_backup2") async {
+                        if (verbose>=1) debug("==== releaseFinish(id="+myId+") reached backup");
+                        FinishReplicator.removeBackupOrMarkToDelete(myId);
+                    }
+                };
+                FinishReplicator.asyncExec(req, this, preSendAction, postSendAction);
+                if (verbose>=1) debug("<<<< Root(id="+id+").notifyRootTx returning");
             }
         }
         

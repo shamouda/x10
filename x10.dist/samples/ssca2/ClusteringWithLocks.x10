@@ -248,8 +248,9 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
     }
     
     private def createCluster(store:TxStore, root:Int, placeId:Long, clusterId:Long, 
-            plh:PlaceLocalHandle[ClusteringState], verbose:Int) {
+            plh:PlaceLocalHandle[ClusteringState], verbose:Int):Long {
         var success:Boolean = false;
+        var retryCount:Long = 0;
         while (!success) {
             val result = GlobalRef(new Result());
             val tx = store.makeLockingTx();
@@ -270,7 +271,7 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
                 } else {
                     tx.unlockWrite(root);
                     //if the root is taken, end this iteration
-                    return;
+                    return retryCount;
                 }
                 
                 var nextV:Int = root;
@@ -282,18 +283,22 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
                 success = false;
             }
             unlockObtainedKeys(result(), tx, success, verbose);
+            retryCount++;
         }
+        return retryCount;
     }
     
     private def execute(state:ClusteringState, placeId:Long, workerId:Long, start:Int, end:Int, 
             store:TxStore, plh:PlaceLocalHandle[ClusteringState], verbose:Int) {
-        Console.OUT.println(here + " worder["+workerId+"] starting: " + start + "-" + (end-1));
+        var totalFailedRetries:Long = 0;
+        Console.OUT.println(here + ":worder:"+workerId+":from:" + start + ":to:" + (end-1));
         // Iterate over each of the vertices in my portion.
         var clusterId:Long = 1;
         for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++clusterId) { 
             val s:Int = state.verticesToWorkOn(vertexIndex);
-            createCluster(store, s, placeId, clusterId, plh, verbose);
+            totalFailedRetries += createCluster(store, s, placeId, clusterId, plh, verbose);
         }
+        Console.OUT.println(here + ":worder:"+workerId+":from:" + start + ":to:" + (end-1)+":totalRetries:"+totalFailedRetries);
     }
     
     /**

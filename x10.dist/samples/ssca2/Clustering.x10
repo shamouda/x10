@@ -194,7 +194,8 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
 
     private def execute(store:TxStore, state:ClusteringState, placeId:Long, workerId:Long, start:Int, end:Int, 
             plh:PlaceLocalHandle[ClusteringState], verbose:Int) {
-        Console.OUT.println(here + " worder["+workerId+"] starting: " + start + "-" + (end-1));
+        var totalFailedRetries:Long = 0;
+        Console.OUT.println(here + ":worder:"+workerId+":from:" + start + ":to:" + (end-1));
         // Iterate over each of the vertices in my portion.
         var c:Long = 1;
         for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++c) { 
@@ -203,8 +204,9 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
             val closure = (tx:Tx) => {
                 createCluster(store, tx, s, placeId, clusterId, plh, verbose);
             };
-            store.executeTransaction(closure);
+            totalFailedRetries += store.executeTransaction(closure);
         }
+        Console.OUT.println(here + ":worder:"+workerId+":from:" + start + ":to:" + (end-1)+":totalRetries:"+totalFailedRetries);
     }
     
     /**
