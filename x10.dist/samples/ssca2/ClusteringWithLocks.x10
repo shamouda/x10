@@ -291,14 +291,14 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
     private def execute(state:ClusteringState, placeId:Long, workerId:Long, start:Int, end:Int, 
             store:TxStore, plh:PlaceLocalHandle[ClusteringState], verbose:Int) {
         var totalFailedRetries:Long = 0;
-        Console.OUT.println(here + ":worder:"+workerId+":from:" + start + ":to:" + (end-1));
+        Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1));
         // Iterate over each of the vertices in my portion.
         var clusterId:Long = 1;
         for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++clusterId) { 
             val s:Int = state.verticesToWorkOn(vertexIndex);
             totalFailedRetries += createCluster(store, s, placeId, clusterId, plh, verbose);
         }
-        Console.OUT.println(here + ":worder:"+workerId+":from:" + start + ":to:" + (end-1)+":totalRetries:"+totalFailedRetries);
+        Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":totalRetries:"+totalFailedRetries);
     }
     
     /**

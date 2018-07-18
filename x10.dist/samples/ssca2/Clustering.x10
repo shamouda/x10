@@ -195,7 +195,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
     private def execute(store:TxStore, state:ClusteringState, placeId:Long, workerId:Long, start:Int, end:Int, 
             plh:PlaceLocalHandle[ClusteringState], verbose:Int) {
         var totalFailedRetries:Long = 0;
-        Console.OUT.println(here + ":worder:"+workerId+":from:" + start + ":to:" + (end-1));
+        Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1));
         // Iterate over each of the vertices in my portion.
         var c:Long = 1;
         for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++c) { 
@@ -206,7 +206,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
             };
             totalFailedRetries += store.executeTransaction(closure);
         }
-        Console.OUT.println(here + ":worder:"+workerId+":from:" + start + ":to:" + (end-1)+":totalRetries:"+totalFailedRetries);
+        Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":totalRetries:"+totalFailedRetries);
     }
     
     /**
@@ -422,6 +422,13 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         
         if (System.getenv("TM") != null && System.getenv("TM").equals("locking")) {
             Console.OUT.println("!!!!ERROR: TM=locking is not accepted in this program!!!!");
+            return;
+        }
+        
+        val ar1 = vp.split(",");
+        val ar2 = vt.split(",");
+        if (ar1.size != ar2.size) {
+            Console.OUT.println("!!!!ERROR: vp and vt must have the same number of elements!!!!");
             return;
         }
         
