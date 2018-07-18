@@ -89,11 +89,15 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
         if (excs == null) excs = new GrowableRail[CheckedThrowable]();
         excs.add(t);
     }
-
+    
+    protected def getAddMemberPrintMsg(m:Int, ro:Boolean, tag:String) {
+        return "Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] "+tag+"["+m+"] readOnly["+ro+"] ...";
+    }
+    
     /***************** Members *****************/
     public def addMember(m:Int, ro:Boolean){
         if (TxConfig.TM_DEBUG) 
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] add member["+m+"] readOnly["+ro+"] ...");
+            Console.OUT.println(getAddMemberPrintMsg(m, ro, "add member"));
         lock.lock();
         if (members == null)
             members = new HashSet[Int]();
@@ -110,7 +114,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
             members = new HashSet[Int]();
         for (s in subMembers) {
             if (TxConfig.TM_DEBUG) 
-                Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] add sub member["+s+"] readOnly["+subReadOnly+"] ...");
+                Console.OUT.println(getAddMemberPrintMsg(s, subReadOnly, "add sub member"));
             members.add(s);
         }
         readOnly = readOnly & subReadOnly;
@@ -139,14 +143,12 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     
     /***************** Get ********************/
     public def get(key:Any):Cloneable {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] get("+key+") actvity["+Runtime.activity()+"] marked ...");
         Runtime.activity().tx = true;
         return plh().getMasterStore().get(id, key);
     }
     
     /***************** PUT ********************/
     public def put(key:Any, value:Cloneable):Cloneable {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] put("+key+") actvity["+Runtime.activity()+"] marked ...");
         Runtime.activity().tx = true;
         Runtime.activity().txReadOnly = false;
         return plh().getMasterStore().put(id, key, value);
@@ -154,7 +156,6 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     
     /***************** Delete *****************/
     public def delete(key:Any):Cloneable {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] delete("+key+") actvity["+Runtime.activity()+"] marked ...");
         Runtime.activity().tx = true;
         Runtime.activity().txReadOnly = false;
         return plh().getMasterStore().delete(id, key);
@@ -162,7 +163,6 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     
     /***************** KeySet *****************/
     public def keySet():Set[Any] {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] keySet() actvity["+Runtime.activity()+"] marked ...");
         Runtime.activity().tx = true;
         return plh().getMasterStore().keySet(id); 
     }

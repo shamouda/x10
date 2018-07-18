@@ -167,8 +167,10 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 for (e in states.entries()) {
                     val state = e.getValue();
                     if (state.tx != null) {
-                        if (TxConfig.get().TM_DEBUG || verbose>=1)
-                            Console.OUT.println("Finish["+state.id+"] has Tx["+state.tx.id+"] " + TxConfig.txIdToString (state.tx.id)+ " isRootTx["+state.isRootTx+"]");
+                        if (TxConfig.get().TM_DEBUG || verbose>=1) {
+                            Console.OUT.println("printTxStates: Finish["+state.id+"] has Tx["+state.tx.id+"] " + TxConfig.txIdToString (state.tx.id)+ " isRootTx["+state.isRootTx+"] numActive["+state.numActive+"] ");
+                            state.dump();
+                        }
                     }
                 }
             } finally {
@@ -374,6 +376,36 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     statesLock.unlock();
                 }
             });
+        }
+        
+        
+        static def p0FinalizeLocalTx(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState], tx:Tx, isRO:Boolean, excs:GrowableRail[CheckedThrowable]) {
+            at (place0) @Immediate("p0FinalizeLocalTx_to_zero") async {
+                try {
+                    statesLock.lock();
+                    if (Place(id.home).isDead()) {
+                        if (verbose>=1) debug("<<<< finalizeLocalTx(id="+id+") failed, state from dead src["+id.home+"] denied");
+                        //throw new Exception("state creation from a dead src denied");
+                        //no need to handle this exception; the caller has died.
+                    } else {
+                        if (verbose>=1) debug(">>>> initializing state for id="+ id);
+                        val rootTx = true;
+                        val state = new State(id, parentId, gfs, tx, rootTx);
+                        if (tx != null) {
+                            tx.initialize(id);
+                            tx.addMember(id.home, isRO);
+                        }
+                        if (verbose>=1) debug(">>>> finalizeLocalTx: creating new State id="+ id +" parentId="+parentId + " tx="+tx);
+                        state.numActive = 0;
+                        state.transit.remove(FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC));
+                        states.put(id, state);
+                        state.excs = excs;
+                        state.tryRelease();
+                    }
+                } finally {
+                    statesLock.unlock();
+                }
+            }
         }
         
         static def p0RemoteSpawnSmallGlobal(id:Id, srcId:Int, dstId:Int, bytes:Rail[Byte],
@@ -640,7 +672,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         static def p0TermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int], t:CheckedThrowable, isTx:Boolean, isTxRO:Boolean) {
-            if (verbose>=1) debug(">>>> State(id="+id+").p0TermMultiple [dstId=" + dstId +", size="+map.size()+" ] called");
+            if (verbose>=1) debug(">>>> State(id="+id+").p0TermMultiple [dstId=" + dstId +", size="+map.size()+", isTx="+isTx+", isTxRO="+isTxRO+" ] called");
             at (place0) @Immediate("p0Opt_notifyTermMul_to_zero") async {
                 if (map == null )
                     throw new Exception(here + " FATAL ERROR p0TermMultiple(id="+id+", dstId="+dstId+", map="+map+") map is null");
@@ -659,15 +691,15 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                         val cnt = e.getValue();
                         state.transitToCompletedMul(srcId, dstId, kind, cnt); // drops the term msg if dst is dead
                     }
+                    if (verbose>=1) debug("<<<< State(id="+id+").p0TermMultiple [dstId=" + dstId +", size="+map.size() + ", isTx="+isTx+", isTxRO="+isTxRO+", tx="+state.tx+" ] returning");
                 } finally {
                     statesLock.unlock();
                 }
-                if (verbose>=1) debug("<<<< State(id="+id+").p0TermMultiple [dstId=" + dstId +", size="+map.size()+" ] returning");
-           }
+            }
         }
         
         static def p0HereTermMultiple(id:Id, dstId:Int, map:HashMap[Task,Int], t:CheckedThrowable, isTx:Boolean, isTxRO:Boolean) {           
-            if (verbose>=1) debug(">>>> State(id="+id+").p0HereTermMultiple [dstId=" + dstId +", mapSz="+map.size()+" ] called");
+            if (verbose>=1) debug(">>>> State(id="+id+").p0HereTermMultiple [dstId=" + dstId +", size="+map.size()+", isTx="+isTx+", isTxRO="+isTxRO+" ] called");
             try {
                 statesLock.lock();
                 val state = states(id);
@@ -681,10 +713,10 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     val cnt = e.getValue();
                     state.transitToCompletedMul(srcId, dstId, kind, cnt); // drops the term msg if dst is dead
                 }
+                if (verbose>=1) debug("<<<< State(id="+id+").p0HereTermMultiple [dstId=" + dstId +", size="+map.size() + ", isTx="+isTx+", isTxRO="+isTxRO+", tx="+state.tx+" ] returning");
             } finally {
                 statesLock.unlock();
             }
-            if (verbose>=1) debug("<<<< State(id="+id+").p0HereTermMultiple [dstId=" + dstId +", mapSz="+map.size()+" ] returning");
         }
         
         def addException(t:CheckedThrowable) {
@@ -859,7 +891,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             }
             val parentState = states(parentId);
             parentState.tx.addSubMembers(tx.getMembers(), tx.isReadOnly());
-            if (verbose>=1) debug("<<<< State(id="+id+").notifyRootTx(parentId=" + parentId +") returning");
+            if (verbose>=1) debug("<<<< State(id="+id+").notifyRootTx(parentId=" + parentId +", parentTxId="+parentState.tx.id+", parentTx="+parentState.tx+") returning");
         }
         
         def notifyParent() {
@@ -968,6 +1000,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 } else {
                     //no remote finish for this id should be created here
                     remoteDeny.add(id);
+                    dropped = sent;
                 }
             } finally {
                 remoteLock.unlock();
@@ -1116,15 +1149,17 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         public def notifyReceived(t:Task) {
+            var count:Int = -1n;
             try {
                 ilock.lock();
                 if (taskDeny != null && taskDeny.contains(t.place) )
                     throw new RemoteCreationDenied();
                 increment(received, t);
+                count = lc.incrementAndGet();
             } finally {
                 ilock.unlock();
             }
-            return lc.incrementAndGet();
+            return count;
         }
         
         def printMap(map:HashMap[Task,Int]) {
@@ -1176,8 +1211,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             val gfs = new GlobalRef[FinishState](fs);
             
             if (bytes.size >= ASYNC_SIZE_THRESHOLD) {
-                if (verbose >= 1) debug("==== Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting indirect (size="+ bytes.size+") ");
             	val count = notifyReceived(Task(srcId, ASYNC)); // synthetic activity to keep finish locally live during async to Place0
+            	if (verbose >= 1) debug("==== Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting indirect (size="+ bytes.size+") lc="+count);
             	State.p0RemoteSpawnBigGlobal(id, srcId, dstId, bytes, gfs);
             } else {
                 if (verbose >= 1) debug("====  Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting direct (size="+ bytes.size+") ");
@@ -1285,7 +1320,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             var tmpTx:Boolean = false;
             var tmpTxRO:Boolean = false;
 
-            if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") called ");
+            if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+",isTx="+isTx+", readonly="+readOnly+") called ");
             val count = lc.decrementAndGet();
             if (verbose>=1) debug(">>>> Remote(id="+id+").notifyTerminationAndGetMap called, taskFrom["+srcId+"] lc="+count);
             
@@ -1309,12 +1344,11 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             if (map == null)
                 return;
            
-            if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root, mapSize=" + map.size());
+            if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+", tmpTx="+tmpTx+", tmpTxRO="+tmpTxRO+") reporting to root, mapSize=" + map.size());
             if (here.id == 0)
                 State.p0HereTermMultiple(id, dstId, map, ex, tmpTx, tmpTxRO);
-            else {
+            else
                 State.p0TermMultiple(id, dstId, map, ex, tmpTx, tmpTxRO);
-            }
             if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning");
         }
         
@@ -1351,14 +1385,14 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         private var txReadOnlyFlag:Boolean = true;
         
         public def registerFinishTx(old:Tx, rootTx:Boolean):void {
-            if (verbose>=1) debug(">>>> registerFinishTx(id="+id+", root="+rootTx+") ");
+            if (verbose>=1) debug(">>>> registerFinishTx(id="+id+", txId="+old.id+", root="+rootTx+") ");
             this.isRootTx = rootTx;
             if (rootTx)
                 this.tx = old;
             else
                 this.tx = Tx.clone(old);
             this.tx.initialize(id);
-            if (verbose>=1) debug("<<<< registerFinishTx(id="+id+", root="+rootTx+",tx="+this.tx+") returning");
+            if (verbose>=1) debug("<<<< registerFinishTx(id="+id+", txId="+old.id+", root="+rootTx+",tx="+this.tx+") returning");
         }
         
         public def toString() {
@@ -1677,15 +1711,17 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
 
         private def tryReleaseLocal() {
-        	if (!txFlag) {
+            if (tx == null || tx.isEmpty() || !isRootTx) {
         		latch.release();
+        		//We don't need to do parentTx.addSubMembers because this place is part of the transaction any way
         	} else {
-        		tx.addMember(here.id as Int, txReadOnlyFlag);
+        	    State.p0FinalizeLocalTx(id, parentId, ref, tx, txReadOnlyFlag, excs);
+        		/*tx.addMember(here.id as Int, txReadOnlyFlag);
                 var abort:Boolean = false;
                 if (excs != null && excs.size() > 0) {
                     abort = true;
                 }
-                tx.finalizeLocal(this, abort);
+                tx.finalizeLocal(this, abort);*/
         	}
         }
         

@@ -59,8 +59,12 @@ public class TxResilient extends Tx {
         super(plh, id);
     }
     
+    protected def getAddMemberPrintMsg(m:Int, ro:Boolean, tag:String) {
+        return "Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] FID["+gcId+"] "+tag+"["+m+"] readOnly["+ro+"] ...";
+    }
+    
     public def initialize(fid:FinishResilient.Id) {
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+fid+"] here["+here+"] activity["+Runtime.activity()+"] initialize called ...");
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] FID["+fid+"] activity["+Runtime.activity()+"] initialize called ...");
         gcId = fid;
         lock = new Lock();
         gr = GlobalRef[Tx](this);
@@ -71,6 +75,7 @@ public class TxResilient extends Tx {
 
     public def initializeNewMaster(fid:FinishResilient.Id,
             _mem:Set[Int], _excs:GrowableRail[CheckedThrowable], _ro:Boolean) {
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] FID["+fid+"] activity["+Runtime.activity()+"] initializeNewMaster called ...");
         gcId = fid;
         lock = new Lock();
         gr = GlobalRef[Tx](this);
