@@ -226,6 +226,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 } else {
                     //no remote finish for this id should be created here
                     remoteDeny.add(id);
+                    dropped = sent;
                 }
             } finally {
                 remoteLock.unlock();
