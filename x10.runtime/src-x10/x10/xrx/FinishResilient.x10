@@ -290,4 +290,5 @@ class GetNewMasterResponse {
     var found:Boolean = false;
     var newMasterPlace:Int = -1n;
     var newMasterId:FinishResilient.Id = FinishResilient.UNASSIGNED;
+    var ignoreRequest:Boolean = false; //only if it's a RemoveGhost request
 }

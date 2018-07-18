@@ -243,6 +243,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 } else {
                     //no remote finish for this id should be created here
                     remoteDeny.add(id);
+                    dropped = sent;
                 }
             } finally {
                 remoteLock.unlock();
@@ -645,6 +646,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 this.isRootTx = _rootTx;
                 this.tx.initializeNewMaster(_id, _tx_mem, _tx_excs, _tx_ro);
             }
+            if (verbose>=1) debug("<<<< recreated master(id="+id+") using backup values");
         }
         
         def this(id:Id, parent:FinishState) {
@@ -1325,7 +1327,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         
         private def tryReleaseLocal() {
             if (verbose>=1) debug(">>>> Root(id="+id+").tryReleaseLocal called ");
-            if (!txFlag) {
+            if (tx == null || tx.isEmpty() || !isRootTx) {
                 latch.release();
             } else {
                 tx.addMember(here.id as Int, txReadOnlyFlag);
@@ -1809,21 +1811,26 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def backupNotifyParent() {
+            if (verbose>=1) debug(">>>> Backup(id="+id+").notifyParent(parentId="+parentId+") called");
             if (parentId != FinishResilient.UNASSIGNED) {
+                if ( parentId.home == id.home && 
+                     FinishReplicator.findBackup(parentId) == null) {
+                    if (verbose>=1) debug("<<<< Backup(id="+id+").notifyParent(parentId="+parentId+") skip request because backup doesn't exist");
+                    return;
+                }
                 var subMembers:Set[Int] = null;
                 var subReadOnly:Boolean = true;
                 if (tx != null && !isRootTx) {
                     subMembers = tx.getMembers();
                     subReadOnly = tx.isReadOnly();
                 }
-                val mem = subMembers;
-                val ro = subReadOnly;
-                Runtime.submitUncounted( ()=>{
-                    if (verbose>=1) debug(">>>> Backup(id="+id+").notifyParent(parentId="+parentId+") called");
-                    val req = FinishRequest.makeOptRemoveGhostChildRequest(parentId, id, mem, ro);
-                    val resp = FinishReplicator.exec(req);
-                    if (verbose>=1) debug("<<<< Backup(id="+id+").notifyParent(parentId="+parentId+") returning");
-                });
+                //val mem = subMembers;
+                //val ro = subReadOnly;
+                //Runtime.submitUncounted( ()=>{
+                val req = FinishRequest.makeOptRemoveGhostChildRequest(parentId, id, subMembers, subReadOnly);
+                FinishReplicator.asyncExec(req, null);
+                if (verbose>=1) debug("<<<< Backup(id="+id+").notifyParent(parentId="+parentId+") returning");
+                //});
             }
         }
 
@@ -2191,7 +2198,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
     }
     
-    //FIXME: nominate another master if the nominated one is dead
     static def createMasters(backups:HashSet[FinishBackupState]) {
         if (verbose>=1) debug(">>>> createMasters(size="+backups.size()+") called");
         if (backups.size() == 0) {
@@ -2203,6 +2209,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         var i:Long = 0;
         for (bx in backups) {
             val b = bx as OptimisticBackupState;
+            if (verbose>=1) debug("===== createMasters nominate for id["+b.id+"] ");
             places(i++) = FinishReplicator.nominateMasterPlaceIfDead(b.placeOfMaster);
         }
         

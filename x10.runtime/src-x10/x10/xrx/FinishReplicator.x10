@@ -23,6 +23,7 @@ import x10.util.concurrent.Lock;
 import x10.io.Deserializer;
 import x10.compiler.AsyncClosure;
 import x10.xrx.freq.FinishRequest;
+import x10.xrx.freq.RemoveGhostChildRequestOpt;
 
 public final class FinishReplicator {
     
@@ -294,10 +295,16 @@ public final class FinishReplicator {
                     val bFin:FinishBackupState;
                     if (createOk)
                         bFin = findBackupOrCreate(req.id, req.parentId, req.getTx(), req.isRootTx());
+                    else if (req instanceof RemoveGhostChildRequestOpt)
+                        bFin = findBackup(req.id);
                     else
                         bFin = findBackupOrThrow(req.id);
                     req.isLocal = true;
-                    val bresp = bFin.exec(req);
+                    var bresp:BackupResponse = null;
+                    if (bFin != null)
+                        bresp = bFin.exec(req);
+                    else
+                        bresp = new BackupResponse(); //allowed only for RemoveGhost
                     req.isLocal = false;
                     processBackupResponse(bresp, req.num, backupPlaceId);
                 } else {
@@ -309,9 +316,16 @@ public final class FinishReplicator {
                         val bFin:FinishBackupState;
                         if (createOk)
                             bFin = findBackupOrCreate(req.id, req.parentId, req.getTx(), req.isRootTx());
+                        else if (req instanceof RemoveGhostChildRequestOpt)
+                            bFin = findBackup(req.id);
                         else
                             bFin = findBackupOrThrow(req.id);
-                        val bresp = bFin.exec(req);
+                        var resp:BackupResponse = null;
+                        if (bFin != null)
+                            resp = bFin.exec(req);
+                        else
+                            resp = new BackupResponse(); //allowed only for RemoveGhost
+                        val bresp = resp;
                         if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup backup moving to caller " + caller);
                         val num = req.num;
                         at (caller) @Immediate("async_backup_exec_response") async {
@@ -335,13 +349,11 @@ public final class FinishReplicator {
             req.masterPlaceId = bresp.newMasterPlace;
             if (verbose>=1) debug("==== Replicator(id="+req.id+").processBackupResponse MasterChanged exception caught, newMasterPlace["+bresp.newMasterPlace+"]" );
             asyncExecInternal(req, null);
-        }
-        else if (bresp.errMasterDied) {
+        } else if (bresp.errMasterDied) {
             val req = FinishReplicator.getPendingBackupRequest(num);
             if (verbose>=1) debug("==== Replicator(id="+req.id+").processBackupResponse MasterDied exception caught" );
             handleMasterDied(req);
-        }
-        else {
+        } else {
             finalizeAsyncExec(num, backupPlaceId);
         }
         if (verbose>=1) debug("<<<< Replicator(num="+num+").processBackupResponse returned" );
@@ -397,7 +409,9 @@ public final class FinishReplicator {
     }
     
     static def handleMasterDied(req:FinishRequest) {
-        backupGetNewMaster(req);
+        val ignore = backupGetNewMaster(req);
+        if (ignore)//this is true only in remove ghost when the master and backup objects are not found
+            return;
         if (!OPTIMISTIC) {
             req.setOutAdopterId(req.id);
             req.setOutSubmit(false);
@@ -461,7 +475,9 @@ public final class FinishReplicator {
                 if (verbose>=1) debug("<<<< Replicator(id="+req.id+").exec() returning");
                 break;
             } catch (ex:MasterDied) {
-                backupGetNewMaster(req); // we communicate with backup to ask for the new master location
+                val ignore = backupGetNewMaster(req); // we communicate with backup to ask for the new master location
+                if (ignore) //this is true only in remove ghost when the master and backup objects are not found
+                    break;
                 if (!OPTIMISTIC)
                     adopterId = req.id;
                 if (verbose>=1) debug("==== Replicator(id="+req.id+").exec() threw MasterDied exception, forward to newMaster " + req.id + " @ " + req.masterPlaceId);
@@ -567,10 +583,18 @@ public final class FinishReplicator {
             val bFin:FinishBackupState;
             if (createOk)
                 bFin = findBackupOrCreate(req.id, req.parentId, req.getTx(), req.isRootTx());
+            else if (req instanceof RemoveGhostChildRequestOpt)
+                bFin = findBackup(req.id);
             else
                 bFin = findBackupOrThrow(req.id);
             req.isLocal = true;
-            val resp = bFin.exec(req);
+            
+            var resp:BackupResponse = null;
+            if (bFin != null)
+                resp = bFin.exec(req);
+            else
+                resp = new BackupResponse(); //allowed only for RemoveGhost
+            
             req.isLocal = false;
             if (resp.errMasterDied) { 
                 throw new MasterDied();
@@ -589,9 +613,15 @@ public final class FinishReplicator {
                 val bFin:FinishBackupState;
                 if (createOk)
                     bFin = findBackupOrCreate(req.id, req.parentId, req.getTx(), req.isRootTx());
+                else if (req instanceof RemoveGhostChildRequestOpt)
+                    bFin = findBackup(req.id);
                 else
                     bFin = findBackupOrThrow(req.id);
-                val resp = bFin.exec(req);
+                var resp:BackupResponse = null;
+                if (bFin != null)
+                    resp = bFin.exec(req);
+                else
+                    resp = new BackupResponse(); //allowed only for RemoveGhost
                 val r_errMasterDied = resp.errMasterDied;
                 val r_errMasterChanged = resp.errMasterChanged;
                 val r_newMasterPlace = resp.newMasterPlace;
@@ -627,8 +657,8 @@ public final class FinishReplicator {
         return resp;
     }
     
-    //prepares request for new master
-    public static def backupGetNewMaster(req:FinishRequest) {
+    //prepares request for new master - returns true only if backup was not found for a RemoveGhost request
+    public static def backupGetNewMaster(req:FinishRequest):Boolean {
         val id = req.id;
         val initBackup = getBackupPlace(id.home);
         var curBackup:Int = initBackup;
@@ -647,7 +677,7 @@ public final class FinishReplicator {
                     else
                         resp.newMasterPlace = bFin.getPlaceOfMaster();
                     break;
-                } 
+                }
             } else {
                 val backup = Place(curBackup);
                 val me = here;
@@ -693,8 +723,14 @@ public final class FinishReplicator {
             }
             curBackup = ((curBackup + 1) % NUM_PLACES) as Int;
         } while (initBackup != curBackup);
-        if (!resp.found)
+        if (!resp.found && !(req instanceof RemoveGhostChildRequestOpt))
             throw new Exception(here + " ["+Runtime.activity()+"] FATAL exception, cannot find backup for id=" + id);
+        
+        if (!resp.found && req instanceof RemoveGhostChildRequestOpt) {
+            respGR.forget();
+            return true; //ignore
+        }
+            
         req.id = resp.newMasterId;
         req.masterPlaceId = resp.newMasterPlace;
         req.setToAdopter(true);
@@ -706,6 +742,7 @@ public final class FinishReplicator {
             updateBackupPlace(id.home, curBackup);
         if (OPTIMISTIC) //master place doesn't change for pessimistic finish
             updateMasterPlace(req.id.home, req.masterPlaceId);
+        return false; //don't ignore
     }
     
     //dummy communication with the master to ensure it is still alive
@@ -985,14 +1022,12 @@ public final class FinishReplicator {
         try {
             glock.lock();
             m = masterMap.getOrElse(idHome,-1n);
-            do {
-                if (m == -1n)
-                    m = ((idHome - 1 + NUM_PLACES)%NUM_PLACES) as Int;
-                else
-                    m = ((m - 1 + NUM_PLACES)%NUM_PLACES) as Int;
+            if (m == -1n)
+                m = ((idHome - 1 + NUM_PLACES)%NUM_PLACES) as Int;
+            while (allDead.contains(m) && i < maxIter) {
+                m = ((m - 1 + NUM_PLACES)%NUM_PLACES) as Int;
                 i++;
-            } while (allDead.contains(m) && i < maxIter);
-            
+            }
             if (allDead.contains(m) || i == maxIter)
                 throw new Exception(here + " ["+Runtime.activity()+"] FATAL ERROR couldn't nominate a new master place for idHome=" + idHome);
             masterMap.put(idHome, m);
