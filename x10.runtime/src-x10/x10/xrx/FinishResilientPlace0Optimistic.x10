@@ -881,6 +881,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 } else {
                     //no remote finish for this id should be created here
                     remoteDeny.add(id);
+		    dropped = sent;
                 }
             } finally {
                 remoteLock.unlock();
