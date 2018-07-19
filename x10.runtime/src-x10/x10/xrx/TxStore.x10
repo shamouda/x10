@@ -26,6 +26,9 @@ import x10.util.resilient.localstore.TxConfig;
 import x10.util.resilient.localstore.MasterStore;
 import x10.util.resilient.localstore.SlaveStore;
 import x10.compiler.Uncounted;
+import x10.util.concurrent.Condition;
+import x10.util.resilient.concurrent.ResilientCondition;
+import x10.compiler.Immediate;
 
 /**
  * 
@@ -290,14 +293,29 @@ public class TxStore {
             if (oldActivePlaces.contains(Place(i)))
                 continue;
             
-            var allocated:Boolean = false;
-            try {
-                debug("Recovering " + here + " Try to allocate " + Place(i) );
-                allocated = at (Place(i)) plh().allocate(deadVirtualId);
-            }catch(ex:Exception) {
+            val masterRes = new GlobalRef[TxStoreAllocateSpareResponse](new TxStoreAllocateSpareResponse());
+            debug("Recovering " + here + " Try to allocate " + Place(i) );
+            val master = Place(i);
+            val rCond = ResilientCondition.make(master);
+            val closure = (gr:GlobalRef[Condition]) => {
+                at (master) @Immediate("alloc_spare_request") async {
+                    val result = plh().allocate(deadVirtualId);
+                    at (gr) @Immediate("alloc_spare_response") async {
+                        val mRes = (masterRes as GlobalRef[TxStoreAllocateSpareResponse]{self.home == here})();
+                        mRes.allocated = result;
+                        gr().release();
+                    }
+                }
+            };
+            rCond.run(closure);
+            var success:Boolean = true;
+            if (rCond.failed() || !masterRes().allocated) {
+                success = false;
             }
+            rCond.forget();
+            masterRes.forget();
             
-            if (!allocated)
+            if (!success)
                 debug("Recovering " + here + " Failed to allocate " + Place(i) + ", is it dead? " + Place(i).isDead());
             else {
                 debug("Recovering " + here + " Succeeded to allocate " + Place(i) );
@@ -326,4 +344,7 @@ public class TxStore {
     private def debug(msg:String) {
         if (TxConfig.get().TMREC_DEBUG) Console.OUT.println( msg );
     }
+}
+class TxStoreAllocateSpareResponse {
+    var allocated:Boolean;
 }

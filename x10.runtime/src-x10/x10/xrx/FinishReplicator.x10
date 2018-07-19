@@ -16,6 +16,7 @@ import x10.compiler.Immediate;
 import x10.compiler.Uncounted;
 import x10.util.HashMap;
 import x10.util.HashSet;
+import x10.util.ArrayList;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.GrowableRail;
 import x10.util.resilient.concurrent.LowLevelFinish;
@@ -24,6 +25,7 @@ import x10.io.Deserializer;
 import x10.compiler.AsyncClosure;
 import x10.xrx.freq.FinishRequest;
 import x10.xrx.freq.RemoveGhostChildRequestOpt;
+import x10.xrx.freq.MergeSubTxRequestOpt;
 
 public final class FinishReplicator {
     
@@ -295,7 +297,8 @@ public final class FinishReplicator {
                     val bFin:FinishBackupState;
                     if (createOk)
                         bFin = findBackupOrCreate(req.id, req.parentId, req.getTx(), req.isRootTx());
-                    else if (req instanceof RemoveGhostChildRequestOpt)
+                    else if (req instanceof RemoveGhostChildRequestOpt ||
+                            req instanceof MergeSubTxRequestOpt)
                         bFin = findBackup(req.id);
                     else
                         bFin = findBackupOrThrow(req.id);
@@ -316,7 +319,8 @@ public final class FinishReplicator {
                         val bFin:FinishBackupState;
                         if (createOk)
                             bFin = findBackupOrCreate(req.id, req.parentId, req.getTx(), req.isRootTx());
-                        else if (req instanceof RemoveGhostChildRequestOpt)
+                        else if (req instanceof RemoveGhostChildRequestOpt ||
+                                req instanceof MergeSubTxRequestOpt)
                             bFin = findBackup(req.id);
                         else
                             bFin = findBackupOrThrow(req.id);
@@ -409,14 +413,27 @@ public final class FinishReplicator {
     }
     
     static def handleMasterDied(req:FinishRequest) {
-        val ignore = backupGetNewMaster(req);
-        if (ignore)//this is true only in remove ghost when the master and backup objects are not found
-            return;
-        if (!OPTIMISTIC) {
-            req.setOutAdopterId(req.id);
-            req.setOutSubmit(false);
+        if (Runtime.activity() != null) {
+            val ignore = backupGetNewMaster(req);
+            if (ignore)//this is true only in remove ghost when the master and backup objects are not found
+                return;
+            if (!OPTIMISTIC) {
+                req.setOutAdopterId(req.id);
+                req.setOutSubmit(false);
+            }
+            asyncExec(req, null);
+        } else {
+            Runtime.submitUncounted( ()=>{
+                val ignore = backupGetNewMaster(req);
+                if (ignore)//this is true only in remove ghost when the master and backup objects are not found
+                    return;
+                if (!OPTIMISTIC) {
+                    req.setOutAdopterId(req.id);
+                    req.setOutSubmit(false);
+                }
+                asyncExec(req, null);
+            });
         }
-        asyncExec(req, null);
     }
     
     static def handleBackupDied(req:FinishRequest) {
@@ -583,7 +600,8 @@ public final class FinishReplicator {
             val bFin:FinishBackupState;
             if (createOk)
                 bFin = findBackupOrCreate(req.id, req.parentId, req.getTx(), req.isRootTx());
-            else if (req instanceof RemoveGhostChildRequestOpt)
+            else if (req instanceof RemoveGhostChildRequestOpt ||
+                    req instanceof MergeSubTxRequestOpt)
                 bFin = findBackup(req.id);
             else
                 bFin = findBackupOrThrow(req.id);
@@ -613,7 +631,8 @@ public final class FinishReplicator {
                 val bFin:FinishBackupState;
                 if (createOk)
                     bFin = findBackupOrCreate(req.id, req.parentId, req.getTx(), req.isRootTx());
-                else if (req instanceof RemoveGhostChildRequestOpt)
+                else if (req instanceof RemoveGhostChildRequestOpt ||
+                        req instanceof MergeSubTxRequestOpt)
                     bFin = findBackup(req.id);
                 else
                     bFin = findBackupOrThrow(req.id);
@@ -666,7 +685,7 @@ public final class FinishReplicator {
         val resp = new GetNewMasterResponse();
         val respGR = new GlobalRef[GetNewMasterResponse](resp);
         do {
-            if (verbose>=1) debug(">>>> backupGetNewMaster(id="+req.id+") called, trying curBackup="+curBackup );
+            if (verbose>=1) debug(">>>> backupGetNewMaster(id="+id+") called, trying curBackup="+curBackup );
             if (curBackup == here.id as Int) { 
                 val bFin = findBackup(id);
                 if (bFin != null) {
@@ -680,39 +699,43 @@ public final class FinishReplicator {
                 }
             } else {
                 val backup = Place(curBackup);
+                if (verbose>=1) debug("==== backupGetNewMaster(id="+id+") going to backup="+backup );
                 val me = here;
                 if (!backup.isDead()) {
                     //we cannot use Immediate activities, because this function is blocking
                     val rCond = ResilientCondition.make(backup);
                     val closure = (gr:GlobalRef[Condition]) => {
-                        at (backup) @Uncounted async {
-                            var foundVar:Boolean = false;
-                            var newMasterIdVar:FinishResilient.Id = FinishResilient.UNASSIGNED;
-                            var newMasterPlaceVar:Int = -1n;
-                            val bFin = findBackup(id);
-                            if (bFin != null) {
-                                foundVar = true;
-                                newMasterIdVar = bFin.getNewMasterBlocking();
-                                if (newMasterIdVar == FinishResilient.Id(0n,0n))
-                                    newMasterPlaceVar = 0n; /**AT_FINISH HACK**/
-                                else
-                                    newMasterPlaceVar = bFin.getPlaceOfMaster();
-                            }
-                            val found = foundVar;
-                            val newMasterId = newMasterIdVar;
-                            val newMasterPlace = newMasterPlaceVar;
-                            at (gr) @Immediate("backup_get_new_master_response") async {
-                                val backResp = (respGR as GlobalRef[GetNewMasterResponse]{self.home == here})();
-                                backResp.found = found;
-                                backResp.newMasterId = newMasterId;
-                                backResp.newMasterPlace = newMasterPlace;
-                                gr().release();
-                            }
+                        at (backup) @Immediate("backup_get_new_master_request") async {
+                            Runtime.submitUncounted( ()=>{
+                                var foundVar:Boolean = false;
+                                var newMasterIdVar:FinishResilient.Id = FinishResilient.UNASSIGNED;
+                                var newMasterPlaceVar:Int = -1n;
+                                val bFin = findBackup(id);
+                                if (bFin != null) {
+                                    foundVar = true;
+                                    newMasterIdVar = bFin.getNewMasterBlocking();
+                                    if (newMasterIdVar == FinishResilient.Id(0n,0n))
+                                        newMasterPlaceVar = 0n; /**AT_FINISH HACK**/
+                                    else
+                                        newMasterPlaceVar = bFin.getPlaceOfMaster();
+                                }
+                                val found = foundVar;
+                                val newMasterId = newMasterIdVar;
+                                val newMasterPlace = newMasterPlaceVar;
+                                at (gr) @Immediate("backup_get_new_master_response") async {
+                                    val backResp = (respGR as GlobalRef[GetNewMasterResponse]{self.home == here})();
+                                    backResp.found = found;
+                                    backResp.newMasterId = newMasterId;
+                                    backResp.newMasterPlace = newMasterPlace;
+                                    gr().release();
+                                }
+                            });
                         }
                     };
                     
                     rCond.run(closure);
                     if (rCond.failed()) {
+                        if (verbose>=1) debug("==== backupGetNewMaster(id="+id+") backup="+backup  + "  failed: MasterAndBackupDied");
                         throw new MasterAndBackupDied();
                     }
                     rCond.forget();
@@ -723,14 +746,17 @@ public final class FinishReplicator {
             }
             curBackup = ((curBackup + 1) % NUM_PLACES) as Int;
         } while (initBackup != curBackup);
-        if (!resp.found && !(req instanceof RemoveGhostChildRequestOpt))
-            throw new Exception(here + " ["+Runtime.activity()+"] FATAL exception, cannot find backup for id=" + id);
         
-        if (!resp.found && req instanceof RemoveGhostChildRequestOpt) {
+        if (!resp.found && !( req instanceof RemoveGhostChildRequestOpt || req instanceof MergeSubTxRequestOpt)) {
+            if (verbose>=1) debug("==== backupGetNewMaster(id="+id+") failed: FATAL exception, cannot find backup for id=" + id);
+            throw new Exception(here + " ["+Runtime.activity()+"] FATAL exception, cannot find backup for id=" + id);
+        }
+        
+        if (!resp.found && (req instanceof RemoveGhostChildRequestOpt || req instanceof MergeSubTxRequestOpt)) {
             respGR.forget();
             return true; //ignore
         }
-            
+        
         req.id = resp.newMasterId;
         req.masterPlaceId = resp.newMasterPlace;
         req.setToAdopter(true);
@@ -995,9 +1021,22 @@ public final class FinishReplicator {
         return result;
     }
     
-    static def getImpactedBackups(newDead:HashSet[Int]) {
+    static def isLeaf(id:FinishResilient.Id, set:HashSet[FinishBackupState]) {
+        if (verbose>=1) debug(">>>> isLeaf("+id+") called");
+        for (e in set) {
+            if (e.getParentId() == id) {
+                if (verbose>=1) debug("<<<< isLeaf("+id+") returning false, the child is " + e.getId());
+                return false;
+            }
+        }
+        if (verbose>=1) debug("<<<< isLeaf("+id+") returning true");
+        return true;
+    }
+    
+    static def getImpactedBackups(newDead:HashSet[Int]):ArrayList[FinishBackupState] {
         if (verbose>=1) debug(">>>> lockAndGetImpactedBackups called");
-        val result = new HashSet[FinishBackupState]();
+        val unordered = new HashSet[FinishBackupState]();
+        val list = new ArrayList[FinishBackupState]();
         try {
             glock.lock();
             for (e in fbackups.entries()) {
@@ -1006,13 +1045,42 @@ public final class FinishReplicator {
                 if ( bFin.getId().id != -5555n && ( 
                      OPTIMISTIC && (newDead.contains(bFin.getPlaceOfMaster()) || bFin.getTxStarted() )  || 
                     !OPTIMISTIC && newDead.contains(bFin.getId().home) ) ) {
-                    result.add(bFin);
+                    unordered.add(bFin);
                 }
+            }
+            if (verbose>=1) {
+                var str:String = "";
+                for (k in unordered)
+                    str += k.getId() + " , ";
+                debug("==== lockAndGetImpactedBackups unordered ["+str+"]");
+            }
+            while (unordered.size() > 0) {
+                var tmp:FinishBackupState = null;
+                var rm:Boolean = false;
+                for (node in unordered) {
+                    if (isLeaf(node.getId(), unordered)) {
+                        rm = true;
+                        tmp = node;
+                        break;
+                    }
+                }
+                if (rm) {
+                    unordered.remove(tmp);
+                    list.add(tmp);
+                    if (unordered.size() == 0)
+                        break;
+                }
+            }
+            if (verbose>=1) {
+                var str:String = "";
+                for (k in list)
+                    str += k.getId() + " , ";
+                debug("<<<< lockAndGetImpactedBackups returning ["+str+"]");
             }
         } finally {
             glock.unlock();
         }
-        return result;
+        return list;
     }
     
     static def nominateMasterPlaceIfDead(idHome:Int) {
@@ -1140,6 +1208,7 @@ public final class FinishReplicator {
             glock.lock();
             val bs = fbackups.getOrElse(id, null);
             if (bs == null) {
+                if (verbose>=1) debug("<<<< findBackupOrThrow(id="+id+") returning with FATAL ERROR backup(id="+id+") not found here");
                 throw new Exception(here + " ["+Runtime.activity()+"] FATAL ERROR backup(id="+id+") not found here");
             }
             else {

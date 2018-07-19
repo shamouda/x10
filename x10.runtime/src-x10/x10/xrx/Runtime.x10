@@ -1401,10 +1401,10 @@ public final class Runtime {
         } else if (RESILIENT_MODE == Configuration.RESILIENT_MODE_X10RT_ONLY) {
             // Nothing to do at the XRX level in this mode.
         } else {
-            FinishResilient.notifyPlaceDeath();
-            GetRegistry.notifyPlaceDeath();
             ResilientCondition.notifyPlaceDeath();
             LowLevelFinish.notifyPlaceDeath();
+            FinishResilient.notifyPlaceDeath();
+            GetRegistry.notifyPlaceDeath();
             for (store in txStores) {
                 store.asyncRecover();
             }
