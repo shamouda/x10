@@ -9,7 +9,6 @@ import x10.util.resilient.PlaceManager;
 import x10.util.resilient.localstore.TxConfig;
 import x10.xrx.TxStoreFatalException;
 import x10.util.resilient.localstore.Cloneable;
-import x10.xrx.TxStoreConflictException;
 import x10.util.ArrayList;
 import x10.util.HashMap;
 import x10.util.HashSet;
