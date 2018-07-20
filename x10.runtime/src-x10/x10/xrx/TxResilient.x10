@@ -63,18 +63,19 @@ public class TxResilient extends Tx {
         return "Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] FID["+gcId+"] "+tag+"["+m+"] readOnly["+ro+"] ...";
     }
     
-    public def initialize(fid:FinishResilient.Id) {
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] FID["+fid+"] activity["+Runtime.activity()+"] initialize called ...");
+    public def initialize(fid:FinishResilient.Id, backup:Int) {
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] FID["+fid+"] activity["+Runtime.activity()+"] backup["+backup+"] initialize called ...");
         gcId = fid;
         lock = new Lock();
         gr = GlobalRef[Tx](this);
         vote = true;
         readOnly = true;
         ph2Started = false;
+        backupId = backup;
     }
 
     public def initializeNewMaster(fid:FinishResilient.Id,
-            _mem:Set[Int], _excs:GrowableRail[CheckedThrowable], _ro:Boolean) {
+            _mem:Set[Int], _excs:GrowableRail[CheckedThrowable], _ro:Boolean, backup:Int) {
         debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] FID["+fid+"] activity["+Runtime.activity()+"] initializeNewMaster called ...");
         gcId = fid;
         lock = new Lock();
@@ -84,6 +85,7 @@ public class TxResilient extends Tx {
         members = _mem;
         excs = _excs;
         readOnly = _ro;
+        backupId = backup;
     }
     
     public def getBackupClone():Tx { 
@@ -123,7 +125,7 @@ public class TxResilient extends Tx {
 
     public def resilient2PC(abort:Boolean) {
         if (abort) {
-            addExceptionUnsafe(new TxStoreConflictException());
+            //addExceptionUnsafe(new TxStoreConflictException());
             abortMastersOnly();
         } else {
             prepare();
@@ -316,7 +318,7 @@ public class TxResilient extends Tx {
             if (count == 0n) {
                 prep = true;
                 if (!vote) //don't overwrite fatal exceptions
-                    addExceptionUnsafe(new TxStoreConflictException());
+                    addExceptionUnsafe(new TxStoreConflictException(here + " Tx["+id+"] validation failed", here));
             }
         }
         debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPrepare place["+place+"] ptype="+ptype+" localVote["+v+"] vote["+vote+"] completed, count="+count+" ...");
@@ -324,7 +326,6 @@ public class TxResilient extends Tx {
         
         if (prep) {
             if (backupId != -1n && vote) {
-                markPendingOnBackup();
                 updateBackup();
             }
             else
@@ -449,15 +450,22 @@ public class TxResilient extends Tx {
     }
     
     public def isImpactedByDeadPlaces(newDead:HashSet[Int]) {
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces called");
         try {
             lock.lock();
+            if (backupId != -1n && newDead.contains(backupId)) {
+                debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces returning true, backup is: " + backupId);
+                return true;
+            }
             if (pending != null) {
                 for (key in pending.keySet()) {
-                    if (Place(key.place as Long).isDead()) {
+                    if (newDead.contains(key.place)) {
+                        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces returning true, pending contains: " + key.place);
                         return true;
                     }
                 }
             }
+            debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces returning false");
             return false;
         } finally {
             lock.unlock();
@@ -525,9 +533,14 @@ public class TxResilient extends Tx {
     }
     
     private def updateBackup() {
+        val bId:Int;
+        lock.lock();
+        pendingOnBackup = true;
+        bId = backupId;
+        lock.unlock();
         val gcId = this.gcId;
         val gr = this.gr;
-        val backup = Place(backupId as Long);
+        val backup = Place(bId as Long);
         debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] updateBackup place"+backup+" ...");
         at (backup) @Immediate("notify_backup_commit") async {
             val bFin = FinishReplicator.findBackupOrThrow(gcId) as FinishResilientOptimistic.OptimisticBackupState;
@@ -536,12 +549,6 @@ public class TxResilient extends Tx {
                 (gr() as TxResilient).notifyBackupUpdated();
             }
         }
-    }
-    
-    private def markPendingOnBackup() {
-        lock.lock();
-        pendingOnBackup = true;
-        lock.unlock();
     }
     
     public def notifyBackupChange(newBackupId:Int) {

@@ -100,6 +100,10 @@ public abstract class FinishResilient extends FinishState {
         public def toString() = "<ChildrenQueryId parentId=" + parentId + " dead="+dead+" src=" + src +">";
     }
     
+    public static struct DeniableTask(id:Id, src:Int) {
+        public def toString() = "<DeniableTask id="+id+",src="+ src+">";
+    }
+    
     protected static val nextId = new AtomicInteger(); // per-place portion of unique id
     
     /*

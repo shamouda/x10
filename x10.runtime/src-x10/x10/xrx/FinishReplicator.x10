@@ -45,6 +45,7 @@ public final class FinishReplicator {
     //non-blocking transit
     private static val pendingMaster = new HashMap[Long,FinishRequest]();
     private static val pendingBackup = new HashMap[Long,FinishRequest]();
+    private static val reqRecoveringMaster = new HashSet[Long]();//to avoid recovering the same request twice
     private static val transitPendingAct = new HashMap[Long,PendingActivity]();
     private static val postActions = new HashMap[Long,(Boolean, FinishResilient.Id)=>void]();
     
@@ -104,13 +105,16 @@ public final class FinishReplicator {
     private static def addMasterPending(req:FinishRequest, postSendAction:(Boolean, FinishResilient.Id)=>void) {
         try {
             glock.lock();
+            pendingMaster.put(req.num, req);
+            if (postSendAction != null) {
+                postActions.put(req.num, postSendAction);
+                if (verbose>=1) debug("==== Replicator.addMasterPending(id="+req.id+", num="+req.num+") postAction ADDED");
+            }
             if (Place(req.masterPlaceId).isDead()) {
+                reqRecoveringMaster.add(req.num); // to prevent notifyPlaceDeath from double-recovering this request
                 if (verbose>=1) debug("<<<< Replicator.addMasterPending(id="+req.id+", num="+req.num+",master="+req.masterPlaceId+") returned TARGET_DEAD");
                 return TARGET_DEAD;
             }
-            pendingMaster.put(req.num, req);
-            if (postSendAction != null)
-                postActions.put(req.num, postSendAction);
             if (verbose>=1) debug("<<<< Replicator.addMasterPending(id="+req.id+", num="+req.num+") returned SUCCESS");
             return SUCCESS;
         } finally {
@@ -191,6 +195,8 @@ public final class FinishReplicator {
                 if (postSendAction != null) {
                     if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(id="+req.id+") executing postSendAction(submit="+req.getOutSubmit()+",adopterId="+req.getOutAdopterId()+")");
                     postSendAction(req.getOutSubmit(), req.getOutAdopterId());
+                } else {
+                    if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") NO_POST_ACTION_FOUND");
                 }
                 if (verbose>=1) debug("<<<< Replicator.finalizeAsyncExec(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") returned");
                 /////FinishRequest.deallocReq(req);
@@ -395,8 +401,9 @@ public final class FinishReplicator {
             glock.lock();
             for (entry in pendingMaster.entries()) {
                 val req = entry.getValue();
-                if (newDead.contains(req.masterPlaceId)) {
+                if (newDead.contains(req.masterPlaceId) && !reqRecoveringMaster.contains(req.num)) {
                     set.add(req);
+                    reqRecoveringMaster.add(req.num);
                 }
             }
             for (r in set) {
@@ -768,6 +775,10 @@ public final class FinishReplicator {
             updateBackupPlace(id.home, curBackup);
         if (OPTIMISTIC) //master place doesn't change for pessimistic finish
             updateMasterPlace(req.id.home, req.masterPlaceId);
+        
+        glock.lock();
+        reqRecoveringMaster.remove(req.num);
+        glock.unlock();
         return false; //don't ignore
     }
     
@@ -1011,12 +1022,21 @@ public final class FinishReplicator {
             for (e in fmasters.entries()) {
                 val id = e.getKey();
                 val mFin = e.getValue();
+                var im:Boolean = false;
                 if (mFin.isImpactedByDeadPlaces(newDead)) {
                     result.add(mFin);
+                    im = true;
                 }
+                if (verbose>=1) debug("==== lockAndGetImpactedMasters id=" +  id + " isImpacted? " + im);
             }
         } finally {
             glock.unlock();
+        }
+        if (verbose>=1) {
+            var s:String = "";
+            for (e in result)
+                s += e + " ";
+            debug("<<<< lockAndGetImpactedMasters returning ["+s+"]");
         }
         return result;
     }
@@ -1096,9 +1116,10 @@ public final class FinishReplicator {
                 m = ((m - 1 + NUM_PLACES)%NUM_PLACES) as Int;
                 i++;
             }
-            if (allDead.contains(m) || i == maxIter)
-                throw new Exception(here + " ["+Runtime.activity()+"] FATAL ERROR couldn't nominate a new master place for idHome=" + idHome);
-            masterMap.put(idHome, m);
+            if (allDead.contains(m) || i == maxIter) {
+                Console.OUT.println(here + " ["+Runtime.activity()+"] FATAL ERROR couldn't nominate a new master place for idHome=" + idHome);
+                System.killHere();
+            }
         } finally {
             glock.unlock();
         }
@@ -1106,7 +1127,21 @@ public final class FinishReplicator {
         return m;
     }
     
-    static def nominateBackupPlaceIfDead(idHome:Int) {
+    static def applyNominatedMasterPlaces(map:HashMap[Int,Int]) {
+        if (map == null)
+            return;
+        try {
+            glock.lock();
+            for (e in map.entries()) {
+                masterMap.put(e.getKey(), e.getValue());
+                if (verbose>=1) debug("<<<< applyNominatedMasterPlaces(idHome="+e.getKey()+",masterPlace"+e.getValue()+")");
+            }
+        } finally {
+            glock.unlock();
+        }
+    }
+    
+    static def updateBackupPlaceIfDead(idHome:Int) {
         var b:Int;
         var maxIter:Int = NUM_PLACES;
         var i:Int = 0n;

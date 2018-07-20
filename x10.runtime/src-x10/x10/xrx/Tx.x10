@@ -81,8 +81,8 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     /**
      * Used in resilient mode only
      * */
-    public def initialize(dummy:FinishResilient.Id) { }
-    public def initializeNewMaster(dummy:FinishResilient.Id, _mem:Set[Int], _excs:GrowableRail[CheckedThrowable], _ro:Boolean) {}
+    public def initialize(dummy:FinishResilient.Id, backupId:Int) { }
+    public def initializeNewMaster(dummy:FinishResilient.Id, _mem:Set[Int], _excs:GrowableRail[CheckedThrowable], _ro:Boolean, _backupId:Int) {}
     public def getBackupClone():Tx { return null; }
     
     protected def addExceptionUnsafe(t:CheckedThrowable) {

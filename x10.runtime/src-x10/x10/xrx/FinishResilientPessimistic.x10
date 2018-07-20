@@ -1937,7 +1937,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
         var i:Long = 0;
         while (iter.hasNext()) {
             val m = iter.next() as PessimisticMasterState;
-            val newB = FinishReplicator.nominateBackupPlaceIfDead(m.id.home);
+            val newB = FinishReplicator.updateBackupPlaceIfDead(m.id.home);
             places(i) = newB;
             //don't update m.backupPlaceId until the recovered backups are created. Otherwise, pleases that are calling getNewBackup may reach the backup before it is created
             newBackups.put(m.id, newB); 
@@ -2067,7 +2067,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
             createOrSyncBackups(newDead, masters);
         else {
             if (myBackupDied) {
-                val newBackup = Place(FinishReplicator.nominateBackupPlaceIfDead(hereId));                
+                val newBackup = Place(FinishReplicator.updateBackupPlaceIfDead(hereId));                
                 val rCond = ResilientCondition.make(newBackup);
                 val closure = (gr:GlobalRef[Condition]) => {
                     at (newBackup) @Immediate("dummy_backup") async {

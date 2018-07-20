@@ -209,12 +209,16 @@ public class TxStore {
         
         val newActivePlaces = computeNewActivePlaces(oldActivePlaces, deadVirtualId, spare);
         
-        if (deadVirtualId == -1)
-            throw new Exception(here + " Fatal error, slave index cannot be found in oldActivePlaces");
+        if (deadVirtualId == -1) {
+            Console.OUT.println(here + " FATAL ERROR, slave index cannot be found in oldActivePlaces");
+            System.killHere();
+        }
         
         val deadPlaceSlave = oldActivePlaces.next(deadPlace);
-        if (deadPlaceSlave.isDead())
-            throw new Exception(here + " Fatal error, two consecutive places died : " + deadPlace + "  and " + deadPlaceSlave);
+        if (deadPlaceSlave.isDead()) {
+            Console.OUT.println(here + " FATAL ERROR, two consecutive places died : " + deadPlace + "  and " + deadPlaceSlave);
+            System.killHere();
+        }
         
         finish {
             at (deadPlaceSlave) async createMasterStoreAtSpare(plh, spare, deadPlace, deadVirtualId, newActivePlaces, deadMaster);
@@ -323,9 +327,10 @@ public class TxStore {
                 break;
             }
         }
-        if(placeIndx == -1)
-            throw new Exception(here + " No available spare places to allocate ");         
-            
+        if(placeIndx == -1) {
+            Console.OUT.println(here + " FATAL No available spare places to allocate ");
+            System.killHere();
+        }
         return Place(placeIndx);
     }
     

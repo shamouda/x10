@@ -38,7 +38,7 @@ public class TxResilientNoSlaves extends Tx {
         super(plh, id);
     }
     
-    public def initialize(fid:FinishResilient.Id) {
+    public def initialize(fid:FinishResilient.Id, dummyBackupId:Int) {
         gcId = fid;
         lock = new Lock();
         gr = GlobalRef[Tx](this);

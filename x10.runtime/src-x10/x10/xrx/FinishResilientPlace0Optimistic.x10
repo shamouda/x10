@@ -335,7 +335,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     if (verbose>=1) debug(">>>> initializing state for id="+ id);
                     state = new State(id, parentId, gfs, tx, rootTx);
                     if (tx != null) {
-                        tx.initialize(id);
+                        tx.initialize(id, -1n);
                     }
                     if (verbose>=1) debug(">>>> creating new State id="+ id +" parentId="+parentId + " tx="+tx);
                     states.put(id, state);
@@ -392,7 +392,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                         val rootTx = true;
                         val state = new State(id, parentId, gfs, tx, rootTx);
                         if (tx != null) {
-                            tx.initialize(id);
+                            tx.initialize(id, -1n);
                             tx.addMember(id.home, isRO);
                         }
                         if (verbose>=1) debug(">>>> finalizeLocalTx: creating new State id="+ id +" parentId="+parentId + " tx="+tx);
@@ -1391,7 +1391,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 this.tx = old;
             else
                 this.tx = Tx.clone(old);
-            this.tx.initialize(id);
+            this.tx.initialize(id, -1n);
             if (verbose>=1) debug("<<<< registerFinishTx(id="+id+", txId="+old.id+", root="+rootTx+",tx="+this.tx+") returning");
         }
         
