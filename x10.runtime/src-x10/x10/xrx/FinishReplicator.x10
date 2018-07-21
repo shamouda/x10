@@ -16,6 +16,7 @@ import x10.compiler.Immediate;
 import x10.compiler.Uncounted;
 import x10.util.HashMap;
 import x10.util.HashSet;
+import x10.util.ArrayList;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.GrowableRail;
 import x10.util.resilient.concurrent.LowLevelFinish;
@@ -23,6 +24,7 @@ import x10.util.concurrent.Lock;
 import x10.io.Deserializer;
 import x10.compiler.AsyncClosure;
 import x10.xrx.freq.FinishRequest;
+import x10.xrx.freq.RemoveGhostChildRequestOpt;
 
 public final class FinishReplicator {
     
@@ -42,6 +44,7 @@ public final class FinishReplicator {
     //non-blocking transit
     private static val pendingMaster = new HashMap[Long,FinishRequest]();
     private static val pendingBackup = new HashMap[Long,FinishRequest]();
+    private static val reqRecoveringMaster = new HashSet[Long]();//to avoid recovering the same request twice
     private static val transitPendingAct = new HashMap[Long,PendingActivity]();
     private static val postActions = new HashMap[Long,(Boolean, FinishResilient.Id)=>void]();
     
@@ -101,13 +104,16 @@ public final class FinishReplicator {
     private static def addMasterPending(req:FinishRequest, postSendAction:(Boolean, FinishResilient.Id)=>void) {
         try {
             glock.lock();
+            pendingMaster.put(req.num, req);
+            if (postSendAction != null) {
+                postActions.put(req.num, postSendAction);
+                if (verbose>=1) debug("==== Replicator.addMasterPending(id="+req.id+", num="+req.num+") postAction ADDED");
+            }
             if (Place(req.masterPlaceId).isDead()) {
+                reqRecoveringMaster.add(req.num); // to prevent notifyPlaceDeath from double-recovering this request
                 if (verbose>=1) debug("<<<< Replicator.addMasterPending(id="+req.id+", num="+req.num+",master="+req.masterPlaceId+") returned TARGET_DEAD");
                 return TARGET_DEAD;
             }
-            pendingMaster.put(req.num, req);
-            if (postSendAction != null)
-                postActions.put(req.num, postSendAction);
             if (verbose>=1) debug("<<<< Replicator.addMasterPending(id="+req.id+", num="+req.num+") returned SUCCESS");
             return SUCCESS;
         } finally {
@@ -188,6 +194,8 @@ public final class FinishReplicator {
                 if (postSendAction != null) {
                     if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(id="+req.id+") executing postSendAction(submit="+req.getOutSubmit()+",adopterId="+req.getOutAdopterId()+")");
                     postSendAction(req.getOutSubmit(), req.getOutAdopterId());
+                } else {
+                    if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") NO_POST_ACTION_FOUND");
                 }
                 if (verbose>=1) debug("<<<< Replicator.finalizeAsyncExec(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") returned");
                 /////FinishRequest.deallocReq(req);
@@ -236,16 +244,18 @@ public final class FinishReplicator {
                 asyncMasterToBackup(caller, req, mresp);
             }
         } else {
-            if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncExecInternal remote moving to master " + master);
+            if (verbose>=1) debug("==== Replicator(id="+req.id+",num="+req.num+").asyncExecInternal remote moving to master " + master);
             at (master) @Immediate("async_master_exec") async {
                 if (req == null)
                     throw new Exception(here + " SER_FATAL at master => req is null");
-                if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncExecInternal remote reached master ");
+                if (verbose>=1) debug("==== Replicator(id="+req.id+",num="+req.num+").asyncExecInternal remote reached master ");
                 val mFin = findMaster(req.id);
-                if (mFin == null) 
-                    throw new Exception(here + " fatal error, master(id="+req.id+") is null2 while processing req["+req+"]");
+                if (mFin == null)  {
+                    Console.OUT.println(here + " FATAL ERROR, master(id="+req.id+",num="+req.num+") is null2 while processing req["+req+"]");
+                    System.killHere();
+                }
                 val mresp = mFin.exec(req);
-                if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncExecInternal remote master moving to caller " + caller);
+                if (verbose>=1) debug("==== Replicator(id="+req.id+",num="+req.num+").asyncExecInternal remote master moving to caller " + caller);
                 at (caller) @Immediate("async_master_exec_response") async {
                     if (mresp == null || req == null)
                         throw new Exception(here + " SER_FATAL at caller => mresp is null? "+(mresp == null)+", req is null? " + (req==null));
@@ -267,7 +277,7 @@ public final class FinishReplicator {
     
     static def asyncMasterToBackup(caller:Place, req:FinishRequest, mresp:MasterResponse) {
         val submit = mresp.submit;
-        if (verbose>=1) debug(">>>> Replicator(id="+req.id+").asyncMasterToBackup => backupPlaceId = " + mresp.backupPlaceId + " submit = " + submit );
+        if (verbose>=1) debug(">>>> Replicator(id="+req.id+",num="+req.num+").asyncMasterToBackup => backupPlaceId = " + mresp.backupPlaceId + " submit = " + submit + " parentId="+req.parentId + " req="+req);
         if (mresp.backupPlaceId == -1n)
             throw new Exception (here + " FATAL ERROR ["+req+"], backup -1 means master had a fatal error before reporting its backup value");
         if (mresp.backupChanged) {
@@ -292,10 +302,16 @@ public final class FinishReplicator {
                     val bFin:FinishBackupState;
                     if (createOk)
                         bFin = findBackupOrCreate(req.id, req.parentId);
+                    else if (req instanceof RemoveGhostChildRequestOpt)
+                        bFin = findBackup(req.id);
                     else
                         bFin = findBackupOrThrow(req.id);
                     req.isLocal = true;
-                    val bresp = bFin.exec(req);
+                    var bresp:BackupResponse = null;
+                    if (bFin != null)
+                        bresp = bFin.exec(req);
+                    else
+                        bresp = new BackupResponse(); //allowed only for RemoveGhost
                     req.isLocal = false;
                     processBackupResponse(bresp, req.num, backupPlaceId);
                 } else {
@@ -307,9 +323,16 @@ public final class FinishReplicator {
                         val bFin:FinishBackupState;
                         if (createOk)
                             bFin = findBackupOrCreate(req.id, req.parentId);
+                        else if (req instanceof RemoveGhostChildRequestOpt)
+                            bFin = findBackup(req.id);
                         else
                             bFin = findBackupOrThrow(req.id);
-                        val bresp = bFin.exec(req);
+                        var resp:BackupResponse = null;
+                        if (bFin != null)
+                            resp = bFin.exec(req);
+                        else
+                            resp = new BackupResponse(); //allowed only for RemoveGhost
+                        val bresp = resp;
                         if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup backup moving to caller " + caller);
                         val num = req.num;
                         at (caller) @Immediate("async_backup_exec_response") async {
@@ -333,13 +356,11 @@ public final class FinishReplicator {
             req.masterPlaceId = bresp.newMasterPlace;
             if (verbose>=1) debug("==== Replicator(id="+req.id+").processBackupResponse MasterChanged exception caught, newMasterPlace["+bresp.newMasterPlace+"]" );
             asyncExecInternal(req, null);
-        }
-        else if (bresp.errMasterDied) {
+        } else if (bresp.errMasterDied) {
             val req = FinishReplicator.getPendingBackupRequest(num);
             if (verbose>=1) debug("==== Replicator(id="+req.id+").processBackupResponse MasterDied exception caught" );
             handleMasterDied(req);
-        }
-        else {
+        } else {
             finalizeAsyncExec(num, backupPlaceId);
         }
         if (verbose>=1) debug("<<<< Replicator(num="+num+").processBackupResponse returned" );
@@ -377,8 +398,9 @@ public final class FinishReplicator {
             glock.lock();
             for (entry in pendingMaster.entries()) {
                 val req = entry.getValue();
-                if (newDead.contains(req.masterPlaceId)) {
+                if (newDead.contains(req.masterPlaceId) && !reqRecoveringMaster.contains(req.num)) {
                     set.add(req);
+                    reqRecoveringMaster.add(req.num);
                 }
             }
             for (r in set) {
@@ -395,12 +417,27 @@ public final class FinishReplicator {
     }
     
     static def handleMasterDied(req:FinishRequest) {
-        backupGetNewMaster(req);
-        if (!OPTIMISTIC) {
-            req.setOutAdopterId(req.id);
-            req.setOutSubmit(false);
+        if (Runtime.activity() != null) {
+            val ignore = backupGetNewMaster(req);
+            if (ignore)//this is true only in remove ghost when the master and backup objects are not found
+                return;
+            if (!OPTIMISTIC) {
+                req.setOutAdopterId(req.id);
+                req.setOutSubmit(false);
+            }
+            asyncExec(req, null);
+        } else {
+            Runtime.submitUncounted( ()=>{
+                val ignore = backupGetNewMaster(req);
+                if (ignore)//this is true only in remove ghost when the master and backup objects are not found
+                    return;
+                if (!OPTIMISTIC) {
+                    req.setOutAdopterId(req.id);
+                    req.setOutSubmit(false);
+                }
+                asyncExec(req, null);
+            });
         }
-        asyncExec(req, null);
     }
     
     static def handleBackupDied(req:FinishRequest) {
@@ -459,7 +496,9 @@ public final class FinishReplicator {
                 if (verbose>=1) debug("<<<< Replicator(id="+req.id+").exec() returning");
                 break;
             } catch (ex:MasterDied) {
-                backupGetNewMaster(req); // we communicate with backup to ask for the new master location
+                val ignore = backupGetNewMaster(req); // we communicate with backup to ask for the new master location
+                if (ignore) //this is true only in remove ghost when the master and backup objects are not found
+                    break;
                 if (!OPTIMISTIC)
                     adopterId = req.id;
                 if (verbose>=1) debug("==== Replicator(id="+req.id+").exec() threw MasterDied exception, forward to newMaster " + req.id + " @ " + req.masterPlaceId);
@@ -565,10 +604,18 @@ public final class FinishReplicator {
             val bFin:FinishBackupState;
             if (createOk)
                 bFin = findBackupOrCreate(req.id, req.parentId);
+            else if (req instanceof RemoveGhostChildRequestOpt)
+                bFin = findBackup(req.id);
             else
                 bFin = findBackupOrThrow(req.id);
             req.isLocal = true;
-            val resp = bFin.exec(req);
+            
+            var resp:BackupResponse = null;
+            if (bFin != null)
+                resp = bFin.exec(req);
+            else
+                resp = new BackupResponse(); //allowed only for RemoveGhost
+            
             req.isLocal = false;
             if (resp.errMasterDied) { 
                 throw new MasterDied();
@@ -587,9 +634,15 @@ public final class FinishReplicator {
                 val bFin:FinishBackupState;
                 if (createOk)
                     bFin = findBackupOrCreate(req.id, req.parentId);
+                else if (req instanceof RemoveGhostChildRequestOpt)
+                    bFin = findBackup(req.id);
                 else
                     bFin = findBackupOrThrow(req.id);
-                val resp = bFin.exec(req);
+                var resp:BackupResponse = null;
+                if (bFin != null)
+                    resp = bFin.exec(req);
+                else
+                    resp = new BackupResponse(); //allowed only for RemoveGhost
                 val r_errMasterDied = resp.errMasterDied;
                 val r_errMasterChanged = resp.errMasterChanged;
                 val r_newMasterPlace = resp.newMasterPlace;
@@ -625,8 +678,8 @@ public final class FinishReplicator {
         return resp;
     }
     
-    //prepares request for new master
-    public static def backupGetNewMaster(req:FinishRequest) {
+    //prepares request for new master - returns true only if backup was not found for a RemoveGhost request
+    public static def backupGetNewMaster(req:FinishRequest):Boolean {
         val id = req.id;
         val initBackup = getBackupPlace(id.home);
         var curBackup:Int = initBackup;
@@ -634,7 +687,7 @@ public final class FinishReplicator {
         val resp = new GetNewMasterResponse();
         val respGR = new GlobalRef[GetNewMasterResponse](resp);
         do {
-            if (verbose>=1) debug(">>>> backupGetNewMaster(id="+req.id+") called, trying curBackup="+curBackup );
+            if (verbose>=1) debug(">>>> backupGetNewMaster(id="+id+") called, trying curBackup="+curBackup );
             if (curBackup == here.id as Int) { 
                 val bFin = findBackup(id);
                 if (bFin != null) {
@@ -645,42 +698,46 @@ public final class FinishReplicator {
                     else
                         resp.newMasterPlace = bFin.getPlaceOfMaster();
                     break;
-                } 
+                }
             } else {
                 val backup = Place(curBackup);
+                if (verbose>=1) debug("==== backupGetNewMaster(id="+id+") going to backup="+backup );
                 val me = here;
                 if (!backup.isDead()) {
                     //we cannot use Immediate activities, because this function is blocking
                     val rCond = ResilientCondition.make(backup);
                     val closure = (gr:GlobalRef[Condition]) => {
-                        at (backup) @Uncounted async {
-                            var foundVar:Boolean = false;
-                            var newMasterIdVar:FinishResilient.Id = FinishResilient.UNASSIGNED;
-                            var newMasterPlaceVar:Int = -1n;
-                            val bFin = findBackup(id);
-                            if (bFin != null) {
-                                foundVar = true;
-                                newMasterIdVar = bFin.getNewMasterBlocking();
-                                if (newMasterIdVar == FinishResilient.Id(0n,0n))
-                                    newMasterPlaceVar = 0n; /**AT_FINISH HACK**/
-                                else
-                                    newMasterPlaceVar = bFin.getPlaceOfMaster();
-                            }
-                            val found = foundVar;
-                            val newMasterId = newMasterIdVar;
-                            val newMasterPlace = newMasterPlaceVar;
-                            at (gr) @Immediate("backup_get_new_master_response") async {
-                                val backResp = (respGR as GlobalRef[GetNewMasterResponse]{self.home == here})();
-                                backResp.found = found;
-                                backResp.newMasterId = newMasterId;
-                                backResp.newMasterPlace = newMasterPlace;
-                                gr().release();
-                            }
+                        at (backup) @Immediate("backup_get_new_master_request") async {
+                            Runtime.submitUncounted( ()=>{
+                                var foundVar:Boolean = false;
+                                var newMasterIdVar:FinishResilient.Id = FinishResilient.UNASSIGNED;
+                                var newMasterPlaceVar:Int = -1n;
+                                val bFin = findBackup(id);
+                                if (bFin != null) {
+                                    foundVar = true;
+                                    newMasterIdVar = bFin.getNewMasterBlocking();
+                                    if (newMasterIdVar == FinishResilient.Id(0n,0n))
+                                        newMasterPlaceVar = 0n; /**AT_FINISH HACK**/
+                                    else
+                                        newMasterPlaceVar = bFin.getPlaceOfMaster();
+                                }
+                                val found = foundVar;
+                                val newMasterId = newMasterIdVar;
+                                val newMasterPlace = newMasterPlaceVar;
+                                at (gr) @Immediate("backup_get_new_master_response") async {
+                                    val backResp = (respGR as GlobalRef[GetNewMasterResponse]{self.home == here})();
+                                    backResp.found = found;
+                                    backResp.newMasterId = newMasterId;
+                                    backResp.newMasterPlace = newMasterPlace;
+                                    gr().release();
+                                }
+                            });
                         }
                     };
                     
                     rCond.run(closure);
                     if (rCond.failed()) {
+                        if (verbose>=1) debug("==== backupGetNewMaster(id="+id+") backup="+backup  + "  failed: MasterAndBackupDied");
                         throw new MasterAndBackupDied();
                     }
                     rCond.forget();
@@ -691,8 +748,17 @@ public final class FinishReplicator {
             }
             curBackup = ((curBackup + 1) % NUM_PLACES) as Int;
         } while (initBackup != curBackup);
-        if (!resp.found)
+        
+        if (!resp.found && !(req instanceof RemoveGhostChildRequestOpt)) {
+            if (verbose>=1) debug("==== backupGetNewMaster(id="+id+") failed: FATAL exception, cannot find backup for id=" + id);
             throw new Exception(here + " ["+Runtime.activity()+"] FATAL exception, cannot find backup for id=" + id);
+        }
+        
+        if (!resp.found && req instanceof RemoveGhostChildRequestOpt) {
+            respGR.forget();
+            return true; //ignore
+        }
+        
         req.id = resp.newMasterId;
         req.masterPlaceId = resp.newMasterPlace;
         req.setToAdopter(true);
@@ -704,6 +770,11 @@ public final class FinishReplicator {
             updateBackupPlace(id.home, curBackup);
         if (OPTIMISTIC) //master place doesn't change for pessimistic finish
             updateMasterPlace(req.id.home, req.masterPlaceId);
+        
+        glock.lock();
+        reqRecoveringMaster.remove(req.num);
+        glock.unlock();
+        return false; //don't ignore
     }
     
     //dummy communication with the master to ensure it is still alive
@@ -946,33 +1017,85 @@ public final class FinishReplicator {
             for (e in fmasters.entries()) {
                 val id = e.getKey();
                 val mFin = e.getValue();
+                var im:Boolean = false;
                 if (mFin.isImpactedByDeadPlaces(newDead)) {
                     result.add(mFin);
+                    im = true;
                 }
+                if (verbose>=1) debug("==== lockAndGetImpactedMasters id=" +  id + " isImpacted? " + im);
             }
         } finally {
             glock.unlock();
         }
+        if (verbose>=1) {
+            var s:String = "";
+            for (e in result)
+                s += e + " ";
+            debug("<<<< lockAndGetImpactedMasters returning ["+s+"]");
+        }
         return result;
     }
     
-    static def getImpactedBackups(newDead:HashSet[Int]) {
+    static def isLeaf(id:FinishResilient.Id, set:HashSet[FinishBackupState]) {
+        if (verbose>=1) debug(">>>> isLeaf("+id+") called");
+        for (e in set) {
+            if (e.getParentId() == id) {
+                if (verbose>=1) debug("<<<< isLeaf("+id+") returning false, the child is " + e.getId());
+                return false;
+            }
+        }
+        if (verbose>=1) debug("<<<< isLeaf("+id+") returning true");
+        return true;
+    }
+    
+    static def getImpactedBackups(newDead:HashSet[Int]):ArrayList[FinishBackupState] {
         if (verbose>=1) debug(">>>> lockAndGetImpactedBackups called");
-        val result = new HashSet[FinishBackupState]();
+        val unordered = new HashSet[FinishBackupState]();
+        val list = new ArrayList[FinishBackupState]();
         try {
             glock.lock();
             for (e in fbackups.entries()) {
                 val id = e.getKey();
                 val bFin = e.getValue();
-                if ( bFin.getId().id != -5555n && ( OPTIMISTIC && newDead.contains(bFin.getPlaceOfMaster()) || 
+                if ( bFin.getId().id != -5555n && ( 
+                     OPTIMISTIC && newDead.contains(bFin.getPlaceOfMaster())  || 
                     !OPTIMISTIC && newDead.contains(bFin.getId().home) ) ) {
-                    result.add(bFin);
+                    unordered.add(bFin);
                 }
+            }
+            if (verbose>=1) {
+                var str:String = "";
+                for (k in unordered)
+                    str += k.getId() + " , ";
+                debug("==== lockAndGetImpactedBackups unordered ["+str+"]");
+            }
+            while (unordered.size() > 0) {
+                var tmp:FinishBackupState = null;
+                var rm:Boolean = false;
+                for (node in unordered) {
+                    if (isLeaf(node.getId(), unordered)) {
+                        rm = true;
+                        tmp = node;
+                        break;
+                    }
+                }
+                if (rm) {
+                    unordered.remove(tmp);
+                    list.add(tmp);
+                    if (unordered.size() == 0)
+                        break;
+                }
+            }
+            if (verbose>=1) {
+                var str:String = "";
+                for (k in list)
+                    str += k.getId() + " , ";
+                debug("<<<< lockAndGetImpactedBackups returning ["+str+"]");
             }
         } finally {
             glock.unlock();
         }
-        return result;
+        return list;
     }
     
     static def nominateMasterPlaceIfDead(idHome:Int) {
@@ -982,17 +1105,16 @@ public final class FinishReplicator {
         try {
             glock.lock();
             m = masterMap.getOrElse(idHome,-1n);
-            do {
-                if (m == -1n)
-                    m = ((idHome - 1 + NUM_PLACES)%NUM_PLACES) as Int;
-                else
-                    m = ((m - 1 + NUM_PLACES)%NUM_PLACES) as Int;
+            if (m == -1n)
+                m = ((idHome - 1 + NUM_PLACES)%NUM_PLACES) as Int;
+            while (allDead.contains(m) && i < maxIter) {
+                m = ((m - 1 + NUM_PLACES)%NUM_PLACES) as Int;
                 i++;
-            } while (allDead.contains(m) && i < maxIter);
-            
-            if (allDead.contains(m) || i == maxIter)
-                throw new Exception(here + " ["+Runtime.activity()+"] FATAL ERROR couldn't nominate a new master place for idHome=" + idHome);
-            masterMap.put(idHome, m);
+            }
+            if (allDead.contains(m) || i == maxIter) {
+                Console.OUT.println(here + " ["+Runtime.activity()+"] FATAL ERROR couldn't nominate a new master place for idHome=" + idHome);
+                System.killHere();
+            }
         } finally {
             glock.unlock();
         }
@@ -1000,7 +1122,21 @@ public final class FinishReplicator {
         return m;
     }
     
-    static def nominateBackupPlaceIfDead(idHome:Int) {
+    static def applyNominatedMasterPlaces(map:HashMap[Int,Int]) {
+        if (map == null)
+            return;
+        try {
+            glock.lock();
+            for (e in map.entries()) {
+                masterMap.put(e.getKey(), e.getValue());
+                if (verbose>=1) debug("<<<< applyNominatedMasterPlaces(idHome="+e.getKey()+",masterPlace"+e.getValue()+")");
+            }
+        } finally {
+            glock.unlock();
+        }
+    }
+    
+    static def updateBackupPlaceIfDead(idHome:Int) {
         var b:Int;
         var maxIter:Int = NUM_PLACES;
         var i:Int = 0n;
@@ -1032,7 +1168,7 @@ public final class FinishReplicator {
             glock.unlock();
         }
     }
-    
+        
     static def removeBackup(id:FinishResilient.Id) {
         try {
             glock.lock();
@@ -1089,6 +1225,7 @@ public final class FinishReplicator {
             glock.lock();
             val bs = fbackups.getOrElse(id, null);
             if (bs == null) {
+                if (verbose>=1) debug("<<<< findBackupOrThrow(id="+id+") returning with FATAL ERROR backup(id="+id+") not found here");
                 throw new Exception(here + " ["+Runtime.activity()+"] FATAL ERROR backup(id="+id+") not found here");
             }
             else {
@@ -1284,9 +1421,24 @@ public final class FinishReplicator {
     }
     
     static def waitForZeroPending() {
+        var count:Long = 0;
         if (verbose>=1) debug(">>>> waitForZeroPending called" );
         while (pending.get() != 0n || pendingAsyncRequestsExists() ) {
             System.threadSleep(100); // release the CPU to more productive pursuits
+            count++;
+            if (count%10000 == 0) {
+                glock.lock();
+                var str:String = "pendingMaster = ";
+                for (e in pendingMaster.entries()) {
+                    str += e.getKey() + ":" + e.getValue().id + " , ";
+                }
+                var str2:String = "pendingBackup = ";
+                for (e in pendingBackup.entries()) {
+                    str2 += e.getKey() + ":" + e.getValue().id + " , ";
+                }
+                glock.unlock();
+                if (verbose>=1) debug("==== waitForZeroPending waiting for: " + str + " : " + str2 );
+            }
         }
         pending.set(-2000n); //this means the main finish has completed its work
         if (verbose>=1) debug("<<<< waitForZeroPending returning" );

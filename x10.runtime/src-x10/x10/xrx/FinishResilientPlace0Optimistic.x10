@@ -29,7 +29,6 @@ import x10.util.resilient.concurrent.LowLevelFinish;
 import x10.util.concurrent.Condition;
 import x10.util.Timer;
 
-//FIXME: return a dummy remote rather than a fatal RemoteCreationDenied
 /**
  * Place0-based Resilient Finish using the optimistic counting protocol
  */
@@ -147,6 +146,20 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             transit.put(FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
         }
         
+        def gc() {
+            val id = this.id;
+            val set = new HashSet[Int]();
+            for (e in sent.entries()) {
+                val dst = e.getKey().dst;
+                if (dst != here.id as Int && !set.contains(dst)) {
+                    set.add(dst);
+                    at(Place(dst)) @Immediate("optp0_remoteFinishCleanup") async {
+                        FinishResilientPlace0Optimistic.P0OptimisticRemoteState.deleteObject(id);
+                    }
+                }
+            }
+        }
+        
         /*********************************************************************/
         /*******************   Failure Recovery Methods   ********************/
         /*********************************************************************/
@@ -167,19 +180,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             //no more states under this parent from that src should be created
         }
         
-        def gc() {
-            val id = this.id;
-            val set = new HashSet[Int]();
-            for (e in sent.entries()) {
-                val dst = e.getKey().dst;
-                if (dst != here.id as Int && !set.contains(dst)) {
-                    set.add(dst);
-                    at(Place(dst)) @Immediate("optp0_remoteFinishCleanup") async {
-                        FinishResilientPlace0Optimistic.P0OptimisticRemoteState.deleteObject(id);
-                    }
-                }
-            }
-        }
+
         
         static def updateGhostChildrenAndGetRemoteQueries(newDead:HashSet[Int]):HashMap[Int,OptResolveRequest] {
             val countingReqs = new HashMap[Int,OptResolveRequest]();
@@ -834,7 +835,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         
         private static val remoteLock = new Lock();
         private static val remotes = new HashMap[Id, P0OptimisticRemoteState](); //a cache for remote finish objects
-        private static val remoteDeny = new HashSet[Id](); //remote deny list
         
         private var ex:CheckedThrowable = null;
         
@@ -879,8 +879,11 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     val received = remote.receivedFrom(src, kind);
                     dropped = sent - received;
                 } else {
-                    //no remote finish for this id should be created here
-                    remoteDeny.add(id);
+                    //prepare remote to not accept future tasks from the src
+                    val newRemote = new P0OptimisticRemoteState(id);
+                    remotes.put(id, newRemote);
+                    newRemote.taskDeny = new HashSet[Int]();
+                    newRemote.taskDeny.add(src);
 		    dropped = sent;
                 }
             } finally {
@@ -895,10 +898,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 remoteLock.lock();
                 var remoteState:P0OptimisticRemoteState = remotes.getOrElse(id, null);
                 if (remoteState == null) {
-                    //FIXME: return a dummy remote rather than a fatal RemoteCreationDenied
-                    if (remoteDeny.contains(id)) {
-                        throw new RemoteCreationDenied();
-                    }
                     remoteState = new P0OptimisticRemoteState(id);
                     remotes.put(id, remoteState);
                 }
@@ -1016,18 +1015,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             ilock.unlock();
         }
         
-        def getRecordedExp() {
-            try {
-                ilock.lock();
-                if (ex == null)
-                    return null;
-                else
-                    return new CheckedThrowable(ex);
-            } finally {
-                ilock.unlock();
-            }
-        }
-        
         public def notifyTerminationAndGetMap(t:Task, ex:CheckedThrowable) {
             var map:HashMap[Task,Int] = null;
             val count = lc.decrementAndGet();
@@ -1041,15 +1028,17 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         public def notifyReceived(t:Task) {
+            var count:Int = -1n;
             try {
                 ilock.lock();
                 if (taskDeny != null && taskDeny.contains(t.place) )
                     throw new RemoteCreationDenied();
                 increment(received, t);
+                count = lc.incrementAndGet();
             } finally {
                 ilock.unlock();
             }
-            return lc.incrementAndGet();
+            return count;
         }
         
         def printMap(map:HashMap[Task,Int]) {
@@ -1101,8 +1090,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             val gfs = new GlobalRef[FinishState](fs);
             
             if (bytes.size >= ASYNC_SIZE_THRESHOLD) {
-                if (verbose >= 1) debug("==== Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting indirect (size="+ bytes.size+") ");
             	val count = notifyReceived(Task(srcId, ASYNC)); // synthetic activity to keep finish locally live during async to Place0
+            	if (verbose >= 1) debug("==== Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting indirect (size="+ bytes.size+") lc="+count);
             	State.p0RemoteSpawnBigGlobal(id, srcId, dstId, bytes, gfs);
             } else {
                 if (verbose >= 1) debug("====  Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+"), selecting direct (size="+ bytes.size+") ");
@@ -1179,9 +1168,9 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             
             if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root, mapSize=" + map.size());
             if (here.id == 0)
-                State.p0HereTermMultiple(id, dstId, map, getRecordedExp());
+                State.p0HereTermMultiple(id, dstId, map, ex);
             else {
-                State.p0TermMultiple(id, dstId, map, getRecordedExp());
+                State.p0TermMultiple(id, dstId, map, ex);
             }
             if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
         }
@@ -1206,24 +1195,19 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             var map:HashMap[Task,Int] = null;
 
             if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") called ");
-            val count = lc.decrementAndGet();
-            if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityTermination called, taskFrom["+srcId+"] lc="+count);
-            
-            var exp:CheckedThrowable = null;
-            if (count == 0n) {
-                ilock.lock();
-                map = getReportMapUnsafe();
-                if (t != null)
-                    ex = t;
-                if (ex != null)
-                    exp = new CheckedThrowable(ex);
-                ilock.unlock();
-            } else {
-                ilock.lock();
-                if (t != null)
-                    ex = t;
-                if (ex != null)
-                    exp = new CheckedThrowable(ex);
+            try {
+                ilock.lock();            
+                val count = lc.decrementAndGet();
+                if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityTermination called, taskFrom["+srcId+"] lc="+count);
+                if (count == 0n) {
+                    map = getReportMapUnsafe();
+                    if (t != null)
+                        ex = t;
+                } else {
+                    if (t != null)
+                        ex = t;
+                }
+            } finally {
                 ilock.unlock();
             }
             if (map == null)
@@ -1231,9 +1215,9 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
            
             if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root, mapSize=" + map.size());
             if (here.id == 0)
-                State.p0HereTermMultiple(id, dstId, map, exp);
+                State.p0HereTermMultiple(id, dstId, map, ex);
             else {
-                State.p0TermMultiple(id, dstId, map, exp);
+                State.p0TermMultiple(id, dstId, map, ex);
             }
             if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning");
         }
@@ -1529,7 +1513,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             if (count > 0) {
                 return;
             }
-            assert count == 0n : here + " FATAL ERROR: Root(id="+id+").notifyActivityTermination reached a negative local count";
 
             if (!isGlobal) { //only one activity is here, no need to lock/unlock latch
                 if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(srcId="+srcId + " dstId="+dstId+",kind="+kind+") returning");

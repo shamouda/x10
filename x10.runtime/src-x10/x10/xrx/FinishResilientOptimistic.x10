@@ -23,6 +23,7 @@ import x10.util.concurrent.SimpleLatch;
 import x10.util.GrowableRail;
 import x10.util.HashMap;
 import x10.util.HashSet;
+import x10.util.ArrayList;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.concurrent.ResilientCondition;
 import x10.util.resilient.concurrent.LowLevelFinish;
@@ -60,23 +61,29 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
     def waitForFinish():void { me.waitForFinish(); }
     def spawnRemoteActivity(place:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void { me.spawnRemoteActivity(place, body, prof); }
     
-    def notifyActivityTermination(srcPlace:Place,t:CheckedThrowable):void {
-        if (me instanceof OptimisticRemoteState)
-            me.notifyActivityTermination(srcPlace, t);
+    def notifyActivityTermination(srcPlace:Place, t:CheckedThrowable):void {
+        if (me instanceof OptimisticRemoteState) {
+            if (t == null) me.notifyActivityTermination(srcPlace);
+            else me.notifyActivityTermination(srcPlace, t);
+        }
         else
             super.notifyActivityTermination(srcPlace, t);
     }
     
-    def notifyActivityCreatedAndTerminated(srcPlace:Place,t:CheckedThrowable):void { 
-        if (me instanceof OptimisticRemoteState)
-            me.notifyActivityCreatedAndTerminated(srcPlace, t);
+    def notifyActivityCreatedAndTerminated(srcPlace:Place, t:CheckedThrowable):void { 
+        if (me instanceof OptimisticRemoteState) {
+            if (t == null) me.notifyActivityCreatedAndTerminated(srcPlace);
+            else me.notifyActivityCreatedAndTerminated(srcPlace, t);
+        }
         else
             super.notifyActivityCreatedAndTerminated(srcPlace, t);
     }
     
-    def notifyShiftedActivityCompletion(srcPlace:Place,t:CheckedThrowable):void {
-        if (me instanceof OptimisticRemoteState)
-            me.notifyShiftedActivityCompletion(srcPlace, t);
+    def notifyShiftedActivityCompletion(srcPlace:Place, t:CheckedThrowable):void {
+        if (me instanceof OptimisticRemoteState) {
+            if (t == null) me.notifyShiftedActivityCompletion(srcPlace);
+            else me.notifyShiftedActivityCompletion(srcPlace, t);
+        }
         else
             super.notifyShiftedActivityCompletion(srcPlace, t);
     }
@@ -137,12 +144,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         var taskDeny:HashSet[Int] = null; // lazily allocated
         val lc = new AtomicInteger(0n);//each time lc reaches zero, we report reported-received to root finish and set reported=received
 
-        private var ex:CheckedThrowable = null; //fixme: make it a list of exceptions
-        
         private static val remoteLock = new Lock();
         private static val remotes = new HashMap[Id, OptimisticRemoteState]() ; //a cache for remote finish objects
-        private static val remoteDeny = new HashSet[Id](); //remote deny list
-        
+
+        private var ex:CheckedThrowable = null; //fixme: make it a list of exceptions
+
         public def toString() {
             return "OptimisticRemote(id="+id+", localCount="+lc.get()+")";
         }
@@ -202,9 +208,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 remoteLock.lock();
                 var remoteState:OptimisticRemoteState = remotes.getOrElse(id, null);
                 if (remoteState == null) {
-                    if (remoteDeny.contains(id)) {
-                        throw new RemoteCreationDenied();
-                    }
                     remoteState = new OptimisticRemoteState(id);
                     remotes.put(id, remoteState);
                 }
@@ -224,8 +227,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     val received = remote.receivedFrom(src, kind);
                     dropped = sent - received;
                 } else {
-                    //no remote finish for this id should be created here
-                    remoteDeny.add(id);
+                    //prepare remote to not accept future tasks from the src
+                    val newRemote = new OptimisticRemoteState(id);
+                    remotes.put(id, newRemote);
+                    newRemote.taskDeny = new HashSet[Int]();
+                    newRemote.taskDeny.add(src);
                     dropped = sent;
                 }
             } finally {
@@ -293,18 +299,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             ilock.unlock();
         }
         
-        def getRecordedExp() {
-            try {
-                ilock.lock();
-                if (ex == null)
-                    return null;
-                else
-                    return new CheckedThrowable(ex);
-            } finally {
-                ilock.unlock();
-            }
-        }
-        
         public def notifyTerminationAndGetMap(t:Task, exp:CheckedThrowable) {
             var map:HashMap[Task,Int] = null;
             val count = lc.decrementAndGet();
@@ -369,7 +363,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
             val parentId = UNASSIGNED;
-            val id = this.id;
+            val id = this.id; //don't serialize this
             
             val start = prof != null ? System.nanoTime() : 0;
             val ser = new Serializer();
@@ -387,10 +381,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val fs = Runtime.activity().finishState(); //the outer finish
             val preSendAction = ()=>{FinishReplicator.addPendingAct(id, num, dstId, fs, bytes, prof);};
             val postSendAction = (submit:Boolean, adopterId:Id)=>{
-                fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
                 if (submit) {
                     FinishReplicator.sendPendingAct(id, num);
                 }
+                fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
             };
             val count = notifyReceived(Task(srcId, ASYNC)); // synthetic activity to keep finish locally live during async replication
             if (verbose>=1) debug("<<<< Remote(id="+id+").spawnRemoteActivity(srcId="+srcId+",dstId="+dstId+",kind="+kind+") incremented localCount to " + count);
@@ -465,7 +459,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }
 
             if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root");
-            val req = FinishRequest.makeOptTermMulRequest(id, dstId, map, getRecordedExp());
+            val req = FinishRequest.makeOptTermMulRequest(id, dstId, map, ex);
             FinishReplicator.asyncExec(req, null);
             if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
         }
@@ -495,7 +489,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (map == null)
                 return;
             if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") reporting to root");
-            val req = FinishRequest.makeOptTermMulRequest(id, dstId, map, getRecordedExp());
+            val req = FinishRequest.makeOptTermMulRequest(id, dstId, map, ex);
             FinishReplicator.asyncExec(req, null);
             if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning");
         }
@@ -534,10 +528,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         val transit:HashMap[Edge,Int];
         var ghostChildren:HashSet[Id] = null;  //lazily allocated in addException
         var ghostsNotifiedEarly:HashSet[Id] = null; //used to save racing (remove ghost requests when the master is yet to calculate the ghostChildren)
-        var isAdopted:Boolean = false; //set to true when backup recreates a master
+        var isRecovered:Boolean = false; //set to true when backup recreates a master
         
         var migrating:Boolean = false; //used to stop updates to the object during recovery
-        var backupPlaceId:Int = FinishReplicator.getBackupPlace(here.id as Int);  //may be updated in notifyPlaceDeath
+        var backupPlaceId:Int = FinishReplicator.updateBackupPlaceIfDead(here.id as Int);  //may be updated in notifyPlaceDeath
         var backupChanged:Boolean = false;
         var isGlobal:Boolean = false;//flag to indicate whether finish has been resiliently replicated or not
         var strictFinish:Boolean = false;
@@ -560,7 +554,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             this.isGlobal = true;
             this.backupChanged = true;
             this.lc = 0n;
-            this.isAdopted = true; // will have to call notifyParent
+            this.isRecovered = true; // will have to call notifyParent
         }
         
         def this(id:Id, parent:FinishState) {
@@ -706,8 +700,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def addException(t:CheckedThrowable, resp:MasterResponse) {
-            if (t == null)
-                return;
             try {
                 latch.lock();
                 addExceptionUnsafe(t);
@@ -761,7 +753,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }
         }
         
-        
         def transitToCompleted(srcId:Long, dstId:Long, kind:Int, t:CheckedThrowable, tag:String, resp:MasterResponse) {
             try {
                 latch.lock();
@@ -774,9 +765,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 assert numActive>=0 : here + " FATAL error, Master(id="+id+").numActive reached -ve value";
                 if (t != null) addExceptionUnsafe(t);
                 if (quiescent()) {
-                    releaseLatch();
-                    notifyParent();
-                    FinishReplicator.removeMaster(id);
+                    tryRelease();
                 }
                 if (verbose>=1) debug("<<<< Master(id="+id+").transitToCompleted returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
                 resp.backupPlaceId = backupPlaceId;
@@ -801,9 +790,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     assert numActive>=0 : here + " FATAL error, Master(id="+id+").numActive reached -ve value";
                     if (t != null) addExceptionUnsafe(t);
                     if (quiescent()) {
-                        releaseLatch();
-                        notifyParent();
-                        FinishReplicator.removeMaster(id);
+                        tryRelease();
                     }
                 }
                 if (verbose>=1) debug("<<<< Master(id="+id+").removeGhostChild childId=" + childId + ", t=" + t + " returning");
@@ -824,11 +811,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             //don't decrement 'sent' 
             
             numActive-=cnt;
-            assert numActive>=0 : here + " FATAL error, Master(id="+id+").numActive reached -ve value";
             if (quiescent()) {
-                releaseLatch();
-                notifyParent();
-                FinishReplicator.removeMaster(id);
+                tryRelease();
             }
             resp.backupPlaceId = backupPlaceId;
             resp.backupChanged = backupChanged;
@@ -836,22 +820,20 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def quiescent():Boolean {
-            if (verbose>=2) debug(">>>> Master(id="+id+").quiescent called");
-            if (numActive < 0) {
-                debug("COUNTING ERROR: Master(id="+id+").quiescent negative numActive!!!");
-                dump();
-                assert false : here + " COUNTING ERROR: Master(id="+id+").quiescent negative numActive!!!";
-                return true; 
-            }
-        
             val quiet = numActive == 0;
             if (verbose>=3) dump();
             if (verbose>=2 || (verbose>=1 && quiet)) debug("<<<< Master(id="+id+").quiescent returning " + quiet);
             return quiet;
         }
         
+        def tryRelease() {
+            releaseLatch();
+            notifyParent();
+            FinishReplicator.removeMaster(id);
+        }
+        
         def releaseLatch() {
-            if (isAdopted) {
+            if (isRecovered) {
                 if (verbose>=1) debug("releaseLatch(id="+id+") called on adopted finish; not releasing latch");
             } else {
                 val exceptions = (excs == null || excs.isEmpty()) ?  null : excs.toRail();
@@ -862,15 +844,16 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def notifyParent() {
-            if (!isAdopted || parentId == FinishResilient.UNASSIGNED) {
+            if (!isRecovered || parentId == FinishResilient.UNASSIGNED) {
                 if (verbose>=1) debug("<<< Master(id="+id+").notifyParent returning, not adopted or parent["+parentId+"] does not exist");
                 return;
             }
-            
-            if (verbose>=1) debug(">>>> Master(id="+id+").notifyParent(parentId="+parentId+") called");
-            val req = FinishRequest.makeOptRemoveGhostChildRequest(parentId, id);
-            FinishReplicator.asyncExec(req, null);
-            if (verbose>=1) debug("<<<< Master(id="+id+").notifyParent(parentId="+parentId+") returning");
+            Runtime.submitUncounted( ()=>{
+                if (verbose>=1) debug(">>>> Master(id="+id+").notifyParent(parentId="+parentId+") called");
+                val req = FinishRequest.makeOptRemoveGhostChildRequest(parentId, id);
+                FinishReplicator.exec(req);
+                if (verbose>=1) debug("<<<< Master(id="+id+").notifyParent(parentId="+parentId+") returning");
+            });
         }
         
         public def exec(xreq:FinishRequest) {
@@ -890,7 +873,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 val srcId = req.srcId;
                 val dstId = req.dstId;
                 val kind = req.kind;
-                if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=TRANSIT, id=" + id + ", srcId=" + srcId + ", dstId="+ dstId + ", kind=" + kind + " ] called");
+                if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=TRANSIT, srcId=" + srcId + ", dstId="+ dstId + ", kind=" + kind + " ] called");
                 if (Place(srcId).isDead()) {
                     if (verbose>=1) debug("==== notifySubActivitySpawn(id="+id+") src "+srcId + "is dead; dropping async");
                 } else if (Place(dstId).isDead()) {
@@ -959,6 +942,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 val dpe = new DeadPlaceException(Place(childId.home));
                 if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=REM_GHOST, child="+childId+", ex="+dpe+" ] called");
                 removeGhostChild(childId, dpe, resp);
+                resp.submit = true;
                 if (verbose>=1) debug("<<<< Master(id="+id+").exec [req=REM_GHOST, child="+childId+", ex="+dpe+" ] returning");
             } 
             return resp;
@@ -1029,10 +1013,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val fs = Runtime.activity().finishState(); //the outer finish
             val preSendAction = ()=>{FinishReplicator.addPendingAct(id, num, dstId, fs, bytes, prof);};
             val postSendAction = (submit:Boolean, adopterId:Id)=>{
-                fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
                 if (submit) {
                     FinishReplicator.sendPendingAct(id, num);
                 }
+                fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
             };
             val count = lc_incrementAndGet(); // synthetic activity to keep finish locally live during async replication
             FinishReplicator.asyncExec(req, this, preSendAction, postSendAction);
@@ -1135,7 +1119,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (count > 0) {
                 return;
             }
-            assert count == 0n: here + " FATAL ERROR: Root(id="+id+").notifyActivityTermination reached a negative local count";
             if (!isGlobal) { //only one activity is here, no need to lock/unlock latch
                 if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(srcId="+srcId + " dstId="+dstId+",kind="+kind+") returning");
                 latch.release();
@@ -1250,20 +1233,17 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 transit.remove(e);
             
             if (quiescent()) {
-                releaseLatch();
-                notifyParent();
-                FinishReplicator.removeMaster(id);
+                tryRelease();
             }
             if (verbose>=1) debug("<<<< Master(id="+id+").convertToDead returning, numActive="+numActive);
         }
         
         public def convertFromDead(countDropped:HashMap[FinishResilientOptimistic.DroppedQueryId, Int]) {
-            if (verbose>=1) debug(">>>> Backup(id="+id+").convertFromDead called");
+            if (verbose>=1) debug(">>>> Master(id="+id+").convertFromDead called");
             for (e in countDropped.entries()) {
                 val query = e.getKey();
                 val dropped = e.getValue();
                 if (dropped > 0 && query.id == id) {
-                    //FATAL IF STATE IS NULL
                     val edge = Edge(query.src, query.dst, query.kind);
                     val oldTransit = transit.get(edge);
                     val oldActive = numActive;
@@ -1283,9 +1263,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }
             
             if (quiescent()) {
-                releaseLatch();
-                notifyParent();
-                FinishReplicator.removeMaster(id);
+				tryRelease();
             }
             if (verbose>=1) debug("<<<< Backup(id="+id+").convertFromDead returning, numActive="+numActive);
         }
@@ -1312,7 +1290,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         var ghostChildren:HashSet[Id] = null;  //lazily allocated in addException
         var ghostsNotifiedEarly:HashSet[Id] = null; //used to save racing (remove ghost requests when the master is yet to calculate the ghostChildren)
         var excs:GrowableRail[CheckedThrowable]; 
-        var isAdopted:Boolean = false;
+        var isRecovered:Boolean = false;
         var migrating:Boolean = false;
         var placeOfMaster:Int = -1n; //will be updated during adoption
         var isReleased:Boolean = false;
@@ -1422,8 +1400,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def addException(t:CheckedThrowable) {
-            if (t == null)
-                return;
             try {
                 ilock.lock();
                 addExceptionUnsafe(t);
@@ -1433,6 +1409,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def inTransit(srcId:Long, dstId:Long, kind:Int, tag:String) {
+            val lc:Long;
             try {
                 ilock.lock();
                 if (verbose>=1) debug(">>>> Backup(id="+id+").inTransit called (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ") ");
@@ -1440,7 +1417,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 FinishResilient.increment(sent, e);
                 FinishResilient.increment(transit, e);
                 numActive++;
-                
+                lc = numActive;
                 if (verbose>=3) debug("==== Backup(id="+id+").inTransit (srcId=" + srcId + ", dstId=" + dstId + ") dumping after update");
                 if (verbose>=3) dump();
                 
@@ -1448,6 +1425,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             } finally {
                 ilock.unlock();
             }
+            return lc;
         }
         
         def transitToCompleted(srcId:Long, dstId:Long, kind:Int, ex:CheckedThrowable, tag:String) {
@@ -1521,27 +1499,33 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }
         }
         
-        def quiescent():Boolean {
-            if (verbose>=2) debug(">>>> Backup(id="+id+").quiescent called");
-
-            if (numActive < 0) {
-                debug("COUNTING ERROR: Backup(id="+id+").quiescent negative numActive!!!");
-                assert false : "COUNTING ERROR: Backup(id="+id+").quiescent negative numActive!!!";
-                return true; // TODO: This really should be converted to a fatal error....
-            }
-        
+        def quiescent():Boolean {     
             val quiet = numActive == 0;
             if (verbose>=2 || (verbose>=1 && quiet)) debug("<<<< Backup(id="+id+").quiescent returning " + quiet);
             return quiet;
         }
         
         def notifyParent() {
-            Runtime.submitUncounted( ()=>{
-                if (verbose>=1) debug(">>>> Backup(id="+id+").notifyParent(parentId="+parentId+") called");
-                val req = FinishRequest.makeOptRemoveGhostChildRequest(parentId, id);
-                val resp = FinishReplicator.exec(req);
-                if (verbose>=1) debug("<<<< Backup(id="+id+").notifyParent(parentId="+parentId+") returning");
-            });
+            if (verbose>=1) debug(">>>> Backup(id="+id+").notifyParent(parentId="+parentId+") called");
+            if (parentId != FinishResilient.UNASSIGNED) {
+                if ( parentId.home == id.home) { 
+                    val parBack = FinishReplicator.findBackup(parentId);
+                    if (parBack == null) {
+                        if (verbose>=1) debug("<<<< Backup(id="+id+").notifyParent(parentId="+parentId+") skip request because backup doesn't exist");
+                        return;
+                    } else if (this.migrating && (parBack as OptimisticBackupState).isMigrating()) { //child recovery is done before the parent recovery
+                        val dpe = new DeadPlaceException(Place(id.home));
+                        (parBack as OptimisticBackupState).removeGhostChild(id, dpe);
+                        return;
+                    }
+                }
+                Runtime.submitUncounted( ()=>{
+                    if (verbose>=1) debug(">>>> Backup(id="+id+").notifyParent(parentId="+parentId+") called");
+                    val req = FinishRequest.makeOptRemoveGhostChildRequest(parentId, id);
+                    val resp = FinishReplicator.exec(req);
+                    if (verbose>=1) debug("<<<< Backup(id="+id+").notifyParent(parentId="+parentId+") returning");
+                });
+            }
         }
 
         public def exec(xreq:FinishRequest) {
@@ -1566,13 +1550,14 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 val srcId = req.srcId;
                 val dstId = req.dstId;
                 val kind = req.kind;
+                val transitSubmitDPE = req.transitSubmitDPE;
                 if (verbose>=1) debug(">>>> Backup(id="+id+").exec [req=TRANSIT, srcId=" + srcId + ", dstId="+ dstId + ",kind=" + kind + " ] called");
                 if (req.transitSubmitDPE) {
                     addDeadPlaceException(dstId);
                     if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=TRANSIT-transitSubmitDPE, srcId=" + srcId + ", dstId="+ dstId + ",kind=" + kind + " ] returning");
                 } else {
-                    inTransit(srcId, dstId, kind, "notifySubActivitySpawn");
-                    if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=TRANSIT, srcId=" + srcId + ", dstId="+ dstId + ",kind=" + kind + " ] returning");
+                    val lc = inTransit(srcId, dstId, kind, "notifySubActivitySpawn");
+                    if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=TRANSIT, srcId=" + srcId + ", dstId="+ dstId + ",kind=" + kind + " ] returning, count="+lc);
                 }
             } else if (xreq instanceof TermRequestOpt) {
                 val req = xreq as TermRequestOpt;
@@ -1626,7 +1611,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (verbose>=1) debug(">>>> Backup(id="+id+").getNewMasterBlocking called");
             Runtime.increaseParallelism();
             ilock.lock();
-            while (!isAdopted || migrating) {
+            while (!isRecovered || migrating) {
                 ilock.unlock();
                 System.threadSleep(0); // release the CPU to more productive pursuits
                 ilock.lock();
@@ -1635,6 +1620,18 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             Runtime.decreaseParallelism(1n);
             if (verbose>=1) debug("<<<< Backup(id="+id+").getNewMasterBlocking returning, newMaster=" + id);
             return id;
+        }
+        
+        
+        public def isMigrating() {
+            val result:Boolean;
+            try {
+                ilock.lock();
+                result = migrating;
+                return result;
+            } finally {
+                ilock.unlock();
+            }
         }
         
         public def convertToDead(newDead:HashSet[Int], countChildrenBackups:HashMap[FinishResilient.Id, HashSet[FinishResilient.Id]]) {
@@ -1679,8 +1676,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             
             if (quiescent()) {
                 isReleased = true;
-                notifyParent();
-                FinishReplicator.removeBackup(id);
             }
             if (verbose>=1) debug("<<<< Backup(id="+id+").convertToDead returning, numActive="+numActive);
         }
@@ -1712,19 +1707,21 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             
             if (quiescent()) {
                 isReleased = true;
-                notifyParent();
-                FinishReplicator.removeBackup(id);
             }
             if (verbose>=1) debug("<<<< Backup(id="+id+").convertFromDead returning, numActive="+numActive);
         }
         
+        private def backupTryRelease() {
+            notifyParent();
+            FinishReplicator.removeBackup(id);
+        }
     }
     
     /*********************************************************************/
     /*******************   Failure Recovery Methods   ********************/
     /*********************************************************************/
     static def aggregateCountingRequests(newDead:HashSet[Int],
-            masters:HashSet[FinishMasterState], backups:HashSet[FinishBackupState]) {
+            masters:HashSet[FinishMasterState], backups:ArrayList[FinishBackupState]) {
         val countingReqs = new HashMap[Int,OptResolveRequest]();
         if (!masters.isEmpty()) {
             for (dead in newDead) {
@@ -1857,11 +1854,14 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         fin.run(closure);
         if (verbose>=1) debug("LOW_LEVEL_FINISH.waiting ended");
         
-        if (fin.failed())
-            throw new Exception(here + " FATAL ERROR: another place failed during recovery ...");
+        if (fin.failed()) {
+            var str:String = "";
+            for (p in places)
+                str += p + "," + Place(p as Long).isDead()+ " , ";
+            throw new Exception(here + " FATAL ERROR: another place failed during recovery ["+str+"] ...");
+        }
     }
     
-    //FIXME: nominate another master if the nominated one is dead
     static def createMasters(backups:HashSet[FinishBackupState]) {
         if (verbose>=1) debug(">>>> createMasters(size="+backups.size()+") called");
         if (backups.size() == 0) {
@@ -1870,10 +1870,17 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         val places = new Rail[Int](backups.size());
+        val nominations = new HashMap[Int,Int]();//finish home-master place
         var i:Long = 0;
         for (bx in backups) {
             val b = bx as OptimisticBackupState;
-            places(i++) = FinishReplicator.nominateMasterPlaceIfDead(b.placeOfMaster);
+            if (verbose>=1) debug("===== createMasters nominate for id["+b.id+"] ");
+            var pl:Int = nominations.getOrElse(b.placeOfMaster,-1n);
+            if (pl == -1n) {
+                pl = FinishReplicator.nominateMasterPlaceIfDead(b.placeOfMaster);
+                nominations.put(b.placeOfMaster, pl);
+            }
+            places(i++) = pl;
         }
         
         val fin = LowLevelFinish.make(places);
@@ -1912,23 +1919,26 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         fin.run(closure);
         if (verbose>=1) debug("LOW_LEVEL_FINISH.waiting ended");
         
-        if (fin.failed())
-            throw new Exception("FATAL ERROR: another place failed during recovery ...");
+        if (fin.failed()) {
+            var str:String = "";
+            for (p in places)
+                str += p + "," + Place(p as Long).isDead()+ " , ";
+            throw new Exception("FATAL ERROR: another place failed during recovery ["+str+"] ...");
+        }
 
         i = 0;
         for (bx in backups) {
             val b = bx as OptimisticBackupState;
             b.lock();
             b.placeOfMaster = places(i);
-            b.isAdopted = true;
+            b.isRecovered = true;
             b.migrating = false;
             b.unlock();
         }
-        
+        FinishReplicator.applyNominatedMasterPlaces(nominations);
         if (verbose>=1) debug("<<<< createMasters(size="+backups.size()+") returning");
     }
     
-    //FIXME: nominate another backup if the nominated one is dead
     static def createOrSyncBackups(newDead:HashSet[Int], masters:HashSet[FinishMasterState]) {
         if (verbose>=1) debug(">>>> createOrSyncBackups(size="+masters.size()+") called");
         
@@ -1938,7 +1948,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         var i:Long = 0;
         while (iter.hasNext()) {
             val m = iter.next() as OptimisticMasterState;
-            val newB = FinishReplicator.nominateBackupPlaceIfDead(m.id.home);
+            val newB = FinishReplicator.updateBackupPlaceIfDead(m.id.home);
             places(i) = newB;
             //don't update m.backupPlaceId until the recovered backups are created. Otherwise, pleases that are calling getNewBackup may reach the backup before it is created
             newBackups.put(m.id, newB); 
@@ -1982,8 +1992,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         fin.run(closure);
         if (verbose>=1) debug("LOW_LEVEL_FINISH.waiting ended");
         
-        if (fin.failed())
-            throw new Exception("FATAL ERROR: another place failed during recovery ...");
+        if (fin.failed()) {
+            var str:String = "";
+            for (p in places)
+                str += p + "," + Place(p as Long).isDead()+ " , ";
+            Console.OUT.println("FATAL ERROR: another place failed during recovery ["+str+"] ...");
+            System.killHere();
+        }
         
         for (mx in masters) {
             val m = mx as OptimisticMasterState;
@@ -2013,8 +2028,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         val masters = FinishReplicator.getImpactedMasters(newDead); //any master who contacted the dead place or whose backup was lost
         val backups = FinishReplicator.getImpactedBackups(newDead); //any backup who lost its master.
         val myBackupDied = newDead.contains(FinishReplicator.getBackupPlace(hereId));
-        if (myBackupDied)
-            debug(">>>> notifyPlaceDeath my backup died");
+        
         //prevent updates on backups since they are based on decisions made by a dead master
         for (bx in backups) {
             val b = bx as OptimisticBackupState;
@@ -2062,7 +2076,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             createOrSyncBackups(newDead, masters);
         else {
             if (myBackupDied) {
-                val newBackup = Place(FinishReplicator.nominateBackupPlaceIfDead(hereId));
+                val newBackup = Place(FinishReplicator.updateBackupPlaceIfDead(hereId));
                 val rCond = ResilientCondition.make(newBackup);
                 val closure = (gr:GlobalRef[Condition]) => {
                     at (newBackup) @Immediate("dummy_backup") async {
@@ -2076,28 +2090,35 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }
         }
 
-        val newMasters = new HashSet[FinishMasterState]();
         val activeBackups = new HashSet[FinishBackupState]();
         //sorting the backups is not needed. notifyParent calls are done using uncounted activities that will retry until the parent is available
         for (b in backups) {
             val backup = b as OptimisticBackupState;
-            
             backup.lock();
-
             //convert to dead
             backup.convertToDead(newDead, countChildrenBackups);
             if (!backup.isReleased) {
                 //convert from dead
                 backup.convertFromDead(countDropped);
-                if (!backup.isReleased){
-                    activeBackups.add(backup);
-                }
             }
-            
             backup.unlock(); //as long as we keep migrating = true, no changes will be permitted on backup
         }
         
-        if (backups.size() > 0) {
+        for (b in backups) {
+            val backup = b as OptimisticBackupState;
+            backup.lock();
+            if (verbose>=1) debug("==== notifyPlaceDeath isBackupActive => id["+backup.id+"] backup.isReleased["+backup.isReleased+"] ");
+			if (backup.isReleased) {
+            	if (verbose>=1) debug("==== notifyPlaceDeath isBackupActive => id["+backup.id+"] backup.isReleased["+backup.isReleased+"] TRY_RELEASE");
+                backup.backupTryRelease();
+            } else {
+                activeBackups.add(backup);
+            	if (verbose>=1) debug("==== notifyPlaceDeath isBackupActive => id["+backup.id+"] backup.isReleased["+backup.isReleased+"] ADD_TO_ACTIVE");
+            }
+            backup.unlock(); //as long as we keep migrating = true, no changes will be permitted on backup
+        }
+        
+        if (activeBackups.size() > 0) {
             createMasters(activeBackups);
         } else {
             if (verbose>=1) debug("==== createMasters bypassed ====");
