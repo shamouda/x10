@@ -112,7 +112,7 @@ public class ResilientStore {
                     val masterState = plh().masterStore.getState(); 
                     plh().slave = added;
                     at (added) async {
-                        plh().slaveStore.addMasterPlace(virtualId, masterState);
+                        plh().joinAsSlave(virtualId, masterState);
                     }
                 }
             }

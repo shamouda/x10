@@ -42,6 +42,10 @@ public class LocalStore {
     public def joinAsMaster (virtualPlaceId:Long, data:HashMap[String,HashMap[String,Cloneable]]) {
         this.virtualPlaceId = virtualPlaceId;
         masterStore = new MasterStore(virtualPlaceId, data);
+    }
+    
+    public def joinAsSlave(virtualPlaceId:Long, masterState:MasterState) {
         slaveStore = new SlaveStore();
+        slaveStore.addMasterPlace(virtualPlaceId, masterState);
     }
 }
