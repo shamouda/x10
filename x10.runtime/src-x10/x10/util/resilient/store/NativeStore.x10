@@ -38,7 +38,8 @@ public class NativeStore[V]{V haszero, V <: Cloneable} extends Store[V] {
   
   val map:ResilientNativeMap;
   val log:ResilientNativeMap;
-
+  
+  var txUsed:Boolean = false;
   def this(name:String, activePlaces:PlaceGroup) {
     store = ResilientStore.make(activePlaces);
     map = store.makeMap("_map_" + name);
@@ -63,6 +64,7 @@ public class NativeStore[V]{V haszero, V <: Cloneable} extends Store[V] {
   } 
 
   public def set2(key:String, value:V, place:Place, key2:String, value2:V) {
+    txUsed = true;
     val placeId = store.getActivePlaces().indexOf(place);
     log.set(key, new NativeLogEntry(value, placeId, key2, value2));
     finish {
@@ -77,17 +79,19 @@ public class NativeStore[V]{V haszero, V <: Cloneable} extends Store[V] {
   // update for changes in the active PlaceGroup
   public def updateForChangedPlaces(changes:ChangeDescription):void {
     store.updateForChangedPlaces(changes);
-    val group = store.getActivePlaces();
-    group.broadcastFlat(() => {
-      for(key in log.keySet()) {
-        Console.ERR.println("Replaying transaction log for key " + key);
-        val entry = log.get(key) as NativeLogEntry[V];
-        finish {
-          at (group(entry.placeId)) async map.set(entry.key2, entry.value2);
-          map.set(key, entry.value);
-        }
-        log.delete(key);
-      }
-    });
+    if (txUsed) {
+        val group = store.getActivePlaces();
+        group.broadcastFlat(() => {
+          for(key in log.keySet()) {
+            Console.ERR.println("Replaying transaction log for key " + key);
+            val entry = log.get(key) as NativeLogEntry[V];
+            finish {
+              at (group(entry.placeId)) async map.set(entry.key2, entry.value2);
+              map.set(key, entry.value);
+            }
+            log.delete(key);
+          }
+        });
+    }
   }
 }
