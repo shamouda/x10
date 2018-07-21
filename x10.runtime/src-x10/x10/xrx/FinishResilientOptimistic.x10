@@ -507,11 +507,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         def pushException(t:CheckedThrowable):void {
             assert (Runtime.activity() != null) : here + " >>>> Remote(id="+id+").pushException(t="+t.getMessage()+") blocking method called within an immediate thread";
             val parentId = UNASSIGNED;
-            if (verbose>=1) {
-                debug(">>>> Remote(id="+id+").pushException(t="+t.getMessage()+") called trace:");
-                t.printStackTrace();
-            }
-            
+            if (verbose>=1) debug(">>>> Remote(id="+id+").pushException(t="+t.getMessage()+") called");
             val req = FinishRequest.makeOptExcpRequest(id, parentId, t);
             FinishReplicator.exec(req, null);
             if (verbose>=1) debug("<<<< Remote(id="+id+").pushException(t="+t.getMessage()+") returning");
@@ -784,12 +780,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         def addExceptionUnsafe(t:CheckedThrowable) {
             if (excs == null) excs = new GrowableRail[CheckedThrowable]();
             excs.add(t);
-            if (verbose>=1) {
-                var s:String = "";
-                for (var i:Long = 0; i < excs.size(); i++)
-                    s += excs(i) + ",";
-                debug("<<<< addExceptionUnsafe(id="+id+") t="+t.getMessage() + " exceptions size = " + excs.size() + " list["+s+"]");
-            }
+            if (verbose>=1) debug("<<<< addExceptionUnsafe(id="+id+") t="+t.getMessage() + " exceptions size = " + excs.size());
         }
         
         def addDeadPlaceException(placeId:Long, resp:MasterResponse) {
@@ -966,13 +957,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 var abort:Boolean = false;
                 if (excs != null && excs.size() > 0) {
                     abort = true;
-                    if (verbose>=1) {
-                        var s:String = "";
-                        for (var i:Long = 0; i < excs.size(); i++) {
-                            s += excs(i) + ", ";
-                        }
-                        debug("==== Master.tryRelease(id="+id+").tryRelease finalizeWithBackup abort because["+s+"]");
-                    }
                 }
                 tx.finalizeWithBackup(this, abort, backupPlaceId); //this also performs gc
             }
@@ -1274,10 +1258,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def pushException(t:CheckedThrowable):void {
-            if (verbose>=1) {
-                debug(">>>> Root(id="+id+").pushException(t="+t.getMessage()+") called trace:");
-                t.printStackTrace();
-            }
             if (localFinishExceptionPushed(t)) {
                 if (verbose>=1) debug("<<<< Root(id="+id+").pushException(t="+t.getMessage()+") returning");
                 return;
@@ -1294,7 +1274,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 }
             }
             
-            
+            if (verbose>=1) debug(">>>> Root(id="+id+").pushException(t="+t.getMessage()+") called");
             val req = FinishRequest.makeOptExcpRequest(id, parentId, t);
             FinishReplicator.exec(req, this);
             if (verbose>=1) debug("<<<< Root(id="+id+").pushException(t="+t.getMessage()+") returning");
@@ -2401,7 +2381,8 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             var str:String = "";
             for (p in places)
                 str += p + "," + Place(p as Long).isDead()+ " , ";
-            throw new Exception("FATAL ERROR: another place failed during recovery ["+str+"] ...");
+            Console.OUT.println("FATAL ERROR: another place failed during recovery ["+str+"] ...");
+            System.killHere();
         }
         
         for (mx in masters) {
@@ -2436,8 +2417,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         val masters = FinishReplicator.getImpactedMasters(newDead); //any master who contacted the dead place or whose backup was lost
         val backups = FinishReplicator.getImpactedBackups(newDead); //any backup who lost its master.
         val myBackupDied = newDead.contains(FinishReplicator.getBackupPlace(hereId));
-        if (myBackupDied)
-            debug(">>>> notifyPlaceDeath my backup died");
         
         //prevent updates on backups since they are based on decisions made by a dead master
         for (bx in backups) {

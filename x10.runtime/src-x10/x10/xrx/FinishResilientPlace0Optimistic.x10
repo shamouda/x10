@@ -221,6 +221,12 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 for (s in states.entries()) {
                     val id = s.getKey();
                     val state = s.getValue();
+                    
+                    if (state.tx != null && state.tx instanceof TxResilient && (state.tx as TxResilient).isImpactedByDeadPlaces(newDead)) {
+                        if (state.txStarted)
+                            (state.tx as TxResilient).notifyPlaceDeath();
+                    }
+                    
                     var calGhosts:Boolean = false;
                     val toRemove = new HashSet[Edge]();
                     for (e in state.transit.entries()) {
@@ -266,13 +272,10 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     if (state.quiescent()) {
                         toRemoveState.add(state);
                     }
-                    
                 }
                 
                 for (s in toRemoveState) {
-                    if (s.txStarted)
-                        (s.tx as TxResilient).notifyPlaceDeath();
-                    else
+                    if (!s.txStarted)
                         s.tryRelease();
                 }
                 return countingReqs;
@@ -313,9 +316,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 }
                 
                 for (s in toRemoveState) {
-                    if (s.txStarted)
-                        (s.tx as TxResilient).notifyPlaceDeath();
-                    else
+                    if (!s.txStarted)
                         s.tryRelease();
                 }
             } finally {
@@ -944,7 +945,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         
         private static val remoteLock = new Lock();
         private static val remotes = new HashMap[Id, P0OptimisticRemoteState](); //a cache for remote finish objects
-        private static val remoteDeny = new HashSet[Id](); //remote deny list
         
         private var txFlag:Boolean = false;
         private var txReadOnlyFlag:Boolean = true;
@@ -998,8 +998,11 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     val received = remote.receivedFrom(src, kind);
                     dropped = sent - received;
                 } else {
-                    //no remote finish for this id should be created here
-                    remoteDeny.add(id);
+                    //prepare remote to not accept future tasks from the src
+                    val newRemote = new P0OptimisticRemoteState(id);
+                    remotes.put(id, newRemote);
+                    newRemote.taskDeny = new HashSet[Int]();
+                    newRemote.taskDeny.add(src);
                     dropped = sent;
                 }
             } finally {
@@ -1014,10 +1017,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 remoteLock.lock();
                 var remoteState:P0OptimisticRemoteState = remotes.getOrElse(id, null);
                 if (remoteState == null) {
-                    //FIXME: return a dummy remote rather than a fatal RemoteCreationDenied
-                    if (remoteDeny.contains(id)) {
-                        throw new RemoteCreationDenied();
-                    }
                     remoteState = new P0OptimisticRemoteState(id);
                     remotes.put(id, remoteState);
                 }
@@ -1321,23 +1320,23 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             var tmpTxRO:Boolean = false;
 
             if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+",isTx="+isTx+", readonly="+readOnly+") called ");
-            val count = lc.decrementAndGet();
-            if (verbose>=1) debug(">>>> Remote(id="+id+").notifyTerminationAndGetMap called, taskFrom["+srcId+"] lc="+count);
-            
-            if (count == 0n) {
+            try {
                 ilock.lock();
-                map = getReportMapUnsafe();
-                setTxFlagsUnsafe(isTx, readOnly);
-                tmpTx = txFlag;
-                tmpTxRO = txReadOnlyFlag;
-                if (t != null)
-                    ex = t;
-                ilock.unlock();
-            } else if (isTx) {
-                ilock.lock();
-                setTxFlagsUnsafe(isTx, readOnly);
-                if (t != null)
-                    ex = t;
+                val count = lc.decrementAndGet();
+                if (verbose>=1) debug("==== Remote(id="+id+").notifyTerminationAndGetMap called, taskFrom["+srcId+"] lc="+count);
+                if (count == 0n) {
+                    map = getReportMapUnsafe();
+                    setTxFlagsUnsafe(isTx, readOnly);
+                    tmpTx = txFlag;
+                    tmpTxRO = txReadOnlyFlag;
+                    if (t != null)
+                        ex = t;
+                } else if (isTx) {
+                    setTxFlagsUnsafe(isTx, readOnly);
+                    if (t != null)
+                        ex = t;
+                }
+            } finally {
                 ilock.unlock();
             }
             
