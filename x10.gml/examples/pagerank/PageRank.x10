@@ -50,6 +50,7 @@ import x10.util.resilient.iterative.*;
  */
 public class PageRank implements SPMDResilientIterativeApp {
 	static val VERBOSE = System.getenv("PAGERANK_DEBUG") != null && System.getenv("PAGERANK_DEBUG").equals("1");
+	static val CHECKPOINT_INPUT_MATRIX = System.getenv("CHECKPOINT_INPUT_MATRIX") != null && System.getenv("CHECKPOINT_INPUT_MATRIX").equals("1");
 	
     public val tolerance:Float;
     public val iterations:Long;
@@ -73,6 +74,8 @@ public class PageRank implements SPMDResilientIterativeApp {
     private var places:PlaceGroup;
     private var team:Team;
     
+    private transient val outDegree:Rail[Int];
+    
     /**
      * Create a new PageRank instance
      * @param edges the edges matrix, where edges(i,j) == 1.0 if there is an
@@ -88,6 +91,7 @@ public class PageRank implements SPMDResilientIterativeApp {
             it:Long,
             tolerance:Float,
             nzd:Float,
+            outDegree:Rail[Int],
             executor:IterativeExecutor) {
         Debug.assure(DistGrid.isVertical(edges.getGrid(), edges.getMap()), 
                 "Input edges matrix does not have vertical distribution.");
@@ -104,7 +108,7 @@ public class PageRank implements SPMDResilientIterativeApp {
         //U = DistVector.make(G.N, g.getAggRowBs(), places, team);
         iterations = it;
         this.tolerance = tolerance;
-        
+        this.outDegree = outDegree;
         GP = DistVector.make(G.N, G.getAggRowBs(), places, team);//G must have vertical distribution
     }
 
@@ -140,30 +144,14 @@ public class PageRank implements SPMDResilientIterativeApp {
         val numColPs = 1;
         val g = DistBlockMatrix.makeSparse(gN, gN, numRowBs, numColBs, numRowPs, numColPs, nzd, executor.activePlaces(), executor.team());
         initRandom(g, executor.activePlaces());
-        val pr = new PageRank(g, it, tolerance, nzd, executor);
+        val pr = new PageRank(g, it, tolerance, nzd, null, executor);
         return pr;
     }
 
-    private static def initLogRandom(edges:DistBlockMatrix{self.M==self.N}, places:PlaceGroup) {
+    private static def initLogRandom(edges:DistBlockMatrix{self.M==self.N}, vertexOutDegree:Rail[Int], places:PlaceGroup) {
         val start = Timer.milliTime();
         val gN = edges.N;
         
-        val mu = 4.0f as ElemType;
-        val sigma = 1.3f as ElemType;
-
-        val rand = new Random(places.size()); // TODO allow choice of random seed
-        val vertexOutDegree = new Rail[Int](gN);
-        var globalNnzGuess:Long = 0;
-        for (i in 0..(gN-1)) {
-            var X:ElemType = ElemType.MAX_VALUE;
-            while (X >= ElemType.MAX_VALUE) {
-              val Z = rand.nextGaussian();
-              X = Math.exp(mu + sigma*Z);
-            }
-            vertexOutDegree(i) = Math.floor(X) as Int;
-            globalNnzGuess += vertexOutDegree(i);
-        }
-
         finish ateach(Dist.makeUnique(places)) {
             edges.handleBS().clear();
             val grid = edges.handleBS().getGrid();
@@ -210,7 +198,6 @@ public class PageRank implements SPMDResilientIterativeApp {
                 edges.handleBS().add(block);
             }
             
-            
             // divide the weight of each outgoing edge by the number of outgoing edges
             val colSums = Vector.make(gN);
             edges.colSumTo_local(colSums);
@@ -249,8 +236,21 @@ public class PageRank implements SPMDResilientIterativeApp {
         val team = executor.team();
         
         val g = DistBlockMatrix.make(gN, gN, numRowBs, numColBs, numRowPs, numColPs, places, team);
-        initLogRandom(g, executor.activePlaces());
-        val pr = new PageRank(g, it, tolerance, 0.0f, executor);
+        
+        val mu = 4.0f as ElemType;
+        val sigma = 1.3f as ElemType;
+        val rand = new Random(places.size()); // TODO allow choice of random seed
+        val vertexOutDegree = new Rail[Int](gN);
+        for (i in 0..(gN-1)) {
+            var X:ElemType = ElemType.MAX_VALUE;
+            while (X >= ElemType.MAX_VALUE) {
+              val Z = rand.nextGaussian();
+              X = Math.exp(mu + sigma*Z);
+            }
+            vertexOutDegree(i) = Math.floor(X) as Int;
+        }
+        initLogRandom(g, vertexOutDegree, executor.activePlaces());
+        val pr = new PageRank(g, it, tolerance, 0.0f, vertexOutDegree, executor);
         return pr;
     }
 
@@ -315,6 +315,9 @@ public class PageRank implements SPMDResilientIterativeApp {
 
     public def getCheckpointData_local():HashMap[String,Cloneable] {
     	val map = new HashMap[String,Cloneable]();
+    	if (CHECKPOINT_INPUT_MATRIX && plh().iter == 0) {
+    		map.put("G", G.makeSnapshot_local());
+    	}
     	map.put("P", P.makeSnapshot_local());
     	map.put("app", plh().makeSnapshot_local());
     	if (VERBOSE) Console.OUT.println(here + "Checkpointing at iter ["+plh().iter+"] maxDelta["+plh().maxDelta+"] ...");
@@ -322,6 +325,9 @@ public class PageRank implements SPMDResilientIterativeApp {
     }
     
     public def restore_local(restoreDataMap:HashMap[String,Cloneable], lastCheckpointIter:Long) {
+    	if (CHECKPOINT_INPUT_MATRIX) {
+    		G.restoreSnapshot_local(restoreDataMap.getOrThrow("G"));
+    	}
     	P.restoreSnapshot_local(restoreDataMap.getOrThrow("P"));
     	plh().restoreSnapshot_local(restoreDataMap.getOrThrow("app"));
     	if (VERBOSE) Console.OUT.println(here + "Restore succeeded. Restarting from iteration["+plh().iter+"] maxDelta["+plh().maxDelta+"] ...");
@@ -342,11 +348,13 @@ public class PageRank implements SPMDResilientIterativeApp {
     		PlaceLocalHandle.addPlace[AppTempData](plh, sparePlace, ()=>new AppTempData());
     	}
         
-        if (this.nzd > 0.0f) {
-            G.allocSparseBlocks(this.nzd, changes.addedPlaces);
-            initRandom(G, this.places);
-        } else {
-            initLogRandom(G, this.places);
+        if (!CHECKPOINT_INPUT_MATRIX) {
+	        if (this.nzd > 0.0f) {
+	            G.allocSparseBlocks(this.nzd, changes.addedPlaces);
+	            initRandom(G, this.places);
+	        } else {
+	            initLogRandom(G, this.outDegree, this.places);
+	        }
         }
         if (VERBOSE) Console.OUT.println("Remake succeeded. Restarting from iteration["+plh().iter+"] ...");
     }
