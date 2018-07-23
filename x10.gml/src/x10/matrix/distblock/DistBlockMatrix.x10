@@ -702,7 +702,6 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
             val blk = blkitr.next();
             blk.getMatrix().colSumTo(vec);
         }
-        Console.OUT.println(here + " -team=" + team + " -vec.d=" + vec.d + " -size=" + vec.d.size);
         team.allreduce(vec.d, 0, vec.d, 0, this.N, Team.ADD);
     }
     
