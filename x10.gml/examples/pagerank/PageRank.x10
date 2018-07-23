@@ -59,8 +59,6 @@ public class PageRank implements SPMDResilientIterativeApp {
     public val G:DistBlockMatrix{self.M==self.N};
     /** PageRank vector */
     public val P:DupVector(G.N);
-    /** Personalization vector */
-    //public val U:DistVector(G.N);
 
     /** temp data: G * P */
     val GP:DistVector(G.N);
@@ -110,13 +108,11 @@ public class PageRank implements SPMDResilientIterativeApp {
         GP = DistVector.make(G.N, G.getAggRowBs(), places, team);//G must have vertical distribution
     }
 
-    private static def init(edges:DistBlockMatrix{self.M==self.N}, places:PlaceGroup, isNormalDist:Boolean) {
+    private static def initRandom(edges:DistBlockMatrix{self.M==self.N}, places:PlaceGroup) {
         // divide the weight of each outgoing edge by the number of outgoing edges
         finish for (p in places) at (p) async {
             x10.matrix.util.RandTool.reSeed(places.indexOf(here.id()));
-            
-            if (isNormalDist)
-                edges.initRandom_local();
+            edges.initRandom_local();
             
             val colSums = Vector.make(edges.N);
             edges.colSumTo_local(colSums);
@@ -135,39 +131,23 @@ public class PageRank implements SPMDResilientIterativeApp {
                 }
             }
         }
+        Console.OUT.println("Pagerank.initRandom() completed");
     }
     
     public static def makeRandom(gN:Long, nzd:Float, it:Long, tolerance:Float, numRowBs:Long, numColBs:Long, executor:IterativeExecutor) {
         val numRowPs = executor.activePlaces().size();
         val numColPs = 1;
         val g = DistBlockMatrix.makeSparse(gN, gN, numRowBs, numColBs, numRowPs, numColPs, nzd, executor.activePlaces(), executor.team());
-        init(g, executor.activePlaces(), true);
+        initRandom(g, executor.activePlaces());
         val pr = new PageRank(g, it, tolerance, nzd, executor);
-        Console.OUT.println("Pagerank.makeRandom() completed");
         return pr;
     }
 
-    /**
-     * Initialize the Google Matrix G with a log-normal distribution of outward
-     * links. Values for mu and sigma are taken from the Pregel paper.
-     *
-     * @see Malewicz et al. (2010)
-     *   Pregel: a system for large-scale graph processing.
-     *   http://dx.doi.org/10.1145/1807167.1807184
-     */
-    public static def makeLogNormal(gN:Long, it:Long, tolerance:Float, numRowBs:Long, numColBs:Long, executor:IterativeExecutor) {
-        val densityGuess = 0.079f;
-        val numRowPs = executor.activePlaces().size();
-        val numColPs = 1;
-        val places = executor.activePlaces();
-        val team = executor.team();
-        
-        val g = DistBlockMatrix.make(gN, gN, numRowBs, numColBs, numRowPs, numColPs, places, team);
-        
+    private static def initLogRandom(edges:DistBlockMatrix{self.M==self.N}, places:PlaceGroup) {
         val mu = 4.0f as ElemType;
         val sigma = 1.3f as ElemType;
 
-        val rand = new Random(); // TODO allow choice of random seed
+        val rand = new Random(places.size()); // TODO allow choice of random seed
         val vertexOutDegree = new Rail[Int](gN);
         var globalNnzGuess:Long = 0;
         for (i in 0..(gN-1)) {
@@ -181,9 +161,9 @@ public class PageRank implements SPMDResilientIterativeApp {
         }
 
         finish ateach(Dist.makeUnique(places)) {
-            val grid = g.handleBS().getGrid();
-            val itr = g.handleBS().getDistMap().buildBlockIteratorAtPlace(places.indexOf(here));
-            val rand2 = new Random(); // TODO allow choice of random seed
+            val grid = edges.handleBS().getGrid();
+            val itr = edges.handleBS().getDistMap().buildBlockIteratorAtPlace(places.indexOf(here));
+            val rand2 = new Random(places.indexOf(here.id())); // TODO allow choice of random seed
             val invN = 1.0 / gN;
             while (itr.hasNext()) {
                 val bid    = itr.next();
@@ -222,12 +202,50 @@ public class PageRank implements SPMDResilientIterativeApp {
                 }
                 val c2 = new Compress2D(c1);
                 val block = new SparseBlock(rowbid, colbid, roff, coff, new SparseCSC(m, n, c2));
-                g.handleBS().add(block);
+                edges.handleBS().add(block);
+            }
+            
+            
+            // divide the weight of each outgoing edge by the number of outgoing edges
+            val colSums = Vector.make(edges.N);
+            edges.colSumTo_local(colSums);
+
+            val localBlockIter = edges.handleBS().iterator();
+            while (localBlockIter.hasNext()) {
+                val matrix = localBlockIter.next().getMatrix() as SparseCSC;
+                for (j in 0..(matrix.N-1)) {
+                    if (colSums(j) > 0) {
+                        val compressedCol = matrix.getCol(j);
+                        for (i in 0..(compressedCol.length-1)) {
+                            compressedCol.setValue(i, compressedCol.getValue(i) / colSums(j));
+                        }
+                    }
+                    // TODO account for vertices with zero outgoing edges
+                }
             }
         }
-        init(g, executor.activePlaces(), false);
+        
+        Console.OUT.println("Pagerank.initLogRandom() completed");
+    }
+    
+    /**
+     * Initialize the Google Matrix G with a log-normal distribution of outward
+     * links. Values for mu and sigma are taken from the Pregel paper.
+     *
+     * @see Malewicz et al. (2010)
+     *   Pregel: a system for large-scale graph processing.
+     *   http://dx.doi.org/10.1145/1807167.1807184
+     */
+    public static def makeLogNormal(gN:Long, it:Long, tolerance:Float, numRowBs:Long, numColBs:Long, executor:IterativeExecutor) {
+        val densityGuess = 0.079f;
+        val numRowPs = executor.activePlaces().size();
+        val numColPs = 1;
+        val places = executor.activePlaces();
+        val team = executor.team();
+        
+        val g = DistBlockMatrix.make(gN, gN, numRowBs, numColBs, numRowPs, numColPs, places, team);
+        initLogRandom(g, executor.activePlaces());
         val pr = new PageRank(g, it, tolerance, 0.0f, executor);
-        Console.OUT.println("Pagerank.makeLogNormal() completed");
         return pr;
     }
 
@@ -292,10 +310,6 @@ public class PageRank implements SPMDResilientIterativeApp {
 
     public def getCheckpointData_local():HashMap[String,Cloneable] {
     	val map = new HashMap[String,Cloneable]();
-    	//if (plh().iter == 0) {
-    	// map.put("G", G.makeSnapshot_local());
-    	//}
-    	//map.put("U", U.makeSnapshot_local());
     	map.put("P", P.makeSnapshot_local());
     	map.put("app", plh().makeSnapshot_local());
     	if (VERBOSE) Console.OUT.println(here + "Checkpointing at iter ["+plh().iter+"] maxDelta["+plh().maxDelta+"] ...");
@@ -303,8 +317,6 @@ public class PageRank implements SPMDResilientIterativeApp {
     }
     
     public def restore_local(restoreDataMap:HashMap[String,Cloneable], lastCheckpointIter:Long) {
-    	//G.restoreSnapshot_local(restoreDataMap.getOrThrow("G"));
-    	//U.restore_local(restoreDataMap.getOrThrow("U"));
     	P.restoreSnapshot_local(restoreDataMap.getOrThrow("P"));
     	plh().restoreSnapshot_local(restoreDataMap.getOrThrow("app"));
     	if (VERBOSE) Console.OUT.println(here + "Restore succeeded. Restarting from iteration["+plh().iter+"] maxDelta["+plh().maxDelta+"] ...");
@@ -316,10 +328,8 @@ public class PageRank implements SPMDResilientIterativeApp {
         val newRowPs = changes.newActivePlaces.size();
         val newColPs = 1;
         if (VERBOSE) Console.OUT.println(here + "Remake, newRowPs["+newRowPs+"], newColPs["+newColPs+"] ...");
-        //val nzd = nnz as Float / (G.M * G.N);
         G.remake(newRowPs, newColPs, changes.newActivePlaces, newTeam, changes.addedPlaces);
         G.allocSparseBlocks(this.nzd, changes.addedPlaces);
-        //U.remake(G.getAggRowBs(), changes.newActivePlaces, newTeam, changes.addedPlaces);
         P.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
         GP.remake(G.getAggRowBs(), changes.newActivePlaces, newTeam, changes.addedPlaces);
         
@@ -327,7 +337,11 @@ public class PageRank implements SPMDResilientIterativeApp {
     		if (VERBOSE) Console.OUT.println("Adding place["+sparePlace+"] to plh ...");
     		PlaceLocalHandle.addPlace[AppTempData](plh, sparePlace, ()=>new AppTempData());
     	}
-        init(G, this.places, true);
+        if (this.nzd > 0.0f)
+            initRandom(G, this.places);
+        else
+            initLogRandom(G, this.places);
+        
         if (VERBOSE) Console.OUT.println("Remake succeeded. Restarting from iteration["+plh().iter+"] ...");
     }
     

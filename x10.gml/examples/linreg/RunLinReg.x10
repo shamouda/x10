@@ -103,8 +103,6 @@ public class RunLinReg {
             Console.OUT.println("Starting without warmpup!!");
         }
         
-        
-        
         val disableAgree = System.getenv("DISABLE_TEAM_AGREE") != null && Long.parseLong(System.getenv("DISABLE_TEAM_AGREE")) == 1;
         val startTime = Timer.milliTime();
         val executor:IterativeExecutor;
@@ -119,26 +117,11 @@ public class RunLinReg {
         val rowBlocks = opts("r", places.size());
         val colBlocks = opts("c", 1);
 
-        val X:DistBlockMatrix;
-        val y:DistVector(X.M);
-
+        var pRL:LinearRegression = null;
+        
         val featuresFile = opts("f", "");
         if (featuresFile.equals("")) {
-            Console.OUT.printf("Linear regression with random examples X(%d,%d) blocks(%dx%d) ", mX, nX, rowBlocks, colBlocks);
-            Console.OUT.printf("dist(%dx%d) nonzeroDensity:%g\n", places.size(), 1, nonzeroDensity);
-
-            if (nonzeroDensity < LinearRegression.MAX_SPARSE_DENSITY) {
-                X = DistBlockMatrix.makeSparse(mX, nX, rowBlocks, colBlocks, places.size(), 1, nonzeroDensity, places, team);
-            } else {
-                Console.OUT.println("Using dense matrix as non-zero density = " + nonzeroDensity);
-                X = DistBlockMatrix.makeDense(mX, nX, rowBlocks, colBlocks, places.size(), 1, places, team);
-            }
-            y = DistVector.make(X.M, places, team);
-
-            finish for (place in places) at(place) async {
-                X.initRandom_local();
-                y.initRandom_local();
-            }
+            pRL = LinearRegression.makeRandom(mX, nX, rowBlocks, colBlocks, iterations, tolerance, nonzeroDensity, regularization, executor);
         } else {
             val labelsFile = opts("l", "");
             if (labelsFile.equals("")) {
@@ -146,36 +129,15 @@ public class RunLinReg {
                 System.setExitCode(1n);
                 return;
             }
-            val addBias = true;
-            val trainingFraction = 1.0;
-            val inputData = RegressionInputData.readFromSystemMLFile(featuresFile, labelsFile, places, trainingFraction, addBias);
-            mX = inputData.numTraining;
-            nX = inputData.numFeatures+1; // including bias
-            nonzeroDensity = 1.0f; // TODO allow sparse input
-            
-            X = DistBlockMatrix.makeDense(mX, nX, rowBlocks, colBlocks, places.size(), 1, places, team);
-            y = DistVector.make(X.M, places, team);
-
-            // initialize labels, examples at each place
-            finish for (place in places) at(place) async {
-                val trainingLabels = inputData.local().trainingLabels;
-                val trainingExamples = inputData.local().trainingExamples;
-                val startRow = X.getGrid().startRow(places.indexOf(place));
-                val blks = X.handleBS();
-                val blkitr = blks.iterator();
-                while (blkitr.hasNext()) {
-                    val blk = blkitr.next();              
-                    blk.init((i:Long, j:Long)=> trainingExamples((i-startRow)*X.N+j));
-                }
-                y.init_local((i:Long)=> trainingLabels(i));
-            }
+            pRL = LinearRegression.makeFromFile(featuresFile, labelsFile, rowBlocks, colBlocks, iterations, tolerance, nonzeroDensity, regularization, executor);
         }
-
         val M = mX;
         val N = nX;
-
-        val parLR = new LinearRegression(X, y, iterations, tolerance, nonzeroDensity, regularization, executor);
-
+        val parLR = pRL;
+        
+        val X = pRL.X;
+        val y = pRL.y;
+        
         var localX:DenseMatrix(M, N) = null;
         var localY:Vector(M) = null;
         if (verify) {
@@ -201,8 +163,8 @@ public class RunLinReg {
         //parLR.printTimes();
 
         if (print) {
-            //Console.OUT.println("Input sparse matrix X\n" + X);
-            //Console.OUT.println("Input dense matrix y\n" + y);
+            Console.OUT.println("Input sparse matrix X\n" + X);
+            Console.OUT.println("Input dense matrix y\n" + y);
             Console.OUT.println("Output estimated weights: \n" + parLR.getResult());
         }
 
