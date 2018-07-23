@@ -163,6 +163,7 @@ public class PageRank implements SPMDResilientIterativeApp {
         }
 
         finish ateach(Dist.makeUnique(places)) {
+            edges.handleBS().clear();
             val grid = edges.handleBS().getGrid();
             val itr = edges.handleBS().getDistMap().buildBlockIteratorAtPlace(places.indexOf(here));
             val rand2 = new Random(places.indexOf(here.id())); // TODO allow choice of random seed
@@ -209,7 +210,7 @@ public class PageRank implements SPMDResilientIterativeApp {
             
             
             // divide the weight of each outgoing edge by the number of outgoing edges
-            val colSums = Vector.make(edges.N);
+            val colSums = Vector.make(gN);
             edges.colSumTo_local(colSums);
 
             val localBlockIter = edges.handleBS().iterator();
