@@ -1331,8 +1331,9 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     tmpTxRO = txReadOnlyFlag;
                     if (t != null)
                         ex = t;
-                } else if (isTx) {
-                    setTxFlagsUnsafe(isTx, readOnly);
+                } else {
+                    if (isTx)
+                        setTxFlagsUnsafe(isTx, readOnly);
                     if (t != null)
                         ex = t;
                 }
@@ -1694,7 +1695,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             }
             if (verbose>=1) debug("==== Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+",tx="+tx+","+txFlag+","+txReadOnlyFlag+") called");
             State.p0TransitToCompleted(id, parentId, ref, srcId, dstId, kind, null, tx, isRootTx, txFlag, txReadOnlyFlag);
-            if (verbose>=1) debug("==== Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+",tx="+tx+","+txFlag+","+txReadOnlyFlag+") returning");
+            if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+",tx="+tx+","+txFlag+","+txReadOnlyFlag+") returning");
         }
 
         private def forgetGlobalRefs():void {
