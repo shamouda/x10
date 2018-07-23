@@ -106,11 +106,13 @@ public class LinearRegression implements SPMDResilientIterativeApp {
     }
     
     private static def initRandom(X:DistBlockMatrix, y:DistVector(X.M), places:PlaceGroup) {
+        val start = Timer.milliTime();
         finish for (place in places) at(place) async {
             x10.matrix.util.RandTool.reSeed(places.indexOf(here.id()));
             X.initRandom_local();
             y.initRandom_local();
         }
+        Console.OUT.println("LinearRegression.initRandom() completed in "+(Timer.milliTime()-start)+" ms");
     }
     
     public static def makeRandom(mX:Long, nX:Long, rowBlocks:Long, colBlocks:Long, iterations:Long, tolerance:Float, 
@@ -137,6 +139,7 @@ public class LinearRegression implements SPMDResilientIterativeApp {
     
     private static def initFromFile(X:DistBlockMatrix, y:DistVector(X.M), inData:RegressionInputData, 
             featuresFile:String, labelsFile:String, places:PlaceGroup) {
+        val start = Timer.milliTime();
         var inD:RegressionInputData;
         if (inData == null) {
             val addBias = true;
@@ -160,6 +163,7 @@ public class LinearRegression implements SPMDResilientIterativeApp {
             }
             y.init_local((i:Long)=> trainingLabels(i));
         }
+        Console.OUT.println("LinearRegression.initFromFile() completed in "+(Timer.milliTime()-start)+" ms");
     }
     
     // TODO allow sparse input

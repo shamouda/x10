@@ -109,6 +109,7 @@ public class PageRank implements SPMDResilientIterativeApp {
     }
 
     private static def initRandom(edges:DistBlockMatrix{self.M==self.N}, places:PlaceGroup) {
+        val start = Timer.milliTime();
         // divide the weight of each outgoing edge by the number of outgoing edges
         finish for (p in places) at (p) async {
             x10.matrix.util.RandTool.reSeed(places.indexOf(here.id()));
@@ -131,7 +132,7 @@ public class PageRank implements SPMDResilientIterativeApp {
                 }
             }
         }
-        Console.OUT.println("Pagerank.initRandom() completed");
+        Console.OUT.println("Pagerank.initRandom() completed in "+(Timer.milliTime()-start)+" ms");
     }
     
     public static def makeRandom(gN:Long, nzd:Float, it:Long, tolerance:Float, numRowBs:Long, numColBs:Long, executor:IterativeExecutor) {
@@ -144,6 +145,7 @@ public class PageRank implements SPMDResilientIterativeApp {
     }
 
     private static def initLogRandom(edges:DistBlockMatrix{self.M==self.N}, places:PlaceGroup) {
+        val start = Timer.milliTime();
         val gN = edges.N;
         
         val mu = 4.0f as ElemType;
@@ -228,7 +230,7 @@ public class PageRank implements SPMDResilientIterativeApp {
             }
         }
         
-        Console.OUT.println("Pagerank.initLogRandom() completed");
+        Console.OUT.println("Pagerank.initLogRandom() completed in "+(Timer.milliTime()-start)+" ms");
     }
     
     /**
