@@ -101,8 +101,21 @@ public class PageRank implements SPMDResilientIterativeApp {
         this.nnz = nnz;
         root = here;
 
+        P = DupVector.make(G.N, places, team);
+        P.init(1.0);
+        //U = DistVector.make(G.N, g.getAggRowBs(), places, team);
+        iterations = it;
+        this.tolerance = tolerance;
+        
+        GP = DistVector.make(G.N, G.getAggRowBs(), places, team);//G must have vertical distribution
+    }
+
+    private static def init(edges:DistBlockMatrix{self.M==self.N}, isNormalDist:Boolean) {
         // divide the weight of each outgoing edge by the number of outgoing edges
         finish for (p in executor.activePlaces()) at (p) async {
+            if (isNormalDist)
+                edges.initRandom_local();
+            
             val colSums = Vector.make(edges.N);
             edges.colSumTo_local(colSums);
 
@@ -120,25 +133,15 @@ public class PageRank implements SPMDResilientIterativeApp {
                 }
             }
         }
-
-        P = DupVector.make(G.N, places, team);
-        P.init(1.0);
-        //U = DistVector.make(G.N, g.getAggRowBs(), places, team);
-        iterations = it;
-        this.tolerance = tolerance;
-        
-        GP = DistVector.make(G.N, G.getAggRowBs(), places, team);//G must have vertical distribution
     }
-
+    
     public static def makeRandom(gN:Long, nzd:Float, it:Long, tolerance:Float, numRowBs:Long, numColBs:Long, executor:IterativeExecutor) {
         val numRowPs = executor.activePlaces().size();
         val numColPs = 1;
         val g = DistBlockMatrix.makeSparse(gN, gN, numRowBs, numColBs, numRowPs, numColPs, nzd, executor.activePlaces(), executor.team());
+        init(g, true);
         val pr = new PageRank(g, it, tolerance, g.getTotalNonZeroCount(), executor);
-        finish ateach(Dist.makeUnique(executor.activePlaces())) {
-            g.initRandom_local();
-            // TODO init personalization vector U
-        }
+        Console.OUT.println("Pagerank.makeRandom() completed");
         return pr;
     }
 
@@ -220,8 +223,10 @@ public class PageRank implements SPMDResilientIterativeApp {
                 g.handleBS().add(block);
             }
         }
-
-        return new PageRank(g, it, tolerance, g.getTotalNonZeroCount(), executor);
+        init(g, false);
+        val pr = new PageRank(g, it, tolerance, g.getTotalNonZeroCount(), executor);
+        Console.OUT.println("Pagerank.makeLogNormal() completed");
+        return pr;
     }
 
     public def run(startTime:Long):Vector(G.N) {
@@ -259,6 +264,9 @@ public class PageRank implements SPMDResilientIterativeApp {
     }
     
     public def step_local():void {
+        if (here.id == 0)
+            Console.OUT.println("iter:"+ plh().iter);
+        
         GP.mult_local(G, P);
         GP.scale_local(alpha);
     
