@@ -353,11 +353,7 @@ public class PageRank implements SPMDResilientIterativeApp {
 	            G.allocSparseBlocks(this.nzd, changes.addedPlaces);
 	            initRandom(G, this.places);
 	        } else {
-<<<<<<< HEAD
 	            initLogRandom(G, this.outDegree, this.places);
-=======
-	            initLogRandom(G, this.places);
->>>>>>> branch 'TM-136' of https://github.com/shamouda/x10.git
 	        }
         }
         if (VERBOSE) Console.OUT.println("Remake succeeded. Restarting from iteration["+plh().iter+"] ...");
