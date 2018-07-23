@@ -50,6 +50,7 @@ import x10.util.resilient.iterative.*;
  */
 public class PageRank implements SPMDResilientIterativeApp {
 	static val VERBOSE = System.getenv("PAGERANK_DEBUG") != null && System.getenv("PAGERANK_DEBUG").equals("1");
+	static val CHECKPOINT_INPUT_MATRIX = System.getenv("CHECKPOINT_INPUT_MATRIX") != null && System.getenv("CHECKPOINT_INPUT_MATRIX").equals("1");
 	
     public val tolerance:Float;
     public val iterations:Long;
@@ -315,6 +316,9 @@ public class PageRank implements SPMDResilientIterativeApp {
 
     public def getCheckpointData_local():HashMap[String,Cloneable] {
     	val map = new HashMap[String,Cloneable]();
+    	if (CHECKPOINT_INPUT_MATRIX && plh().iter == 0) {
+    		map.put("G", G.makeSnapshot_local());
+    	}
     	map.put("P", P.makeSnapshot_local());
     	map.put("app", plh().makeSnapshot_local());
     	if (VERBOSE) Console.OUT.println(here + "Checkpointing at iter ["+plh().iter+"] maxDelta["+plh().maxDelta+"] ...");
@@ -322,6 +326,9 @@ public class PageRank implements SPMDResilientIterativeApp {
     }
     
     public def restore_local(restoreDataMap:HashMap[String,Cloneable], lastCheckpointIter:Long) {
+    	if (CHECKPOINT_INPUT_MATRIX) {
+    		G.restoreSnapshot_local(restoreDataMap.getOrThrow("G"));
+    	}
     	P.restoreSnapshot_local(restoreDataMap.getOrThrow("P"));
     	plh().restoreSnapshot_local(restoreDataMap.getOrThrow("app"));
     	if (VERBOSE) Console.OUT.println(here + "Restore succeeded. Restarting from iteration["+plh().iter+"] maxDelta["+plh().maxDelta+"] ...");
@@ -342,11 +349,13 @@ public class PageRank implements SPMDResilientIterativeApp {
     		PlaceLocalHandle.addPlace[AppTempData](plh, sparePlace, ()=>new AppTempData());
     	}
         
-        if (this.nzd > 0.0f) {
-            G.allocSparseBlocks(this.nzd, changes.addedPlaces);
-            initRandom(G, this.places);
-        } else {
-            initLogRandom(G, this.places);
+        if (!CHECKPOINT_INPUT_MATRIX) {
+	        if (this.nzd > 0.0f) {
+	            G.allocSparseBlocks(this.nzd, changes.addedPlaces);
+	            initRandom(G, this.places);
+	        } else {
+	            initLogRandom(G, this.places);
+	        }
         }
         if (VERBOSE) Console.OUT.println("Remake succeeded. Restarting from iteration["+plh().iter+"] ...");
     }
