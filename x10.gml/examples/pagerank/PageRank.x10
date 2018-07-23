@@ -144,6 +144,8 @@ public class PageRank implements SPMDResilientIterativeApp {
     }
 
     private static def initLogRandom(edges:DistBlockMatrix{self.M==self.N}, places:PlaceGroup) {
+        val gN = edges.N;
+        
         val mu = 4.0f as ElemType;
         val sigma = 1.3f as ElemType;
 
@@ -329,7 +331,6 @@ public class PageRank implements SPMDResilientIterativeApp {
         val newColPs = 1;
         if (VERBOSE) Console.OUT.println(here + "Remake, newRowPs["+newRowPs+"], newColPs["+newColPs+"] ...");
         G.remake(newRowPs, newColPs, changes.newActivePlaces, newTeam, changes.addedPlaces);
-        G.allocSparseBlocks(this.nzd, changes.addedPlaces);
         P.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
         GP.remake(G.getAggRowBs(), changes.newActivePlaces, newTeam, changes.addedPlaces);
         
@@ -337,11 +338,13 @@ public class PageRank implements SPMDResilientIterativeApp {
     		if (VERBOSE) Console.OUT.println("Adding place["+sparePlace+"] to plh ...");
     		PlaceLocalHandle.addPlace[AppTempData](plh, sparePlace, ()=>new AppTempData());
     	}
-        if (this.nzd > 0.0f)
-            initRandom(G, this.places);
-        else
-            initLogRandom(G, this.places);
         
+        if (this.nzd > 0.0f) {
+            G.allocSparseBlocks(this.nzd, changes.addedPlaces);
+            initRandom(G, this.places);
+        } else {
+            initLogRandom(G, this.places);
+        }
         if (VERBOSE) Console.OUT.println("Remake succeeded. Restarting from iteration["+plh().iter+"] ...");
     }
     
