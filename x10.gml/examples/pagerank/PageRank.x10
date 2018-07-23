@@ -110,9 +110,9 @@ public class PageRank implements SPMDResilientIterativeApp {
         GP = DistVector.make(G.N, G.getAggRowBs(), places, team);//G must have vertical distribution
     }
 
-    private static def init(edges:DistBlockMatrix{self.M==self.N}, isNormalDist:Boolean) {
+    private static def init(edges:DistBlockMatrix{self.M==self.N}, places:PlaceGroup, isNormalDist:Boolean) {
         // divide the weight of each outgoing edge by the number of outgoing edges
-        finish for (p in executor.activePlaces()) at (p) async {
+        finish for (p in places) at (p) async {
             if (isNormalDist)
                 edges.initRandom_local();
             
@@ -139,7 +139,7 @@ public class PageRank implements SPMDResilientIterativeApp {
         val numRowPs = executor.activePlaces().size();
         val numColPs = 1;
         val g = DistBlockMatrix.makeSparse(gN, gN, numRowBs, numColBs, numRowPs, numColPs, nzd, executor.activePlaces(), executor.team());
-        init(g, true);
+        init(g, executor.activePlaces(), true);
         val pr = new PageRank(g, it, tolerance, g.getTotalNonZeroCount(), executor);
         Console.OUT.println("Pagerank.makeRandom() completed");
         return pr;
@@ -223,7 +223,7 @@ public class PageRank implements SPMDResilientIterativeApp {
                 g.handleBS().add(block);
             }
         }
-        init(g, false);
+        init(g, executor.activePlaces(), false);
         val pr = new PageRank(g, it, tolerance, g.getTotalNonZeroCount(), executor);
         Console.OUT.println("Pagerank.makeLogNormal() completed");
         return pr;
@@ -253,14 +253,13 @@ public class PageRank implements SPMDResilientIterativeApp {
 
         Console.OUT.flush();
     }
-    
-    /*public def isFinished_local():Boolean {
-        return (iterations <= 0 && plh().maxDelta < tolerance) || (iterations > 0 && plh().iter >= iterations);
-    }*/
 
     //for performance evaluation with fixed number of iterations
     public def isFinished_local():Boolean {
-        return plh().iter >= iterations;
+        if (iterations == 0)
+            return (iterations <= 0 && plh().maxDelta < tolerance) || (iterations > 0 && plh().iter >= iterations);    
+        else
+            return plh().iter >= iterations;
     }
     
     public def step_local():void {
