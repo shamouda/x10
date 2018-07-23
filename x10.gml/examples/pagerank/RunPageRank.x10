@@ -24,9 +24,6 @@ import x10.util.Team;
 /**
  * Page Rank demo
  */
-//Example run commands to use Hazelcast or native store
-//KILL_PLACES=4 KILL_STEPS=12 X10_RESILIENT_MODE=12 X10_LAUNCHER_TTY=false GML_ELEM_TYPE=double X10_NPLACES=8 X10_NTHREADS=1 x10 -DX10RT_DATASTORE=native -classpath build:$X10_HOME/x10.gml/lib/managed_gml_double.jar -libpath $X10_HOME/x10.gml/native_double/lib RunPageRank -m 100 --density 0.8 --iterations 30 -k 10 -s 2
-//KILL_PLACES=4 KILL_STEPS=12 X10_RESILIENT_MODE=12 X10_LAUNCHER_TTY=false GML_ELEM_TYPE=double X10_NPLACES=8 X10_NTHREADS=1 x10 -DX10RT_DATASTORE=Hazelcast -classpath build:$X10_HOME/x10.gml/lib/managed_gml_double.jar -libpath $X10_HOME/x10.gml/native_double/lib RunPageRank -m 100 --density 0.8 --iterations 30 -k 10 -s 2 
 public class RunPageRank {
     public static def main(args:Rail[String]): void {
         val opts = new OptionsParser(args, [
@@ -69,10 +66,10 @@ public class RunPageRank {
         if (millionEdgesPerPlace != -1.0f) {
             nonzeroDensity = 0.001f;
             mG = (10000*Math.sqrt(placesCount*10*millionEdgesPerPlace)) as Long;
-            Console.OUT.printf("Running in weak scaling mode: density["+nonzeroDensity+"] mG["+mG+"]");
+            Console.OUT.println("Running in weak scaling mode: density["+nonzeroDensity+"] mG["+mG+"] places["+Place.numPlaces()+"] spare["+sparePlaces+"]");
         } else {
             mG = opts("m", 100000);
-            Console.OUT.printf("Running in normal mode: density["+nonzeroDensity+"] mG["+mG+"]");
+            Console.OUT.println("Running in normal mode: density["+nonzeroDensity+"] mG["+mG+"] places["+Place.numPlaces()+"] spare["+sparePlaces+"]");
         }
         
         Console.OUT.printf("G: rows/cols %d iterations: %d\n", mG, iterations);

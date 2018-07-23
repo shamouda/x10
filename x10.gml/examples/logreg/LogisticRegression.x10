@@ -497,7 +497,7 @@ public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implem
         val newRowPs = changes.newActivePlaces.size();        
         val newColPs = 1;
         //remake all the distributed data structures
-        X.remake(newRowPs, newColPs, changes.newActivePlaces, changes.addedPlaces);
+        X.remake(newRowPs, newColPs, changes.newActivePlaces, newTeam, changes.addedPlaces);
         
         val rowBs = X.getAggRowBs();
         B.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
