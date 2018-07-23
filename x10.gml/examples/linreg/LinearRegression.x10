@@ -35,6 +35,7 @@ import x10.matrix.regression.RegressionInputData;
  */
 public class LinearRegression implements SPMDResilientIterativeApp {
 	static val VERBOSE = System.getenv("LINREG_DEBUG") != null && System.getenv("LINREG_DEBUG").equals("1");
+	static val CHECKPOINT_INPUT_MATRIX = System.getenv("CHECKPOINT_INPUT_MATRIX") != null && System.getenv("CHECKPOINT_INPUT_MATRIX").equals("1");
 	
     public static val MAX_SPARSE_DENSITY = 0.1f;
     public val lambda:Float; // regularization parameter
@@ -286,6 +287,9 @@ public class LinearRegression implements SPMDResilientIterativeApp {
    
     public def getCheckpointData_local():HashMap[String,Cloneable] {
     	val map = new HashMap[String,Cloneable]();
+    	if (CHECKPOINT_INPUT_MATRIX && plh().iter == 0) {
+    		map.put("X", X.makeSnapshot_local());
+    	}
     	map.put("d_p", d_p.makeSnapshot_local());
     	map.put("d_q", d_q.makeSnapshot_local());
     	map.put("d_r", d_r.makeSnapshot_local());
@@ -296,6 +300,9 @@ public class LinearRegression implements SPMDResilientIterativeApp {
     }
     
     public def restore_local(restoreDataMap:HashMap[String,Cloneable], lastCheckpointIter:Long) {
+    	if (CHECKPOINT_INPUT_MATRIX) {
+    		X.restoreSnapshot_local(restoreDataMap.getOrThrow("X"));
+    	}
     	d_p.restoreSnapshot_local(restoreDataMap.getOrThrow("d_p"));
         d_q.restoreSnapshot_local(restoreDataMap.getOrThrow("d_q"));
         d_r.restoreSnapshot_local(restoreDataMap.getOrThrow("d_r"));
@@ -321,16 +328,17 @@ public class LinearRegression implements SPMDResilientIterativeApp {
     		if (VERBOSE) Console.OUT.println("Adding place["+sparePlace+"] to plh ...");
     		PlaceLocalHandle.addPlace[AppTempData](plh, sparePlace, ()=>new AppTempData());
     	}
-        
-        if (featuresFile == null){
-            if (this.nzd < LinearRegression.MAX_SPARSE_DENSITY) {
-                X.allocSparseBlocks(this.nzd, changes.addedPlaces);
-            } else {
-                X.allocDenseBlocks(changes.addedPlaces);
-            }
-            initRandom(X, y, places);
-        } else {
-            initFromFile(X, y, null, featuresFile, labelsFile, places);
+        if (!CHECKPOINT_INPUT_MATRIX) {
+	        if (featuresFile == null){
+	            if (this.nzd < LinearRegression.MAX_SPARSE_DENSITY) {
+	                X.allocSparseBlocks(this.nzd, changes.addedPlaces);
+	            } else {
+	                X.allocDenseBlocks(changes.addedPlaces);
+	            }
+	            initRandom(X, y, places);
+	        } else {
+	            initFromFile(X, y, null, featuresFile, labelsFile, places);
+	        }
         }
     }
     

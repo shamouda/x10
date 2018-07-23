@@ -32,9 +32,6 @@ import x10.util.resilient.iterative.SPMDAgreeResilientIterativeExecutor;
 /**
  * Test harness for Linear Regression using GML
  */
-//Example run commands to use Hazelcast or native stores
-//KILL_PLACES=4 KILL_STEPS=12 X10_RESILIENT_MODE=12 X10_LAUNCHER_TTY=false  X10_NPLACES=8 X10_NTHREADS=1 x10 -DX10RT_DATASTORE=native -classpath build:$X10_HOME/x10.gml/lib/managed_gml_double.jar  -libpath $X10_HOME/x10.gml/native_double/lib RunLinReg  -m 1000 -n 1000 --density 1.0 --iterations 30 --verify -k 10 -s 1
-//KILL_PLACES=4 KILL_STEPS=12 X10_RESILIENT_MODE=12 X10_LAUNCHER_TTY=false  X10_NPLACES=8 X10_NTHREADS=1 x10 -DX10RT_DATASTORE=Hazelcast -classpath build:$X10_HOME/x10.gml/lib/managed_gml_double.jar  -libpath $X10_HOME/x10.gml/native_double/lib RunLinReg  -m 1000 -n 1000 --density 1.0 --iterations 30 --verify -k 10 -s 1
 public class RunLinReg {
 
     public static def main(args:Rail[String]): void {
