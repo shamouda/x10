@@ -67,7 +67,7 @@ public class RunPageRank {
         var mG:Long = -1;
         val millionEdgesPerPlace = opts("mepp", -1.0f);
         if (millionEdgesPerPlace != -1.0f) {
-            nonzeroDensity = 0.001;
+            nonzeroDensity = 0.001f;
             mG = (10000*Math.sqrt(placesCount*10*millionEdgesPerPlace)) as Long;
             Console.OUT.printf("Running in weak scaling mode: density["+nonzeroDensity+"] mG["+mG+"]");
         } else {
