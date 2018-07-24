@@ -28,6 +28,7 @@ import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.Snapshottable;
 import x10.util.resilient.iterative.*;
+import x10.matrix.regression.RegressionInputData;
 
 /*
  * Multinomial Logistic Regression 
@@ -36,7 +37,10 @@ import x10.util.resilient.iterative.*;
  * https://apache.github.io/incubator-systemml/algorithms-classification.html
  * https://github.com/apache/incubator-systemml/blob/master/scripts/algorithms/MultiLogReg.dml
  * */
-public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implements SPMDResilientIterativeApp { 
+public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implements SPMDResilientIterativeApp {
+    static val CHECKPOINT_INPUT_MATRIX = System.getenv("CHECKPOINT_INPUT_MATRIX") != null && System.getenv("CHECKPOINT_INPUT_MATRIX").equals("1");
+    
+    
     static val MAX_SPARSE_DENSITY = 0.1f;
     private val C = 2;
     private val tolerance = 0.000001f;
@@ -88,8 +92,14 @@ public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implem
     private val LT1:DistVector(N);
     private val LT2:DistVector(N);
     
+
+    //used for initilizing the matrix from input files
+    var featuresFile:String;
+    var labelsFile:String;
     
-    public def this(N:Long, D:Long, x_:DistBlockMatrix, y:DistVector, it:Int, nit:Int, nzd:Float, reg:Float, bias:Boolean, executor:IterativeExecutor) {
+    public def this(N:Long, D:Long, x_:DistBlockMatrix, y:DistVector, it:Int, nit:Int, nzd:Float, reg:Float, bias:Boolean, 
+                    featuresFile:String, labelsFile:String,
+                    executor:IterativeExecutor) {
         property(N, D);
         
         this.nzd = nzd;
@@ -98,7 +108,8 @@ public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implem
         this.regularization = reg;
         this.root = here;
         this.bias = bias;
-        
+        this.featuresFile = featuresFile;
+        this.labelsFile = labelsFile;
         this.executor = executor;
         this.places = executor.activePlaces();
         this.team = executor.team();
@@ -126,6 +137,102 @@ public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implem
         //SystemML 2-column table (LT) transformed into 2 vectors (LT1, LT2)
         LT1 = DistVector.make(N, rowBs, places, team);
         LT2 = DistVector.make(N, rowBs, places, team);
+    }
+    
+    
+    private static def initRandom(X:DistBlockMatrix, y:DistVector(X.M), places:PlaceGroup) {
+        val start = Timer.milliTime();
+        finish for (place in places) at(place) async {
+            x10.matrix.util.RandTool.reSeed(places.indexOf(here.id()));
+            X.initRandom_local(1, 10);
+            y.initRandom_local(1, 10);
+        }
+        Console.OUT.println("LogisticRegression.initRandom() completed in "+(Timer.milliTime()-start)+" ms");
+    }
+    
+    public static def makeRandom(mX:Long, nX:Long, rowBlocks:Long, colBlocks:Long, iterations:Int, innerIterations:Int, 
+            nonzeroDensity:Float, regularization:Float, bias:Boolean, executor:IterativeExecutor) {
+        val places = executor.activePlaces();
+        val team = executor.team();
+        
+        val X:DistBlockMatrix;
+        val y:DistVector(X.M);
+        
+        Console.OUT.printf("Logistic regression with random examples X(%d,%d) blocks(%dx%d) ", mX, nX, rowBlocks, colBlocks);
+        Console.OUT.printf("dist(%dx%d) nonzeroDensity:%g\n", places.size(), 1, nonzeroDensity);
+
+        if (nonzeroDensity < LogisticRegression.MAX_SPARSE_DENSITY) {
+            X = DistBlockMatrix.makeSparse(mX, nX, rowBlocks, colBlocks, places.size(), 1, nonzeroDensity, places, team);
+        } else {
+            Console.OUT.println("Using dense matrix as non-zero density = " + nonzeroDensity);
+            X = DistBlockMatrix.makeDense(mX, nX, rowBlocks, colBlocks, places.size(), 1, places, team);
+        }
+        y = DistVector.make(X.M, places, team);
+        initRandom(X, y, places);
+        return new LogisticRegression(mX, nX, X, y, iterations, innerIterations, nonzeroDensity, regularization, bias, null, null, executor);
+    }
+    
+    private static def initFromFile(X:DistBlockMatrix, y:DistVector(X.M), inData:RegressionInputData, 
+            featuresFile:String, labelsFile:String, places:PlaceGroup) {
+        val start = Timer.milliTime();
+        var inD:RegressionInputData;
+        if (inData == null) {
+            val addBias = true;
+            val trainingFraction = 1.0;
+            inD = RegressionInputData.readFromSystemMLFile(featuresFile, labelsFile, places, trainingFraction, addBias);
+        }
+        else
+            inD = inData;
+
+        val inputData = inD;
+        // initialize labels, examples at each place
+        finish for (place in places) at(place) async {
+            val trainingLabels = inputData.local().trainingLabels;
+            val trainingExamples = inputData.local().trainingExamples;
+            val startRow = X.getGrid().startRow(places.indexOf(place));
+            val blks = X.handleBS();
+            val blkitr = blks.iterator();
+            while (blkitr.hasNext()) {
+                val blk = blkitr.next();              
+                blk.init((i:Long, j:Long)=> trainingExamples((i-startRow)*X.N+j));
+            }
+            y.init_local((i:Long)=> trainingLabels(i));
+            
+            /*
+             #[SYSTEMML] Convert "Y_vec" into indicator matrice:
+             if (min (Y_vec) <= 0) { 
+                # Category labels "0", "-1" etc. are converted into the largest label
+                max_y = max (Y_vec);
+                Y_vec  = Y_vec  + (- Y_vec  + max_y + 1) * ppred (Y_vec , 0.0, "<=");
+             }
+             **/
+            val max_y = y.max_local();
+            y.map_local((a:ElemType)=>{ (a <= 0.0)? max_y + 1.0 : a} );
+        }
+        Console.OUT.println("LogisticRegression.initFromFile() completed in "+(Timer.milliTime()-start)+" ms");
+    }
+    
+ // TODO allow sparse input
+    public static def makeFromFile(featuresFile:String, labelsFile:String,
+            rowBlocks:Long, colBlocks:Long, iterations:Int, innerIterations:Int, 
+            nonzeroDensity:Float, regularization:Float, bias:Boolean, executor:IterativeExecutor) {
+        val places = executor.activePlaces();
+        val team = executor.team();
+        
+        val X:DistBlockMatrix;
+        val y:DistVector(X.M);
+        
+        val addBias = true;
+        val trainingFraction = 1.0;
+        val inputData = RegressionInputData.readFromSystemMLFile(featuresFile, labelsFile, places, trainingFraction, addBias);
+        val mX = inputData.numTraining;
+        val nX = inputData.numFeatures+1; // including bias
+        
+        X = DistBlockMatrix.makeDense(mX, nX, rowBlocks, colBlocks, places.size(), 1, places, team);
+        y = DistVector.make(X.M, places, team);
+
+        initFromFile(X, y, inputData, featuresFile, labelsFile, places);
+        return new LogisticRegression(mX, nX, X, y, iterations, innerIterations, nonzeroDensity, regularization, bias, featuresFile, labelsFile, executor);
     }
     
     /*
@@ -465,7 +572,9 @@ public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implem
     public def getCheckpointData_local() {
         val map = new HashMap[String,Cloneable]();
         if (plh().iter == 1) {
-            map.put("X", X.makeSnapshot_local());
+            if (CHECKPOINT_INPUT_MATRIX){
+                map.put("X", X.makeSnapshot_local());
+            }
             map.put("y", y.makeSnapshot_local());
             map.put("lambda", lambda.makeSnapshot_local());
         }
@@ -480,7 +589,9 @@ public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implem
     }
     
     public def restore_local(restoreDataMap:HashMap[String,Cloneable], lastCheckpointIter:Long) {
-        X.restoreSnapshot_local(restoreDataMap.getOrThrow("X"));
+    	if (CHECKPOINT_INPUT_MATRIX) {
+            X.restoreSnapshot_local(restoreDataMap.getOrThrow("X"));
+        }
         y.restoreSnapshot_local(restoreDataMap.getOrThrow("y"));
         lambda.restoreSnapshot_local(restoreDataMap.getOrThrow("lambda"));
         B.restoreSnapshot_local(restoreDataMap.getOrThrow("B"));
@@ -520,6 +631,18 @@ public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implem
         LT2.remake(rowBs, changes.newActivePlaces, newTeam, changes.addedPlaces); 
         for (sparePlace in changes.addedPlaces){
             PlaceLocalHandle.addPlace[AppTempData](plh, sparePlace, ()=>new AppTempData());
+        }
+        if (!CHECKPOINT_INPUT_MATRIX) {
+	        if (featuresFile == null){
+	            if (this.nzd < LogisticRegression.MAX_SPARSE_DENSITY) {
+	                X.allocSparseBlocks(this.nzd, changes.addedPlaces);
+	            } else {
+	                X.allocDenseBlocks(changes.addedPlaces);
+	            }
+	            initRandom(X, y, places);
+	        } else {
+	            initFromFile(X, y, null, featuresFile, labelsFile, places);
+	        }
         }
         Console.OUT.println(here + " Remake succeeded ...");
     }

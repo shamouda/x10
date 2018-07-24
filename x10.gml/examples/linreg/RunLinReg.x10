@@ -73,7 +73,7 @@ public class RunLinReg {
         val iterations = opts("i", 0n);
         val tolerance = opts("t", 0.000001f);
         val sparePlaces = opts("s", 0n);
-        val checkpointFrequency = opts("checkpointFreq", -1n);
+        val checkpointFreq = opts("checkpointFreq", -1n);
 
         if (nonzeroDensity<0.0f
          || sparePlaces < 0 || sparePlaces >= Place.numPlaces()) {
@@ -82,15 +82,9 @@ public class RunLinReg {
             return;
         }
 
-        if (sparePlaces > 0) {
-            if (Runtime.RESILIENT_MODE <= 0) {
-                Console.ERR.println("Error: attempt to skip places when not in resilient mode.  Aborting.");
-                System.setExitCode(1n);
-                return;
-            } else {
-                Console.OUT.println("Skipping "+sparePlaces+" places to reserve for failure.");
-            }
-        }
+        if (sparePlaces > 0)
+            Console.OUT.println("Using "+sparePlaces+" spare place(s).");
+            
         
         val disableWarmup = System.getenv("DISABLE_TEAM_WARMUP");
         if (disableWarmup == null || disableWarmup.equals("0")) {
@@ -104,9 +98,9 @@ public class RunLinReg {
         val startTime = Timer.milliTime();
         val executor:IterativeExecutor;
         if (x10.xrx.Runtime.x10rtAgreementSupport() && !disableAgree)
-            executor = new SPMDAgreeResilientIterativeExecutor(checkpointFrequency, sparePlaces, false);
+            executor = new SPMDAgreeResilientIterativeExecutor(checkpointFreq, sparePlaces, false);
         else
-            executor = new SPMDResilientIterativeExecutor(checkpointFrequency, sparePlaces, false);
+            executor = new SPMDResilientIterativeExecutor(checkpointFreq, sparePlaces, false);
 
         val places = executor.activePlaces();
         val team = executor.team();
