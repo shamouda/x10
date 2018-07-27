@@ -31,10 +31,6 @@ public class GlobalResilientIterativeExecutor (home:Place) {
     private static val VERBOSE = (System.getenv("EXECUTOR_DEBUG") != null
                                && System.getenv("EXECUTOR_DEBUG").equals("1"));
 
-    //todo: allow the application to chose specific iterations for checkpointing
-    private static val CHECKPOINT_ITER0_ONLY = (System.getenv("CHECKPOINT_ITER0_ONLY") != null
-            && System.getenv("CHECKPOINT_ITER0_ONLY").equals("1")); //for kmeans
-    
     private val manager:GlobalRef[PlaceManager]{self.home == this.home};
     private val resilientMap:Store[Cloneable];
     private val appStore:ApplicationSnapshotStore;
@@ -116,12 +112,8 @@ public class GlobalResilientIterativeExecutor (home:Place) {
                 
                 /*** Checkpoint ***/                
                 if (isResilient && !restored) {
-                    if (globalIter == 0 || !CHECKPOINT_ITER0_ONLY) {
-                        checkpoint(app, globalIter);                    
-                        lastCkptIter = globalIter;
-                    } else {
-                        Console.OUT.println("Checkpoint bypassed at iteration: " + globalIter);
-                    }
+                    checkpoint(app, globalIter);                    
+                    lastCkptIter = globalIter;
                 }
                 else {
                 	restored = false;
