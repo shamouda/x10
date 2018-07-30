@@ -80,6 +80,9 @@ public class SPMDAgreeResilientIterativeExecutor extends IterativeExecutor {
                     var localRestoreJustDone:Boolean = false;
                     var localRestoreRequired:Boolean = restoreRequired;
                     
+                    if (plh().globalIter == 0)
+                        team.barrier(); // used for benchmarking the agreement time only
+                    
                     while ( !app.isFinished_local() || localRestoreRequired) {
                         var stepStartTime:Long = -1; // (-1) is used to differenciate between checkpoint exceptions and step exceptions
                         /*** Restore ***/
@@ -113,7 +116,8 @@ public class SPMDAgreeResilientIterativeExecutor extends IterativeExecutor {
                         plh().globalIter++;
                     }//while !isFinished
                 }//finish ateach
-            } catch (iterEx:Exception) {
+            }
+            catch (iterEx:Exception) {
                 Console.OUT.println("IterativeExecutor exception thrown!!! ...");
                 //iterEx.printStackTrace();
                 //exception from finish_ateach  or from restore

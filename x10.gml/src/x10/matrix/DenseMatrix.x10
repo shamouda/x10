@@ -166,9 +166,9 @@ public class DenseMatrix extends Matrix {
      * values between 0.0 and 1.0.
      */    
     public def initRandom(): DenseMatrix(this) {
-        val rgen = RandTool.getRandGen();
+        //val rgen = RandTool.getRandGen();
         for (var i:Long=0; i<M*N; i++) {
-            this.d(i) = RandTool.nextElemType[ElemType](rgen);
+            this.d(i) = RandTool.nextElemType[ElemType]();
         }
         return this;
     }
@@ -182,9 +182,9 @@ public class DenseMatrix extends Matrix {
      */    
     public def initRandom(lb:Long, ub:Long): DenseMatrix(this) {
         val len = Math.abs(ub-lb)+1;
-        val rgen = RandTool.getRandGen();
+        //val rgen = RandTool.getRandGen();
         for (var i:Long=0; i<M*N; i++) {
-            this.d(i) = rgen.nextLong(len)+lb;
+            this.d(i) = RandTool.nextLong(len)+lb;
         }
         return this;
     }

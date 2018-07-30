@@ -67,153 +67,112 @@ public class RunLogReg {
             return;
         }
     
+        val regularization:Float = opts("z", 0.0f);
         var mX:Long = opts("m", 10);
         var nX:Long = opts("n", 10);
+        var nonzeroDensity:Float = opts("d", 0.5f);
+        val verify = opts("v");
+        val print = opts("p");
+        val iterations = opts("i", 100n);
+        val innerIterations = opts("x", 0n);
         val sparePlaces = opts("s", 0n);
         val checkpointFreq = opts("checkpointFreq", -1n);
-        var nonzeroDensity:Float = opts("d", 0.5f);
+
 
         if ((mX<=0) ||(nX<=0) || sparePlaces < 0 || sparePlaces >= Place.numPlaces()) {
             Console.OUT.println("Error in settings");
-        } else {
-            
-            val disableWarmup = System.getenv("DISABLE_TEAM_WARMUP");
-            if (disableWarmup == null || disableWarmup.equals("0")) {
-                teamWarmup();
-            }
-            else {
-                Console.OUT.println("Starting without warmpup!!");
-            }
-            
-            if (sparePlaces > 0)
-                Console.OUT.println("Using "+sparePlaces+" spare place(s).");
-            
-            
-            val disableAgree = System.getenv("DISABLE_TEAM_AGREE") != null && Long.parseLong(System.getenv("DISABLE_TEAM_AGREE")) == 1;
-            val startTime = Timer.milliTime();
-            val executor:IterativeExecutor;
-            if (x10.xrx.Runtime.x10rtAgreementSupport() && !disableAgree)
-                executor = new SPMDAgreeResilientIterativeExecutor(checkpointFreq, sparePlaces, false);
-            else
-                executor = new SPMDResilientIterativeExecutor(checkpointFreq, sparePlaces, false);
-            
-            val places = executor.activePlaces();
-            val team = executor.team();         
-            
-            val rowBlocks = opts("r", places.size());
-            val colBlocks = opts("c", 1);
-            
-            val regularization:Float = opts("z", 0.0f);
-            val iterations = opts("i", 100n);
-            val innerIterations = opts("x", 0n);
-            val verify = opts("v");
-            val print = opts("p");
-            
-            var bias:Boolean = false;
-            val X:DistBlockMatrix;
-            val y:DistVector(X.M);
-
-            val featuresFile = opts("f", "");
-            if (featuresFile.equals("")) {
-                Console.OUT.printf("Logistic regression with random examples X(%d,%d) blocks(%dx%d) ", mX, nX, rowBlocks, colBlocks);
-                Console.OUT.printf("dist(%dx%d) nonzeroDensity:%g\n", places.size(), 1, nonzeroDensity);
-
-                if (nonzeroDensity < LogisticRegression.MAX_SPARSE_DENSITY) {
-                    X = DistBlockMatrix.makeSparse(mX, nX, rowBlocks, colBlocks, places.size(), 1, nonzeroDensity, places, team);
-                } else {
-                    Console.OUT.println("Using dense matrix as non-zero density = " + nonzeroDensity);
-                    X = DistBlockMatrix.makeDense(mX, nX, rowBlocks, colBlocks, places.size(), 1, places, team);
-                }
-                y = DistVector.make(X.M, places, team);
-
-                finish for (place in places) at(place) async {
-                    X.initRandom_local(1, 10);
-                    y.initRandom_local(1, 10);
-                }
-            } else {
-                bias = true;
-                val labelsFile = opts("l", "");
-                if (labelsFile.equals("")) {
-                    Console.ERR.println("RunLogReg: missing labels file\ntry `RunLogReg -h ' for more information");
-                    System.setExitCode(1n);
-                    return;
-                }
-                val addBias = true;
-                val trainingFraction = 1.0;
-                val inputData = RegressionInputData.readFromSystemMLFile(featuresFile, labelsFile, places, trainingFraction, addBias);
-                mX = inputData.numTraining;
-                nX = inputData.numFeatures+1; // including bias
-                nonzeroDensity = 1.0f; // TODO allow sparse input
-                
-                X = DistBlockMatrix.makeDense(mX, nX, rowBlocks, colBlocks, places.size(), 1, places, team);
-                y = DistVector.make(X.M, places, team);
-
-                // initialize labels, examples at each place
-                finish for (place in places) at(place) async {
-                    val trainingLabels = inputData.local().trainingLabels;
-                    val trainingExamples = inputData.local().trainingExamples;
-                    val startRow = X.getGrid().startRow(places.indexOf(place));
-                    val blks = X.handleBS();
-                    val blkitr = blks.iterator();
-                    while (blkitr.hasNext()) {
-                        val blk = blkitr.next();              
-                        blk.init((i:Long, j:Long)=> trainingExamples((i-startRow)*X.N+j));
-                    }
-                    y.init_local((i:Long)=> trainingLabels(i));
-                    
-                    /*
-                     #[SYSTEMML] Convert "Y_vec" into indicator matrice:
-                     if (min (Y_vec) <= 0) { 
-                        # Category labels "0", "-1" etc. are converted into the largest label
-                        max_y = max (Y_vec);
-                        Y_vec  = Y_vec  + (- Y_vec  + max_y + 1) * ppred (Y_vec , 0.0, "<=");
-                     }
-                     **/
-                    val max_y = y.max_local();
-                    y.map_local((a:ElemType)=>{ (a <= 0.0)? max_y + 1.0 : a} );
-                }
-            }
-            
-            Console.OUT.println("X: rows:"+mX+" cols:"+nX
-                +" density:"+nonzeroDensity+" iterations:"+iterations);
-
-            val prun = new LogisticRegression(mX, nX, X, y, iterations, innerIterations, nonzeroDensity, regularization, bias, executor);
-        
-            val M = mX;
-            val N = nX;
-            
-            var denX:DenseMatrix(M,N) = null;
-            var l:Vector(M) = null;
-            if (verify) {
-                denX = prun.X.toDense();
-                l = Vector.make(denX.M);
-                prun.y.copyTo(l); // gather
-            }
-        
-            Debug.flushln("Starting logistic regression");
-            
-            val weightsPar = prun.train(startTime);
-                        
-            if (verify) { // Sequential run 
-                val seq = new SeqLogReg(mX, nX, denX, l,
-                    iterations, innerIterations, regularization, bias);
-
-                Debug.flushln("Starting sequential logistic regression");
-                val weightsSeq = seq.run();
-                Debug.flushln("Verifying results against sequential version");
-                
-                Console.OUT.println("w_parallel: " + weightsPar.toString());
-                Console.OUT.println("w_sequential: " + weightsSeq.toString());
-                
-                
-                if (equalsRespectNaN(weightsPar, weightsSeq)) {
-                    Console.OUT.println("Verification passed.");
-                } else {
-                    Console.OUT.println("Verification failed!");
-                }
-            }
-            
+            return;
         }
+            
+        if (sparePlaces > 0)
+            Console.OUT.println("Using "+sparePlaces+" spare place(s).");
+        
+        val disableWarmup = System.getenv("DISABLE_TEAM_WARMUP");
+        if (disableWarmup == null || disableWarmup.equals("0")) {
+            teamWarmup();
+        }
+        else {
+            Console.OUT.println("Starting without warmpup!!");
+        }
+                    
+        val disableAgree = System.getenv("DISABLE_TEAM_AGREE") != null && Long.parseLong(System.getenv("DISABLE_TEAM_AGREE")) == 1;
+        val startTime = Timer.milliTime();
+        val executor:IterativeExecutor;
+        if (x10.xrx.Runtime.x10rtAgreementSupport() && !disableAgree)
+            executor = new SPMDAgreeResilientIterativeExecutor(checkpointFreq, sparePlaces, false);
+        else
+            executor = new SPMDResilientIterativeExecutor(checkpointFreq, sparePlaces, false);
+        
+        val places = executor.activePlaces();
+        val team = executor.team();         
+        
+        val rowBlocks = opts("r", places.size());
+        val colBlocks = opts("c", 1);
+        			
+		var pRL:LogisticRegression = null;
+		var bias:Boolean = false;
+        val featuresFile = opts("f", "");
+        if (featuresFile.equals("")) {
+			pRL = LogisticRegression.makeRandom(mX, nX, rowBlocks, colBlocks, iterations, innerIterations, 
+			        nonzeroDensity, regularization, bias, executor);
+        } else {
+            val labelsFile = opts("l", "");
+            if (labelsFile.equals("")) {
+                Console.ERR.println("RunLogReg: missing labels file\ntry `RunLogReg -h ' for more information");
+                System.setExitCode(1n);
+                return;
+            }
+            bias = true;
+			pRL = LogisticRegression.makeFromFile(featuresFile, labelsFile, rowBlocks, colBlocks, iterations, innerIterations, 
+                    nonzeroDensity, regularization, bias, executor);
+        }
+        
+        Console.OUT.println("X: rows:"+mX+" cols:"+nX
+            +" density:"+nonzeroDensity+" iterations:"+iterations);
+    
+        val M = mX;
+        val N = nX;
+        val prun = pRL;
+        
+        val X = pRL.X;
+        val y = pRL.y;
+        
+        var denX:DenseMatrix(M,N) = null;
+        var l:Vector(M) = null;
+        if (verify) {
+            denX = prun.X.toDense();
+            l = Vector.make(denX.M);
+            prun.y.copyTo(l); // gather
+        }
+    
+        Debug.flushln("Starting logistic regression");
+        
+        val weightsPar = prun.train(startTime);
+        
+        if (print) {
+            Console.OUT.println("Input sparse matrix X\n" + X);
+            Console.OUT.println("Input dense matrix y\n" + y);
+        }
+        
+        if (verify) { // Sequential run 
+            val seq = new SeqLogReg(mX, nX, denX, l,
+                iterations, innerIterations, regularization, bias);
+
+            Debug.flushln("Starting sequential logistic regression");
+            val weightsSeq = seq.run();
+            Debug.flushln("Verifying results against sequential version");
+            
+            Console.OUT.println("w_parallel: " + weightsPar.toString());
+            Console.OUT.println("w_sequential: " + weightsSeq.toString());
+            
+            
+            if (equalsRespectNaN(weightsPar, weightsSeq)) {
+                Console.OUT.println("Verification passed.");
+            } else {
+                Console.OUT.println("Verification failed!");
+            }
+        }
+
     }
     
     /*

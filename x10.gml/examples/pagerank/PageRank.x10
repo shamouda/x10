@@ -50,6 +50,7 @@ import x10.util.resilient.iterative.*;
  */
 public class PageRank implements SPMDResilientIterativeApp {
 	static val VERBOSE = System.getenv("PAGERANK_DEBUG") != null && System.getenv("PAGERANK_DEBUG").equals("1");
+	static val CHECKPOINT_INPUT_MATRIX = System.getenv("CHECKPOINT_INPUT_MATRIX") != null && System.getenv("CHECKPOINT_INPUT_MATRIX").equals("1");
 	
     public val tolerance:Float;
     public val iterations:Long;
@@ -59,14 +60,12 @@ public class PageRank implements SPMDResilientIterativeApp {
     public val G:DistBlockMatrix{self.M==self.N};
     /** PageRank vector */
     public val P:DupVector(G.N);
-    /** Personalization vector */
-    //public val U:DistVector(G.N);
 
     /** temp data: G * P */
     val GP:DistVector(G.N);
     
-    /** Number of non-zeros in G */
-    private val nnz:Float;
+    /** non-zero density in G */
+    private val nzd:Float;
 
     private val executor:IterativeExecutor;
     
@@ -74,6 +73,8 @@ public class PageRank implements SPMDResilientIterativeApp {
     private val root:Place;
     private var places:PlaceGroup;
     private var team:Team;
+    
+    private transient val outDegree:Rail[Int];
     
     /**
      * Create a new PageRank instance
@@ -89,7 +90,8 @@ public class PageRank implements SPMDResilientIterativeApp {
             edges:DistBlockMatrix{self.M==self.N},
             it:Long,
             tolerance:Float,
-            nnz:Long,
+            nzd:Float,
+            outDegree:Rail[Int],
             executor:IterativeExecutor) {
         Debug.assure(DistGrid.isVertical(edges.getGrid(), edges.getMap()), 
                 "Input edges matrix does not have vertical distribution.");
@@ -98,11 +100,25 @@ public class PageRank implements SPMDResilientIterativeApp {
         this.executor = executor;
         this.places = executor.activePlaces();
         this.team = executor.team();
-        this.nnz = nnz;
+        this.nzd = nzd;
         root = here;
 
+        P = DupVector.make(G.N, places, team);
+        P.init(1.0);
+        //U = DistVector.make(G.N, g.getAggRowBs(), places, team);
+        iterations = it;
+        this.tolerance = tolerance;
+        this.outDegree = outDegree;
+        GP = DistVector.make(G.N, G.getAggRowBs(), places, team);//G must have vertical distribution
+    }
+
+    private static def initRandom(edges:DistBlockMatrix{self.M==self.N}, places:PlaceGroup) {
+        val start = Timer.milliTime();
         // divide the weight of each outgoing edge by the number of outgoing edges
-        finish for (p in executor.activePlaces()) at (p) async {
+        finish for (p in places) at (p) async {
+            x10.matrix.util.RandTool.reSeed(places.indexOf(here.id()));
+            edges.initRandom_local();
+            
             val colSums = Vector.make(edges.N);
             edges.colSumTo_local(colSums);
 
@@ -120,65 +136,27 @@ public class PageRank implements SPMDResilientIterativeApp {
                 }
             }
         }
-
-        P = DupVector.make(G.N, places, team);
-        P.init(1.0);
-        //U = DistVector.make(G.N, g.getAggRowBs(), places, team);
-        iterations = it;
-        this.tolerance = tolerance;
-        
-        GP = DistVector.make(G.N, G.getAggRowBs(), places, team);//G must have vertical distribution
+        Console.OUT.println("Pagerank.initRandom() completed in "+(Timer.milliTime()-start)+" ms");
     }
-
+    
     public static def makeRandom(gN:Long, nzd:Float, it:Long, tolerance:Float, numRowBs:Long, numColBs:Long, executor:IterativeExecutor) {
         val numRowPs = executor.activePlaces().size();
         val numColPs = 1;
         val g = DistBlockMatrix.makeSparse(gN, gN, numRowBs, numColBs, numRowPs, numColPs, nzd, executor.activePlaces(), executor.team());
-        val pr = new PageRank(g, it, tolerance, g.getTotalNonZeroCount(), executor);
-        finish ateach(Dist.makeUnique(executor.activePlaces())) {
-            g.initRandom_local();
-            // TODO init personalization vector U
-        }
+        initRandom(g, executor.activePlaces());
+        val pr = new PageRank(g, it, tolerance, nzd, null, executor);
         return pr;
     }
 
-    /**
-     * Initialize the Google Matrix G with a log-normal distribution of outward
-     * links. Values for mu and sigma are taken from the Pregel paper.
-     *
-     * @see Malewicz et al. (2010)
-     *   Pregel: a system for large-scale graph processing.
-     *   http://dx.doi.org/10.1145/1807167.1807184
-     */
-    public static def makeLogNormal(gN:Long, it:Long, tolerance:Float, numRowBs:Long, numColBs:Long, executor:IterativeExecutor) {
-        val densityGuess = 0.079f;
-        val numRowPs = executor.activePlaces().size();
-        val numColPs = 1;
-        val places = executor.activePlaces();
-        val team = executor.team();
+    private static def initLogRandom(edges:DistBlockMatrix{self.M==self.N}, vertexOutDegree:Rail[Int], places:PlaceGroup) {
+        val start = Timer.milliTime();
+        val gN = edges.N;
         
-        val g = DistBlockMatrix.make(gN, gN, numRowBs, numColBs, numRowPs, numColPs, places, team);
-        
-        val mu = 4.0f as ElemType;
-        val sigma = 1.3f as ElemType;
-
-        val rand = new Random(); // TODO allow choice of random seed
-        val vertexOutDegree = new Rail[Int](gN);
-        var globalNnzGuess:Long = 0;
-        for (i in 0..(gN-1)) {
-            var X:ElemType = ElemType.MAX_VALUE;
-            while (X >= ElemType.MAX_VALUE) {
-              val Z = rand.nextGaussian();
-              X = Math.exp(mu + sigma*Z);
-            }
-            vertexOutDegree(i) = Math.floor(X) as Int;
-            globalNnzGuess += vertexOutDegree(i);
-        }
-
         finish ateach(Dist.makeUnique(places)) {
-            val grid = g.handleBS().getGrid();
-            val itr = g.handleBS().getDistMap().buildBlockIteratorAtPlace(places.indexOf(here));
-            val rand2 = new Random(); // TODO allow choice of random seed
+            edges.handleBS().clear();
+            val grid = edges.handleBS().getGrid();
+            val itr = edges.handleBS().getDistMap().buildBlockIteratorAtPlace(places.indexOf(here));
+            val rand2 = new Random(places.indexOf(here.id())); // TODO allow choice of random seed
             val invN = 1.0 / gN;
             while (itr.hasNext()) {
                 val bid    = itr.next();
@@ -217,11 +195,63 @@ public class PageRank implements SPMDResilientIterativeApp {
                 }
                 val c2 = new Compress2D(c1);
                 val block = new SparseBlock(rowbid, colbid, roff, coff, new SparseCSC(m, n, c2));
-                g.handleBS().add(block);
+                edges.handleBS().add(block);
+            }
+            
+            // divide the weight of each outgoing edge by the number of outgoing edges
+            val colSums = Vector.make(gN);
+            edges.colSumTo_local(colSums);
+
+            val localBlockIter = edges.handleBS().iterator();
+            while (localBlockIter.hasNext()) {
+                val matrix = localBlockIter.next().getMatrix() as SparseCSC;
+                for (j in 0..(matrix.N-1)) {
+                    if (colSums(j) > 0) {
+                        val compressedCol = matrix.getCol(j);
+                        for (i in 0..(compressedCol.length-1)) {
+                            compressedCol.setValue(i, compressedCol.getValue(i) / colSums(j));
+                        }
+                    }
+                    // TODO account for vertices with zero outgoing edges
+                }
             }
         }
-
-        return new PageRank(g, it, tolerance, g.getTotalNonZeroCount(), executor);
+        
+        Console.OUT.println("Pagerank.initLogRandom() completed in "+(Timer.milliTime()-start)+" ms");
+    }
+    
+    /**
+     * Initialize the Google Matrix G with a log-normal distribution of outward
+     * links. Values for mu and sigma are taken from the Pregel paper.
+     *
+     * @see Malewicz et al. (2010)
+     *   Pregel: a system for large-scale graph processing.
+     *   http://dx.doi.org/10.1145/1807167.1807184
+     */
+    public static def makeLogNormal(gN:Long, it:Long, tolerance:Float, numRowBs:Long, numColBs:Long, executor:IterativeExecutor) {
+        val densityGuess = 0.079f;
+        val numRowPs = executor.activePlaces().size();
+        val numColPs = 1;
+        val places = executor.activePlaces();
+        val team = executor.team();
+        
+        val g = DistBlockMatrix.make(gN, gN, numRowBs, numColBs, numRowPs, numColPs, places, team);
+        
+        val mu = 4.0f as ElemType;
+        val sigma = 1.3f as ElemType;
+        val rand = new Random(places.size()); // TODO allow choice of random seed
+        val vertexOutDegree = new Rail[Int](gN);
+        for (i in 0..(gN-1)) {
+            var X:ElemType = ElemType.MAX_VALUE;
+            while (X >= ElemType.MAX_VALUE) {
+              val Z = rand.nextGaussian();
+              X = Math.exp(mu + sigma*Z);
+            }
+            vertexOutDegree(i) = Math.floor(X) as Int;
+        }
+        initLogRandom(g, vertexOutDegree, executor.activePlaces());
+        val pr = new PageRank(g, it, tolerance, 0.0f, vertexOutDegree, executor);
+        return pr;
     }
 
     public def run(startTime:Long):Vector(G.N) {
@@ -240,7 +270,7 @@ public class PageRank implements SPMDResilientIterativeApp {
         Console.OUT.printf("Input Matrix G:(%dx%d), partition:(%dx%d) blocks, ",
                 G.M, G.N, G.getGrid().numRowBlocks, G.getGrid().numColBlocks);
         Console.OUT.printf("distribution:(%dx%d), number of non-zeros:%d\n", 
-                Place.numPlaces(), 1, nzc);
+                this.places, 1, nzc);
 
         Console.OUT.printf("Input duplicated vector P(%d), duplicated in all places\n", P.M);
 
@@ -248,17 +278,19 @@ public class PageRank implements SPMDResilientIterativeApp {
 
         Console.OUT.flush();
     }
-    
-    /*public def isFinished_local():Boolean {
-        return (iterations <= 0 && plh().maxDelta < tolerance) || (iterations > 0 && plh().iter >= iterations);
-    }*/
 
     //for performance evaluation with fixed number of iterations
     public def isFinished_local():Boolean {
-        return plh().iter >= iterations;
+        if (iterations == 0)
+            return (iterations <= 0 && plh().maxDelta < tolerance) || (iterations > 0 && plh().iter >= iterations);    
+        else
+            return plh().iter >= iterations;
     }
     
     public def step_local():void {
+        if (here.id == 0)
+            Console.OUT.println("iter:"+ plh().iter);
+        
         GP.mult_local(G, P);
         GP.scale_local(alpha);
     
@@ -283,10 +315,9 @@ public class PageRank implements SPMDResilientIterativeApp {
 
     public def getCheckpointData_local():HashMap[String,Cloneable] {
     	val map = new HashMap[String,Cloneable]();
-    	if (plh().iter == 0) {
+    	if (CHECKPOINT_INPUT_MATRIX && plh().iter == 0) {
     		map.put("G", G.makeSnapshot_local());
     	}
-    	//map.put("U", U.makeSnapshot_local());
     	map.put("P", P.makeSnapshot_local());
     	map.put("app", plh().makeSnapshot_local());
     	if (VERBOSE) Console.OUT.println(here + "Checkpointing at iter ["+plh().iter+"] maxDelta["+plh().maxDelta+"] ...");
@@ -294,8 +325,9 @@ public class PageRank implements SPMDResilientIterativeApp {
     }
     
     public def restore_local(restoreDataMap:HashMap[String,Cloneable], lastCheckpointIter:Long) {
-    	G.restoreSnapshot_local(restoreDataMap.getOrThrow("G"));
-    	//U.restore_local(restoreDataMap.getOrThrow("U"));
+    	if (CHECKPOINT_INPUT_MATRIX) {
+    		G.restoreSnapshot_local(restoreDataMap.getOrThrow("G"));
+    	}
     	P.restoreSnapshot_local(restoreDataMap.getOrThrow("P"));
     	plh().restoreSnapshot_local(restoreDataMap.getOrThrow("app"));
     	if (VERBOSE) Console.OUT.println(here + "Restore succeeded. Restarting from iteration["+plh().iter+"] maxDelta["+plh().maxDelta+"] ...");
@@ -307,17 +339,23 @@ public class PageRank implements SPMDResilientIterativeApp {
         val newRowPs = changes.newActivePlaces.size();
         val newColPs = 1;
         if (VERBOSE) Console.OUT.println(here + "Remake, newRowPs["+newRowPs+"], newColPs["+newColPs+"] ...");
-        val nzd = nnz as Float / (G.M * G.N);
-        // TODO remake using nnz instead of nzd
-        G.remake(newRowPs, newColPs, changes.newActivePlaces, changes.addedPlaces);
-        //U.remake(G.getAggRowBs(), changes.newActivePlaces, newTeam, changes.addedPlaces);
+        G.remake(newRowPs, newColPs, changes.newActivePlaces, newTeam, changes.addedPlaces);
         P.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
         GP.remake(G.getAggRowBs(), changes.newActivePlaces, newTeam, changes.addedPlaces);
         
-        for (sparePlace in changes.addedPlaces){
+        for (sparePlace in changes.addedPlaces) {
     		if (VERBOSE) Console.OUT.println("Adding place["+sparePlace+"] to plh ...");
     		PlaceLocalHandle.addPlace[AppTempData](plh, sparePlace, ()=>new AppTempData());
     	}
+        
+        if (!CHECKPOINT_INPUT_MATRIX) {
+	        if (this.nzd > 0.0f) {
+	            G.allocSparseBlocks(this.nzd, changes.addedPlaces);
+	            initRandom(G, this.places);
+	        } else {
+	            initLogRandom(G, this.outDegree, this.places);
+	        }
+        }
         if (VERBOSE) Console.OUT.println("Remake succeeded. Restarting from iteration["+plh().iter+"] ...");
     }
     

@@ -24,9 +24,6 @@ import x10.util.Team;
 /**
  * Page Rank demo
  */
-//Example run commands to use Hazelcast or native store
-//KILL_PLACES=4 KILL_STEPS=12 X10_RESILIENT_MODE=12 X10_LAUNCHER_TTY=false GML_ELEM_TYPE=double X10_NPLACES=8 X10_NTHREADS=1 x10 -DX10RT_DATASTORE=native -classpath build:$X10_HOME/x10.gml/lib/managed_gml_double.jar -libpath $X10_HOME/x10.gml/native_double/lib RunPageRank -m 100 --density 0.8 --iterations 30 -k 10 -s 2
-//KILL_PLACES=4 KILL_STEPS=12 X10_RESILIENT_MODE=12 X10_LAUNCHER_TTY=false GML_ELEM_TYPE=double X10_NPLACES=8 X10_NTHREADS=1 x10 -DX10RT_DATASTORE=Hazelcast -classpath build:$X10_HOME/x10.gml/lib/managed_gml_double.jar -libpath $X10_HOME/x10.gml/native_double/lib RunPageRank -m 100 --density 0.8 --iterations 30 -k 10 -s 2 
 public class RunPageRank {
     public static def main(args:Rail[String]): void {
         val opts = new OptionsParser(args, [
@@ -35,6 +32,7 @@ public class RunPageRank {
             Option("p","print","print matrix V, vectors d and w on completion")
         ], [
             Option("m","rows","number of rows, default = 100000"),
+            Option("mepp","millionEdgesPerPlace","number of million edges per place assuming density=0.001, default = 2 (i.e. 2M per place) "),
             Option("r","rowBlocks","number of row blocks, default = X10_NPLACES"),
             Option("c","colBlocks","number of columnn blocks; default = 1"),
             Option("d","density","nonzero density, default = log-normal"),
@@ -55,7 +53,7 @@ public class RunPageRank {
             return;
         }
 
-        val nonzeroDensity = opts("d", 0.0f);
+        var nonzeroDensity:Float = opts("d", 0.0f);
         val iterations = opts("i", 0n);
         val tolerance = opts("t", 0.0001f);
         val verify = opts("v");
@@ -63,8 +61,16 @@ public class RunPageRank {
         val sparePlaces = opts("s", 0n);
         val checkpointFreq = opts("checkpointFreq", -1n);
         val placesCount = Place.numPlaces() - sparePlaces;
-        
-        val mG = opts("m", (20000*Math.sqrt(placesCount*5)) as Long );
+        var mG:Long = -1;
+        val millionEdgesPerPlace = opts("mepp", -1.0f);
+        if (millionEdgesPerPlace != -1.0f) {
+            nonzeroDensity = 0.001f;
+            mG = (10000*Math.sqrt(placesCount*10*millionEdgesPerPlace)) as Long;
+            Console.OUT.println("Running in weak scaling mode: density["+nonzeroDensity+"] mG["+mG+"] places["+Place.numPlaces()+"] spare["+sparePlaces+"]");
+        } else {
+            mG = opts("m", 100000);
+            Console.OUT.println("Running in normal mode: density["+nonzeroDensity+"] mG["+mG+"] places["+Place.numPlaces()+"] spare["+sparePlaces+"]");
+        }
         
         Console.OUT.printf("G: rows/cols %d iterations: %d\n", mG, iterations);
         if ((mG<=0) || sparePlaces < 0 || sparePlaces >= Place.numPlaces())
@@ -73,8 +79,7 @@ public class RunPageRank {
             val disableWarmup = System.getenv("DISABLE_TEAM_WARMUP");
             if (disableWarmup == null || disableWarmup.equals("0")) {
                 teamWarmup();
-            }
-            else {
+            } else {
                 Console.OUT.println("Starting without warmpup!!");
             }
             

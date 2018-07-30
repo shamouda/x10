@@ -25,7 +25,7 @@ import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.localstore.Snapshottable;
 import x10.util.resilient.iterative.*;
-
+import x10.matrix.regression.RegressionInputData;
 
 /**
  * Parallel linear regression using a conjugate gradient solver
@@ -35,6 +35,7 @@ import x10.util.resilient.iterative.*;
  */
 public class LinearRegression implements SPMDResilientIterativeApp {
 	static val VERBOSE = System.getenv("LINREG_DEBUG") != null && System.getenv("LINREG_DEBUG").equals("1");
+	static val CHECKPOINT_INPUT_MATRIX = System.getenv("CHECKPOINT_INPUT_MATRIX") != null && System.getenv("CHECKPOINT_INPUT_MATRIX").equals("1");
 	
     public static val MAX_SPARSE_DENSITY = 0.1f;
     public val lambda:Float; // regularization parameter
@@ -69,7 +70,14 @@ public class LinearRegression implements SPMDResilientIterativeApp {
     var team:Team;
     var places:PlaceGroup;
     
-    public def this(X:DistBlockMatrix, y:DistVector(X.M), it:Long, tolerance:Float, sparseDensity:Float, regularization:Float, executor:IterativeExecutor) {
+    //used for initilizing the matrix from input files
+    var featuresFile:String;
+    var labelsFile:String;
+    
+    public def this(X:DistBlockMatrix, y:DistVector(X.M), it:Long, tolerance:Float, 
+            sparseDensity:Float, regularization:Float,
+            featuresFile:String, labelsFile:String,
+            executor:IterativeExecutor) {
         this.X = X;
         this.y = y;
         if (it > 0) {
@@ -79,6 +87,9 @@ public class LinearRegression implements SPMDResilientIterativeApp {
         }
         this.tolerance = tolerance;
         this.lambda = regularization;
+        this.featuresFile = featuresFile;
+        this.labelsFile = labelsFile;
+        this.nzd = sparseDensity;
         this.executor = executor;
         this.places = executor.activePlaces();
         this.team = executor.team();
@@ -92,8 +103,92 @@ public class LinearRegression implements SPMDResilientIterativeApp {
         
         d_w = DupVector.make(X.N, places, team);  
 
-        nzd = sparseDensity;
         root = here;
+    }
+    
+    private static def initRandom(X:DistBlockMatrix, y:DistVector(X.M), places:PlaceGroup) {
+        val start = Timer.milliTime();
+        finish for (place in places) at(place) async {
+            x10.matrix.util.RandTool.reSeed(places.indexOf(here.id()));
+            X.initRandom_local();
+            y.initRandom_local();
+        }
+        Console.OUT.println("LinearRegression.initRandom() completed in "+(Timer.milliTime()-start)+" ms");
+    }
+    
+    public static def makeRandom(mX:Long, nX:Long, rowBlocks:Long, colBlocks:Long, iterations:Long, tolerance:Float, 
+            nonzeroDensity:Float, regularization:Float, executor:IterativeExecutor) {
+        val places = executor.activePlaces();
+        val team = executor.team();
+        
+        val X:DistBlockMatrix;
+        val y:DistVector(X.M);
+
+        Console.OUT.printf("Linear regression with random examples X(%d,%d) blocks(%dx%d) ", mX, nX, rowBlocks, colBlocks);
+        Console.OUT.printf("dist(%dx%d) nonzeroDensity:%g\n", places.size(), 1, nonzeroDensity);
+
+        if (nonzeroDensity < LinearRegression.MAX_SPARSE_DENSITY) {
+            X = DistBlockMatrix.makeSparse(mX, nX, rowBlocks, colBlocks, places.size(), 1, nonzeroDensity, places, team);
+        } else {
+            Console.OUT.println("Using dense matrix as non-zero density = " + nonzeroDensity);
+            X = DistBlockMatrix.makeDense(mX, nX, rowBlocks, colBlocks, places.size(), 1, places, team);
+        }
+        y = DistVector.make(X.M, places, team);
+        initRandom(X, y, places);
+        return new LinearRegression(X, y, iterations, tolerance, nonzeroDensity, regularization, null, null, executor);
+    }
+    
+    private static def initFromFile(X:DistBlockMatrix, y:DistVector(X.M), inData:RegressionInputData, 
+            featuresFile:String, labelsFile:String, places:PlaceGroup) {
+        val start = Timer.milliTime();
+        var inD:RegressionInputData;
+        if (inData == null) {
+            val addBias = true;
+            val trainingFraction = 1.0;
+            inD = RegressionInputData.readFromSystemMLFile(featuresFile, labelsFile, places, trainingFraction, addBias);
+        }
+        else
+            inD = inData;
+        
+        val inputData = inD;
+        // initialize labels, examples at each place
+        finish for (place in places) at(place) async {
+            val trainingLabels = inputData.local().trainingLabels;
+            val trainingExamples = inputData.local().trainingExamples;
+            val startRow = X.getGrid().startRow(places.indexOf(place));
+            val blks = X.handleBS();
+            val blkitr = blks.iterator();
+            while (blkitr.hasNext()) {
+                val blk = blkitr.next();              
+                blk.init((i:Long, j:Long)=> trainingExamples((i-startRow)*X.N+j));
+            }
+            y.init_local((i:Long)=> trainingLabels(i));
+        }
+        Console.OUT.println("LinearRegression.initFromFile() completed in "+(Timer.milliTime()-start)+" ms");
+    }
+    
+    // TODO allow sparse input
+    public static def makeFromFile(featuresFile:String, labelsFile:String,
+            rowBlocks:Long, colBlocks:Long, iterations:Long, tolerance:Float, 
+            nonzeroDensity:Float, regularization:Float, executor:IterativeExecutor) {
+        val places = executor.activePlaces();
+        val team = executor.team();
+        
+        val X:DistBlockMatrix;
+        val y:DistVector(X.M);
+        
+        val addBias = true;
+        val trainingFraction = 1.0;
+        val inputData = RegressionInputData.readFromSystemMLFile(featuresFile, labelsFile, places, trainingFraction, addBias);
+        val mX = inputData.numTraining;
+        val nX = inputData.numFeatures+1; // including bias
+        
+        X = DistBlockMatrix.makeDense(mX, nX, rowBlocks, colBlocks, places.size(), 1, places, team);
+        y = DistVector.make(X.M, places, team);
+        
+        initFromFile(X, y, inputData, featuresFile, labelsFile, places);
+        
+        return new LinearRegression(X, y, iterations, tolerance, nonzeroDensity, regularization, featuresFile, labelsFile, executor);
     }
     
     /*public def isFinished_local() {
@@ -192,7 +287,7 @@ public class LinearRegression implements SPMDResilientIterativeApp {
    
     public def getCheckpointData_local():HashMap[String,Cloneable] {
     	val map = new HashMap[String,Cloneable]();
-    	if (plh().iter == 0) {    		
+    	if (CHECKPOINT_INPUT_MATRIX && plh().iter == 0) {
     		map.put("X", X.makeSnapshot_local());
     	}
     	map.put("d_p", d_p.makeSnapshot_local());
@@ -205,7 +300,9 @@ public class LinearRegression implements SPMDResilientIterativeApp {
     }
     
     public def restore_local(restoreDataMap:HashMap[String,Cloneable], lastCheckpointIter:Long) {
-    	X.restoreSnapshot_local(restoreDataMap.getOrThrow("X"));
+    	if (CHECKPOINT_INPUT_MATRIX) {
+    		X.restoreSnapshot_local(restoreDataMap.getOrThrow("X"));
+    	}
     	d_p.restoreSnapshot_local(restoreDataMap.getOrThrow("d_p"));
         d_q.restoreSnapshot_local(restoreDataMap.getOrThrow("d_q"));
         d_r.restoreSnapshot_local(restoreDataMap.getOrThrow("d_r"));
@@ -220,16 +317,29 @@ public class LinearRegression implements SPMDResilientIterativeApp {
         val newRowPs = changes.newActivePlaces.size();
         val newColPs = 1;
         //remake all the distributed data structures
-        X.remake(newRowPs, newColPs, changes.newActivePlaces, changes.addedPlaces);
+        X.remake(newRowPs, newColPs, changes.newActivePlaces, newTeam, changes.addedPlaces);
         d_p.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
         d_q.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
         d_r.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
         d_w.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
         Xp.remake(X.getAggRowBs(), changes.newActivePlaces, newTeam, changes.addedPlaces);
+        y.remake(X.getAggRowBs(), changes.newActivePlaces, newTeam, changes.addedPlaces);
         for (sparePlace in changes.addedPlaces){
     		if (VERBOSE) Console.OUT.println("Adding place["+sparePlace+"] to plh ...");
     		PlaceLocalHandle.addPlace[AppTempData](plh, sparePlace, ()=>new AppTempData());
     	}
+        if (!CHECKPOINT_INPUT_MATRIX) {
+	        if (featuresFile == null){
+	            if (this.nzd < LinearRegression.MAX_SPARSE_DENSITY) {
+	                X.allocSparseBlocks(this.nzd, changes.addedPlaces);
+	            } else {
+	                X.allocDenseBlocks(changes.addedPlaces);
+	            }
+	            initRandom(X, y, places);
+	        } else {
+	            initFromFile(X, y, null, featuresFile, labelsFile, places);
+	        }
+        }
     }
     
     class AppTempData implements Cloneable, Snapshottable {

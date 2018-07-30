@@ -15,6 +15,7 @@ import x10.util.HashMap;
 import x10.matrix.ElemType;
 import x10.util.resilient.localstore.Cloneable;
 
+//FIXME: remove the placeIndex parameter, not needed
 public class VectorSnapshotInfo(placeIndex:Long, data:Rail[ElemType]{self!=null}) implements Cloneable {    
     public def clone():Cloneable {  
         return new VectorSnapshotInfo(placeIndex, new Rail[ElemType](data));

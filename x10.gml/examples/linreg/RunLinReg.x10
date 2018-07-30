@@ -32,9 +32,6 @@ import x10.util.resilient.iterative.SPMDAgreeResilientIterativeExecutor;
 /**
  * Test harness for Linear Regression using GML
  */
-//Example run commands to use Hazelcast or native stores
-//KILL_PLACES=4 KILL_STEPS=12 X10_RESILIENT_MODE=12 X10_LAUNCHER_TTY=false  X10_NPLACES=8 X10_NTHREADS=1 x10 -DX10RT_DATASTORE=native -classpath build:$X10_HOME/x10.gml/lib/managed_gml_double.jar  -libpath $X10_HOME/x10.gml/native_double/lib RunLinReg  -m 1000 -n 1000 --density 1.0 --iterations 30 --verify -k 10 -s 1
-//KILL_PLACES=4 KILL_STEPS=12 X10_RESILIENT_MODE=12 X10_LAUNCHER_TTY=false  X10_NPLACES=8 X10_NTHREADS=1 x10 -DX10RT_DATASTORE=Hazelcast -classpath build:$X10_HOME/x10.gml/lib/managed_gml_double.jar  -libpath $X10_HOME/x10.gml/native_double/lib RunLinReg  -m 1000 -n 1000 --density 1.0 --iterations 30 --verify -k 10 -s 1
 public class RunLinReg {
 
     public static def main(args:Rail[String]): void {
@@ -76,7 +73,7 @@ public class RunLinReg {
         val iterations = opts("i", 0n);
         val tolerance = opts("t", 0.000001f);
         val sparePlaces = opts("s", 0n);
-        val checkpointFrequency = opts("checkpointFreq", -1n);
+        val checkpointFreq = opts("checkpointFreq", -1n);
 
         if (nonzeroDensity<0.0f
          || sparePlaces < 0 || sparePlaces >= Place.numPlaces()) {
@@ -85,15 +82,9 @@ public class RunLinReg {
             return;
         }
 
-        if (sparePlaces > 0) {
-            if (Runtime.RESILIENT_MODE <= 0) {
-                Console.ERR.println("Error: attempt to skip places when not in resilient mode.  Aborting.");
-                System.setExitCode(1n);
-                return;
-            } else {
-                Console.OUT.println("Skipping "+sparePlaces+" places to reserve for failure.");
-            }
-        }
+        if (sparePlaces > 0)
+            Console.OUT.println("Using "+sparePlaces+" spare place(s).");
+            
         
         val disableWarmup = System.getenv("DISABLE_TEAM_WARMUP");
         if (disableWarmup == null || disableWarmup.equals("0")) {
@@ -103,15 +94,13 @@ public class RunLinReg {
             Console.OUT.println("Starting without warmpup!!");
         }
         
-        
-        
         val disableAgree = System.getenv("DISABLE_TEAM_AGREE") != null && Long.parseLong(System.getenv("DISABLE_TEAM_AGREE")) == 1;
         val startTime = Timer.milliTime();
         val executor:IterativeExecutor;
         if (x10.xrx.Runtime.x10rtAgreementSupport() && !disableAgree)
-            executor = new SPMDAgreeResilientIterativeExecutor(checkpointFrequency, sparePlaces, false);
+            executor = new SPMDAgreeResilientIterativeExecutor(checkpointFreq, sparePlaces, false);
         else
-            executor = new SPMDResilientIterativeExecutor(checkpointFrequency, sparePlaces, false);
+            executor = new SPMDResilientIterativeExecutor(checkpointFreq, sparePlaces, false);
 
         val places = executor.activePlaces();
         val team = executor.team();
@@ -119,26 +108,11 @@ public class RunLinReg {
         val rowBlocks = opts("r", places.size());
         val colBlocks = opts("c", 1);
 
-        val X:DistBlockMatrix;
-        val y:DistVector(X.M);
-
+        var pRL:LinearRegression = null;
+        
         val featuresFile = opts("f", "");
         if (featuresFile.equals("")) {
-            Console.OUT.printf("Linear regression with random examples X(%d,%d) blocks(%dx%d) ", mX, nX, rowBlocks, colBlocks);
-            Console.OUT.printf("dist(%dx%d) nonzeroDensity:%g\n", places.size(), 1, nonzeroDensity);
-
-            if (nonzeroDensity < LinearRegression.MAX_SPARSE_DENSITY) {
-                X = DistBlockMatrix.makeSparse(mX, nX, rowBlocks, colBlocks, places.size(), 1, nonzeroDensity, places, team);
-            } else {
-                Console.OUT.println("Using dense matrix as non-zero density = " + nonzeroDensity);
-                X = DistBlockMatrix.makeDense(mX, nX, rowBlocks, colBlocks, places.size(), 1, places, team);
-            }
-            y = DistVector.make(X.M, places, team);
-
-            finish for (place in places) at(place) async {
-                X.initRandom_local();
-                y.initRandom_local();
-            }
+            pRL = LinearRegression.makeRandom(mX, nX, rowBlocks, colBlocks, iterations, tolerance, nonzeroDensity, regularization, executor);
         } else {
             val labelsFile = opts("l", "");
             if (labelsFile.equals("")) {
@@ -146,36 +120,15 @@ public class RunLinReg {
                 System.setExitCode(1n);
                 return;
             }
-            val addBias = true;
-            val trainingFraction = 1.0;
-            val inputData = RegressionInputData.readFromSystemMLFile(featuresFile, labelsFile, places, trainingFraction, addBias);
-            mX = inputData.numTraining;
-            nX = inputData.numFeatures+1; // including bias
-            nonzeroDensity = 1.0f; // TODO allow sparse input
-            
-            X = DistBlockMatrix.makeDense(mX, nX, rowBlocks, colBlocks, places.size(), 1, places, team);
-            y = DistVector.make(X.M, places, team);
-
-            // initialize labels, examples at each place
-            finish for (place in places) at(place) async {
-                val trainingLabels = inputData.local().trainingLabels;
-                val trainingExamples = inputData.local().trainingExamples;
-                val startRow = X.getGrid().startRow(places.indexOf(place));
-                val blks = X.handleBS();
-                val blkitr = blks.iterator();
-                while (blkitr.hasNext()) {
-                    val blk = blkitr.next();              
-                    blk.init((i:Long, j:Long)=> trainingExamples((i-startRow)*X.N+j));
-                }
-                y.init_local((i:Long)=> trainingLabels(i));
-            }
+            pRL = LinearRegression.makeFromFile(featuresFile, labelsFile, rowBlocks, colBlocks, iterations, tolerance, nonzeroDensity, regularization, executor);
         }
-
         val M = mX;
         val N = nX;
-
-        val parLR = new LinearRegression(X, y, iterations, tolerance, nonzeroDensity, regularization, executor);
-
+        val parLR = pRL;
+        
+        val X = pRL.X;
+        val y = pRL.y;
+        
         var localX:DenseMatrix(M, N) = null;
         var localY:Vector(M) = null;
         if (verify) {
@@ -201,8 +154,8 @@ public class RunLinReg {
         //parLR.printTimes();
 
         if (print) {
-            //Console.OUT.println("Input sparse matrix X\n" + X);
-            //Console.OUT.println("Input dense matrix y\n" + y);
+            Console.OUT.println("Input sparse matrix X\n" + X);
+            Console.OUT.println("Input dense matrix y\n" + y);
             Console.OUT.println("Output estimated weights: \n" + parLR.getResult());
         }
 

@@ -92,9 +92,9 @@ public class Vector(M:Long) implements (Long) => ElemType {
      * Initialize vector with random values between 0.0 and 1.0.
      */    
     public def initRandom(): Vector(this) {
-        val rgen = RandTool.getRandGen();
+        //val rgen = RandTool.getRandGen();
          for (i in 0..(M-1))
-            this.d(i) = RandTool.nextElemType[ElemType](rgen);
+            this.d(i) = RandTool.nextElemType[ElemType]();
         return this;
     }
     
@@ -106,9 +106,9 @@ public class Vector(M:Long) implements (Long) => ElemType {
      */    
     public def initRandom(min:Long, max:Long) {
         val len = Math.abs(max-min)+1;
-        val rgen = RandTool.getRandGen();
+        //val rgen = RandTool.getRandGen();
          for (i in 0..(M-1))
-            this.d(i) = rgen.nextLong(len)+min;
+            this.d(i) = RandTool.nextLong(len)+min;
         return this;
     }
     

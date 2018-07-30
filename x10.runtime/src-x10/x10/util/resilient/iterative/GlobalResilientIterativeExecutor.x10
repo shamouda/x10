@@ -255,42 +255,37 @@ public class GlobalResilientIterativeExecutor (home:Place) {
             Console.OUT.println("AllRemake:" + listToString(remakeTimes));
         }
         Console.OUT.println("=========Totals by averaging Min/Max statistics============");
-        Console.OUT.println(">>>>>>>>>>>>>>Initialization:"      + applicationInitializationTime);
+        Console.OUT.println("Initialization:"      + applicationInitializationTime);
         Console.OUT.println();
-        Console.OUT.println("   ---AverageSingleStep:" + listAverage(stepTimes));
-        Console.OUT.println(">>>>>>>>>>>>>>TotalSteps:"+ listSum(stepTimes) );
+        Console.OUT.println("AverageSingleStep:" + listAverage(stepTimes));
+        Console.OUT.println(">>TotalSteps:"+ listSum(stepTimes) );
         Console.OUT.println();
         if (isResilient){
-            Console.OUT.println("Checkpoint-all:" + listToString(ckptTimes));
-            Console.OUT.println("   ---AverageCheckpoint:" + listAverage(ckptTimes) );
-            Console.OUT.println(">>>>>>>>>>>>>>TotalCheckpointingTime:" + listSum(ckptTimes)  );
+            Console.OUT.println("CkptData-all:" + listToString(ckptTimes));
+            Console.OUT.println("AverageCkptData:" + listAverage(ckptTimes) );
+            Console.OUT.println("CkptAgr:0"); //always zero in global executor
+            Console.OUT.println("AverageCkptAgr:0" ); //always zero in global executor
+            Console.OUT.println(">>TotalCheckpointingTime:" + listSum(ckptTimes)  );
       
             Console.OUT.println();
             Console.OUT.println("FailureDetection-all:"        + listToString(failureDetectionTimes) );
-            Console.OUT.println("   ---AverageFailureDetection:"   + listAverage(failureDetectionTimes) );
+            Console.OUT.println("AverageFailureDetection:"   + listAverage(failureDetectionTimes) );
                         
             Console.OUT.println("ResilientMapRecovery-all:"      + listToString(resilientMapRecoveryTimes) );
-            Console.OUT.println("   ---AverageResilientMapRecovery:" + listAverage(resilientMapRecoveryTimes) );
+            Console.OUT.println("AverageResilientMapRecovery:" + listAverage(resilientMapRecoveryTimes) );
             Console.OUT.println("AppRemake-all:"      + listToString(appRemakeTimes) );
-            Console.OUT.println("   ---AverageAppRemake:" + listAverage(appRemakeTimes) );            
+            Console.OUT.println("AverageAppRemake:" + listAverage(appRemakeTimes) );
+            Console.OUT.println("TeamReconstruction-all:0"); //always zero in global executor
+            Console.OUT.println("AverageTeamReconstruction:0"); //always zero in global executor
             Console.OUT.println("TotalRemake-all:"                   + listToString(remakeTimes) );
-            Console.OUT.println("   ---AverageTotalRemake:"              + listAverage(remakeTimes) );
+            Console.OUT.println("AverageTotalRemake:"              + listAverage(remakeTimes) );
             
             Console.OUT.println("RestoreData-all:"      + listToString(restoreTimes));
-            Console.OUT.println("   ---AverageRestoreData:"    + listAverage(restoreTimes));
-            Console.OUT.println(">>>>>>>>>>>>>>TotalRecovery:" + (listSum(failureDetectionTimes) + listSum(remakeTimes) + listSum(restoreTimes) ));
+            Console.OUT.println("AverageRestoreData:"    + listAverage(restoreTimes));
+            Console.OUT.println(">>TotalRecovery:" + (listSum(failureDetectionTimes) + listSum(remakeTimes) + listSum(restoreTimes) ));
         }
         Console.OUT.println("=============================");
         Console.OUT.println("Actual RunTime:" + runTime);
-        var calcTotal:Double = applicationInitializationTime + listSum(stepTimes);
-        
-        if (isResilient){
-            calcTotal += listSum(ckptTimes) + 
-                (listSum(failureDetectionTimes) + listSum(remakeTimes) + listSum(restoreTimes) );
-        }
-        Console.OUT.println("Calculated RunTime based on Averages:" + calcTotal 
-            + "   ---Difference:" + (runTime-calcTotal));
-        
         Console.OUT.println("=========Counts============");
         Console.OUT.println("StepCount:"+stepTimes.size());
         if (isResilient){
