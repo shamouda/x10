@@ -193,19 +193,24 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
 
     private def execute(store:TxStore, state:ClusteringState, placeId:Long, workerId:Long, start:Int, end:Int, 
             plh:PlaceLocalHandle[ClusteringState], verbose:Int) {
-        var totalFailedRetries:Long = 0;
-        Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1));
-        // Iterate over each of the vertices in my portion.
-        var c:Long = 1;
-        for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++c) { 
-            val s:Int = state.verticesToWorkOn(vertexIndex);
-            val clusterId = c;
-            val closure = (tx:Tx) => {
-                createCluster(store, tx, s, placeId, clusterId, plh, verbose);
-            };
-            totalFailedRetries += store.executeTransaction(closure);
+        try {
+            var totalFailedRetries:Long = 0;
+            Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1));
+            // Iterate over each of the vertices in my portion.
+            var c:Long = 1;
+            for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++c) { 
+                val s:Int = state.verticesToWorkOn(vertexIndex);
+                val clusterId = c;
+                val closure = (tx:Tx) => {
+                    createCluster(store, tx, s, placeId, clusterId, plh, verbose);
+                };
+                totalFailedRetries += store.executeTransaction(closure);
+            }
+            Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":totalRetries:"+totalFailedRetries);
+        }catch (ex:Exception) {
+            Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":FAILED");
+            ex.printStackTrace();
         }
-        Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":totalRetries:"+totalFailedRetries);
     }
     
     /**
@@ -260,7 +265,8 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
                 for (workerId in 1..state.workersPerPlace) {
                     val start = startVertex + (workerId-1) * verticesPerWorker;
                     val end = start + verticesPerWorker;
-                    async execute(store, state, placeId, workerId, start as Int, end as Int, plh, verbose);
+                    val end2 = end >= state.verticesToWorkOn.size ? state.verticesToWorkOn.size : end;
+                    async execute(store, state, placeId, workerId, start as Int, end2 as Int, plh, verbose);
                 }
             }
             
@@ -526,6 +532,7 @@ class ClusteringState(N:Int) {
         if (ex != null) {
             if (p0Excs == null)
                 p0Excs = new GrowableRail[CheckedThrowable]();
+            p0Excs.add(ex);
         }
         lc = --p0Cnt;
         p0Latch.unlock();

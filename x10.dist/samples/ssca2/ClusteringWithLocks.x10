@@ -176,10 +176,12 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
                     } else {
                         val me = here.id;
                         at (result) async {
-                            atomic {
-                                result().lockedLast.put(me, locked);
-                                result().lockedLastTotal += locked.size();
-                                result().total += locked.size();
+                            if (locked.size() > 0 ) {
+                                atomic {
+                                    result().lockedLast.put(me, locked);
+                                    result().lockedLastTotal += locked.size();
+                                    result().total += locked.size();
+                                }
                             }
                         }
                     }
@@ -325,7 +327,8 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
                 for (workerId in 1..state.workersPerPlace) {
                     val start = startVertex + (workerId-1) * verticesPerWorker;
                     val end = start + verticesPerWorker;
-                    async execute(state, placeId, workerId, start as Int, end as Int, store, plh, verbose);
+                    val end2 = end >= state.verticesToWorkOn.size ? state.verticesToWorkOn.size : end;
+                    async execute(state, placeId, workerId, start as Int, end2 as Int, store, plh, verbose);
                 }
             }
             
@@ -583,6 +586,7 @@ class ClusteringState(N:Int) {
         if (ex != null) {
             if (p0Excs == null)
                 p0Excs = new GrowableRail[CheckedThrowable]();
+            p0Excs.add(ex);
         }
         lc = --p0Cnt;
         p0Latch.unlock();
