@@ -207,7 +207,7 @@ public final class FinishReplicator {
         }
     }
     
-    private static def finalizeAsyncExecForP0Finish(num:Long) {
+    private static def finalizeAsyncExecForP0Finish(num:Long, submit:Boolean) {
         try {
             glock.lock();
             val req = pendingMaster.remove(num);
@@ -216,14 +216,15 @@ public final class FinishReplicator {
                 throw new Exception (here + " FATAL ERROR in finalizeAsyncExecForP0Finish, pending backup request num="+num+" not found ");
             }
             else {
+                req.setOutSubmit(submit);
                 val postSendAction = postActions.remove(req.num); 
                 if (postSendAction != null) {
-                    if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(id="+req.id+") executing postSendAction(submit="+req.getOutSubmit()+",adopterId="+req.getOutAdopterId()+")");
+                    if (verbose>=1) debug("==== Replicator.finalizeAsyncExecForP0Finish(id="+req.id+") executing postSendAction(submit="+req.getOutSubmit()+",adopterId="+req.getOutAdopterId()+")");
                     postSendAction(req.getOutSubmit(), req.getOutAdopterId());
                 } else {
-                    if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") NO_POST_ACTION_FOUND");
+                    if (verbose>=1) debug("==== Replicator.finalizeAsyncExecForP0Finish(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") NO_POST_ACTION_FOUND");
                 }
-                if (verbose>=1) debug("<<<< Replicator.finalizeAsyncExec(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") returned");
+                if (verbose>=1) debug("<<<< Replicator.finalizeAsyncExecForP0Finish(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") returned");
                 /////FinishRequest.deallocReq(req);
             }
         } finally {
@@ -373,7 +374,7 @@ public final class FinishReplicator {
                     }                
                 } //else is LEGAL ABSENCE => backup death is being handled by notifyPlaceDeath
             } else { //don't backup place0 finishes
-                finalizeAsyncExecForP0Finish(req.num);
+                finalizeAsyncExecForP0Finish(req.num, submit);
             }
         } else {
             if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup() backupGo = false");
