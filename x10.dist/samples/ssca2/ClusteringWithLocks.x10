@@ -300,7 +300,7 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
             val s:Int = state.verticesToWorkOn(vertexIndex);
             totalFailedRetries += createCluster(store, s, placeId, clusterId, plh, verbose);
             if (state.g > -1 && clusterId % state.g == 0) {
-                Console.OUT.println(here + ":worker:"+workerId+":progress -> " + c);        
+                Console.OUT.println(here + ":worker:"+workerId+":progress -> " + clusterId);        
             }
         }
         Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":totalRetries:"+totalFailedRetries);
