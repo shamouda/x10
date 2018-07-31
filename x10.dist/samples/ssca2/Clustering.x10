@@ -205,6 +205,9 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
                     createCluster(store, tx, s, placeId, clusterId, plh, verbose);
                 };
                 totalFailedRetries += store.executeTransaction(closure);
+                if (state.g > -1 && c % state.g == 0) {
+                    Console.OUT.println(here + ":worker:"+workerId+":progress -> " + c);        
+                }
             }
             Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":totalRetries:"+totalFailedRetries);
         }catch (ex:Exception) {
@@ -393,7 +396,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         val b:Double = cmdLineParams("-b", 0.1);
         val c:Double = cmdLineParams("-c", 0.1);
         val d:Double = cmdLineParams("-d", 0.25);
-        val g:Long = cmdLineParams("-g", -1);
+        val g:Long = cmdLineParams("-g", -1); // progress
         val r:Long = cmdLineParams("-r", 0);
         val permute:Int = cmdLineParams("-p", 1n); // on by default
         val verbose:Int = cmdLineParams("-v", 0n); // off by default
