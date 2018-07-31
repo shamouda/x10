@@ -193,27 +193,23 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
 
     private def execute(store:TxStore, state:ClusteringState, placeId:Long, workerId:Long, start:Int, end:Int, 
             plh:PlaceLocalHandle[ClusteringState], verbose:Int) {
-        try {
-            var totalFailedRetries:Long = 0;
-            Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1));
-            // Iterate over each of the vertices in my portion.
-            var c:Long = 1;
-            for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++c) { 
-                val s:Int = state.verticesToWorkOn(vertexIndex);
-                val clusterId = c;
-                val closure = (tx:Tx) => {
-                    createCluster(store, tx, s, placeId, clusterId, plh, verbose);
-                };
-                totalFailedRetries += store.executeTransaction(closure);
-                if (state.g > -1 && c % state.g == 0) {
-                    Console.OUT.println(here + ":worker:"+workerId+":progress -> " + c);        
-                }
+        var totalFailedRetries:Long = 0;
+        Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1));
+        // Iterate over each of the vertices in my portion.
+        var c:Long = 1;
+        for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++c) { 
+            val s:Int = state.verticesToWorkOn(vertexIndex);
+            val clusterId = c;
+            val closure = (tx:Tx) => {
+                createCluster(store, tx, s, placeId, clusterId, plh, verbose);
+            };
+            totalFailedRetries += store.executeTransaction(closure);
+            if (state.g > -1 && c % state.g == 0) {
+                Console.OUT.println(here + ":worker:"+workerId+":progress -> " + c);        
             }
-            Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":totalRetries:"+totalFailedRetries);
-        }catch (ex:Exception) {
-            Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":FAILED");
-            ex.printStackTrace();
         }
+        Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":totalRetries:"+totalFailedRetries);
+        state.addRetries(totalFailedRetries);
     }
     
     /**
@@ -272,11 +268,11 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
                     async execute(store, state, placeId, workerId, start as Int, end2 as Int, plh, verbose);
                 }
             }
-            
+            val totalRetries = state.totalRetries;
             Console.OUT.println(here + " ==> completed successfully ");
             at (Place(0)) @Uncounted async {
                 val p0state = plh();
-                p0state.notifyTermination(null);
+                p0state.notifyTermination(null, totalRetries);
             }
         }
     }
@@ -473,11 +469,11 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         val procTime = time/1E9;
         val totalTime = distTime + procTime;
         val procPct = procTime*100.0/totalTime;
-
+        val retries = plh().p0TotalRetries;
         if(verbose > 2 || r > 0) 
             app.printClusters(store);
 
-        Console.OUT.println("Places: " + places + "  N: " + plh().N + "  Setup: " + distTime + "s  Processing: " + procTime + "s  Total: " + totalTime + "s  (proc: " + procPct  +  "%).");
+        Console.OUT.println("Places:" + places + "N: " + plh().N + "SetupInSeconds:" + distTime + ":ProcessingInSeconds:" + procTime + ":TotalInSeconds:" + totalTime + ":retries:"+retries+":(proc:" + procPct  + "%).");
     }
     
     /**
@@ -512,6 +508,9 @@ class ClusteringState(N:Int) {
     var p0Cnt:Long;
     var p0Latch:SimpleLatch = null;
     var p0Excs:GrowableRail[CheckedThrowable] = null;
+    var p0TotalRetries:Long = 0;
+
+    var totalRetries:Long = 0;
     
     public def this(graph:Graph, verticesToWorkOn:Rail[Int], places:Long, workersPerPlace:Long,
             verbose:Int, clusterSize:Long, g:Long, vp:String, vt:String) {
@@ -529,7 +528,7 @@ class ClusteringState(N:Int) {
         this.verticesToWorkOn = verticesToWorkOn;
     }
     
-    public def notifyTermination(ex:CheckedThrowable) {
+    public def notifyTermination(ex:CheckedThrowable, r:Long) {
         var lc:Long = -1;
         p0Latch.lock();
         if (ex != null) {
@@ -538,9 +537,13 @@ class ClusteringState(N:Int) {
             p0Excs.add(ex);
         }
         lc = --p0Cnt;
+        totalRetries += r;
         p0Latch.unlock();
         if (lc == 0)
             p0Latch.release();
     }
     
+    public def addRetries(r:Long) {
+        atomic { totalRetries += r; }
+    }
 }

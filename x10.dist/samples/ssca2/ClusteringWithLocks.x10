@@ -304,6 +304,7 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
             }
         }
         Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":totalRetries:"+totalFailedRetries);
+        state.addRetries(totalFailedRetries);
     }
     
     /**
@@ -334,11 +335,11 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
                     async execute(state, placeId, workerId, start as Int, end2 as Int, store, plh, verbose);
                 }
             }
-            
+            val totalRetries = state.totalRetries;
             Console.OUT.println(here + " ==> completed successfully ");
             at (Place(0)) @Uncounted async {
                 val p0state = plh();
-                p0state.notifyTermination(null);
+                p0state.notifyTermination(null, totalRetries);
             }
         }
     }
@@ -458,7 +459,7 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         val b:Double = cmdLineParams("-b", 0.1);
         val c:Double = cmdLineParams("-c", 0.1);
         val d:Double = cmdLineParams("-d", 0.25);
-        val g:Long = cmdLineParams("-g", -1);
+        val g:Long = cmdLineParams("-g", -1); // progress
         val r:Long = cmdLineParams("-r", 0);
         val permute:Int = cmdLineParams("-p", 1n); // on by default
         val verbose:Int = cmdLineParams("-v", 0n); // off by default
@@ -527,11 +528,11 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         val procTime = time/1E9;
         val totalTime = distTime + procTime;
         val procPct = procTime*100.0/totalTime;
-
+        val retries = plh().p0TotalRetries;
         if(verbose > 2 || r > 0) 
             app.printClusters(store);
 
-        Console.OUT.println("Places: " + places + "  N: " + plh().N + "  Setup: " + distTime + "s  Processing: " + procTime + "s  Total: " + totalTime + "s  (proc: " + procPct  +  "%).");
+        Console.OUT.println("Places:" + places + "N: " + plh().N + "SetupInSeconds:" + distTime + ":ProcessingInSeconds:" + procTime + ":TotalInSeconds:" + totalTime + ":retries:"+retries+":(proc:" + procPct  + "%).");
     }
     
     /**
@@ -566,6 +567,9 @@ class ClusteringState(N:Int) {
     var p0Cnt:Long;
     var p0Latch:SimpleLatch = null;
     var p0Excs:GrowableRail[CheckedThrowable] = null;
+    var p0TotalRetries:Long = 0;
+
+    var totalRetries:Long = 0;
     
     public def this(graph:Graph, verticesToWorkOn:Rail[Int], places:Long, workersPerPlace:Long,
             verbose:Int, clusterSize:Long, g:Long, vp:String, vt:String) {
@@ -583,7 +587,7 @@ class ClusteringState(N:Int) {
         this.verticesToWorkOn = verticesToWorkOn;
     }
     
-    public def notifyTermination(ex:CheckedThrowable) {
+    public def notifyTermination(ex:CheckedThrowable, r:Long) {
         var lc:Long = -1;
         p0Latch.lock();
         if (ex != null) {
@@ -592,9 +596,13 @@ class ClusteringState(N:Int) {
             p0Excs.add(ex);
         }
         lc = --p0Cnt;
+        totalRetries += r;
         p0Latch.unlock();
         if (lc == 0)
             p0Latch.release();
     }
     
+    public def addRetries(r:Long) {
+        atomic { totalRetries += r; }
+    }
 }
