@@ -277,11 +277,9 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
                     result().total = 1;
                     if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] locked root ["+root+"] ");
                 } else {
-                    tx.unlockWrite(root);
-                    //if the root is taken, end this iteration
-                    return retryCount;
+                    tx.unlockWrite(root); 
+                    return retryCount; //if the root is taken, end this iteration
                 }
-                
                 var nextV:Int = root;
                 while (nextV != -1n) {
                     nextV = processVertex(nextV, placeId, clusterId, tx, plh, result);
