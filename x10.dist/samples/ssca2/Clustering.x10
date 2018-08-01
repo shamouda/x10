@@ -473,7 +473,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         if(verbose > 2 || r > 0) 
             app.printClusters(store);
 
-        Console.OUT.println("Places:" + places + "N: " + plh().N + "SetupInSeconds:" + distTime + ":ProcessingInSeconds:" + procTime + ":TotalInSeconds:" + totalTime + ":retries:"+retries+":(proc:" + procPct  + "%).");
+        Console.OUT.println("Places:" + places + ":N:" + plh().N + ":SetupInSeconds:" + distTime + ":ProcessingInSeconds:" + procTime + ":TotalInSeconds:" + totalTime + ":retries:"+retries+":(proc:" + procPct  + "%).");
     }
     
     /**
@@ -537,7 +537,7 @@ class ClusteringState(N:Int) {
             p0Excs.add(ex);
         }
         lc = --p0Cnt;
-        totalRetries += r;
+        p0TotalRetries += r;
         p0Latch.unlock();
         if (lc == 0)
             p0Latch.release();

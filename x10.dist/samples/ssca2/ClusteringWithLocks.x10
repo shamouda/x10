@@ -596,7 +596,7 @@ class ClusteringState(N:Int) {
             p0Excs.add(ex);
         }
         lc = --p0Cnt;
-        totalRetries += r;
+        p0TotalRetries += r;
         p0Latch.unlock();
         if (lc == 0)
             p0Latch.release();
