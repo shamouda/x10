@@ -56,6 +56,8 @@ public final class FinishReplicator {
     private static val TARGET_DEAD = 1n;
     private static val LEGAL_ABSENCE = 2n;
 
+    public static val PLACE0_BACKUP = System.getenv("PLACE0_BACKUP") == null || System.getenv("PLACE0_BACKUP").equals("1");
+    
     //we must deny new buckup creations from the dead source place
     //places other than the given src can use this place to create a backup
     protected static struct BackupDenyId(parentId:FinishResilient.Id, src:Int) {
@@ -206,6 +208,32 @@ public final class FinishReplicator {
         }
     }
     
+    private static def finalizeAsyncExecForP0Finish(num:Long, submit:Boolean) {
+        try {
+            glock.lock();
+            val req = pendingMaster.remove(num);
+            if (verbose>=1) debug(">>>> Replicator.finalizeAsyncExecForP0Finish(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") called");
+            if (req == null) {
+                throw new Exception (here + " FATAL ERROR in finalizeAsyncExecForP0Finish, pending backup request num="+num+" not found ");
+            }
+            else {
+                req.setOutSubmit(submit);
+                val postSendAction = postActions.remove(req.num); 
+                if (postSendAction != null) {
+                    if (verbose>=1) debug("==== Replicator.finalizeAsyncExecForP0Finish(id="+req.id+") executing postSendAction(submit="+req.getOutSubmit()+",adopterId="+req.getOutAdopterId()+")");
+                    postSendAction(req.getOutSubmit(), req.getOutAdopterId());
+                } else {
+                    if (verbose>=1) debug("==== Replicator.finalizeAsyncExecForP0Finish(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") NO_POST_ACTION_FOUND");
+                }
+                if (verbose>=1) debug("<<<< Replicator.finalizeAsyncExecForP0Finish(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") returned");
+                /////FinishRequest.deallocReq(req);
+            }
+        } finally {
+            glock.unlock();
+        }
+    }
+    
+    
     static def asyncExec(req:FinishRequest, localMaster:FinishMasterState):void {
         val rc = addMasterPending(req, null);
         if (rc == SUCCESS)
@@ -290,38 +318,18 @@ public final class FinishReplicator {
                 /*the child may not find the parent's backup during globalInit, so it needs to create it*/
                 req.parentId = FinishResilient.Id(mresp.parentIdHome, mresp.parentIdSeq);          
             }
-            val rc = masterToBackupPending(req, submit, mresp.backupPlaceId, mresp.transitSubmitDPE);
-            if (rc == TARGET_DEAD) {
-                //ignore backup and go ahead with post processing
-                handleBackupDied(req);
-            } else if (rc == SUCCESS){ //normal path
-                val backupPlaceId = req.backupPlaceId;
-                val backup = Place(backupPlaceId);
-                val createOk = req.createOK();
-                if (backup.id == here.id) {
-                    if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup backup local");
-                    val bFin:FinishBackupState;
-                    if (createOk)
-                        bFin = findBackupOrCreate(req.id, req.parentId, req.getTx(), req.isRootTx());
-                    else if (req instanceof RemoveGhostChildRequestOpt ||
-                            req instanceof MergeSubTxRequestOpt)
-                        bFin = findBackup(req.id);
-                    else
-                        bFin = findBackupOrThrow(req.id);
-                    req.isLocal = true;
-                    var bresp:BackupResponse = null;
-                    if (bFin != null)
-                        bresp = bFin.exec(req);
-                    else
-                        bresp = new BackupResponse(); //allowed only for RemoveGhost
-                    req.isLocal = false;
-                    processBackupResponse(bresp, req.num, backupPlaceId);
-                } else {
-                    if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup moving to backup " + backup);
-                    at (backup) @Immediate("async_backup_exec") async {
-                        if (req == null)
-                            throw new Exception(here + " SER_FATAL at backup => req is null");
-                        if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup reached backup ");
+            val p0Cond = req.id.home != 0n || PLACE0_BACKUP; 
+            if (p0Cond)  {
+                val rc = masterToBackupPending(req, submit, mresp.backupPlaceId, mresp.transitSubmitDPE);
+                if (rc == TARGET_DEAD) {
+                    //ignore backup and go ahead with post processing
+                    handleBackupDied(req);
+                } else if (rc == SUCCESS){ //normal path
+                    val backupPlaceId = req.backupPlaceId;
+                    val backup = Place(backupPlaceId);
+                    val createOk = req.createOK();
+                    if (backup.id == here.id) {
+                        if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup backup local");
                         val bFin:FinishBackupState;
                         if (createOk)
                             bFin = findBackupOrCreate(req.id, req.parentId, req.getTx(), req.isRootTx());
@@ -330,22 +338,47 @@ public final class FinishReplicator {
                             bFin = findBackup(req.id);
                         else
                             bFin = findBackupOrThrow(req.id);
-                        var resp:BackupResponse = null;
+                        req.isLocal = true;
+                        var bresp:BackupResponse = null;
                         if (bFin != null)
-                            resp = bFin.exec(req);
+                            bresp = bFin.exec(req);
                         else
-                            resp = new BackupResponse(); //allowed only for RemoveGhost
-                        val bresp = resp;
-                        if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup backup moving to caller " + caller);
-                        val num = req.num;
-                        at (caller) @Immediate("async_backup_exec_response") async {
-                            if (bresp == null)
-                                throw new Exception(here + " SER_FATAL at caller => bresp is null");
-                            processBackupResponse(bresp, num, backupPlaceId);
+                            bresp = new BackupResponse(); //allowed only for RemoveGhost
+                        req.isLocal = false;
+                        processBackupResponse(bresp, req.num, backupPlaceId);
+                    } else {
+                        if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup moving to backup " + backup);
+                        at (backup) @Immediate("async_backup_exec") async {
+                            if (req == null)
+                                throw new Exception(here + " SER_FATAL at backup => req is null");
+                            if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup reached backup ");
+                            val bFin:FinishBackupState;
+                            if (createOk)
+                                bFin = findBackupOrCreate(req.id, req.parentId, req.getTx(), req.isRootTx());
+                            else if (req instanceof RemoveGhostChildRequestOpt ||
+                                    req instanceof MergeSubTxRequestOpt)
+                                bFin = findBackup(req.id);
+                            else
+                                bFin = findBackupOrThrow(req.id);
+                            var resp:BackupResponse = null;
+                            if (bFin != null)
+                                resp = bFin.exec(req);
+                            else
+                                resp = new BackupResponse(); //allowed only for RemoveGhost
+                            val bresp = resp;
+                            if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup backup moving to caller " + caller);
+                            val num = req.num;
+                            at (caller) @Immediate("async_backup_exec_response") async {
+                                if (bresp == null)
+                                    throw new Exception(here + " SER_FATAL at caller => bresp is null");
+                                processBackupResponse(bresp, num, backupPlaceId);
+                            }
                         }
-                    }
-                }                
-            } //else is LEGAL ABSENCE => backup death is being handled by notifyPlaceDeath
+                    }                
+                } //else is LEGAL ABSENCE => backup death is being handled by notifyPlaceDeath
+            } else { //don't backup place0 finishes
+                finalizeAsyncExecForP0Finish(req.num, submit);
+            }
         } else {
             if (verbose>=1) debug("==== Replicator(id="+req.id+").asyncMasterToBackup() backupGo = false");
             removeMasterPending(req.num);
@@ -483,7 +516,8 @@ public final class FinishReplicator {
                     updateBackupPlace(req.id.home, mresp.backupPlaceId);
                 }
                 
-                val backupGo = ( submit || (mresp.transitSubmitDPE && req.isTransitRequest()));
+                val p0Cond = req.id.home != 0n || PLACE0_BACKUP;
+                val backupGo = p0Cond && ( submit || (mresp.transitSubmitDPE && req.isTransitRequest()));
                 if (backupGo) {
                     if (req.isAddChildRequest()) { /*in some cases, the parent may be transiting at the same time as its child, */
                                                    /*the child may not find the parent's backup during globalInit, so it needs to create it*/
@@ -516,8 +550,7 @@ public final class FinishReplicator {
                 try {
                     val newBackupId = masterGetNewBackup(req, localMaster);
                     updateBackupPlace(req.id.home, newBackupId);
-                }
-                catch (mdied:MasterDied) {
+                } catch (mdied:MasterDied) {
                     throw new Exception (here + " FATAL error, backup died, as well as original master");
                 }
                 debug("<<<< Replicator(id="+req.id+").exec() returning: ignored backup failure exception");
@@ -1353,7 +1386,7 @@ public final class FinishReplicator {
                 if (backupDeny.contains(BackupDenyId(parentId,id.home)))
                     throw new Exception (here + " FATAL: " + id + " must not be in denyList");
                 bs = new FinishResilientOptimistic.OptimisticBackupState(id, parentId, numActive, 
-                		sent, transit, ghostChildren, excs, placeOfMaster, tx, rootTx);
+                        sent, transit, ghostChildren, excs, placeOfMaster, tx, rootTx);
                 fbackups.put(id, bs);
                 if (verbose>=1) debug("<<<< createOptimisticBackupOrSync(id="+id+", parentId="+parentId+") returning, created bs="+bs);
             } else {
