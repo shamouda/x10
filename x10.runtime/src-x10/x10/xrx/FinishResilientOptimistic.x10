@@ -616,12 +616,14 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         private var txStarted:Boolean = false; //if true - this.notifyPlaceDeath() will call tx.notifyPlaceDeath();
     
         public def registerFinishTx(old:Tx, rootTx:Boolean):void {
+            latch.lock();
             this.isRootTx = rootTx;
             if (rootTx)
                 this.tx = old;
             else
                 this.tx = Tx.clone(old);
             this.tx.initialize(id, backupPlaceId);
+            latch.unlock();
         }
     
         //initialize from backup values
