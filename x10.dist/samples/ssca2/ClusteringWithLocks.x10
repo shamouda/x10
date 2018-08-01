@@ -297,7 +297,9 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
     
     private def execute(state:ClusteringState, placeId:Long, workerId:Long, start:Int, end:Int, 
             store:TxStore, plh:PlaceLocalHandle[ClusteringState], verbose:Int) {
+        val time0 = System.currentTimeMillis();
         var totalFailedRetries:Long = 0;
+        val all = end - start;
         Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1));
         // Iterate over each of the vertices in my portion.
         var c:Long = 1;
@@ -306,11 +308,20 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
             val clusterId = vertexIndex;
             totalFailedRetries += createCluster(store, s, placeId, clusterId, plh, verbose);
             if (state.g > -1 && clusterId % state.g == 0) {
-                Console.OUT.println(here + ":worker:"+workerId+":progress -> " + c);        
+                printProgress(here + ":worker:"+workerId+":progress -> " + c + "/" + all , time0);
             }
         }
         Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":totalRetries:"+totalFailedRetries);
         state.addRetries(totalFailedRetries);
+    }
+    
+    private def printProgress(message:String, time0:Long) {
+        val time = System.currentTimeMillis();
+        val s = "        " + (time - time0);
+        val s1 = s.substring(s.length() - 9n, s.length() - 3n);
+        val s2 = s.substring(s.length() - 3n, s.length());
+        Console.OUT.println(s1 + "." + s2 + ": " + message);
+        return time;
     }
     
     /**
