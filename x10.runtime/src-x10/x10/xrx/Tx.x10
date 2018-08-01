@@ -99,6 +99,7 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
         if (TxConfig.TM_DEBUG) 
             Console.OUT.println(getAddMemberPrintMsg(m, ro, "add member"));
         if (lock == null) {
+            Console.OUT.println(here + "Tx["+id+"] " + TxConfig.txIdToString (id)+ " FATAL EXCEPTION in Tx.addMember lock is null. ");
             throw new Exception(here + "Tx["+id+"] " + TxConfig.txIdToString (id)+ " FATAL EXCEPTION in Tx.addMember lock is null. ");
         }
         lock.lock();

@@ -183,15 +183,13 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
             tx.put(root, new Color(placeId, clusterId));
             result().locked.add(root);
             if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] locked root ["+root+"] ");
-        } else {
-            //if the root is taken, end this iteration
-            return;
-        }
-        var nextV:Int = root;
-        while (nextV != -1n) {
-            nextV = processVertex(nextV, placeId, clusterId, tx, plh, result);
-        }
-        if (verbose > 1n) result().print(tx.id, placeId, clusterId);
+            
+            var nextV:Int = root;
+            while (nextV != -1n) {
+                nextV = processVertex(nextV, placeId, clusterId, tx, plh, result);
+            }
+            if (verbose > 1n) result().print(tx.id, placeId, clusterId);
+        } //else: the root is taken, end this iteration 
     }
 
     private def execute(store:TxStore, state:ClusteringState, placeId:Long, workerId:Long, start:Int, end:Int, 
