@@ -210,7 +210,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
             if (state.g > -1 && c % state.g == 0) {
                 printProgress(here + ":worker:"+workerId+":progress -> " + c + "/" + all , time0);
             }
-            if ( ((c as Double)/all) >= killG) {
+            if (killG > -1.0 && ((c as Double)/all) >= killG) {
             	Console.OUT.println(here + " Hammer calling killHere " + c + "/" + all );
                 System.killHere();
             }
@@ -405,6 +405,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
             Option("w", "", "Workers"),
             Option("vp","victims","victim places to kill (comma separated)"),
             Option("vt","victimsTimes","times to kill victim places(comma separated)"),
+            Option("vg","killByProgress","whether we kill by time or progress: default 0 (by time)"),
             Option("v", "", "Verbose")]);
 
         val spare:Long = cmdLineParams("-sp", 0);
