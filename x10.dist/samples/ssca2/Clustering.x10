@@ -193,11 +193,11 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
     }
 
     private def execute(store:TxStore, state:ClusteringState, placeId:Long, workerId:Long, start:Int, end:Int, 
-            plh:PlaceLocalHandle[ClusteringState], verbose:Int) {
+            plh:PlaceLocalHandle[ClusteringState], verbose:Int, killG:Double) {
         val time0 = System.currentTimeMillis();
         var totalFailedRetries:Long = 0;
         val all = end - start;
-        Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1));
+        Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1) + ":killG:"+killG);
         // Iterate over each of the vertices in my portion.
         var c:Long = 1;
         for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++c) { 
@@ -209,6 +209,10 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
             totalFailedRetries += store.executeTransaction(closure);
             if (state.g > -1 && c % state.g == 0) {
                 printProgress(here + ":worker:"+workerId+":progress -> " + c + "/" + all , time0);
+            }
+            if ( ((c as Double)/all) >= killG) {
+            	Console.OUT.println(here + " Hammer calling killHere " + c + "/" + all );
+                System.killHere();
             }
         }
         Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":totalRetries:"+totalFailedRetries);
@@ -245,6 +249,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
             
             Console.OUT.println(here + " starting: " + startVertex + "-" + (endVertex-1));
             
+            var killProgress:Double = 0.0;
             /** Scheduler a hammer activity to kill the place at the specified time **/
             if (resilient && state.vp != null && state.vt != null) {
                 val arr = state.vp.split(",");
@@ -257,18 +262,22 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
                 }
                 if (indx != -1) {
                     val times = state.vt.split(",");
-                    val killTime = Long.parseLong(times(indx));
-                    @Uncounted async {
-                        Console.OUT.println("Hammer kill timer at "+here+" starting sleep for "+killTime+" secs");
-                        val startedNS = System.nanoTime(); 
-                        
-                        val deadline = System.currentTimeMillis() + 1000 * killTime;
-                        while (deadline > System.currentTimeMillis()) {
-                            val sleepTime = deadline - System.currentTimeMillis();
-                            System.sleep(sleepTime);
+                    if (state.vg == 1n) {
+                    	killProgress = Double.parseDouble(times(indx));
+                    } else {
+                    	val killTime = Long.parseLong(times(indx));
+                    	@Uncounted async {
+                            Console.OUT.println("Hammer kill timer at "+here+" starting sleep for "+killTime+" secs");
+                            val startedNS = System.nanoTime(); 
+                            
+                            val deadline = System.currentTimeMillis() + 1000 * killTime;
+                            while (deadline > System.currentTimeMillis()) {
+                                val sleepTime = deadline - System.currentTimeMillis();
+                                System.sleep(sleepTime);
+                            }
+                            Console.OUT.println(here + " Hammer calling killHere" );
+                            System.killHere();
                         }
-                        Console.OUT.println(here + " Hammer calling killHere" );
-                        System.killHere();
                     }
                 }
             }
@@ -278,7 +287,8 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
                     val start = startVertex + (workerId-1) * verticesPerWorker;
                     val end = start + verticesPerWorker;
                     val end2 = end >= state.verticesToWorkOn.size ? state.verticesToWorkOn.size : end;
-                    async execute(store, state, placeId, workerId, start as Int, end2 as Int, plh, verbose);
+                    val killG = (workerId == 1 && killProgress != 0.0) ? killProgress : -1.0;
+                    async execute(store, state, placeId, workerId, start as Int, end2 as Int, plh, verbose, killG);
                 }
             }
             val totalRetries = state.totalRetries;
@@ -408,8 +418,9 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         val g:Long = cmdLineParams("-g", -1); // progress
         val r:Long = cmdLineParams("-r", 0);
         val verbose:Int = cmdLineParams("-v", 0n); // off by default
-        val vp = cmdLineParams("vp", "");
-        val vt = cmdLineParams("vt", "");
+        val vp = cmdLineParams("vp", ""); //victim places
+        val vt = cmdLineParams("vt", ""); //victim kill time or progress
+        val vg = cmdLineParams("-vg", 0n); //kill based on progress
         val workers:Int = cmdLineParams("-w", Runtime.NTHREADS); 
         
         Console.OUT.println("Running SSCA2 with the following parameters:");
@@ -461,7 +472,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         val N = graph.numVertices();
         val verticesToWorkOn = new Rail[Int](N, (i:Long)=>i as Int);
         
-        val plh = PlaceLocalHandle.make[ClusteringState](Place.places(), ()=>new ClusteringState(graph, verticesToWorkOn, places, workers, verbose, clusterSize, g, vp, vt));
+        val plh = PlaceLocalHandle.make[ClusteringState](Place.places(), ()=>new ClusteringState(graph, verticesToWorkOn, places, workers, verbose, clusterSize, g, vp, vt, vg));
         
         val app = new Clustering(plh);
         val store = TxStore.make(activePlaces, asyncRecovery, app);
@@ -498,7 +509,8 @@ class ClusteringState(N:Int) {
     
     val vt:String;
     val vp:String;
-    
+    val vg:Int;
+
     var p0Cnt:Long;
     var p0Latch:SimpleLatch = null;
     var p0Excs:GrowableRail[CheckedThrowable] = null;
@@ -507,7 +519,7 @@ class ClusteringState(N:Int) {
     var totalRetries:Long = 0;
     
     public def this(graph:Graph, verticesToWorkOn:Rail[Int], places:Long, workersPerPlace:Long,
-            verbose:Int, clusterSize:Long, g:Long, vp:String, vt:String) {
+            verbose:Int, clusterSize:Long, g:Long, vp:String, vt:String, vg:Int) {
         property(graph.numVertices());
         this.graph = graph;
         this.places = places;
@@ -519,6 +531,7 @@ class ClusteringState(N:Int) {
         this.g = g;
         this.vp = vp;
         this.vt = vt;
+        this.vg = vg;
         this.verticesToWorkOn = verticesToWorkOn;
     }
     
