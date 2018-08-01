@@ -1386,6 +1386,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         private var txReadOnlyFlag:Boolean = true;
         
         public def registerFinishTx(old:Tx, rootTx:Boolean):void {
+            latch.lock();
             if (verbose>=1) debug(">>>> registerFinishTx(id="+id+", txId="+old.id+", root="+rootTx+") ");
             this.isRootTx = rootTx;
             if (rootTx)
@@ -1395,6 +1396,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             if (verbose>=1) debug("==== registerFinishTx(id="+id+", txId="+old.id+", root="+rootTx+") calling tx.initialize here");
             this.tx.initialize(id, -1n);
             if (verbose>=1) debug("<<<< registerFinishTx(id="+id+", txId="+old.id+", root="+rootTx+",tx="+this.tx+") returning");
+            latch.unlock();
         }
         
         public def toString() {
