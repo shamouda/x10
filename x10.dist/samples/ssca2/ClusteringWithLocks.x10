@@ -534,7 +534,7 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         if(verbose > 2 || r > 0) 
             app.printClusters(store);
 
-        Console.OUT.println("Places:" + places + "N: " + plh().N + "SetupInSeconds:" + distTime + ":ProcessingInSeconds:" + procTime + ":TotalInSeconds:" + totalTime + ":retries:"+retries+":(proc:" + procPct  + "%).");
+        Console.OUT.println("Places:" + places + ":N:" + plh().N + ":SetupInSeconds:" + distTime + ":ProcessingInSeconds:" + procTime + ":TotalInSeconds:" + totalTime + ":retries:"+retries+":(proc:" + procPct  + "%).");
     }
     
 }
