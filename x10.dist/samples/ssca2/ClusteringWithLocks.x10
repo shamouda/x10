@@ -137,7 +137,7 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         
         //get the adjacent vertices to v (excluding v)
         val map = getAdjacentVertecesPlaces(v, edgeStart, edgeEnd, verticesPerPlace, graph, result);
-        if (verbose > 1n) {
+        if (verbose > 2n) {
             printVertexPlaceMap(v, map, tx.id);
         }
         
@@ -221,7 +221,6 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
             }
         } 
         result().merge();
-        if (verbose > 1n) result().print(txId);
         return nextV;
     }
     
@@ -281,6 +280,7 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
                     nextV = processVertex(nextV, placeId, clusterId, tx, plh, result);
                 }
                 success = true;
+                if (verbose > 1n) result().print(tx.id);
             } catch (ex:Exception) {
                 success = false;
             }
@@ -443,7 +443,6 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
             Option("b", "", "Probability b"),
             Option("c", "", "Probability c"),
             Option("d", "", "Probability d"),
-            Option("p", "", "Permutation"),
             Option("g", "", "Progress"),
             Option("r", "", "Print resulting clusters"),
             Option("w", "", "Workers"),
@@ -461,7 +460,6 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         val d:Double = cmdLineParams("-d", 0.25);
         val g:Long = cmdLineParams("-g", -1); // progress
         val r:Long = cmdLineParams("-r", 0);
-        val permute:Int = cmdLineParams("-p", 1n); // on by default
         val verbose:Int = cmdLineParams("-v", 0n); // off by default
         val vp = cmdLineParams("vp", "");
         val vt = cmdLineParams("vt", "");
@@ -488,7 +486,6 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         Console.OUT.println("b = " + b);
         Console.OUT.println("c = " + c);
         Console.OUT.println("d = " + d);
-        Console.OUT.println("p = " + permute);
         
         if (System.getenv("TM") == null || !System.getenv("TM").equals("locking")) {
             Console.OUT.println("!!!!ERROR: you must set TM=locking in this program!!!!");
@@ -509,9 +506,6 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         graph.compress();
         val N = graph.numVertices();
         val verticesToWorkOn = new Rail[Int](N, (i:Long)=>i as Int);
-        if (permute > 0n)
-            permuteVertices(N, verticesToWorkOn);
-        
         val plh = PlaceLocalHandle.make[ClusteringState](Place.places(), ()=>new ClusteringState(graph, verticesToWorkOn, places, workers, verbose, clusterSize, g, vp, vt));
         
         val app = new ClusteringWithLocks(plh);
@@ -535,19 +529,6 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         Console.OUT.println("Places:" + places + "N: " + plh().N + "SetupInSeconds:" + distTime + ":ProcessingInSeconds:" + procTime + ":TotalInSeconds:" + totalTime + ":retries:"+retries+":(proc:" + procPct  + "%).");
     }
     
-    /**
-     * A function to shuffle the vertices randomly to give better work dist.
-     */
-    private static def permuteVertices(N:Int, verticesToWorkOn:Rail[Int]) {
-        val prng = new Random(1);
-
-        for(var i:Int=0n; i<N; i++) {
-            val indexToPick = prng.nextInt(N-i);
-            val v = verticesToWorkOn(i);
-            verticesToWorkOn(i) = verticesToWorkOn(i+indexToPick);
-            verticesToWorkOn(i+indexToPick) = v;
-        }
-    }
 }
 
 class ClusteringState(N:Int) {
