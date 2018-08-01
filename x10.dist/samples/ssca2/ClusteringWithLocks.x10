@@ -238,10 +238,17 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
                     str += tmp + "-";
                 }
                 if (verbose > 1n) Console.OUT.println(here + " Tx["+tx.id+"] dest["+dest+"] keys["+str+"]");
-                at (Place(dest)) async {
+                if (Place(dest).id == here.id) {
                     for (k in keys) {
                         if (verbose > 1n) Console.OUT.println(here + " Tx["+tx.id+"] dest["+dest+"] key["+k+"]");
                         tx.unlockWrite(k);
+                    }
+                } else {
+                    at (Place(dest)) async {
+                        for (k in keys) {
+                            if (verbose > 1n) Console.OUT.println(here + " Tx["+tx.id+"] dest["+dest+"] key["+k+"]");
+                            tx.unlockWrite(k);
+                        }
                     }
                 }
             }
@@ -295,12 +302,13 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         var totalFailedRetries:Long = 0;
         Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1));
         // Iterate over each of the vertices in my portion.
-        var clusterId:Long = 1;
-        for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++clusterId) { 
+        var c:Long = 1;
+        for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++c) { 
             val s:Int = state.verticesToWorkOn(vertexIndex);
+            val clusterId = vertexIndex;
             totalFailedRetries += createCluster(store, s, placeId, clusterId, plh, verbose);
             if (state.g > -1 && clusterId % state.g == 0) {
-                Console.OUT.println(here + ":worker:"+workerId+":progress -> " + clusterId);        
+                Console.OUT.println(here + ":worker:"+workerId+":progress -> " + c);        
             }
         }
         Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":totalRetries:"+totalFailedRetries);

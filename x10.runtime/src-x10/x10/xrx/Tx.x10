@@ -169,7 +169,10 @@ public class Tx(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
     
     public def asyncAt(virtualPlace:Long, closure:()=>void) {
         val pl = plh().getPlace(virtualPlace);
-        at (pl) async closure();
+        if (pl.id == here.id)
+            async closure();
+        else
+            at (pl) async closure();
     }
     
     /********** Finalizing a transaction **********/
