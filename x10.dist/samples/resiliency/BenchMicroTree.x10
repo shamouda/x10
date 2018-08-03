@@ -87,25 +87,17 @@ public class BenchMicroTree {
     }
     
     public static def warmpUp(refTime:Long, prefix:String, t:Long, print:Boolean, minTime:Long) {
-        var time0:Long, time1:Long;
-        var iterCount:Long;
-
-        iterCount = 0;
-        time0 = System.nanoTime();
-        do {
-            finish {
-                for (p in Place.places()) {
-                    at (p) async {
+        finish {
+            for (p in Place.places()) {
+                at (p) async {
+                    finish {
                         for (q in Place.places()) at (q) async {
                             think(t);
                         }
                     }
                 }
             }
-            time1 = System.nanoTime();
-            iterCount++;
-        } while (time1-time0 < minTime);
-        if (print) println(refTime, prefix+"fan out - broadcast: "+(time1-time0)/1E9/iterCount+" seconds");
+        }
     }
 
     public static def doTestTree(refTime:Long, prefix:String, t:Long, print:Boolean, minTime:Long) {
