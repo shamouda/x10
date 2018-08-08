@@ -12,6 +12,6 @@
 package x10.xrx;
 import x10.util.GrowableRail;
 
-public interface NonShrinkingApp {
-    public def startPlace(place:Place, store:TxStore, recovery:Boolean):void;
+public interface MasterWorkerApp {
+    public def execWorker(vid:Long, store:TxStore, recovery:Boolean):Any;
 }

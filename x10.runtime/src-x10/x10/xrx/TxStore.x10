@@ -35,21 +35,21 @@ import x10.compiler.Immediate;
  */
 public class TxStore {
     public val plh:PlaceLocalHandle[LocalStore[Any]];    
-    public val app:NonShrinkingApp;
+    public val callback:(Long, Place, TxStore)=>void;
 
-    private def this(plh:PlaceLocalHandle[LocalStore[Any]], app:NonShrinkingApp) {
+    private def this(plh:PlaceLocalHandle[LocalStore[Any]], callback:(Long, Place, TxStore)=>void) {
         this.plh = plh;
-        this.app = app;
+        this.callback = callback;
     }
     
     public static def make(pg:PlaceGroup, immediateRecovery:Boolean) {
         return make (pg, immediateRecovery, null);
     }
     
-    public static def make(pg:PlaceGroup, immediateRecovery:Boolean, app:NonShrinkingApp) {
+    public static def make(pg:PlaceGroup, immediateRecovery:Boolean, callback:(Long, Place, TxStore)=>void) {
         Console.OUT.println("Creating a transactional store with "+pg.size()+" active places, immediateRecovery = " + immediateRecovery);
         val plh = PlaceLocalHandle.make[LocalStore[Any]](Place.places(), ()=> new LocalStore[Any](pg, immediateRecovery) );
-        val store = new TxStore(plh, app);
+        val store = new TxStore(plh, callback);
         Place.places().broadcastFlat(()=> { 
             plh().setPLH(plh); 
             Runtime.addTxStore(store);
@@ -58,6 +58,9 @@ public class TxStore {
         return store;
     }
 
+    public def prevPlace(virtualId:Long) {
+        return plh().getPlace(virtualId:Long);
+    }
     
     public def makeLockingTx():TxLocking {
         val id = plh().getMasterStore().getNextTransactionId();
@@ -194,8 +197,8 @@ public class TxStore {
         val deadVirtualId = oldActivePlaces.indexOf(deadPlace);
         val spare = allocateSparePlace(plh, deadVirtualId, oldActivePlaces);
         recoverSlave(plh, deadPlace, spare, start);
-        if (app != null) {
-            app.startPlace(spare, this, true);
+        if (callback != null) {
+            callback(deadVirtualId, spare, this);
         }
     }
     
