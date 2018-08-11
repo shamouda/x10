@@ -179,7 +179,6 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
             tx.put(root, new Color(placeId, clusterId));
             result().locked.add(root);
             if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] locked root ["+root+"] ");
-            
             var nextV:Int = root;
             while (nextV != -1n) {
                 nextV = processVertex(nextV, placeId, clusterId, tx, plh, result);
@@ -253,6 +252,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
                 val times = state.vt.split(",");
                 if (state.vg == 1n) {
                 	killProgress = Double.parseDouble(times(indx));
+                	Console.OUT.println("Hammer kill based on progress");
                 } else {
                 	val killTime = Long.parseLong(times(indx));
                 	@Uncounted async {
@@ -358,7 +358,6 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
             Option("b", "", "Probability b"),
             Option("c", "", "Probability c"),
             Option("d", "", "Probability d"),
-            Option("p", "", "Permutation"),
             Option("g", "", "Progress"),
             Option("r", "", "Print resulting clusters"),
             Option("w", "", "Workers"),
@@ -380,7 +379,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         val verbose:Int = cmdLineParams("-v", 0n); // off by default
         val vp = cmdLineParams("vp", ""); //victim places
         val vt = cmdLineParams("vt", ""); //victim kill time or progress
-        val vg = cmdLineParams("-vg", 0n); //kill based on progress
+        val vg = cmdLineParams("vg", 0n); //kill based on progress
         val workers:Int = cmdLineParams("-w", Runtime.NTHREADS); 
         
         Console.OUT.println("Running SSCA2 with the following parameters:");
@@ -405,11 +404,11 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         Console.OUT.println("c = " + c);
         Console.OUT.println("d = " + d);
         
+        Console.OUT.println("Hammer parameters: vp="+vp+" vt="+vt+" vg="+ vg);
         if (System.getenv("TM") != null && System.getenv("TM").equals("locking")) {
             Console.OUT.println("!!!!ERROR: TM=locking is not accepted in this program!!!!");
             return;
         }
-        
         val ar1 = vp.split(",");
         val ar2 = vt.split(",");
         if (ar1.size != ar2.size) {

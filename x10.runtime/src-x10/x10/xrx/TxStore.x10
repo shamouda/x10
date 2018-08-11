@@ -58,8 +58,8 @@ public class TxStore {
         return store;
     }
 
-    public def prevPlace(virtualId:Long) {
-        return plh().getPlace(virtualId:Long);
+    public def prevPlace() {
+        return plh().getMaster(here);
     }
     
     public def makeLockingTx():TxLocking {

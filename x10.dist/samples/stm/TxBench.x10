@@ -6,7 +6,8 @@ import x10.util.resilient.localstore.ResilientStore;
 import x10.util.resilient.localstore.CloneableLong;
 import x10.util.resilient.localstore.TxConfig;
 import x10.xrx.TxStoreFatalException;
-import x10.xrx.NonShrinkingApp;
+import x10.xrx.MasterWorkerApp;
+import x10.xrx.MasterWorkerExecutor;
 import x10.xrx.TxStore;
 import x10.xrx.Tx;
 import x10.xrx.TxLocking;
@@ -27,9 +28,8 @@ import x10.util.concurrent.SimpleLatch;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.GrowableRail;
 
-public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinkingApp {
+public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements MasterWorkerApp {
     public static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
-    public static val asyncRecovery = true;
     
     public static def main(args:Rail[String]) {
         val opts = new OptionsParser(args, [
@@ -69,6 +69,7 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
         val mgr = new PlaceManager(s, false);
         val activePlaces = mgr.activePlaces();
         val p = opts("p", activePlaces.size());
+        
         printRunConfigurations (r, u, n, p, t, w, d, h, o, g, s, f, vp, vt);
         
         assert (h <= activePlaces.size()) : "invalid value for parameter h, h should not exceed the number of active places" ;
@@ -76,17 +77,17 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
         if (TxConfig.get().LOCK_FREE) {
             assert (p * t == 1): "lock free mode can only be used with only 1 producer thread";
         }
+        
         val plh = PlaceLocalHandle.make[TxBenchState](Place.places(), ()=> new TxBenchState(here.id, r, u, n, p, t, w, d, h, o, g, s, f, vp, vt) );
         val app = new TxBench(plh);
-        
-        val store = TxStore.make(mgr.activePlaces(), asyncRecovery, app);
+        val executor = MasterWorkerExecutor.make(activePlaces, app);
         
         val startWarmup = Timer.milliTime();
         if (w == -1) {
             Console.OUT.println("no warmpup");
         } else {
             Console.OUT.println("warmup started");
-            app.runIteration(-1, store, plh);
+            executor.run();
             app.resetStatistics(plh);
             Console.OUT.println("warmup completed, warmup elapsed time ["+(Timer.milliTime() - startWarmup)+"]  ms ");
         }
@@ -94,9 +95,9 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
         try {
             for (iter in 1..n) {
                 val startIter = Timer.milliTime();
-                app.runIteration(iter, store, plh);
+                executor.run();
                 Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
-                app.printThroughput(store, plh, iter);
+                app.printThroughput(executor.store(), plh, iter);
                 app.resetStatistics(plh);
             }
             Console.OUT.println("+++ TxBench Succeeded +++");
@@ -106,74 +107,33 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
         }
     }
     
-    public def runIteration(iter:Long, store:TxStore, plh:PlaceLocalHandle[TxBenchState]) {
-        val activePlaces = store.fixAndGetActivePlaces();
-        val p = plh().p;
-        try {
-            if (p != activePlaces.size())
-                throw new TxBenchFailed("Fatal, active places shrank");
-            
-            val state = plh();
-            state.p0Cnt = p;
-            state.p0Latch = new SimpleLatch();
-            
-            for (var i:Long = 0; i < p; i++) {
-                startPlace(iter, activePlaces(i), store, false);
-            }
-            state.p0Latch.await();
-            
-            if (state.p0Excs != null)
-                throw new MultipleExceptions(state.p0Excs);
-            
-        } catch (e:TxBenchFailed) {
-            throw e;
-        } catch (mulExp:MultipleExceptions) {
-            val stmFailed = mulExp.getExceptionsOfType[TxBenchFailed]();
-            if ((stmFailed != null && stmFailed.size != 0) || !resilient)
-                throw mulExp;
-            mulExp.printStackTrace();
-        } catch(e:Exception) {
-            if (!resilient)
-                throw e;
-            e.printStackTrace();
-        }
-    }
-
-    public def startPlace(place:Place, store:TxStore, recovery:Boolean) {
-        startPlace(-1, place, store, recovery);
-    }
-    
-    public def startPlace(i:Long, place:Place, store:TxStore, recovery:Boolean) {
-        val plh = this.plh;//don't copy this
-        
-        var tmpiter:Long = i;
-        var oldThroughput:TxBenchState = null;
+    public def execWorker(vid:Long, store:TxStore, recovery:Boolean):Any {
         if (recovery) {
-            val masterState = plh(); 
-            if (masterState.rightPlaceDeathTimeNS == -1)
-                throw new TxBenchFailed(here + " assertion error, did not receive suicide note ...");
-            oldThroughput = masterState.rightTxBenchState;
-            val recoveryTime = System.nanoTime() - masterState.rightPlaceDeathTimeNS;
-            oldThroughput.shiftElapsedTime(recoveryTime);
-            tmpiter = masterState.iteration;
-            Console.OUT.println(here + " Calculated recovery time = " + (recoveryTime/ 1e9) + " seconds" );
-        }
-        val iter = tmpiter;
-        val recoveryThroughput = oldThroughput;
-        at (place) @Uncounted async {
-            val state = plh();
-            state.iteration = iter;
-            val t = state.t;
-            val myVirtualPlaceId = store.plh().getVirtualPlaceId();
-            if (recoveryThroughput != null)
-                state.reinit(recoveryThroughput); //state.recovered = true
-
-            for (thrd in 1..t) @Uncounted async {
-                produce(store, plh, thrd-1);
+            val leftPlace = store.prevPlace();
+            val me = here;
+            finish at (leftPlace) async {
+                val masterState = plh(); 
+                if (masterState.rightPlaceDeathTimeNS == -1)
+                    throw new TxBenchFailed(here + " assertion error, did not receive suicide note ...");
+                val oldThroughput = masterState.rightTxBenchState;
+                val recoveryTime = System.nanoTime() - masterState.rightPlaceDeathTimeNS;
+                oldThroughput.shiftElapsedTime(recoveryTime);
+                val iter = masterState.iteration;
+                Console.OUT.println(here + " Calculated recovery time = " + (recoveryTime/ 1e9) + " seconds" );
+                at (me) async {
+                    plh().reinit(oldThroughput, iter); //state.recovered = true
+                }
             }
-            
-            killSelf(store, state, iter);
         }
+        
+        val state = plh();
+        state.iteration++;
+        killSelf(store, state, state.iteration);
+        val t = state.t;
+        finish for (thrd in 1..t) async {
+            produce(store, plh, thrd-1);
+        }
+        return -1;
     }
     
     public def produce(store:TxStore, plh:PlaceLocalHandle[TxBenchState], producerId:Long) {
@@ -269,13 +229,6 @@ public class TxBench(plh:PlaceLocalHandle[TxBenchState]) implements NonShrinking
             }
         }
         Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
-        val lc = state.lc.decrementAndGet();
-        if (lc == 0n) {
-            at (Place(0)) @Uncounted async {
-                val p0state = plh();
-                p0state.notifyTermination(null);
-            }
-        }
     }
 
     public def printThroughput(store:TxStore, plh:PlaceLocalHandle[TxBenchState], iteration:Long) {
@@ -498,9 +451,6 @@ class TxBenchFailed extends Exception {
 class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
         h:Long, o:Long, g:Long, s:Long, f:Boolean, vp:String, vt:Long) {
     var virtualPlaceId:Long = -1;
-    var p0Cnt:Long;
-    var p0Latch:SimpleLatch = null;
-    var p0Excs:GrowableRail[CheckedThrowable] = null;
 
     var thrds:Rail[ProducerThroughput];
     var rightTxBenchState:TxBenchState;
@@ -515,7 +465,7 @@ class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
     val reduceSrc = new Rail[Long](2);
     val reduceDst = new Rail[Long](2);
     
-    var iteration:Long = -1;
+    var iteration:Long = 0;
     var lc:AtomicInteger;
     
     public def this() {
@@ -546,16 +496,16 @@ class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
         reduceSrc(0) = 0; reduceSrc(1) = 0;
         reduceDst(0) = 0; reduceDst(1) = 0;
         
-        p0Excs = null;
         lc = new AtomicInteger(t as Int);
     }
     
-    public def reinit(other:TxBenchState) {
+    public def reinit(other:TxBenchState, iter:Long) {
         virtualPlaceId = other.virtualPlaceId;
         thrds = other.thrds;
         recovered = true;
         reduceSrc(0) = 0; reduceSrc(1) = 0;
         reduceDst(0) = 0; reduceDst(1) = 0;
+        iteration = iter;
     }
     
     public def toString() {
@@ -592,20 +542,6 @@ class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
             sumTimes += t.elapsedTimeNS;
         }
         return sumTimes;
-    }
-    
-    public def notifyTermination(ex:CheckedThrowable) {
-        var lc:Long = -1;
-        p0Latch.lock();
-        if (ex != null) {
-            if (p0Excs == null)
-                p0Excs = new GrowableRail[CheckedThrowable]();
-        }
-        lc = --p0Cnt;
-        Console.OUT.println(here + " TxBench.notifyTermination -> count=" + lc );
-        p0Latch.unlock();
-        if (lc == 0)
-            p0Latch.release();
     }
 }
 

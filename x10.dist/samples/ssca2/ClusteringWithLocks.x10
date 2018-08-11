@@ -13,7 +13,8 @@ import x10.xrx.TxStoreConflictException;
 import x10.util.ArrayList;
 import x10.util.HashMap;
 import x10.util.HashSet;
-import x10.xrx.NonShrinkingApp;
+import x10.xrx.MasterWorkerApp;
+import x10.xrx.MasterWorkerExecutor;
 import x10.xrx.TxStore;
 import x10.xrx.Tx;
 import x10.xrx.TxLocking;
@@ -31,9 +32,8 @@ To use locking, we needed to handle the following:
  - avoid locking the same key twice by remembering all acquired keys
  - maintain the list of acquired keys in the application to unlock them
 */
-public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) implements NonShrinkingApp {  
+public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) implements MasterWorkerApp {
     public static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
-    public static val asyncRecovery = true;
     
     public static struct Color implements Cloneable {
         public val placeId:Long;
@@ -188,7 +188,6 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
                 });
             }
         }
-        
         if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] size["+result().total+"] sizeLast["
                 + result().lockedLastTotal+"] target[" + state.clusterSize 
                 + "] edgeCount["+edgeCount+"] oldMapSize["+map.size()+"] ");
@@ -324,41 +323,31 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         return time;
     }
     
-    /**
-     * Dump the clusters.
-     */
-    public def startPlace(place:Place, store:TxStore, recovery:Boolean) {
-        val plh = this.plh; //don't copy this
+    public def execWorker(vid:Long, store:TxStore, recovery:Boolean):Any {
+        val placeId = vid;
+        val state = plh();
+        val N = state.N;
+        val max = state.places;
+        val g = state.g;
+        val verbose = state.verbose;
+        val verticesPerPlace = state.verticesPerPlace;
+        val verticesPerWorker = Math.ceil((state.verticesPerPlace as Double)/state.workersPerPlace) as Long;
+        val startVertex = (N as Long*placeId/max) as Int;
+        val endVertex = (N as Long*(placeId+1)/max) as Int;
         
-        at (place) @Uncounted async {
-            val placeId = store.plh().getVirtualPlaceId();
-            val state = plh();
-            val N = state.N;
-            val max = state.places;
-            val g = state.g;
-            val verbose = state.verbose;
-            val verticesPerPlace = state.verticesPerPlace;
-            val verticesPerWorker = Math.ceil((state.verticesPerPlace as Double)/state.workersPerPlace) as Long;
-            val startVertex = (N as Long*placeId/max) as Int;
-            val endVertex = (N as Long*(placeId+1)/max) as Int;
-            
-            Console.OUT.println(here + " starting: " + startVertex + "-" + (endVertex-1));
-            
-            finish {
-                for (workerId in 1..state.workersPerPlace) {
-                    val start = startVertex + (workerId-1) * verticesPerWorker;
-                    val end = start + verticesPerWorker;
-                    val end2 = end >= state.verticesToWorkOn.size ? state.verticesToWorkOn.size : end;
-                    async execute(state, placeId, workerId, start as Int, end2 as Int, store, plh, verbose);
-                }
-            }
-            val totalRetries = state.totalRetries;
-            Console.OUT.println(here + " ==> completed successfully ");
-            at (Place(0)) @Uncounted async {
-                val p0state = plh();
-                p0state.notifyTermination(null, totalRetries);
+        Console.OUT.println(here + " starting: " + startVertex + "-" + (endVertex-1));
+        
+        finish {
+            for (workerId in 1..state.workersPerPlace) {
+                val start = startVertex + (workerId-1) * verticesPerWorker;
+                val end = start + verticesPerWorker;
+                val end2 = end >= state.verticesToWorkOn.size ? state.verticesToWorkOn.size : end;
+                async execute(state, placeId, workerId, start as Int, end2 as Int, store, plh, verbose);
             }
         }
+        val totalRetries = state.totalRetries;
+        Console.OUT.println(here + " ==> completed successfully ");
+        return totalRetries;
     }
     
     /**
@@ -419,34 +408,7 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         }
         Console.OUT.println("Points in clusters = " + pointsInClusters);
     }
-    
-    public def run(store:TxStore, plh:PlaceLocalHandle[ClusteringState]) {
-        val activePlaces = store.fixAndGetActivePlaces();
-        try {
-            val state = plh();
-            state.p0Cnt = activePlaces.size();
-            state.p0Latch = new SimpleLatch();
-            
-            for (var i:Long = 0; i < state.places; i++) {
-                startPlace(activePlaces(i), store, false);
-            }
-            state.p0Latch.await();
-            
-            if (state.p0Excs != null)
-                throw new MultipleExceptions(state.p0Excs);
-            
-        } catch (mulExp:MultipleExceptions) {
-            /*val stmFailed = mulExp.getExceptionsOfType[TxBenchFailed]();
-            if ((stmFailed != null && stmFailed.size != 0) || !resilient)
-                throw mulExp;*/
-            mulExp.printStackTrace();
-        } catch(e:Exception) {
-            if (!resilient)
-                throw e;
-            e.printStackTrace();
-        }
-    }
-    
+       
     /**
      * Reads in all the options and calculate clusters.
      */
@@ -478,8 +440,8 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         val g:Long = cmdLineParams("-g", -1); // progress
         val r:Long = cmdLineParams("-r", 0);
         val verbose:Int = cmdLineParams("-v", 0n); // off by default
-        val vp = cmdLineParams("vp", "");
-        val vt = cmdLineParams("vt", "");
+        val vp = cmdLineParams("vp", ""); //victim places
+        val vt = cmdLineParams("vt", ""); //victim kill time or progress
         val workers:Int = cmdLineParams("-w", Runtime.NTHREADS); 
         
         Console.OUT.println("Running SSCA2 with the following parameters:");
@@ -513,9 +475,11 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         
         val mgr = new PlaceManager(spare, false);
         val activePlaces = mgr.activePlaces();
-        val rmat = Rmat(seed, n, a, b, c, d);
         val places = activePlaces.size();
-        
+        Console.OUT.println("spare places = " + spare);
+        Console.OUT.println("active places = " + places);
+                
+        val rmat = Rmat(seed, n, a, b, c, d);
         val graph = rmat.generate();
         if (verbose > 0) {
             Console.OUT.println(graph.toString());
@@ -523,25 +487,27 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         graph.compress();
         val N = graph.numVertices();
         val verticesToWorkOn = new Rail[Int](N, (i:Long)=>i as Int);
+
         val plh = PlaceLocalHandle.make[ClusteringState](Place.places(), ()=>new ClusteringState(graph, verticesToWorkOn, places, workers, verbose, clusterSize, g, vp, vt));
-        
         val app = new ClusteringWithLocks(plh);
-        val store = TxStore.make(activePlaces, asyncRecovery, app);
-        Console.OUT.println("spare places = " + spare);
-        Console.OUT.println("active places = " + activePlaces.size());
+        val executor = MasterWorkerExecutor.make(activePlaces, app);
         
         val distTime = (System.nanoTime()-time)/1e9;
         
         time = System.nanoTime();
-        app.run(store, plh);
+        executor.run();
         time = System.nanoTime() - time;
         
+        val results = executor.workerResults();
+        var retries:Long = 0;
+        for (entry in results.entries()) {
+            retries += entry.getValue() as Long;
+        }
         val procTime = time/1E9;
         val totalTime = distTime + procTime;
         val procPct = procTime*100.0/totalTime;
-        val retries = plh().p0TotalRetries;
         if(verbose > 2 || r > 0) 
-            app.printClusters(store);
+            app.printClusters(executor.store());
 
         Console.OUT.println("Places:" + places + ":N:" + plh().N + ":SetupInSeconds:" + distTime + ":ProcessingInSeconds:" + procTime + ":TotalInSeconds:" + totalTime + ":retries:"+retries+":(proc:" + procPct  + "%).");
     }
@@ -561,11 +527,6 @@ class ClusteringState(N:Int) {
     
     val vt:String;
     val vp:String;
-    
-    var p0Cnt:Long;
-    var p0Latch:SimpleLatch = null;
-    var p0Excs:GrowableRail[CheckedThrowable] = null;
-    var p0TotalRetries:Long = 0;
 
     var totalRetries:Long = 0;
     
@@ -583,21 +544,6 @@ class ClusteringState(N:Int) {
         this.vp = vp;
         this.vt = vt;
         this.verticesToWorkOn = verticesToWorkOn;
-    }
-    
-    public def notifyTermination(ex:CheckedThrowable, r:Long) {
-        var lc:Long = -1;
-        p0Latch.lock();
-        if (ex != null) {
-            if (p0Excs == null)
-                p0Excs = new GrowableRail[CheckedThrowable]();
-            p0Excs.add(ex);
-        }
-        lc = --p0Cnt;
-        p0TotalRetries += r;
-        p0Latch.unlock();
-        if (lc == 0)
-            p0Latch.release();
     }
     
     public def addRetries(r:Long) {
