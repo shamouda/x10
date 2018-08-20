@@ -67,7 +67,9 @@ public class TxLogManager[K] {K haszero} {
                 }
             }
             if (obj == null) {
-                throw new TxStoreConcurrencyLimitException(here + " TxStoreConcurrencyLimitException");
+                //throw new TxStoreConcurrencyLimitException(here + " TxStoreConcurrencyLimitException");
+                Console.OUT.println(here + "FATAL ERROR: TxStoreConcurrencyLimitException");
+                System.killHere();
             }
             obj.setId(id); //allocate it
             return obj;

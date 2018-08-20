@@ -30,6 +30,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
     public static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     public static def main(args:Rail[String]) {
+        val mainStart = Timer.milliTime();
         val opts = new OptionsParser(args, [
             Option("help","help","this information"),
             Option("v","verify","verify the result")
@@ -98,9 +99,11 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
                 app.printThroughput(executor.store(), plh, iter);
                 app.resetStatistics(plh);
             }
-            Console.OUT.println("+++ TxBench Succeeded +++");
+            val elapsed = Timer.milliTime() - mainStart;
+            Console.OUT.println("+++ TxBench Succeeded +++  [totalTime:"+(elapsed/1000)+" sec]");
         }catch(ex:Exception) {
-            Console.OUT.println("!!! TxBench Failed !!!");
+            val elapsed = Timer.milliTime() - mainStart;
+            Console.OUT.println("!!! TxBench Failed !!!  [totalTime:"+(elapsed/1000)+" sec]");
             ex.printStackTrace();
         }
     }
