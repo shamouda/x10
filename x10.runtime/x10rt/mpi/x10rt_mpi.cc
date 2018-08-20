@@ -1968,11 +1968,14 @@ struct CollectivePostprocessEnv {
     x10rt_completion_handler *ch;
     void *arg;
     int mpiError;
+    double startT;
+    double endT;
     union {
         struct CollectivePostprocessEnvBarrier {
             x10rt_team team; x10rt_place role;
             x10rt_completion_handler *ch; void *arg;
             int mpiError;
+            double startT; double endT;
         } barrier;
         struct CollectivePostprocessEnvBcast {
             x10rt_team team; x10rt_place role;
@@ -1981,6 +1984,7 @@ struct CollectivePostprocessEnv {
             x10rt_completion_handler *ch; void *arg;
             void *buf;
             int mpiError;
+            double startT; double endT;
         } bcast;
         struct CollectivePostprocessEnvScatter {
             x10rt_team team; x10rt_place role;
@@ -1989,6 +1993,7 @@ struct CollectivePostprocessEnv {
             x10rt_completion_handler *ch; void *arg;
             void *buf;
             int mpiError;
+            double startT; double endT;
         } scatter;
         struct CollectivePostprocessEnvAlltoall {
             x10rt_team team; x10rt_place role;
@@ -1997,6 +2002,7 @@ struct CollectivePostprocessEnv {
             x10rt_completion_handler *ch; void *arg;
             void *buf;
             int mpiError;
+            double startT; double endT;
         } alltoall;
         struct CollectivePostprocessEnvAllreduce {
             x10rt_team team; x10rt_place role;
@@ -2008,6 +2014,7 @@ struct CollectivePostprocessEnv {
             size_t el;
             void *buf;
             int mpiError;
+            double startT; double endT;
         } allreduce;
         struct CollectivePostprocessEnvScatterv {
             x10rt_team team; x10rt_place role;
@@ -2016,6 +2023,7 @@ struct CollectivePostprocessEnv {
             size_t el; x10rt_completion_handler *ch; void *arg;
             int *scounts_; int *soffsets_;
             int mpiError;
+            double startT; double endT;
         } scatterv;
         struct CollectivePostprocessEnvGather {
             x10rt_team team; x10rt_place role;
@@ -2025,6 +2033,7 @@ struct CollectivePostprocessEnv {
             int gsize;
             void *buf;
             int mpiError;
+            double startT; double endT;
         } gather;
         struct CollectivePostprocessEnvGatherv {
             x10rt_team team; x10rt_place role;
@@ -2033,6 +2042,7 @@ struct CollectivePostprocessEnv {
             size_t el; x10rt_completion_handler *ch; void *arg;
             int *dcounts_; int *doffsets_;
             int mpiError;
+            double startT; double endT;
         } gatherv;
         struct CollectivePostprocessEnvAllgather {
             x10rt_team team; x10rt_place role;
@@ -2042,6 +2052,7 @@ struct CollectivePostprocessEnv {
             int gsize;
             void *buf;
             int mpiError;
+            double startT; double endT;
         } allgather;
         struct CollectivePostprocessEnvAllgatherv {
             x10rt_team team; x10rt_place role;
@@ -2051,6 +2062,7 @@ struct CollectivePostprocessEnv {
             int gsize;
             int *dcounts_; int *doffsets_;
             int mpiError;
+            double startT; double endT;
         } allgatherv;
         struct CollectivePostprocessEnvAlltoallv {
             x10rt_team team; x10rt_place role;
@@ -2059,6 +2071,7 @@ struct CollectivePostprocessEnv {
             size_t el; x10rt_completion_handler *ch; void *arg;
             int *scounts_; int *soffsets_; int *dcounts_; int *doffsets_;
             int mpiError;
+            double startT; double endT;
         } alltoallv;
         struct CollectivePostprocessEnvReduce {
             x10rt_team team; x10rt_place role; x10rt_place root;
@@ -2070,6 +2083,7 @@ struct CollectivePostprocessEnv {
             void *buf;
             int el;
             int mpiError;
+            double startT; double endT;
         } reduce;
         struct CollectivePostprocessEnvAgree {
             x10rt_team team; x10rt_place role;
@@ -2077,6 +2091,7 @@ struct CollectivePostprocessEnv {
             x10rt_completion_handler *ch; void *arg;
             void *buf;
             int mpiError;
+            double startT; double endT;
         } agree;
     } env;
 };
@@ -3713,8 +3728,10 @@ void x10rt_net_agree (x10rt_team team, x10rt_place role, const int *sbuf, int *d
     MPI_Comm comm = mpi_tdb.comm(team);
     dbuf[0] = sbuf[0];
     
+    double startT = MPI_Wtime();
     MPI_AGREEMENT_COLLECTIVE("agree", "igree", comm, dbuf);
     
+    MPI_COLLECTIVE_SAVE(startT);
     MPI_COLLECTIVE_SAVE(team);
     MPI_COLLECTIVE_SAVE(role);
     MPI_COLLECTIVE_SAVE(sbuf);
@@ -3728,6 +3745,9 @@ void x10rt_net_agree (x10rt_team team, x10rt_place role, const int *sbuf, int *d
 
 static void x10rt_net_handler_agree(CollectivePostprocessEnv cpe) {
 #ifdef OPEN_MPI_ULFM
+	double stopT = MPI_Wtime();
+	if (x10rt_net_here() == 0)
+		printf("MPI_agree: %g ms\n", (stopT-SAVED(startT)) * 1000);
     if (is_process_failure_error(cpe.mpiError))
     	SAVED(ch)(SAVED(arg), true);
     else
