@@ -33,7 +33,7 @@ public struct Team {
     private static struct DoubleIdx(value:Double, idx:Int) {}
     private static val DEBUG:Boolean = false;
     private static val DEBUGINTERNALS:Boolean = (System.getenv("X10_TEAM_DEBUG_INTERNALS") != null 
-            && System.getenv("X10_TEAM_DEBUG_INTERNALS").equals("1"));
+    		&& System.getenv("X10_TEAM_DEBUG_INTERNALS").equals("1"));
 
     /** A team that has one member at each place. */
     public static val WORLD = Team(0n, Place.places());
@@ -320,9 +320,9 @@ public struct Team {
     }
     
     private static def nativeScatterv[T] (id:Int, role:Int, root:Int, src:Rail[T], src_off:Int, scounts:Rail[Int], soffsets:Rail[Int], dst:Rail[T], dst_off:Int) : void {
-        //FIXME: support Java
-        //@Native("java", "x10.x10rt.TeamSupport.nativeScatterv(id, role, root, ...);")
-        @Native("c++", "x10rt_scatterv(id, role, root, src->raw, soffsets->raw, scounts->raw, &dst->raw[dst_off], scounts->raw[role], sizeof(TPMGL(T)), ::x10aux::coll_handler, ::x10aux::coll_enter());") {}    
+	    //FIXME: support Java
+    	//@Native("java", "x10.x10rt.TeamSupport.nativeScatterv(id, role, root, ...);")
+	    @Native("c++", "x10rt_scatterv(id, role, root, src->raw, soffsets->raw, scounts->raw, &dst->raw[dst_off], scounts->raw[role], sizeof(TPMGL(T)), ::x10aux::coll_handler, ::x10aux::coll_enter());") {}    
     }
     
     
@@ -1531,7 +1531,7 @@ public struct Team {
             local_parentIndex = -1;
             local_child1Index = -1;
             local_child2Index = -1;
-            
+	        
             if (isValid()) {
                 if (local_child1Index > -1) {
                     // Ensure activity completion messages are sent to children
@@ -1563,7 +1563,7 @@ public struct Team {
                             } catch (me:MultipleExceptions) { }
                         }
                     }
-                }
+	            }
 
                 val notifyGrandchildren = (childIndex:Long) => {
                     // child is dead; notify grandchildren
@@ -1586,7 +1586,7 @@ public struct Team {
                     }
                 };
                 
-                if (myLinks.child1Index != -1) {
+	            if (myLinks.child1Index != -1) {
                     if (!places(myLinks.child1Index).isDead()) {
                         try {
                             if (DEBUGINTERNALS) Runtime.println(here+" notifying child1 "+places(myLinks.child1Index)+" of an invalid team");
@@ -1597,8 +1597,8 @@ public struct Team {
                     } else {
                         notifyGrandchildren(myLinks.child1Index);
                     }
-                }
-                if (myLinks.child2Index != -1) {
+	            }
+	            if (myLinks.child2Index != -1) {
                     if (!places(myLinks.child2Index).isDead()) {
                         try {
                             if (DEBUGINTERNALS) Runtime.println(here+" notifying child2 "+places(myLinks.child2Index)+"  of an invalid team");
@@ -1609,7 +1609,7 @@ public struct Team {
                     } else {
                         notifyGrandchildren(myLinks.child2Index);
                     }
-                }
+	            }
                 
                 if (DEBUGINTERNALS) Runtime.println(here+":team"+teamidcopy+" failed "+getCollName(collType));
 
