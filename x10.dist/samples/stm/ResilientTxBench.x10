@@ -1,16 +1,15 @@
 import x10.util.ArrayList;
 
 import x10.util.resilient.PlaceManager;
-import x10.util.resilient.localstore.ResilientNativeMap;
-import x10.util.resilient.localstore.Tx;
-import x10.util.resilient.localstore.ResilientStore;
 import x10.util.resilient.localstore.CloneableLong;
-import x10.util.resilient.localstore.TxConfig;
-import x10.util.resilient.localstore.LockingTx;
-import x10.util.resilient.localstore.LocalTx;
-import x10.util.resilient.localstore.AbstractTx;
-import x10.util.resilient.localstore.tx.TxStoreFatalException;
-
+import x10.xrx.txstore.TxConfig;
+import x10.xrx.TxStoreFatalException;
+import x10.xrx.MasterWorkerApp;
+import x10.xrx.MasterWorkerExecutor;
+import x10.xrx.TxStore;
+import x10.xrx.Tx;
+import x10.xrx.TxLocking;
+import x10.xrx.Runtime;
 import x10.util.concurrent.Future;
 import x10.xrx.Runtime;
 import x10.util.HashMap;
@@ -23,8 +22,12 @@ import x10.util.HashSet;
 import x10.compiler.Uncounted;
 import x10.util.Team;
 
-public class ResilientTxBench {
-    private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
+import x10.util.concurrent.SimpleLatch;
+import x10.util.concurrent.AtomicInteger;
+import x10.util.GrowableRail;
+
+public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements MasterWorkerApp {
+    public static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     public static def main(args:Rail[String]) {
         val opts = new OptionsParser(args, [
@@ -43,9 +46,7 @@ public class ResilientTxBench {
             Option("g","progress","interval of progress reporting per producer (default no progress reporting)"),
             Option("vp","victims","victim places to kill (comma separated)"),
             Option("vt","victimsTimes","times to kill victim places(comma separated)"),
-            Option("opt","optimized","optimized runs use fixed pre-defined members list (default 0 (not optimized))"),
             Option("s","spare","Spare places (default 0)"),
-            Option("flat","flat","Flat transaction (default 0)"),
             Option("f","f","Transaction coordinator is also a participant (default 1) ")
         ]);
         
@@ -60,16 +61,14 @@ public class ResilientTxBench {
         val g = opts("g", -1);
         val s = opts("s", 0);
         val vp = opts("vp", "");
-        val vt = opts("vt", "");
-        val optimized = opts("opt", 0) == 1;
-        val flat = opts("flat", 0) == 1;
+        val vt = opts("vt", -1);
         val f = opts("f", 1) == 1;
-        val victimsList = new VictimsList(vp, vt);
         
         val mgr = new PlaceManager(s, false);
         val activePlaces = mgr.activePlaces();
         val p = opts("p", activePlaces.size());
-        printRunConfigurations (r, u, n, p, t, w, d, h, o, g, s, f, optimized, flat);
+        
+        printRunConfigurations (r, u, n, p, t, w, d, h, o, g, s, f, vp, vt);
         
         assert (h <= activePlaces.size()) : "invalid value for parameter h, h should not exceed the number of active places" ;
 
@@ -77,38 +76,28 @@ public class ResilientTxBench {
             assert (p * t == 1): "lock free mode can only be used with only 1 producer thread";
         }
         
-        val throughputPLH = PlaceLocalHandle.make[PlaceThroughput](Place.places(), ()=> new PlaceThroughput(here.id, t) );
-                
-        val immediateRecovery = true;
-        val store = ResilientStore.make[Long](activePlaces, immediateRecovery);
-        val map = store.makeMap();
+        val plh = PlaceLocalHandle.make[TxBenchState](Place.places(), ()=> new TxBenchState(here.id, r, u, n, p, t, w, d, h, o, g, s, f, vp, vt) );
+        val app = new ResilientTxBench(plh);
+        val executor = MasterWorkerExecutor.make(activePlaces, app);
         
         val startWarmup = Timer.milliTime();
         if (w == -1) {
             Console.OUT.println("no warmpup");
-        }
-        else {
+        } else {
             Console.OUT.println("warmup started");
-            runIteration(map, p, w, r, u, t, h, o, g, f, null, optimized, flat, throughputPLH, null);
-            resetStatistics(map, throughputPLH);
+            executor.run();
+            app.resetStatistics(plh);
             Console.OUT.println("warmup completed, warmup elapsed time ["+(Timer.milliTime() - startWarmup)+"]  ms ");
         }
         
         try {
             for (iter in 1..n) {
                 val startIter = Timer.milliTime();
-                var victim:VictimsList = victimsList;
-                if (victim.onePerIteration)
-                    victim = victimsList.getVictim(iter-1);
-                else
-                    victim = victimsList;
-                runIteration(map, p, d, r, u, t, h, o, g, f, victim, optimized, flat, throughputPLH, null);
+                executor.run();
                 Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
-
-                printThroughput(map, p, iter, throughputPLH, d, t, h, o);
-                resetStatistics(map, throughputPLH);
+                app.printThroughput(executor.store(), plh, iter);
+                app.resetStatistics(plh);
             }
-            
             Console.OUT.println("+++ TxBench Succeeded +++");
         }catch(ex:Exception) {
             Console.OUT.println("!!! TxBench Failed !!!");
@@ -116,158 +105,116 @@ public class ResilientTxBench {
         }
     }
     
-    public static def runIteration(map:ResilientNativeMap[Long], producersCount:Long, 
-            d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, f:Boolean, victims:VictimsList, optimized:Boolean,
-            flat:Boolean, throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
-        val activePlaces = map.fixAndGetActivePlaces();
-        try {
-            
-            finish for (var i:Long = 0; i < producersCount; i++) {               
-                startPlace(activePlaces(i), map, activePlaces.size(), producersCount, d, r, u, t, h, o, g, f, victims, optimized, flat, throughput, recoveryThroughput);
-            }
-            
-        } catch (e:TxBenchFailed) {
-            throw e;
-        } catch (mulExp:MultipleExceptions) {
-            val stmFailed = mulExp.getExceptionsOfType[TxBenchFailed]();
-            if ((stmFailed != null && stmFailed.size != 0) || !resilient)
-                throw mulExp;
-            mulExp.printStackTrace();
-        } catch(e:Exception) {
-            if (!resilient)
-                throw e;
-            e.printStackTrace();
-        }
-    }
-
-    private static def startPlace(pl:Place, map:ResilientNativeMap[Long], activePlacesCount:Long, producersCount:Long, 
-            d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, f:Boolean, victims:VictimsList, optimized:Boolean,
-            flat:Boolean, throughput:PlaceLocalHandle[PlaceThroughput], recoveryThroughput:PlaceThroughput) {
-        
-        at (pl) async {
-            val myVirtualPlaceId = map.plh().getVirtualPlaceId();
-            if (recoveryThroughput != null)
-                throughput().reinit(recoveryThroughput);
-            
-            for (thrd in 1..t) async {
-                produce(map, activePlacesCount, myVirtualPlaceId, producersCount, thrd-1, d, r, u, t, h, o, g, f, victims, optimized, flat, throughput);
-            }
-            
-            if (resilient && victims != null) {
-                val killTime = victims.getKillTime(here);
-                if (killTime != -1) {
-                    @Uncounted async {
-                        Console.OUT.println("Hammer kill timer at "+here+" starting sleep for "+killTime+" secs");
-                        val startedNS = System.nanoTime(); 
-                        
-                        val deadline = System.currentTimeMillis() + 1000 * killTime;
-                        while (deadline > System.currentTimeMillis()) {
-                            val sleepTime = deadline - System.currentTimeMillis();
-                            System.sleep(sleepTime);
-                        }
-                        
-                        val prev = map.plh().getMaster(here);
-                        val myThroughput = throughput();
-                        myThroughput.setElapsedTime(System.nanoTime() - startedNS);
-                        val me = here;
-                        at (prev) {
-                            throughput().rightPlaceThroughput = myThroughput;
-                            throughput().rightPlaceDeathTimeNS =  System.nanoTime();
-                            Console.OUT.println(here + " Received suicide note from " + me + " througputValues: " + myThroughput);
-                        }
-                        
-                        Console.OUT.println(here + " Hammer calling killHere" );
-                        System.killHere();
-                    }
+    public def execWorker(vid:Long, store:TxStore, recovery:Boolean):Any {
+        if (recovery) {
+            val leftPlace = store.prevPlace();
+            val me = here;
+            finish at (leftPlace) async {
+                val masterState = plh(); 
+                if (masterState.rightPlaceDeathTimeNS == -1)
+                    throw new TxBenchFailed(here + " assertion error, did not receive suicide note ...");
+                val oldThroughput = masterState.rightTxBenchState;
+                val recoveryTime = System.nanoTime() - masterState.rightPlaceDeathTimeNS;
+                oldThroughput.shiftElapsedTime(recoveryTime);
+                val iter = masterState.iteration;
+                Console.OUT.println(here + " Calculated recovery time = " + (recoveryTime/ 1e9) + " seconds" );
+                at (me) async {
+                    plh().reinit(oldThroughput, iter); //state.recovered = true
                 }
             }
         }
+        
+        val state = plh();
+        state.iteration++;
+        if (state.iteration > 0) killSelf(store, state, state.iteration);
+        val t = state.t;
+        finish for (thrd in 1..t) async {
+            produce(store, plh, thrd-1);
+        }
+        return -1;
     }
     
-    public static def produce(map:ResilientNativeMap[Long], activePlacesCount:Long, myVirtualPlaceId:Long, producersCount:Long, producerId:Long, 
-            d:Long, r:Long, u:Float, t:Long, h:Long, o:Long, g:Long, f:Boolean, victims:VictimsList, optimized:Boolean, flat:Boolean,
-            throughput:PlaceLocalHandle[PlaceThroughput]) {
-        throughput().started = true;
-        if (throughput().recovered) {
-            Console.OUT.println(here + " Spare place started to produce transactions " + throughput().toString());
+    public def produce(store:TxStore, plh:PlaceLocalHandle[TxBenchState], producerId:Long) {
+        val state = plh();
+        val myVirtualPlaceId = state.virtualPlaceId;
+        val h = state.h;
+        val f = state.f;
+        val r = state.r;
+        val u = state.u;
+        val o = state.o;
+        val p = state.p;
+        val t = state.t;
+        val d = state.d;
+        val g = state.g;
+        
+        state.started = true;
+        if (state.recovered) {
+            Console.OUT.println(here + " Spare place started to produce transactions " + state.toString());
         }
         val rand = new Random((here.id+1) * t + producerId);
-        val myThroughput = throughput().thrds(producerId);
+        val myThroughput = state.thrds(producerId);
         var timeNS:Long = myThroughput.elapsedTimeNS; // always 0 in non-resilient mode, non-zero for spare places in resilient mode
 
         //pre-allocate rails
         val virtualMembers = new Rail[Long](h);
-        val keys = new Rail[Long] (h*o);
+        val keys = new Rail[Any] (h*o);
         val tmpKeys = new Rail[Long] (o);
         val values = new Rail[Long] (h*o);
         val readFlags = new Rail[Boolean] (h*o);
         
         while (timeNS < d*1e6) {
-            val innerStr = nextTransactionMembers(rand, activePlacesCount, h, myVirtualPlaceId, virtualMembers, f);
-            nextRandomOperations(rand, activePlacesCount, virtualMembers, r, u, o, keys, values, readFlags, tmpKeys);
-            
-            val distClosure = (tx:AbstractTx[Long]) => {
-                for (var m:Long = 0; m < h; m++) {
-                    val start = m*o;
-                    val dest = virtualMembers(m);
-                    tx.asyncAt(dest, () => {
-                        for (var x:Long = 0; x < o; x++) {
-                            val key = keys(start+x);
-                            val read = readFlags(start+x);
-                            val value = values(start+x);
-                            read? tx.get(key): tx.put(key, new CloneableLong(value));
-                        }
-                    });
-                }
-                return null;
-            };
-            
-            val localClosure = (tx:AbstractTx[Long]) => {
-                for (var x:Long = 0; x < o; x++) {
-                    val key = keys(x);
-                    val read = readFlags(x);
-                    val value = values(x);
-                    read? tx.get(key): tx.put(key, new CloneableLong(value));
-                }
-                return null;
-            };
+            val innerStr = nextTransactionMembers(rand, p, h, myVirtualPlaceId, virtualMembers, f);
+            nextRandomOperations(rand, p, virtualMembers, r, u, o, keys, values, readFlags, tmpKeys);
             
             //time starts here
             val start = System.nanoTime();
             var includeTx:Boolean = true;
-            if (virtualMembers.size > 1 && TxConfig.STM ) { //STM distributed
-                val remainingTime =  (d*1e6 - timeNS) as Long;
+            if (TxConfig.get().LOCKING) {
+                val distClosure = (tx:TxLocking) => {
+                    for (var m:Long = 0; m < h; m++) {
+                        val start = m*o;
+                        val dest = virtualMembers(m);
+                        tx.asyncAt(dest, () => {
+                            for (var x:Long = 0; x < o; x++) {
+                                val key = keys(start+x) as Long;
+                                val read = readFlags(start+x);
+                                val value = values(start+x);
+                                read? tx.get(key): tx.put(key, new CloneableLong(value));
+                            }
+                        });
+                    }
+                };
                 try {
-                    if (optimized)
-                        map.executeTransaction(virtualMembers, distClosure, -1, remainingTime);
-                    else if (flat)
-                         map.executeFlatTransaction(null, distClosure, -1, remainingTime);
-                    else
-                        map.executeTransaction(null, distClosure, -1, remainingTime);
-                }catch(expf:TxStoreFatalException) {
+                    store.executeLockingTx(virtualMembers, keys, readFlags, o, distClosure);
+                } catch(expf:TxStoreFatalException) {
                     includeTx = false;
+                    //expf.printStackTrace();
                 }
             }
-            else if (virtualMembers.size > 1 && TxConfig.get().LOCKING ) { //locking distributed
-                map.executeLockingTransaction(virtualMembers, keys, readFlags, o, distClosure);
+            else {
+                val distClosure = (tx:Tx) => {
+                    for (var m:Long = 0; m < h; m++) {
+                        val start = m*o;
+                        val dest = virtualMembers(m);
+                        tx.asyncAt(dest, () => {
+                            for (var x:Long = 0; x < o; x++) {
+                                val key = keys(start+x) as Long;
+                                val read = readFlags(start+x);
+                                val value = values(start+x);
+                                read? tx.get(key): tx.put(key, new CloneableLong(value));
+                            }
+                        });
+                    }
+                };
+                
+                val remainingTime =  (d*1e6 - timeNS) as Long;
+                try {
+                    store.executeTransaction(distClosure, -1, remainingTime);
+                } catch(expf:TxStoreFatalException) {
+                    includeTx = false;
+                    //expf.printStackTrace();
+                }
             }
-            else if (virtualMembers.size == 1 && producersCount == 1 && TxConfig.STM ) { // STM local
-                //local transaction
-                assert (virtualMembers(0) == here.id) : "local transactions are not supported at remote places in this benchmark" ;
-                map.executeLocalTransaction(localClosure, -1, -1);
-            }
-            else if (virtualMembers.size == 1 && producersCount == 1 && TxConfig.get().LOCKING ) { //Locking local
-                assert (virtualMembers(0) == here.id) : "local transactions are not supported at remote places in this benchmark" ;
-                map.executeLockingTransaction(virtualMembers, keys, readFlags, o, localClosure);
-            }
-            else if (virtualMembers.size == 1 && producersCount == 1 && TxConfig.get().BASELINE ) { //baseline local
-                map.executeBaselineTransaction(localClosure);
-            }
-            else if (virtualMembers.size > 1 && TxConfig.get().BASELINE ) { //baseline distributed
-                map.executeBaselineTransaction(distClosure);
-            }
-            else
-                assert (false) : "wrong or unsupported configurations, members= " + virtualMembers.size;
             
             val elapsedNS = System.nanoTime() - start; 
             timeNS += elapsedNS;
@@ -276,36 +223,22 @@ public class ResilientTxBench {
             if (includeTx) {
                 myThroughput.txCount++;
                 if (g != -1 && myThroughput.txCount%g == 0)
-                    Console.OUT.println(here + " Progress "+myVirtualPlaceId+"x"+producerId + ":" + myThroughput.txCount );
-            }
-            
-            val slaveChange = map.nextPlaceChange();
-            if (resilient && producerId == 0 && slaveChange.changed) {
-                val nextPlace = slaveChange.newSlave;
-                if (throughput().rightPlaceDeathTimeNS == -1)
-                    throw new TxBenchFailed(here + " assertion error, did not receive suicide note ...");
-                val oldThroughput = throughput().rightPlaceThroughput;
-                val recoveryTime = System.nanoTime() - throughput().rightPlaceDeathTimeNS;
-                oldThroughput.shiftElapsedTime(recoveryTime);
-                Console.OUT.println(here + " Calculated recovery time = " + (recoveryTime/ 1e9) + " seconds" );
-                startPlace(nextPlace, map, activePlacesCount, producersCount, d, r, u, t, h, o, g, f, victims, optimized, flat, throughput, oldThroughput);
+                    Console.OUT.println(here + " Progress " + myVirtualPlaceId + "x" + producerId + ":" + myThroughput.txCount );
             }
         }
         //Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
     }
 
-    public static def printThroughput(map:ResilientNativeMap[Long], producersCount:Long, iteration:Long, plh:PlaceLocalHandle[PlaceThroughput], 
-            d:Long, t:Long, h:Long, o:Long) {
+    public def printThroughput(store:TxStore, plh:PlaceLocalHandle[TxBenchState], iteration:Long) {
         try {
-            map.printTxStatistics();
-            
             Console.OUT.println("========================================================================");
             Console.OUT.println("Collecting throughput information ..... .....");
             Console.OUT.println("========================================================================");
             
-            val activePlcs = map.fixAndGetActivePlaces();
+            val state = plh();
+            val activePlcs = store.fixAndGetActivePlaces();
             val startReduce = System.nanoTime();
-            if (producersCount > 1) {
+            if (state.p > 1) {
                 val team = new Team(activePlcs);
                 finish for (p in activePlcs) async at (p) {
                     val plcTh = plh();
@@ -319,21 +252,20 @@ public class ResilientTxBench {
                     
                     if (!plcTh.started)
                         throw new TxBenchFailed(here + " never started ...");
-                    /*val localThroughput = (counts as Double ) * h * o / (times/1e6) * t;
-                    Console.OUT.println("iteration:" + iteration +":"+here+":t="+t+":localthroughput(op/MS):"+localThroughput);*/
                 }
             }
             else {
-                plh().reduceDst(0) = plh().mergeTimes();
-                plh().reduceDst(1) = plh().mergeCounts();
+                state.reduceDst(0) = state.mergeTimes();
+                state.reduceDst(1) = state.mergeCounts();
             }
             val elapsedReduceNS = System.nanoTime() - startReduce;
             
-            val allTimeNS = plh().reduceDst(0);
-            val cnt = plh().reduceDst(1);
-            val allOperations = cnt * h * o;
             
-            val producers = producersCount * t;
+            val allTimeNS = state.reduceDst(0);
+            val cnt = state.reduceDst(1);
+            val allOperations = cnt * state.h * state.o;
+            
+            val producers = state.p * state.t;
             val throughput = (allOperations as Double) / (allTimeNS/1e6) * producers;
             Console.OUT.println("Reduction completed in "+((elapsedReduceNS)/1e9)+" seconds   txCount["+cnt+"] OpCount["+allOperations+"]  timeNS["+allTimeNS+"]");
             Console.OUT.println("iteration:" + iteration + ":globalthroughput(op/MS):"+throughput);
@@ -343,9 +275,8 @@ public class ResilientTxBench {
             throw new Exception("Failed while collecting throughput information ...");
         }
     }
-    public static def resetStatistics(map:ResilientNativeMap[Long], plh:PlaceLocalHandle[PlaceThroughput]) {
-        map.resetTxStatistics();
-        Place.places().broadcastFlat(()=>{plh().reset();}, (p:Place)=>true);
+    public static def resetStatistics(plh:PlaceLocalHandle[TxBenchState]) {
+        Place.places().broadcastFlat(()=>{ plh().reset();}, (p:Place)=>true);
     }
     
     public static def nextTransactionMembers(rand:Random, activePlacesCount:Long, h:Long, myPlaceIndex:Long, result:Rail[Long], f:Boolean) {
@@ -380,7 +311,7 @@ public class ResilientTxBench {
     }
     
     public static def nextRandomOperations(rand:Random, activePlacesCount:Long, virtualMembers:Rail[Long], r:Long, u:Float, o:Long,
-            keys:Rail[Long], values:Rail[Long], readFlags:Rail[Boolean], tmpKeys:Rail[Long]) {
+            keys:Rail[Any], values:Rail[Long], readFlags:Rail[Boolean], tmpKeys:Rail[Long]) {
         val h = virtualMembers.size;
         val keysPerPlace = r / activePlacesCount;
         
@@ -418,86 +349,44 @@ public class ResilientTxBench {
         }
     }
     
-    /*********************  Structs ********************/
-    static class VictimsList {
-        private val places:Rail[Long];
-        private val seconds:Rail[Long];
-        private var onePerIteration:Boolean;
-    
-        public def this(place:Long, time:Long) {
-            onePerIteration = true;
-            places = new Rail[Long](1);
-            seconds = new Rail[Long](1);
-            places(0) = place;
-            seconds(0) = time;
-        }
-
-        public def getVictim(i:Long) {
-            if (i >= places.size)
-                return null;
-            return new VictimsList(places(i), seconds(i));
-        }
-        
-        public def this(vp:String, vt:String) {
-            if (vp != null && !vp.equals("")) {
-                assert (resilient) : "assertion error, set X10_RESILIENT_MODE to a non-zero value";
-                val tmp = vp.split(",");
-                places = new Rail[Long](tmp.size);
-                for (var i:Long = 0; i < tmp.size; i++) {
-                    places(i) = Long.parseLong(tmp(i));
-                }
-            }
-            else
-                places = null;
-            
-            if (vt != null && !vt.equals("")) {
-                assert (resilient) : "assertion error, set X10_RESILIENT_MODE to a non-zero value";
-                if (vt.equals("-1") && places != null) {
-                    onePerIteration = true;
-                    seconds = new Rail[Long](places.size);
-                    for (var i:Long = 0 ; i< places.size; i++) {
-                        seconds(i) = 1;
-                    }
-                }
-                else {
-                    onePerIteration = false;
-                    val tmp = vt.split(",");
-                    seconds = new Rail[Long](tmp.size);
-                    for (var i:Long = 0; i < tmp.size; i++) {
-                        seconds(i) = Long.parseLong(tmp(i));
+    private def killSelf(store:TxStore, state:TxBenchState, iter:Long) {
+        if (resilient && state.vp != null && iter != -1) {
+            val arr = state.vp.split(",");
+            if (arr.size >= iter) {
+                val victim = Long.parseLong(arr(iter-1));
+                if (here.id == victim) {
+                    val killTime = state.vt * -1;
+                    @Uncounted async {
+                        Console.OUT.println("Hammer kill timer at "+here+" starting sleep for "+killTime+" secs");
+                        val startedNS = System.nanoTime(); 
+                        
+                        val deadline = System.currentTimeMillis() + 1000 * killTime;
+                        while (deadline > System.currentTimeMillis()) {
+                            val sleepTime = deadline - System.currentTimeMillis();
+                            System.sleep(sleepTime);
+                        }
+                        
+                        val prev = store.plh().getMaster(here);
+                        val myThroughput = plh();
+                        myThroughput.setElapsedTime(System.nanoTime() - startedNS);
+                        val me = here;
+                        finish at (prev) async {
+                            plh().rightTxBenchState = myThroughput;
+                            plh().rightPlaceDeathTimeNS =  System.nanoTime();
+                            Console.OUT.println(here + " Received suicide note from " + me + " througputValues: " + myThroughput);
+                        }
+                        
+                        Console.OUT.println(here + " Hammer calling killHere" );
+                        System.killHere();
                     }
                 }
             }
-            else
-                seconds = null;
-            
-            if (places != null){
-                assert (seconds != null) : "assertion error, -vt is missing" ;
-                assert (places.size == seconds.size) : "wrong victims configurations" ;
-            }
-        }
-        
-        public def getKillTime(p:Place) {
-            if (places == null)
-                return -1;
-            for (var i:Long = 0; i < places.size; i++){
-                if (p.id == places(i))
-                    return seconds(i);
-            }
-            return -1;
-        }
-        
-        public def size() {
-            if (places == null)
-                return 0;
-            else
-                return places.size;
         }
     }
     
     /***********************   Utils  *****************************/
     public static def printRunConfigurations(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, 
-            d:Long, h:Long, o:Long, g:Long, s:Long, f:Boolean, opt:Boolean, flat:Boolean) {
+            d:Long, h:Long, o:Long, g:Long, s:Long, f:Boolean, vp:String, vt:Long) {
         Console.OUT.println("TxBench starting with the following parameters:");        
         Console.OUT.println("X10_NPLACES="  + Place.numPlaces());
         Console.OUT.println("X10_NTHREADS=" + Runtime.NTHREADS);
@@ -509,6 +398,7 @@ public class ResilientTxBench {
         Console.OUT.println("X10_EXIT_BY_SIGKILL=" + System.getenv("X10_EXIT_BY_SIGKILL"));
         Console.OUT.println("DISABLE_SLAVE=" + System.getenv("DISABLE_SLAVE"));
         Console.OUT.println("ENABLE_STAT=" + System.getenv("ENABLE_STAT"));
+        Console.OUT.println("BUSY_LOCK=" + System.getenv("BUSY_LOCK"));
         
         Console.OUT.println("r=" + r);
         Console.OUT.println("u=" + u);
@@ -522,8 +412,8 @@ public class ResilientTxBench {
         Console.OUT.println("g=" + g);
         Console.OUT.println("s=" + s);
         Console.OUT.println("f=" + f  + (f ? " !!! At least one place is local !!!! ": "h random places") );
-        Console.OUT.println("opt(static members)=" + opt);
-        Console.OUT.println("flat=" + flat);
+        Console.OUT.println("vp=" + vp);
+        Console.OUT.println("vt=" + vt);
     }
 }
 
@@ -550,29 +440,53 @@ class ProducerThroughput {
     }
 }
 
-class PlaceThroughput(threads:Long) {
-    public var thrds:Rail[ProducerThroughput];
-    public var rightPlaceThroughput:PlaceThroughput;
-    public var rightPlaceDeathTimeNS:Long = -1;
-    public var virtualPlaceId:Long;
+class TxBenchFailed extends Exception {
+    public def this(message:String) {
+        super(message);
+    }
+}
 
-    public var started:Boolean = false;
-    public var recovered:Boolean = false;
+class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
+        h:Long, o:Long, g:Long, s:Long, f:Boolean, vp:String, vt:Long) {
+    var virtualPlaceId:Long = -1;
 
-    public var reducedTime:Long;
-    public var reducedTxCount:Long;
+    var thrds:Rail[ProducerThroughput];
+    var rightTxBenchState:TxBenchState;
+    var rightPlaceDeathTimeNS:Long = -1;
 
-    public val reduceSrc = new Rail[Long](2);
-    public val reduceDst = new Rail[Long](2);
-    public def this(virtualPlaceId:Long, threads:Long) {
-        property(threads);
-        this.virtualPlaceId = virtualPlaceId;
-        thrds = new Rail[ProducerThroughput](threads, (i:Long)=> new ProducerThroughput( virtualPlaceId, i));
+    var started:Boolean = false;
+    var recovered:Boolean = false;
+
+    var reducedTime:Long;
+    var reducedTxCount:Long;
+
+    val reduceSrc = new Rail[Long](2);
+    val reduceDst = new Rail[Long](2);
+    
+    var iteration:Long = -1; //for the warmup iteration
+    var lc:AtomicInteger;
+    
+    public def this() {
+        property(-1, -1F, -1, -1, -1, -1, -1, -1, -1, -1, -1, true, null, -1);
+    }
+    
+    public def this(virtualId:Long, r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
+        h:Long, o:Long, g:Long, s:Long, f:Boolean, vp:String, vt:Long) {
+        property(r, u, n, p, t, w, d, h, o, g, s, f, vp, vt);
+        thrds = new Rail[ProducerThroughput](t);//, (i:Long)=> new ProducerThroughput( virtualPlaceId, i));
+        for (i in 0..(t-1))
+            thrds(i) = new ProducerThroughput( virtualPlaceId, i);
+        this.virtualPlaceId = virtualId;
+        lc = new AtomicInteger(t as Int);
+        if (w > 0)
+            iteration = -1;
+        else
+            iteration = 0;
     }
     
     public def reset() {
-        thrds = new Rail[ProducerThroughput](threads, (i:Long)=> new ProducerThroughput( virtualPlaceId, i));
-        rightPlaceThroughput = null;
+        thrds = new Rail[ProducerThroughput](t, (i:Long)=> new ProducerThroughput( virtualPlaceId, i));
+        rightTxBenchState = null;
         rightPlaceDeathTimeNS = -1;
 
         started = false;
@@ -583,18 +497,21 @@ class PlaceThroughput(threads:Long) {
         
         reduceSrc(0) = 0; reduceSrc(1) = 0;
         reduceDst(0) = 0; reduceDst(1) = 0;
+        
+        lc = new AtomicInteger(t as Int);
     }
     
-    public def reinit(other:PlaceThroughput) {
+    public def reinit(other:TxBenchState, iter:Long) {
         virtualPlaceId = other.virtualPlaceId;
         thrds = other.thrds;
         recovered = true;
         reduceSrc(0) = 0; reduceSrc(1) = 0;
         reduceDst(0) = 0; reduceDst(1) = 0;
+        iteration = iter;
     }
     
     public def toString() {
-        var str:String = "PlaceThroughput[Place"+virtualPlaceId+"] ";
+        var str:String = "TxBenchState[Place"+virtualPlaceId+"] ";
         for (thrd in thrds) {
             str += "{" + thrd + "} ";
         }
@@ -630,9 +547,3 @@ class PlaceThroughput(threads:Long) {
     }
 }
 
-
-class TxBenchFailed extends Exception {
-    public def this(message:String) {
-        super(message);
-    }
-}

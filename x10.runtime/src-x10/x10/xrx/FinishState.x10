@@ -994,8 +994,9 @@ public abstract class FinishState {
             }
             val cTx = tx;
             val cTxReadyOnly = txReadOnly;
-            val subTxMem = Runtime.activity().subMembers;
-            val subTxRO = Runtime.activity().subReadOnly;
+            
+            val subTxMem = Runtime.activity() == null? null : Runtime.activity().subMembers;
+            val subTxRO = Runtime.activity() == null? true : Runtime.activity().subReadOnly;
             val excs = exceptions == null || exceptions.isEmpty() ? null : exceptions.toRail();
             exceptions = null;
             val ref = this.ref();

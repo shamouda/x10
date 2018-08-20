@@ -182,7 +182,7 @@ public class TxStore {
     }
     
     public def recoverSlave(plh:PlaceLocalHandle[TxLocalStore[Any]]) {
-        debug("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: started ...");
+        debug("Recovering " + here + " TxStore.recoverSlave: started ...");
         val start = System.nanoTime();
         val deadPlace = plh().slave;
         val oldActivePlaces = plh().getActivePlaces();
@@ -197,7 +197,7 @@ public class TxStore {
     public def recoverSlave(plh:PlaceLocalHandle[TxLocalStore[Any]], deadPlace:Place, spare:Place, timeStartRecoveryNS:Long) {
         assert (timeStartRecoveryNS != -1);
         val startTimeNS = System.nanoTime();
-        debug("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: started given already allocated spare " + spare);
+        debug("Recovering " + here + " TxStore.recoverSlave: started given already allocated spare " + spare);
         val deadMaster = here;
         val oldActivePlaces = plh().getActivePlaces();
         val deadVirtualId = oldActivePlaces.indexOf(deadPlace);
@@ -226,7 +226,7 @@ public class TxStore {
 
         val recoveryTime = System.nanoTime()-timeStartRecoveryNS;
         val spareAllocTime = startTimeNS - timeStartRecoveryNS;
-        Console.OUT.printf("Recovering " + here + " DistributedRecoveryHelper.recoverSlave completed successfully: spareAllocTime %f seconds, totalRecoveryTime %f seconds\n" , (spareAllocTime/1e9), (recoveryTime/1e9));
+        Console.OUT.printf("Recovering " + here + " TxStore.recoverSlave completed successfully: spareAllocTime %f seconds, totalRecoveryTime %f seconds\n" , (spareAllocTime/1e9), (recoveryTime/1e9));
     }
     
     private def createMasterStoreAtSpare(plh:PlaceLocalHandle[TxLocalStore[Any]], spare:Place, deadPlace:Place, deadVirtualId:Long, newActivePlaces:PlaceGroup, deadMaster:Place) {

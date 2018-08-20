@@ -17,12 +17,13 @@ import x10.util.resilient.PlaceManager;
 import x10.compiler.Uncounted;
 
 public class MasterWorkerExecutor {
+    public static val MW_DEBUG = System.getenv("MW_DEBUG") != null && System.getenv("MW_DEBUG").equals("1");
     private val master = GlobalRef[MasterWorkerExecutor](this);
     
     transient val app:MasterWorkerApp;
     transient var store:TxStore;
     transient var p0Cnt:Long;
-    transient val p0Latch:SimpleLatch = new SimpleLatch();
+    transient var p0Latch:SimpleLatch;
     transient var p0Excs:GrowableRail[CheckedThrowable] = null;
     transient val workerResults:HashMap[Long,Any] = new HashMap[Long,Any]();
     
@@ -46,6 +47,10 @@ public class MasterWorkerExecutor {
     
     public def store() = store;
     
+    private def print(msg:String) {
+        if (MW_DEBUG) Console.OUT.println(msg);
+    }
+    
     public def run() {
         //avoid copying this
         val master = this.master;
@@ -54,7 +59,8 @@ public class MasterWorkerExecutor {
         
         val activePlaces = store.fixAndGetActivePlaces();
         p0Cnt = activePlaces.size();
-        
+        p0Latch = new SimpleLatch();
+        print(here + " MasterWorkerExecutor.run() p0Cnt="+p0Cnt);
         for (place in activePlaces) {
             val vid = activePlaces.indexOf(place);
             at (place) @Uncounted async {
@@ -62,6 +68,7 @@ public class MasterWorkerExecutor {
             }
         }
         p0Latch.await();
+        print(here + " MasterWorkerExecutor.await() completed p0Cnt="+p0Cnt);
         if (p0Excs != null)
             throw new MultipleExceptions(p0Excs);
     }
@@ -70,11 +77,13 @@ public class MasterWorkerExecutor {
         var ex:Exception = null;
         var result:Any = null;
         try {
-            Console.OUT.println(here + " MasterWorkerExecutor.startWorker(vid="+vid+")");
+            print(here + " MasterWorkerExecutor.startWorker(vid="+vid+")");
             result = app.execWorker(vid, store, recovery);
-            Console.OUT.println(here + " MasterWorkerExecutor.endWorker(vid="+vid+")");
+            print(here + " MasterWorkerExecutor.endWorker(vid="+vid+")");
             ex = null;
         } catch (workerEx:Exception) {
+            print(here + " MasterWorkerExecutor.endWorker(vid="+vid+") exception thrown");
+            workerEx.printStackTrace();
             result = null;
             ex = workerEx;
         }
@@ -88,6 +97,7 @@ public class MasterWorkerExecutor {
     public def workerResults() = workerResults;
     
     private def notifyMaster(vid:Long, result:Any, ex:CheckedThrowable) {
+        print(here + " MasterWorkerExecutor.notifyMaster(vid="+vid+",result="+result+", ex="+ex+") ...");
         var lc:Long = -1;
         p0Latch.lock();
         if (ex != null) {
