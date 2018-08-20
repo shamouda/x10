@@ -15,16 +15,16 @@ package x10.xrx;
 import x10.util.HashSet;
 import x10.util.ArrayList;
 import x10.util.HashMap;
-import x10.util.resilient.localstore.LocalStore;
+import x10.xrx.txstore.TxLocalStore;
 import x10.util.resilient.localstore.Cloneable;
 import x10.xrx.TxStoreConcurrencyLimitException;
 import x10.xrx.TxStorePausedException;
 import x10.xrx.TxStoreAbortedException;
 import x10.xrx.TxStoreFatalException;
 import x10.xrx.TxStoreConflictException;
-import x10.util.resilient.localstore.TxConfig;
-import x10.util.resilient.localstore.MasterStore;
-import x10.util.resilient.localstore.SlaveStore;
+import x10.xrx.txstore.TxConfig;
+import x10.xrx.txstore.TxMasterStore;
+import x10.xrx.txstore.TxSlaveStore;
 import x10.compiler.Uncounted;
 import x10.util.concurrent.Condition;
 import x10.util.resilient.concurrent.ResilientCondition;
@@ -34,10 +34,10 @@ import x10.compiler.Immediate;
  * 
  */
 public class TxStore {
-    public val plh:PlaceLocalHandle[LocalStore[Any]];    
+    public val plh:PlaceLocalHandle[TxLocalStore[Any]];    
     public val callback:(Long, Place, TxStore)=>void;
 
-    private def this(plh:PlaceLocalHandle[LocalStore[Any]], callback:(Long, Place, TxStore)=>void) {
+    private def this(plh:PlaceLocalHandle[TxLocalStore[Any]], callback:(Long, Place, TxStore)=>void) {
         this.plh = plh;
         this.callback = callback;
     }
@@ -48,7 +48,7 @@ public class TxStore {
     
     public static def make(pg:PlaceGroup, immediateRecovery:Boolean, callback:(Long, Place, TxStore)=>void) {
         Console.OUT.println("Creating a transactional store with "+pg.size()+" active places, immediateRecovery = " + immediateRecovery);
-        val plh = PlaceLocalHandle.make[LocalStore[Any]](Place.places(), ()=> new LocalStore[Any](pg, immediateRecovery) );
+        val plh = PlaceLocalHandle.make[TxLocalStore[Any]](Place.places(), ()=> new TxLocalStore[Any](pg, immediateRecovery) );
         val store = new TxStore(plh, callback);
         Place.places().broadcastFlat(()=> { 
             plh().setPLH(plh); 
@@ -158,14 +158,6 @@ public class TxStore {
         return dpe;
     }
     
-    public def resetTxStatistics() {
-        if (plh().stat == null)
-            return;
-        finish for (p in plh().getActivePlaces()) at (p) async {
-            plh().stat.clear();
-        }
-    }
-    
     public def fixAndGetActivePlaces() {
         plh().replaceDeadPlaces();
         return plh().getActivePlaces();
@@ -189,7 +181,7 @@ public class TxStore {
         }
     }
     
-    public def recoverSlave(plh:PlaceLocalHandle[LocalStore[Any]]) {
+    public def recoverSlave(plh:PlaceLocalHandle[TxLocalStore[Any]]) {
         debug("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: started ...");
         val start = System.nanoTime();
         val deadPlace = plh().slave;
@@ -202,7 +194,7 @@ public class TxStore {
         }
     }
     
-    public def recoverSlave(plh:PlaceLocalHandle[LocalStore[Any]], deadPlace:Place, spare:Place, timeStartRecoveryNS:Long) {
+    public def recoverSlave(plh:PlaceLocalHandle[TxLocalStore[Any]], deadPlace:Place, spare:Place, timeStartRecoveryNS:Long) {
         assert (timeStartRecoveryNS != -1);
         val startTimeNS = System.nanoTime();
         debug("Recovering " + here + " DistributedRecoveryHelper.recoverSlave: started given already allocated spare " + spare);
@@ -237,7 +229,7 @@ public class TxStore {
         Console.OUT.printf("Recovering " + here + " DistributedRecoveryHelper.recoverSlave completed successfully: spareAllocTime %f seconds, totalRecoveryTime %f seconds\n" , (spareAllocTime/1e9), (recoveryTime/1e9));
     }
     
-    private def createMasterStoreAtSpare(plh:PlaceLocalHandle[LocalStore[Any]], spare:Place, deadPlace:Place, deadVirtualId:Long, newActivePlaces:PlaceGroup, deadMaster:Place) {
+    private def createMasterStoreAtSpare(plh:PlaceLocalHandle[TxLocalStore[Any]], spare:Place, deadPlace:Place, deadVirtualId:Long, newActivePlaces:PlaceGroup, deadMaster:Place) {
         debug("Recovering " + here + " Slave of the dead master ...");
         
         plh().slaveStore.waitUntilPaused();
@@ -248,7 +240,7 @@ public class TxStore {
         val deadPlaceSlave = here;
         at (spare) async {
             debug("Recovering " + here + " Spare received the master replica from slave ["+deadPlaceSlave+"] ...");    
-            plh().setMasterStore (new MasterStore(map, plh().immediateRecovery));
+            plh().setMasterStore (new TxMasterStore(map, plh().immediateRecovery));
             plh().getMasterStore().pausing();
             plh().getMasterStore().paused();
             
@@ -263,7 +255,7 @@ public class TxStore {
         }
     }
     
-    private def createSlaveStoreAtSpare(plh:PlaceLocalHandle[LocalStore[Any]], spare:Place, deadPlace:Place, deadVirtualId:Long) {
+    private def createSlaveStoreAtSpare(plh:PlaceLocalHandle[TxLocalStore[Any]], spare:Place, deadPlace:Place, deadVirtualId:Long) {
         debug("Recovering " + here + " Master of the dead slave, prepare a slave replica for the spare place ...");
         plh().getMasterStore().waitUntilPaused();
         val masterState = plh().getMasterStore().getState().getKeyValueMap();
@@ -271,11 +263,11 @@ public class TxStore {
         val me = here;
         at (spare) async {
             debug("Recovering " + here + " Spare received the slave replica from master ["+me+"] ...");    
-            plh().slaveStore = new SlaveStore(masterState);
+            plh().slaveStore = new TxSlaveStore(masterState);
         }        
     }
     
-    private def waitForSlaveStore(plh:PlaceLocalHandle[LocalStore[Any]], sender:Place)  {
+    private def waitForSlaveStore(plh:PlaceLocalHandle[TxLocalStore[Any]], sender:Place)  {
         if (plh().slaveStoreExists())
             return;
         try {
@@ -292,7 +284,7 @@ public class TxStore {
         }
     }
     
-    private def allocateSparePlace(plh:PlaceLocalHandle[LocalStore[Any]], deadVirtualId:Long, oldActivePlaces:PlaceGroup) {
+    private def allocateSparePlace(plh:PlaceLocalHandle[TxLocalStore[Any]], deadVirtualId:Long, oldActivePlaces:PlaceGroup) {
         val nPlaces = Place.numAllPlaces();
         val nActive = oldActivePlaces.size();
         var placeIndx:Long = -1;

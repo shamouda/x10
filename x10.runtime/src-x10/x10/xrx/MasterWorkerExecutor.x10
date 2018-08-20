@@ -70,7 +70,9 @@ public class MasterWorkerExecutor {
         var ex:Exception = null;
         var result:Any = null;
         try {
+            Console.OUT.println(here + " MasterWorkerExecutor.startWorker(vid="+vid+")");
             result = app.execWorker(vid, store, recovery);
+            Console.OUT.println(here + " MasterWorkerExecutor.endWorker(vid="+vid+")");
             ex = null;
         } catch (workerEx:Exception) {
             result = null;

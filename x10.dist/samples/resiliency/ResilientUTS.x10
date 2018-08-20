@@ -21,7 +21,7 @@ import x10.io.Unserializable;
 import x10.util.concurrent.AtomicLong;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.PlaceManager;
-import x10.util.resilient.store.Store;
+import x10.util.resilient.store.PlaceLocalStore;
 import x10.util.HashMap;
 import x10.util.Collection;
 import x10.util.Map.Entry;
@@ -29,7 +29,7 @@ import x10.xrx.Runtime;
 
 final public class ResilientUTS implements Unserializable {
   val time0:Long;
-  val map:Store[UTS];
+  val map:PlaceLocalStore[UTS];
   val wave:Int;
   val group:PlaceGroup;
   val workers:Rail[Worker];
@@ -47,7 +47,7 @@ final public class ResilientUTS implements Unserializable {
     return time;
   }
 
-  def this(wave:Int, group:PlaceGroup, power:Int, resilient:Boolean, time0:Long, map:Store[UTS]) {
+  def this(wave:Int, group:PlaceGroup, power:Int, resilient:Boolean, time0:Long, map:PlaceLocalStore[UTS]) {
     this.map = map;
     this.group = group;
     this.wave = wave;
@@ -382,7 +382,7 @@ final public class ResilientUTS implements Unserializable {
     }
   }
   
-  static def step(group:PlaceGroup, bag: UTS, wave:Int, power:Int, resilient:Boolean, map:Store[UTS], time0:Long, killTimes:HashMap[Long,Long]) {
+  static def step(group:PlaceGroup, bag: UTS, wave:Int, power:Int, resilient:Boolean, map:PlaceLocalStore[UTS], time0:Long, killTimes:HashMap[Long,Long]) {
     val max = group.size() as Int << power;
     if (wave >= 0) println(time0, "Wave " + wave + ": PLH init beginning");
     val plh = PlaceLocalHandle.make[ResilientUTS](group, () => new ResilientUTS(wave, group, power, resilient, time0, map));
@@ -476,7 +476,7 @@ final public class ResilientUTS implements Unserializable {
     val power = opt.power;
 
     val md = UTS.encoder();
-    val map0 = resilient ? Store.make[UTS]("map0", Place.places()): null;
+    val map0 = resilient ? PlaceLocalStore.make[UTS]("map0", Place.places()): null;
 
     println(time0, "Warmup...");
 
@@ -485,7 +485,7 @@ final public class ResilientUTS implements Unserializable {
     finish step(Place.places(), tmp, -1n, opt.power, resilient, map0, time0, null);
 
     val manager = new PlaceManager(opt.spares, false);
-    val map = resilient ? Store.make[UTS]("map", manager.activePlaces()): null;
+    val map = resilient ? PlaceLocalStore.make[UTS]("map", manager.activePlaces()): null;
 
     println(time0, "Begin");
     val startTime = System.nanoTime();

@@ -19,22 +19,21 @@ import x10.xrx.Runtime;
 import x10.compiler.Pinned;
 import x10.util.GrowableRail;
 import x10.util.Timer;
-import x10.util.resilient.localstore.tx.*;
 import x10.compiler.Uncounted;
 import x10.compiler.Immediate;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Future;
-import x10.util.resilient.localstore.TxConfig;
-import x10.util.resilient.localstore.LocalStore;
+import x10.xrx.txstore.TxConfig;
+import x10.xrx.txstore.TxLocalStore;
 
 /*should be used in non-resilient mode only*/
-public class TxLocking(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
+public class TxLocking(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
     public val members:Rail[Long];
     public val keys:Rail[Any];
     public val readFlags:Rail[Boolean];
     public val opPerPlace:Long;
 
-    protected def this(plh:PlaceLocalHandle[LocalStore[Any]], id:Long, members:Rail[Long],keys:Rail[Any],readFlags:Rail[Boolean],opPerPlace:Long) {
+    protected def this(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long, members:Rail[Long],keys:Rail[Any],readFlags:Rail[Boolean],opPerPlace:Long) {
         property(plh, id);
         this.members = members;
         this.keys = keys;
@@ -42,7 +41,7 @@ public class TxLocking(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
         this.opPerPlace = opPerPlace;
     }
     
-    protected def this(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
+    protected def this(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
         property(plh, id);
         this.members = null;
         this.keys = null;

@@ -28,7 +28,7 @@ import x10.util.concurrent.Lock;
 import x10.util.resilient.concurrent.LowLevelFinish;
 import x10.util.concurrent.Condition;
 import x10.util.Timer;
-import x10.util.resilient.localstore.TxConfig;
+import x10.xrx.txstore.TxConfig;
 
 /**
  * Place0-based Resilient Finish using the optimistic counting protocol

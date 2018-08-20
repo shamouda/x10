@@ -36,7 +36,6 @@ import x10.xrx.freq.RemoveGhostChildRequestOpt;
 import x10.xrx.freq.TransitRequestOpt;
 import x10.xrx.freq.MergeSubTxRequestOpt;
 import x10.util.Set;
-import x10.util.resilient.localstore.LocalStore;
 
 /**
  * Distributed Resilient Finish (records transit tasks only)

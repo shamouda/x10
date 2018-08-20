@@ -9,13 +9,11 @@
  *  (C) Copyright IBM Corporation 2006-2016.
  *  (C) Copyright Sara Salem Hamouda 2014-2016.
  */
-package x10.util.resilient.localstore;
 
-/**
- * A Snapshottable object provides methods to create a snapshot of its
- * (distributed) state and restore to a previous snapshotted state.
- */
-public interface Snapshottable {
-    public def makeSnapshot_local():Cloneable;
-    public def restoreSnapshot_local(snapshot:Cloneable):void;
+package x10.xrx.txstore;
+
+public class TxManagerStatistics {
+    public var commitCount:Long;
+    public var abortCount:Long;
+    
 }

@@ -29,7 +29,7 @@ import x10.io.CustomSerialization;
 import x10.io.Deserializer;
 import x10.io.Serializer;
 
-import x10.util.resilient.localstore.TxConfig;
+import x10.xrx.txstore.TxConfig;
 import x10.util.Set;
 
 public abstract class FinishState {

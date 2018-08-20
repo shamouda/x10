@@ -15,12 +15,11 @@ package x10.xrx;
 import x10.util.Set;
 import x10.util.HashSet;
 import x10.util.concurrent.Future;
-import x10.util.resilient.localstore.tx.TxManager;
-import x10.util.resilient.localstore.LocalStore;
+import x10.xrx.txstore.TxLocalStore;
 import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.concurrent.LowLevelFinish;
 import x10.compiler.Immediate;
-import x10.util.resilient.localstore.TxConfig;
+import x10.xrx.txstore.TxConfig;
 import x10.xrx.TxStoreConflictException;
 import x10.util.concurrent.Lock;
 import x10.util.HashMap;
@@ -55,7 +54,7 @@ public class TxResilient extends Tx {
         public def toString() = "<"+place+","+ptype+">";
     }
     
-    public def this(plh:PlaceLocalHandle[LocalStore[Any]], id:Long) {
+    public def this(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
         super(plh, id);
     }
     
