@@ -775,8 +775,9 @@ public final class FinishReplicator {
                     
                     rCond.run(closure);
                     if (rCond.failed()) {
-                        if (verbose>=1) debug("==== backupGetNewMaster(id="+id+") backup="+backup  + "  failed: MasterAndBackupDied");
-                        throw new MasterAndBackupDied();
+                        Console.OUT.println("FATAL: backupGetNewMaster(id="+id+") backup="+backup  + "  failed: MasterAndBackupDied");
+                        //throw new MasterAndBackupDied();
+                        System.killHere();
                     }
                     rCond.forget();
                     if (respGR().found) {
@@ -789,7 +790,9 @@ public final class FinishReplicator {
         
         if (!resp.found && !( req instanceof RemoveGhostChildRequestOpt || req instanceof MergeSubTxRequestOpt)) {
             if (verbose>=1) debug("==== backupGetNewMaster(id="+id+") failed: FATAL exception, cannot find backup for id=" + id);
-            throw new Exception(here + " ["+Runtime.activity()+"] FATAL exception, cannot find backup for id=" + id);
+            Console.OUT.println("BackupMap = " + getBackupMapAsString());
+            Console.OUT.println(here + " ["+Runtime.activity()+"] FATAL exception, cannot find backup for id=" + id + "   initBackup=" + initBackup + "  curBackup=" + curBackup);
+            System.killHere();
         }
         
         if (!resp.found && (req instanceof RemoveGhostChildRequestOpt || req instanceof MergeSubTxRequestOpt)) {
@@ -892,6 +895,19 @@ public final class FinishReplicator {
                 return ((idHome+1)%Place.numPlaces()) as Int;
             else
                 return b;
+        } finally {
+            glock.unlock();
+        }
+    }
+    
+    static def getBackupMapAsString() {
+        var str:String = "";
+        try {
+            glock.lock();
+            for (e in backupMap.entries()) {
+                str += "("+e.getKey()+","+e.getValue()+") " ;
+            }
+            return str;
         } finally {
             glock.unlock();
         }
