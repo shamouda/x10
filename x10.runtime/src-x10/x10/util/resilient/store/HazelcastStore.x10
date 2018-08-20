@@ -16,7 +16,7 @@ import x10.util.resilient.localstore.Cloneable;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.HashMap;
 
-public class HazelcastStore[V]{V haszero, V <: Cloneable} extends Store[V] {
+public class HazelcastStore[V]{V haszero, V <: Cloneable} extends PlaceLocalStore[V] {
   static final class LogEntry[V] {
     val key:String;
     val value:V;
