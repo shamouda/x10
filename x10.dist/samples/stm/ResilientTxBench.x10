@@ -148,7 +148,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         val g = state.g;
         
         state.started = true;
-        if (state.recovered) {
+        if (state.recovered && producerId == 0) {
             Console.OUT.println(here + " Spare place started to produce transactions " + state.toString());
         }
         val rand = new Random((here.id+1) * t + producerId);
@@ -355,6 +355,9 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
             if (arr.size >= iter) {
                 val victim = Long.parseLong(arr(iter-1));
                 if (here.id == victim) {
+                    if (Runtime.NTHREADS == 1n) {
+                        Runtime.increaseParallelism();
+                    }
                     val killTime = state.vt * -1;
                     @Uncounted async {
                         Console.OUT.println("Hammer kill timer at "+here+" starting sleep for "+killTime+" secs");
