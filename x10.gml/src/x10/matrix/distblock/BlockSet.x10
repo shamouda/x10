@@ -472,7 +472,7 @@ public class BlockSet  {
         }
     }
     
-    protected def clear():void {
+    public def clear():void {
         this.blocklist.clear();
     }
     

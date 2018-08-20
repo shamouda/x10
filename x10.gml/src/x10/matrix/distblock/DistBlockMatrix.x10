@@ -279,6 +279,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
     public static def makeSparse(m:Long, n:Long, rbs:Long, cbs:Long, rps:Long, cps:Long, npz:Float) =
         makeSparse(m, n, rbs, cbs, rps, cps, npz, Place.places(), Team.WORLD);
     
+    //used by pagerank
     public static def makeSparse(m:Long, n:Long, rbs:Long, cbs:Long, rps:Long, cps:Long, npz:Float, places:PlaceGroup, team:Team) =
         make(m, n, rbs, cbs, rps, cps, places, team).allocSparseBlocks(npz);
 
@@ -1039,7 +1040,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
      * @param rowPs, colPs      the number of rows and columns for the place grid
      * @param newPg             the new place group to distribute the matrix over
      */
-    public def remake(rowPs:Long, colPs:Long, newPg:PlaceGroup, addedPlaces:ArrayList[Place]) {
+    public def remake(rowPs:Long, colPs:Long, newPg:PlaceGroup, newTeam:Team, addedPlaces:ArrayList[Place]) {
         assert (places.size() == newPg.size());
         assert (rowPs*colPs==newPg.size()) :
             "Block partitioning error: rowsPs["+rowPs+"]*colPs["+colPs+"] != newPg.size["+newPg.size()+"]";
@@ -1049,6 +1050,7 @@ public class DistBlockMatrix extends Matrix implements Snapshottable {
         }
         gdist = new DistGrid(oldGrid, rowPs, colPs);
         places = newPg;
+        team = newTeam;
     }
     
     public def makeSnapshot_local():Cloneable {
