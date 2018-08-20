@@ -23,7 +23,6 @@ import x10.xrx.Runtime;
 import x10.util.resilient.PlaceManager;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
-import x10.util.resilient.store.Store;
 import x10.compiler.Immediate;
 
 public class SPMDResilientIterativeExecutor extends IterativeExecutor {
@@ -127,7 +126,8 @@ public class SPMDResilientIterativeExecutor extends IterativeExecutor {
                 }//finish ateach
             }
             catch (iterEx:Exception) {
-                iterEx.printStackTrace();
+                Console.OUT.println("IterativeExecutor exception thrown!!! ...");
+                //iterEx.printStackTrace();
                 //exception from finish_ateach  or from restore
                 if (isResilient && containsDPE(iterEx)){
                     remakeRequired = true;

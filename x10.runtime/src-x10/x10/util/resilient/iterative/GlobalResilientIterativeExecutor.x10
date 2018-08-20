@@ -24,7 +24,7 @@ import x10.util.GrowableRail;
 import x10.util.RailUtils;
 import x10.xrx.Runtime;
 import x10.util.resilient.PlaceManager;
-import x10.util.resilient.store.Store;
+import x10.util.resilient.store.PlaceLocalStore;
 import x10.util.resilient.localstore.Cloneable;
 
 public class GlobalResilientIterativeExecutor (home:Place) {
@@ -32,7 +32,7 @@ public class GlobalResilientIterativeExecutor (home:Place) {
                                && System.getenv("EXECUTOR_DEBUG").equals("1"));
 
     private val manager:GlobalRef[PlaceManager]{self.home == this.home};
-    private val resilientMap:Store[Cloneable];
+    private val resilientMap:PlaceLocalStore[Cloneable];
     private val appStore:ApplicationSnapshotStore;
     private var lastCkptIter:Long = -1;
     private val itersPerCheckpoint:Long;
@@ -61,7 +61,7 @@ public class GlobalResilientIterativeExecutor (home:Place) {
         val mgr = new PlaceManager(sparePlaces, supportShrinking);
         this.manager = GlobalRef[PlaceManager](mgr);
         if (isResilient) {
-            this.resilientMap = Store.make[Cloneable]("_map_", mgr.activePlaces());
+            this.resilientMap = PlaceLocalStore.make[Cloneable]("_map_", mgr.activePlaces());
             appStore = new ApplicationSnapshotStore();
             simplePlaceHammer = new SimplePlaceHammer();
             if (VERBOSE) {
