@@ -25,7 +25,6 @@ public class BenchMicro {
     static OUTER_ITERS = System.getenv("BENCHMICRO_ITER") == null ? 10 : Long.parseLong(System.getenv("BENCHMICRO_ITER"));
     static INNER_ITERS = 100;
     static MIN_NANOS = -1; //control the numbers of repeatitions using OUTER_ITERS only
-                      //(10*1e9) as long; // require each test to run for at least 10 seconds (reduce jitter)
 
     @Native("c++", "true")
     @Native("java", "true")
@@ -322,7 +321,6 @@ public class BenchMicro {
         val nextHop = Place.places().next(here);
         at (nextHop) ring(thinkTime, destination);
     }
-
 
     public static def think(think:Long) {
         if (think == 0) return;
