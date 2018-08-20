@@ -23,7 +23,6 @@ import x10.xrx.Runtime;
 import x10.util.resilient.PlaceManager;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
-import x10.util.resilient.store.Store;
 import x10.compiler.Immediate;
 
 public class SPMDAgreeResilientIterativeExecutor extends IterativeExecutor {

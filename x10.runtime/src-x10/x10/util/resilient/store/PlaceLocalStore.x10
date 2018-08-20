@@ -17,7 +17,7 @@ import x10.util.resilient.localstore.Cloneable;
 import x10.util.HashMap;
 
 // a collection of resilient stores, one per place in a place group
-public abstract class Store[V]{V haszero, V <: Cloneable} {
+public abstract class PlaceLocalStore[V]{V haszero, V <: Cloneable} {
     // get the value for the given key in the local store
     public abstract def get(key:String):V;
 

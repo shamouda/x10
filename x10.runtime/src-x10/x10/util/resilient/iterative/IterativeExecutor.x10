@@ -23,14 +23,14 @@ import x10.xrx.Runtime;
 import x10.util.resilient.PlaceManager;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.resilient.localstore.Cloneable;
-import x10.util.resilient.store.Store;
+import x10.util.resilient.store.PlaceLocalStore;
 
 public abstract class IterativeExecutor(home:Place) {
     protected static val VERBOSE = (System.getenv("EXECUTOR_DEBUG") != null 
                                 && System.getenv("EXECUTOR_DEBUG").equals("1"));
 
     protected val manager:GlobalRef[PlaceManager]{self.home == this.home};
-    protected val resilientMap:Store[Cloneable];
+    protected val resilientMap:PlaceLocalStore[Cloneable];
     protected var team:Team;
     protected val ckptInterval:Long;
     protected val isResilient:Boolean;
@@ -55,7 +55,7 @@ public abstract class IterativeExecutor(home:Place) {
         var storeTime:Long = 0;
         storeTime -= Timer.milliTime();
         if (isResilient) {
-            this.resilientMap = Store.make[Cloneable]("_map_", mgr.activePlaces());
+            this.resilientMap = PlaceLocalStore.make[Cloneable]("_map_", mgr.activePlaces());
             this.hammer = new SimplePlaceHammer();
             hammer.printPlan();
         }

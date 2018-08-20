@@ -17,7 +17,7 @@ import x10.util.resilient.localstore.ResilientNativeMap;
 import x10.util.resilient.PlaceManager.ChangeDescription;
 import x10.util.HashMap;
 
-public class NativeStore[V]{V haszero, V <: Cloneable} extends Store[V] {
+public class NativeStore[V]{V haszero, V <: Cloneable} extends PlaceLocalStore[V] {
   static final class NativeLogEntry[V] implements Cloneable {
     val value:V;
     val placeId:Long;
