@@ -258,7 +258,7 @@ public final struct PlaceLocalHandle[T]{T isref, T haszero} {
      */
     public static def addPlace[T](plh:PlaceLocalHandle[T], 
                                   place:Place, init:()=>T){T isref, T haszero}:void {
-        at (place) plh.set(init());
+        finish at (place) async plh.set(init());
     }
 
     /**
