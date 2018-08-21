@@ -250,15 +250,12 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
                 val thrpt = entry.getValue() as Rail[Long];
                 allTimeNS += thrpt(0);
                 cnt += thrpt(1);
-                
-                Console.OUT.println("collecting: placeId["+placeId+"] times["+thrpt(0)+"] counts["+thrpt(1)+"]");
             }
-            Console.OUT.println("collectingAll: times["+allTimeNS+"] counts["+cnt+"]");
+            //Console.OUT.println("collectingAll: times["+allTimeNS+"] counts["+cnt+"]");
             val allOperations = cnt * h * o;
             val producers = p * t;
             val throughput = (allOperations as Double) / (allTimeNS/1e6) * producers;
-            Console.OUT.println("Collection: txCount["+cnt+"] OpCount["+allOperations+"]  timeNS["+allTimeNS+"]");
-            Console.OUT.println("iteration:" + iteration + ":globalthroughput(op/MS):"+throughput);
+            Console.OUT.println("iteration:" + iteration + ":txCount:"+cnt+":OpCount:"+allOperations+":timeNS:"+allTimeNS+":globalthroughput(op/MS):"+throughput);
             Console.OUT.println("========================================================================");
     
         } catch(ex:Exception) {
