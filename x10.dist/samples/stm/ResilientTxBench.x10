@@ -114,8 +114,10 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
             val me = here;
             finish at (leftPlace) async {
                 val masterState = plh(); 
-                if (masterState.rightPlaceDeathTimeNS == -1)
-                    throw new TxBenchFailed(here + " assertion error, did not receive suicide note ...");
+                if (masterState.rightPlaceDeathTimeNS == -1) {
+                    Console.OUT.println(here + " ResilientTxBench Assertion Error: place did not receive suicide note ...");
+                    System.killHere();
+                }
                 val oldThroughput = masterState.rightTxBenchState;
                 val recoveryTime = System.nanoTime() - masterState.rightPlaceDeathTimeNS;
                 oldThroughput.shiftElapsedTime(recoveryTime);
