@@ -230,10 +230,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         public static def countDropped(id:Id, src:Int, kind:Int, sent:Int) {
             if (verbose>=1) debug(">>>> countDropped(id="+id+", src="+src+", kind="+kind+", sent="+sent+") called");
             var dropped:Int = 0n;
+            var createdNow:Boolean = false;
             try {
                 remoteLock.lock();
                 val remote = remotes.getOrElse(id, null);
-                var createdNow:Boolean = false;
                 if (remote != null) {
                     val received = remote.receivedFrom(src, kind);
                     dropped = sent - received;
