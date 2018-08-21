@@ -214,17 +214,19 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         
         static def updateGhostChildrenAndGetRemoteQueries(newDead:HashSet[Int]):HashMap[Int,OptResolveRequest] {
             val countingReqs = new HashMap[Int,OptResolveRequest]();
+            val toNotifyTxState = new HashSet[State]();
+            val toRemoveState = new HashSet[State]();
             try {
                 statesLock.lock();
-                val toRemoveState = new HashSet[State]();
                 val result = new HashSet[State]();
                 for (s in states.entries()) {
                     val id = s.getKey();
                     val state = s.getValue();
                     
                     if (state.tx != null && state.tx instanceof TxResilient && (state.tx as TxResilient).isImpactedByDeadPlaces(newDead)) {
-                        if (state.txStarted)
-                            (state.tx as TxResilient).notifyPlaceDeath();
+                        if (state.txStarted) {
+                            toNotifyTxState.add(state);
+                        }
                     }
                     
                     var calGhosts:Boolean = false;
@@ -278,10 +280,15 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     if (!s.txStarted)
                         s.tryRelease();
                 }
-                return countingReqs;
             } finally {
                 statesLock.unlock();
             }
+            
+            for (s in toNotifyTxState) {
+                (s.tx as TxResilient).notifyPlaceDeath();
+            }
+            
+            return countingReqs;
         }
         
         static def convertDeadActivities(droppedCounts:HashMap[DroppedQueryId, Int]) {
