@@ -725,7 +725,7 @@ public final class FinishReplicator {
         val resp = new GetNewMasterResponse();
         val respGR = new GlobalRef[GetNewMasterResponse](resp);
         do {
-            debug(">>>> backupGetNewMaster(id="+id+") called, trying curBackup="+curBackup );
+            if (verbose>=1) debug(">>>> backupGetNewMaster(id="+id+") called, trying curBackup="+curBackup );
             if (curBackup == here.id as Int) { 
                 val bFin = findBackup(id);
                 if (bFin != null) {
@@ -739,7 +739,7 @@ public final class FinishReplicator {
                 }
             } else {
                 val backup = Place(curBackup);
-                debug("==== backupGetNewMaster(id="+id+") going to backup="+backup );
+                if (verbose>=1) debug("==== backupGetNewMaster(id="+id+") going to backup="+backup );
                 val me = here;
                 if (!backup.isDead()) {
                     //we cannot use Immediate activities, because this function is blocking
@@ -752,15 +752,12 @@ public final class FinishReplicator {
                                 var newMasterPlaceVar:Int = -1n;
                                 val bFin = findBackup(id);
                                 if (bFin != null) {
-                                    debug("==== backupGetNewMaster(id="+id+") backup found ..." );
                                     foundVar = true;
                                     newMasterIdVar = bFin.getNewMasterBlocking();
                                     if (newMasterIdVar == FinishResilient.Id(0n,0n))
                                         newMasterPlaceVar = 0n; /**AT_FINISH HACK**/
                                     else
                                         newMasterPlaceVar = bFin.getPlaceOfMaster();
-                                } else {
-                                    debug("==== backupGetNewMaster(id="+id+") backup not found ..." );
                                 }
                                 val found = foundVar;
                                 val newMasterId = newMasterIdVar;
