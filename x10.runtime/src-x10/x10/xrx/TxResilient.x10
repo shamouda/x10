@@ -183,12 +183,14 @@ public class TxResilient extends Tx {
         }
     }
     
-    private def printPending(tag:String) {
+    private def printPending() {
         var str:String = "";
-        for (e in pending.entries()) {
-            str += e.getKey() + " : " + e.getValue() + " , ";
+        if (pending != null) {
+            for (e in pending.entries()) {
+                str += e.getKey() + " : " + e.getValue() + " , ";
+            }
         }
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] tag["+tag+"] pending["+str+"] count["+count+"] ...");
+        return str;
     }
     
     public def prepare() {
@@ -230,7 +232,7 @@ public class TxResilient extends Tx {
                 }
             }
         }
-        printPending("PREPARE");
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] tag[PREPARE] pending["+printPending()+"] count["+count+"] ...");
         lock.unlock();
         
         if (switchToAbort) { //if any of the masters is dead, abort the transaction
@@ -373,7 +375,7 @@ public class TxResilient extends Tx {
                 }
             }
         }
-        printPending("COMMIT_OR_ABORT");
+        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] tag[COMMIT_OR_ABORT] pending["+printPending()+"] count["+count+"] ...");
         lock.unlock();
         
         for (p in liveMasters) {
@@ -518,6 +520,7 @@ public class TxResilient extends Tx {
             pending = null;
             rel = true;
         }
+        Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead pending["+printPending()+"] count["+count+"] ...");
         debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead completed, pending count=" + count);
         lock.unlock();
         
