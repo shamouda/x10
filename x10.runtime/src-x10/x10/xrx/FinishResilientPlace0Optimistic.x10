@@ -1836,7 +1836,9 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         val newDead = FinishReplicator.getNewDeadPlaces();
         if (newDead == null || newDead.size() == 0) //occurs at program termination
             return;
-        
+        var str:String = "";
+        for (p in newDead)
+            str += "Place(" + p + ") ";
         val start = Timer.milliTime();
         val countingReqs = State.updateGhostChildrenAndGetRemoteQueries(newDead);
         if (countingReqs.size() > 0) {
@@ -1854,6 +1856,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         if (TxConfig.get().TM_DEBUG) State.printTxStates();
         if (verbose>=1) debug("<<<< notifyPlaceDeath returning");
-        Console.OUT.println("p0FinishRecoveryTime:" + (Timer.milliTime()-start) + "ms");
+        Console.OUT.println("p0FinishRecoveryTime:" + (Timer.milliTime()-start) + "ms  for dead places:" + str);
     }
 }
