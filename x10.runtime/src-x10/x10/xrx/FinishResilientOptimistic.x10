@@ -231,8 +231,12 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (verbose>=1) debug(">>>> countDropped(id="+id+", src="+src+", kind="+kind+", sent="+sent+") called");
             var dropped:Int = 0n;
             var createdNow:Boolean = false;
+            var allRemotes:String = "";
             try {
                 remoteLock.lock();
+                for (r in remotes.entries()) {
+                    allRemotes += r.getKey() + " , ";
+                }
                 val remote = remotes.getOrElse(id, null);
                 if (remote != null) {
                     val received = remote.receivedFrom(src, kind);
@@ -249,7 +253,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             } finally {
                 remoteLock.unlock();
             }
-            if (verbose>=1) debug("<<<< countDropped(id="+id+", src="+src+", kind="+kind+", sent="+sent+") returning, createdNow="+createdNow+" dropped="+dropped);
+            if (verbose>=1) debug("<<<< countDropped(id="+id+", src="+src+", kind="+kind+", sent="+sent+") returning, createdNow="+createdNow+" allRemotes={"+allRemotes+"} dropped="+dropped);
             return dropped;
         }
         
