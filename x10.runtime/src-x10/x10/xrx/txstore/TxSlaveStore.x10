@@ -219,6 +219,7 @@ public class TxSlaveStore[K] {K haszero} {
             if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " - TxSlaveStore.waitUntilPaused started logsSize["+logs.size() +"] ...");
             Runtime.increaseParallelism();
             var count:Long = 0;
+            var printMsg:Boolean = false;
             while (logs.size() != 0) {
                 slaveUnlock();
                 TxConfig.waitSleep();
@@ -228,10 +229,11 @@ public class TxSlaveStore[K] {K haszero} {
                     for (log in logs){
                         str += "log{" + log.toString() + "}  , " ;
                     }
-                    Console.OUT.println(here + " maybe a bug, waited too long ..." + str);
+                    Console.OUT.println(here + " maybe a bug, slave waited too long ..." + str);
+                    printMsg = true;
                 }
             }
-        
+            if (printMsg) Console.OUT.println(here + " NOT a bug, slave finished waiting ...");
         } finally {
         	if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " - TxSlaveStore.waitUntilPaused completed ...");
             Runtime.decreaseParallelism(1n);
