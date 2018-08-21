@@ -452,6 +452,8 @@ public class TxResilient extends Tx {
         debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces called");
         try {
             lock.lock();
+            if (newDead.contains(gcId.home))
+                return true;
             if (backupId != -1n && newDead.contains(backupId)) {
                 debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces returning true, backup is: " + backupId);
                 return true;
