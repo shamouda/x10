@@ -87,7 +87,6 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         } else {
             Console.OUT.println("warmup started");
             executor.run();
-            app.resetStatistics(plh);
             Console.OUT.println("warmup completed, warmup elapsed time ["+(Timer.milliTime() - startWarmup)+"]  ms ");
         }
         
@@ -95,9 +94,9 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
             for (iter in 1..n) {
                 val startIter = Timer.milliTime();
                 executor.run();
+                val results = executor.workerResults();
                 Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
-                app.printThroughput(executor.store(), plh, iter);
-                app.resetStatistics(plh);
+                app.printThroughput(executor.store(), results, iter, h, o, p, t);
             }
             val elapsed = Timer.milliTime() - mainStart;
             Console.OUT.println("+++ TxBench Succeeded +++  [totalTime:"+(elapsed/1000)+" sec]");
@@ -136,7 +135,12 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         finish for (thrd in 1..t) async {
             produce(store, plh, thrd-1);
         }
-        return -1;
+        val thrpt = new Rail[Long](2);
+        thrpt(0) = state.mergeTimes();
+        thrpt(1) = state.mergeCounts();
+        
+        state.reset();
+        return thrpt;
     }
     
     public def produce(store:TxStore, plh:PlaceLocalHandle[TxBenchState], producerId:Long) {
@@ -152,7 +156,6 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         val d = state.d;
         val g = state.g;
         
-        state.started = true;
         if (state.recovered && producerId == 0) {
             Console.OUT.println(here + " Spare place started to produce transactions " + state.toString());
         }
@@ -231,57 +234,36 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
                     Console.OUT.println(here + " Progress " + myVirtualPlaceId + "x" + producerId + ":" + myThroughput.txCount );
             }
         }
-        //Console.OUT.println(here + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
+        Console.OUT.println(here.id + "x" + producerId + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
     }
 
-    public def printThroughput(store:TxStore, plh:PlaceLocalHandle[TxBenchState], iteration:Long) {
+    public def printThroughput(store:TxStore, workerResults:HashMap[Long,Any], iteration:Long, h:Long, o:Long, p:Long, t:Long) {
         try {
             Console.OUT.println("========================================================================");
             Console.OUT.println("Collecting throughput information ..... .....");
             Console.OUT.println("========================================================================");
             
-            val state = plh();
-            val activePlcs = store.fixAndGetActivePlaces();
-            val startReduce = System.nanoTime();
-            if (state.p > 1) {
-                val team = new Team(activePlcs);
-                finish for (p in activePlcs) async at (p) {
-                    val plcTh = plh();
-                    val times = plcTh.mergeTimes();
-                    val counts = plcTh.mergeCounts();
-                    
-                    plcTh.reduceSrc(0) = times;
-                    plcTh.reduceSrc(1) = counts;
-                    
-                    team.allreduce(plcTh.reduceSrc, 0, plcTh.reduceDst, 0, 2, Team.ADD);
-                    
-                    if (!plcTh.started)
-                        throw new TxBenchFailed(here + " never started ...");
-                }
+            var allTimeNS:Long = 0;
+            var cnt:Long = 0;
+            for (entry in workerResults.entries()) {
+                val placeId = entry.getKey();
+                val thrpt = entry.getValue() as Rail[Long];
+                allTimeNS += thrpt(0);
+                cnt += thrpt(1);
+                
+                Console.OUT.println("collecting: placeId["+placeId+"] times["+thrpt(0)+"] counts["+thrpt(1)+"]");
             }
-            else {
-                state.reduceDst(0) = state.mergeTimes();
-                state.reduceDst(1) = state.mergeCounts();
-            }
-            val elapsedReduceNS = System.nanoTime() - startReduce;
-            
-            
-            val allTimeNS = state.reduceDst(0);
-            val cnt = state.reduceDst(1);
-            val allOperations = cnt * state.h * state.o;
-            
-            val producers = state.p * state.t;
+            Console.OUT.println("collectingAll: times["+allTimeNS+"] counts["+cnt+"]");
+            val allOperations = cnt * h * o;
+            val producers = p * t;
             val throughput = (allOperations as Double) / (allTimeNS/1e6) * producers;
-            Console.OUT.println("Reduction completed in "+((elapsedReduceNS)/1e9)+" seconds   txCount["+cnt+"] OpCount["+allOperations+"]  timeNS["+allTimeNS+"]");
+            Console.OUT.println("Collection: txCount["+cnt+"] OpCount["+allOperations+"]  timeNS["+allTimeNS+"]");
             Console.OUT.println("iteration:" + iteration + ":globalthroughput(op/MS):"+throughput);
             Console.OUT.println("========================================================================");
     
         } catch(ex:Exception) {
             throw new Exception("Failed while collecting throughput information ...");
         }
-    }
-    public static def resetStatistics(plh:PlaceLocalHandle[TxBenchState]) {
-        Place.places().broadcastFlat(()=>{ plh().reset();}, (p:Place)=>true);
     }
     
     public static def nextTransactionMembers(rand:Random, activePlacesCount:Long, h:Long, myPlaceIndex:Long, result:Rail[Long], f:Boolean) {
@@ -457,23 +439,11 @@ class TxBenchFailed extends Exception {
 class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
         h:Long, o:Long, g:Long, s:Long, f:Boolean, vp:String, vt:Long) {
     var virtualPlaceId:Long = -1;
-
     var thrds:Rail[ProducerThroughput];
     var rightTxBenchState:TxBenchState;
     var rightPlaceDeathTimeNS:Long = -1;
-
-    var started:Boolean = false;
     var recovered:Boolean = false;
-
-    var reducedTime:Long;
-    var reducedTxCount:Long;
-
-    val reduceSrc = new Rail[Long](2);
-    val reduceDst = new Rail[Long](2);
-    
     var iteration:Long = -1; //for the warmup iteration
-    var lc:AtomicInteger;
-    
     public def this() {
         property(-1, -1F, -1, -1, -1, -1, -1, -1, -1, -1, -1, true, null, -1);
     }
@@ -485,7 +455,6 @@ class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
         for (i in 0..(t-1))
             thrds(i) = new ProducerThroughput( virtualPlaceId, i);
         this.virtualPlaceId = virtualId;
-        lc = new AtomicInteger(t as Int);
         if (w > 0)
             iteration = -1;
         else
@@ -496,25 +465,13 @@ class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
         thrds = new Rail[ProducerThroughput](t, (i:Long)=> new ProducerThroughput( virtualPlaceId, i));
         rightTxBenchState = null;
         rightPlaceDeathTimeNS = -1;
-
-        started = false;
         recovered = false;
-
-        reducedTime = 0;
-        reducedTxCount = 0;
-        
-        reduceSrc(0) = 0; reduceSrc(1) = 0;
-        reduceDst(0) = 0; reduceDst(1) = 0;
-        
-        lc = new AtomicInteger(t as Int);
     }
     
     public def reinit(other:TxBenchState, iter:Long) {
         virtualPlaceId = other.virtualPlaceId;
         thrds = other.thrds;
         recovered = true;
-        reduceSrc(0) = 0; reduceSrc(1) = 0;
-        reduceDst(0) = 0; reduceDst(1) = 0;
         iteration = iter;
     }
     
