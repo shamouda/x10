@@ -175,7 +175,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             try {
                 remoteLock.lock();
                 for (idx in gcReqs) {
-                    if (verbose>=1) debug(">>>> deleting object(id="+idx+")");
+                    if (verbose>=1) debug(">>>> deleting remote object(id="+idx+")");
                     remotes.delete(idx);
                 }
             } finally {
@@ -186,6 +186,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         public static def deleteObject(id:Id) {
             try {
                 remoteLock.lock();
+                if (verbose>=1) debug(">>>> deleting remote object(id="+id+")");
                 remotes.delete(id);
             } finally {
                 remoteLock.unlock();
@@ -220,6 +221,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (remoteState == null) {
                     remoteState = new OptimisticRemoteState(id);
                     remotes.put(id, remoteState);
+                    if (verbose>=1) debug("<<<< getOrCreateRemote(id="+id+") added a new remote ...");
                 }
                 return remoteState;
             } finally {
