@@ -472,7 +472,7 @@ public class TxResilient extends Tx {
     }
     
     public def notifyPlaceDeath() {
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead started");
+        Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead started");
         var rel:Boolean = false;
         lock.lock();
         val oldCnt = count;
@@ -520,10 +520,15 @@ public class TxResilient extends Tx {
         lock.unlock();
         
         if (rel) {
-            if (ph2Started)
+            if (ph2Started) {
+                Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead-> release()");
                 release();
-            else
+            } else {
+                Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead-> commitOrAbort()");
                 commitOrAbort(vote);
+            }
+        } else {
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead-> no release yet");
         }
     }
     
