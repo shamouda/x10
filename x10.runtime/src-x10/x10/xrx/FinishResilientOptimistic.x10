@@ -1391,7 +1391,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 notifyRootTx();
             
             // no more messages will come back to this finish state 
-            if (REMOTE_GC) gc();
+            //if (REMOTE_GC) gc();   Backup is in charge of GC because the remote object may be checked when the backup recovers the master
             
             // get exceptions and throw wrapped in a ME if there are any
             if (excs != null) {
@@ -1420,20 +1420,6 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 };
                 FinishReplicator.asyncExec(req, this, preSendAction, postSendAction);
                 if (verbose>=1) debug("<<<< Root(id="+id+").notifyRootTx returning");
-            }
-        }
-        
-        def gc() {
-            val id = this.id;
-            val set = new HashSet[Int]();
-            for (e in sent.entries()) {
-                val dst = e.getKey().dst;
-                if (dst != here.id as Int && !set.contains(dst)) {
-                    set.add(dst);
-                    at(Place(dst)) @Immediate("optdist_remoteFinishCleanup") async {
-                        FinishResilientOptimistic.OptimisticRemoteState.deleteObject(id);
-                    }
-                }
             }
         }
         
@@ -1629,6 +1615,31 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             ilock.unlock();
         }
         
+        
+        static def removeBackupAndSendGC(id:FinishResilient.Id) {       
+            val backup = FinishReplicator.findBackup(id) as OptimisticBackupState;
+            if (backup != null)
+                backup.gc();
+            FinishReplicator.removeBackup(id);
+        }
+        
+        def gc() {
+            if (tx == null || tx.isEmpty()) {
+                val id = this.id;
+                val set = new HashSet[Int]();
+                for (e in sent.entries()) {
+                    val dst = e.getKey().dst;
+                    if (dst != here.id as Int && !set.contains(dst)) {
+                        set.add(dst);
+                        at(Place(dst)) @Immediate("optdist_remoteFinishCleanup") async {
+                            if (verbose>=1) debug("==== Backup(id="+id+").gc ====");
+                            FinishResilientOptimistic.OptimisticRemoteState.deleteObject(id);
+                        }
+                    }
+                }
+            }
+        }
+        
         def notifyCommit() {
             if (tx != null) {
                 (tx as TxResilient).markAsCommitting();
@@ -1760,7 +1771,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (quiescent()) {
                     isReleased = true;
                     if (tx == null || tx instanceof TxResilientNoSlaves || canDelete) 
-                        FinishReplicator.removeBackup(id);
+                        removeBackupAndSendGC(id);
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").transitToCompleted returning (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ") ");
             } finally {
@@ -1790,7 +1801,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     if (quiescent()) {
                         isReleased = true;
                         if (tx == null || tx instanceof TxResilientNoSlaves || canDelete) 
-                            FinishReplicator.removeBackup(id);
+                            removeBackupAndSendGC(id);
                     }
                     if (verbose>=1) debug("<<<< Backup(id="+id+").removeGhostChild returning (childId="+childId+", ex=" + ex + ") numActive=" + numActive + " isReleased=" + isReleased);
                 }
@@ -1826,7 +1837,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (quiescent()) {
                     isReleased = true;
                     if (tx == null || tx instanceof TxResilientNoSlaves || canDelete) 
-                        FinishReplicator.removeBackup(id);
+                        removeBackupAndSendGC(id);
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").transitToCompletedMul returning (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ", cnt="+cnt+") ");
             } finally {
@@ -2084,7 +2095,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         public def releaseFinish(excs:GrowableRail[CheckedThrowable]) {
             if (verbose>=1) debug(">>>> Backup(id="+id+").releaseFinish called");
             backupNotifyParent();
-            FinishReplicator.removeBackup(id);
+            removeBackupAndSendGC(id);
             if (verbose>=1) debug("<<<< Backup(id="+id+").releaseFinish returning");
         }
         

@@ -43,7 +43,7 @@ public abstract class FinishResilient extends FinishState {
     
     private static def isVerbosePlace() {
         if (System.getenv("VERBOSE_PLACE") != null) {
-            val arr = System.getenv("VERBOSE_PLACE").split(",");
+            val arr = System.getenv("VERBOSE_PLACE").split(";");
             for (var i:Long = 0; i < arr.size; i++) {
                 if (Long.parseLong(arr(i)) == here.id)
                     return true;
