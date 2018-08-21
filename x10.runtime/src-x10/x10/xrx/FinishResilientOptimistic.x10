@@ -233,10 +233,12 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             try {
                 remoteLock.lock();
                 val remote = remotes.getOrElse(id, null);
+                var createdNow:Boolean = false;
                 if (remote != null) {
                     val received = remote.receivedFrom(src, kind);
                     dropped = sent - received;
                 } else {
+                    createdNow = true;
                     //prepare remote to not accept future tasks from the src
                     val newRemote = new OptimisticRemoteState(id);
                     remotes.put(id, newRemote);
@@ -247,7 +249,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             } finally {
                 remoteLock.unlock();
             }
-            if (verbose>=1) debug("<<<< countDropped(id="+id+", src="+src+", kind="+kind+", sent="+sent+") returning, dropped="+dropped);
+            if (verbose>=1) debug("<<<< countDropped(id="+id+", src="+src+", kind="+kind+", sent="+sent+") returning, createdNow="+createdNow+" dropped="+dropped);
             return dropped;
         }
         
@@ -1507,6 +1509,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                         throw new Exception(here + " FATAL: dropped tasks counting error id = " + id);
                     
                     numActive -= dropped;
+                    if (verbose>=1) debug(">>>> Master(id="+id+").convertFromDead removed "+dropped+" dropped message(s)");
                     if (oldTransit - dropped == 0n) {
                         transit.remove(edge);
                     }

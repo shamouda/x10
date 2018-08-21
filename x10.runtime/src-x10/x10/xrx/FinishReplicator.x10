@@ -791,7 +791,7 @@ public final class FinishReplicator {
         if (!resp.found && !(req instanceof RemoveGhostChildRequestOpt || req instanceof MergeSubTxRequestOpt)) {
             if (verbose>=1) debug("==== backupGetNewMaster(id="+id+") failed: FATAL exception, cannot find backup for id=" + id);
             Console.OUT.println("BackupMap = " + getBackupMapAsString());
-            Console.OUT.println(here + " ["+Runtime.activity()+"] FATAL exception, cannot find backup for id=" + id + "   initBackup=" + initBackup + "  curBackup=" + curBackup);
+            Console.OUT.println(here + " ["+Runtime.activity()+"] FATAL exception, cannot find backup for id=" + id + "   initBackup=" + initBackup + "  curBackup=" + curBackup + " req="+req);
             System.killHere();
         }
         

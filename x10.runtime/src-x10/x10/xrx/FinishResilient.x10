@@ -25,7 +25,7 @@ public abstract class FinishResilient extends FinishState {
     /*
      * for debug
      */
-    public static val verbose = System.getenv("VERBOSE_PLACE") != null && here.id == getEnvLong("VERBOSE_PLACE")? 
+    public static val verbose = System.getenv("VERBOSE_PLACE") != null && System.getenv("VERBOSE_PLACE").contains(","+here.id+",")? 
             4 : getEnvLong("X10_RESILIENT_VERBOSE") ; // should be copied to subclass
     protected static def getEnvLong(name:String) {
         val env = System.getenv(name);
