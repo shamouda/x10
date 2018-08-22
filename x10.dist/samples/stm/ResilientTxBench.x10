@@ -243,7 +243,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
                     Console.OUT.println(here + " Progress " + myVirtualPlaceId + "x" + producerId + ":" + myThroughput.txCount );
             }
         }
-        Console.OUT.println(here.id + "x" + producerId + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
+        //Console.OUT.println(here.id + "x" + producerId + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
     }
 
     private static def prepopulateKeys(store:TxStore, r:Long, i:Float) {
@@ -266,7 +266,6 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
                             count++;
                         }
                     }
-                    Console.OUT.println(here + " = prepopulated "+count+" keys");
                 });
             }
         };
