@@ -476,7 +476,7 @@ public class TxResilient extends Tx {
     }
     
     public def notifyPlaceDeath() {
-        Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead started");
+        //Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead started");
         var rel:Boolean = false;
         lock.lock();
         val oldCnt = count;
@@ -520,20 +520,20 @@ public class TxResilient extends Tx {
             pending = null;
             rel = true;
         }
-        Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead pending["+printPending()+"] count["+count+"] ...");
+        //Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead pending["+printPending()+"] count["+count+"] ...");
         debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead completed, pending count=" + count);
         lock.unlock();
         
         if (rel) {
             if (ph2Started) {
-                Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead-> release()");
+                //Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead-> release()");
                 release();
             } else {
-                Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead-> commitOrAbort()");
+                //Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead-> commitOrAbort()");
                 commitOrAbort(vote);
             }
         } else {
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead-> no release yet");
+            //Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead-> no release yet");
         }
     }
     
