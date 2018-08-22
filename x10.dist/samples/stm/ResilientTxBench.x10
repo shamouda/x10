@@ -145,17 +145,18 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         finish for (thrd in 1..t) async {
             produce(store, plh, thrd-1, d);
         }
-        val thrpt = new Rail[Long](2);
+        val thrpt = new Rail[Any](4);
         thrpt(0) = state.mergeTimes();
         thrpt(1) = state.mergeCounts();
-        
+        thrpt(2) = state.mergeTxTrials(); 
+        thrpt(3) = state.mergeTxTimes();                
         state.reset();
         return thrpt;
     }
     
     public def produce(store:TxStore, plh:PlaceLocalHandle[TxBenchState], producerId:Long, duration:Long) {
         val state = plh();
-        val myVirtualPlaceId = state.virtualPlaceId;
+        val vid = state.virtualPlaceId;
         val h = state.h;
         val f = state.f;
         val r = state.r;
@@ -180,7 +181,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         val readFlags = new Rail[Boolean] (h*o);
         
         while (timeNS < duration*1e6) {
-            val innerStr = nextTransactionMembers(rand, p, h, myVirtualPlaceId, virtualMembers, f);
+            val innerStr = nextTransactionMembers(rand, p, h, vid, virtualMembers, f);
             nextRandomOperations(rand, p, virtualMembers, r, u, o, keys, values, readFlags, tmpKeys);
             
             //time starts here
@@ -226,7 +227,10 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
                 
                 val remainingTime =  (duration*1e6 - timeNS) as Long;
                 try {
-                    store.executeTransaction(distClosure, -1, remainingTime);
+                    val txStart = Timer.milliTime();
+                    val trials = store.executeTransaction(distClosure, -1, remainingTime);
+                    myThroughput.avgTxTime += Timer.milliTime()-txStart;
+                    myThroughput.avgTxTrials += trials;
                 } catch(expf:TxStoreFatalException) {
                     includeTx = false;
                     //expf.printStackTrace();
@@ -240,10 +244,12 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
             if (includeTx) {
                 myThroughput.txCount++;
                 if (g != -1 && myThroughput.txCount%g == 0)
-                    Console.OUT.println(here + " Progress " + myVirtualPlaceId + "x" + producerId + ":" + myThroughput.txCount );
+                    Console.OUT.println(here + " Progress " + vid + "x" + producerId + ":" + myThroughput.txCount );
             }
         }
-        //Console.OUT.println(here.id + "x" + producerId + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
+        myThroughput.avgTxTime /= myThroughput.txCount;
+        myThroughput.avgTxTrials /= myThroughput.txCount;
+        //Console.OUT.println(here.id + "x" + producerId + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds] averageMS["+myThroughput.avgTxTime+"]");
     }
 
     private static def prepopulateKeys(store:TxStore, r:Long, i:Float) {
@@ -275,23 +281,33 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
     private def printThroughput(store:TxStore, workerResults:HashMap[Long,Any], iteration:Long, h:Long, o:Long, p:Long, t:Long, warmup:Boolean) {
         try {
             Console.OUT.println("========================================================================");
-            Console.OUT.println("Collecting throughput information ..... .....");
+            Console.OUT.println("Collecting run information ..... .....");
             Console.OUT.println("========================================================================");
             
             var allTimeNS:Long = 0;
             var cnt:Long = 0;
+            var avgTxTrials:Float = 0.0F;
+            var avgTxTimes:Float = 0.0F;
+            
             for (entry in workerResults.entries()) {
                 val placeId = entry.getKey();
-                val thrpt = entry.getValue() as Rail[Long];
-                allTimeNS += thrpt(0);
-                cnt += thrpt(1);
+                val thrpt = entry.getValue() as Rail[Any];
+                allTimeNS += thrpt(0) as Long;
+                cnt += thrpt(1) as Long;
+                
+                avgTxTrials += thrpt(2) as Float;
+                avgTxTimes += thrpt(3) as Float;
             }
-            //Console.OUT.println("collectingAll: times["+allTimeNS+"] counts["+cnt+"]");
+            avgTxTrials = avgTxTrials / p;
+            avgTxTimes = avgTxTimes / p;
+            
             val allOperations = cnt * h * o;
             val producers = p * t;
-            val throughput = (allOperations as Double) / (allTimeNS/1e6) * producers;
+            val throughputPerProducer = (allOperations as Double) / (allTimeNS/1e6);
+            val throughput = throughputPerProducer * producers;
             val tag = warmup ? "warmupthroughput" : "globalthroughput";
-            Console.OUT.println("iteration:" + iteration + ":txCount:"+cnt+":OpCount:"+allOperations+":timeNS:"+allTimeNS+":"+tag+"(op/MS):"+throughput);
+            Console.OUT.println("iteration:" + iteration + ":txCount:"+cnt+":OpCount:"+allOperations+":timeNS:"+allTimeNS+":"+tag+"(op/MS):"+throughput+":tpp:"+throughputPerProducer
+                               +":avgTrial:"+avgTxTrials+":avgTxTimeMS:"+avgTxTimes);
             Console.OUT.println("========================================================================");
     
         } catch(ex:Exception) {
@@ -446,6 +462,9 @@ class ProducerThroughput {
     public val placeId:Long;
     public val threadId:Long;
 
+    public var avgTxTime:Float;
+    public var avgTxTrials:Float;
+
     public def this (placeId:Long, threadId:Long, elapsedTimeNS:Long, txCount:Long) {
         this.elapsedTimeNS = elapsedTimeNS;
         this.txCount = txCount;
@@ -537,5 +556,22 @@ class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
         }
         return sumTimes;
     }
+    
+    public def mergeTxTimes():Float {
+        var sumTimes:Float = 0.0F;
+        for (t in thrds) {
+            sumTimes += t.avgTxTime;
+        }
+        return (sumTimes/thrds.size);
+    }
+    
+    public def mergeTxTrials():Float {
+        var sumTrials:Float = 0.0F;
+        for (t in thrds) {
+            sumTrials += t.avgTxTrials;
+        }
+        return (sumTrials/thrds.size);
+    }
+    
 }
 
