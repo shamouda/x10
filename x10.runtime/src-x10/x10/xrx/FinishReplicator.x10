@@ -56,7 +56,8 @@ public final class FinishReplicator {
     private static val TARGET_DEAD = 1n;
     private static val LEGAL_ABSENCE = 2n;
 
-    public static val PLACE0_BACKUP = System.getenv("PLACE0_BACKUP") == null || System.getenv("PLACE0_BACKUP").equals("1");
+    //we don't backup place0 finish by default
+    public static val PLACE0_BACKUP = System.getenv("PLACE0_BACKUP") != null && System.getenv("PLACE0_BACKUP").equals("1");
     
     //we must deny new buckup creations from the dead source place
     //places other than the given src can use this place to create a backup
