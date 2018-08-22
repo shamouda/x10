@@ -260,7 +260,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
                     val initKeys = keysPerPlace * i;
                     var count:Long = 0;
                     while (count < initKeys) {
-                        val k = startKey + Math.abs(rand.nextLong())%keysPerPlace;
+                        val k = baseKey + Math.abs(rand.nextLong())%keysPerPlace;
                         if (tx.get(k) == null) {
                             tx.put(k, new CloneableLong(0));
                             count++;
