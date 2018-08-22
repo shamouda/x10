@@ -110,7 +110,10 @@ public class TxResilient extends Tx {
     public def finalizeWithBackup(finObj:Releasable, abort:Boolean, backupId:Int) {
         debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] backup["+backupId+"] finalize abort="+abort+" ...");
         this.finishObj = finObj;
-        this.backupId = backupId;
+        if (FinishReplicator.PLACE0_BACKUP)
+        	this.backupId = backupId;
+        else
+        	this.backupId = -1n;
         resilient2PC(abort);
     }
     
