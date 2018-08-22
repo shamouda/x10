@@ -6,7 +6,7 @@ import x10.util.Team;
 import x10.util.concurrent.Lock;
 
 import x10.util.resilient.PlaceManager;
-import x10.util.resilient.localstore.TxConfig;
+import x10.xrx.txstore.TxConfig;
 import x10.xrx.TxStoreFatalException;
 import x10.util.resilient.localstore.Cloneable;
 import x10.xrx.TxStoreConflictException;
