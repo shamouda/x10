@@ -253,8 +253,9 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         
         val distClosure = (tx:Tx) => {
             for (var p:Long = 0; p < places; p++) {
-                tx.asyncAt(p, () => {
-                    val startKey = p * keysPerPlace;
+                val dest = p;
+                tx.asyncAt(dest, () => {
+                    val baseKey = dest * keysPerPlace;
                     val rand = new Random(here.id);
                     val initKeys = keysPerPlace * i;
                     var count:Long = 0;
