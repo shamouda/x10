@@ -134,8 +134,9 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         state.iteration++;
         if (state.iteration > 0) killSelf(store, state, state.iteration);
         val t = state.t;
+        val d = (state.iteration > 0) ? state.d : state.w;
         finish for (thrd in 1..t) async {
-            produce(store, plh, thrd-1);
+            produce(store, plh, thrd-1, d);
         }
         val thrpt = new Rail[Long](2);
         thrpt(0) = state.mergeTimes();
@@ -145,7 +146,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         return thrpt;
     }
     
-    public def produce(store:TxStore, plh:PlaceLocalHandle[TxBenchState], producerId:Long) {
+    public def produce(store:TxStore, plh:PlaceLocalHandle[TxBenchState], producerId:Long, duration:Long) {
         val state = plh();
         val myVirtualPlaceId = state.virtualPlaceId;
         val h = state.h;
@@ -155,7 +156,6 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         val o = state.o;
         val p = state.p;
         val t = state.t;
-        val d = state.d;
         val g = state.g;
         
         if (state.recovered && producerId == 0) {
@@ -172,7 +172,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         val values = new Rail[Long] (h*o);
         val readFlags = new Rail[Boolean] (h*o);
         
-        while (timeNS < d*1e6) {
+        while (timeNS < duration*1e6) {
             val innerStr = nextTransactionMembers(rand, p, h, myVirtualPlaceId, virtualMembers, f);
             nextRandomOperations(rand, p, virtualMembers, r, u, o, keys, values, readFlags, tmpKeys);
             
@@ -217,7 +217,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
                     }
                 };
                 
-                val remainingTime =  (d*1e6 - timeNS) as Long;
+                val remainingTime =  (duration*1e6 - timeNS) as Long;
                 try {
                     store.executeTransaction(distClosure, -1, remainingTime);
                 } catch(expf:TxStoreFatalException) {
