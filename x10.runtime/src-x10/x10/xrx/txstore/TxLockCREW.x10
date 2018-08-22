@@ -211,7 +211,8 @@ public class TxLockCREW extends TxLock {
      * */
     private def waitReaderWriterLocked(txId:Long) {
     	if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " here["+here+"] waitReaderWriterLocked started - this["+this+"] "); 
-        try {
+    	var failed:Boolean = false;
+    	try {
             Runtime.increaseParallelism();
             var count:Long = 0;
             while (waitingWriter == -1 && writer != -1 && stronger(txId, writer)) {  //waiting writers get access first
@@ -222,19 +223,23 @@ public class TxLockCREW extends TxLock {
                 TxConfig.waitSleep(); 
                 lock.lock();
                 count++;
+                if (TxConfig.MAX_LOCK_WAIT > 0 && count > TxConfig.MAX_LOCK_WAIT) {
+                	failed = true;
+                	break;
+                }
                 if (count%1000 == 0) {
                     Console.OUT.println(here + " ["+Runtime.activity()+"] - waitReaderWriterLocked  Tx["+txId+"]  writer["+writer+", {"+TxManager.txIdToString(writer)+"} ]  waitingWriter["+waitingWriter+", {"+TxManager.txIdToString(waitingWriter)+"} ] readers["+readers.toString()+"] ...");
                 }
             }
             if (count >= 1000) {
-                Console.OUT.println(here + " ["+Runtime.activity()+"] - waitReaderWriterLocked  Tx["+txId+"]  finished wait ...");
+                Console.OUT.println(here + " ["+Runtime.activity()+"] - waitReaderWriterLocked  Tx["+txId+"]  finished wait failed="+failed+"...");
             }
         } finally {
             Runtime.decreaseParallelism(1n);    
         }
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK waitReaderWriterLocked completed"); 
         
-        if (writer == -1 && waitingWriter == -1)
+        if (!failed && writer == -1 && waitingWriter == -1)
             return true;
         else
             return false;
@@ -252,7 +257,7 @@ public class TxLockCREW extends TxLock {
             waitingWriter = txId;
         else 
             return false;
-        
+        var failed:Boolean = false;
         try {
             Runtime.increaseParallelism();
             var count:Long = 0;
@@ -264,12 +269,16 @@ public class TxLockCREW extends TxLock {
                 TxConfig.waitSleep();
                 lock.lock();
                 count++;
+                if (TxConfig.MAX_LOCK_WAIT > 0 && count > TxConfig.MAX_LOCK_WAIT) {
+                	failed = true;
+                	break;
+                }
                 if (count%1000 == 0) {
                     Console.OUT.println(here + " ["+Runtime.activity()+"] - waitWriterReadersLocked upgrade["+(minLimit == 1)+"] Tx["+txId+"]  writer["+writer+", {"+TxManager.txIdToString(writer)+"} ]  waitingWriter["+waitingWriter+", {"+TxManager.txIdToString(waitingWriter)+"} ] readers["+readers.toString()+"] ...");
                 }
             }
             if (count >= 1000) {
-                Console.OUT.println(here + " ["+Runtime.activity()+"] - waitWriterReadersLocked upgrade["+(minLimit == 1)+"] Tx["+txId+"]  finished wait ...");
+                Console.OUT.println(here + " ["+Runtime.activity()+"] - waitWriterReadersLocked upgrade["+(minLimit == 1)+"] Tx["+txId+"]   failed="+failed+"...");
             }
         }finally {
             Runtime.decreaseParallelism(1n);
@@ -277,7 +286,7 @@ public class TxLockCREW extends TxLock {
         
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " waitWriterReadersLocked completed");
         
-        if (waitingWriter == txId) {
+        if (!failed && waitingWriter == txId) {
             waitingWriter = -1;
             return true;
         }
@@ -291,7 +300,7 @@ public class TxLockCREW extends TxLock {
             waitingWriter = txId;
         else 
             return false;
-        
+        var failed:Boolean = false;
         try {
             Runtime.increaseParallelism();
             var count:Long = 0;
@@ -303,6 +312,10 @@ public class TxLockCREW extends TxLock {
                 TxConfig.waitSleep();   
                 lock.lock();
                 count++;
+                if (TxConfig.MAX_LOCK_WAIT > 0 && count > TxConfig.MAX_LOCK_WAIT) {
+                	failed = true;
+                	break;
+                }
                 if (count%1000 == 0) {
                     Console.OUT.println(here + " ["+Runtime.activity()+"] - waitWriterWriterLocked  Tx["+txId+"]  writer["+writer+"]  waitingWriter["+waitingWriter+"] readers["+readers.toString()+"] ...");
                 }
@@ -315,7 +328,7 @@ public class TxLockCREW extends TxLock {
         }
         
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK waitWriterWriterLocked completed"); 
-        if (waitingWriter == txId) {
+        if (!failed && waitingWriter == txId) {
             waitingWriter = -1;
             return true;
         }

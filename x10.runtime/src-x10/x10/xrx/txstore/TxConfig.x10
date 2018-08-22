@@ -36,6 +36,8 @@ public class TxConfig {
     
     public static val BUSY_LOCK = System.getenv("BUSY_LOCK") != null && System.getenv("BUSY_LOCK").equals("1");
     
+    public static val MAX_LOCK_WAIT = System.getenv("MAX_LOCK_WAIT") == null ? -1 : Long.parseLong(System.getenv("MAX_LOCK_WAIT"));
+    
 // 1 : start 
 // 2 : start + submit
 // 3 : start + submit + valid  
