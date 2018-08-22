@@ -36,6 +36,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
             Option("v","verify","verify the result")
         ], [
             Option("r","keysRange","The range of possible keys (default 32K)"),
+            Option("i","initKeysPercentage","percentage of keys to prepopulate (default 0.0)"),
             Option("u","updatePercentage","percentage of update operation (default 0.0)"),
             Option("n","iterations","number of iterations of the benchmark (default 5)"),
             Option("p","txPlaces","number of places creating transactions (default (X10_PLACES-spare))"),
@@ -52,6 +53,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         ]);
         
         val r = opts("r", 32*1024);
+        val i = opts("i", 0.0F);
         val u = opts("u", 0.5F);
         val n = opts("n", 5);    
         val t = opts("t", Runtime.NTHREADS as Long);
@@ -69,7 +71,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         val activePlaces = mgr.activePlaces();
         val p = opts("p", activePlaces.size());
         
-        printRunConfigurations (r, u, n, p, t, w, d, h, o, g, s, f, vp, vt);
+        printRunConfigurations (r, i, u, n, p, t, w, d, h, o, g, s, f, vp, vt);
         
         assert (h <= activePlaces.size()) : "invalid value for parameter h, h should not exceed the number of active places" ;
 
@@ -80,6 +82,11 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         val plh = PlaceLocalHandle.make[TxBenchState](Place.places(), ()=> new TxBenchState(here.id, r, u, n, p, t, w, d, h, o, g, s, f, vp, vt) );
         val app = new ResilientTxBench(plh);
         val executor = MasterWorkerExecutor.make(activePlaces, app);
+        if (i > 0.0F) {
+            val startInit = Timer.milliTime();
+            prepopulateKeys(executor.store(), r, i);
+            Console.OUT.println("Store initialization completed, elapsed time ["+(Timer.milliTime() - startInit)+"]  ms ");
+        }
         
         val startWarmup = Timer.milliTime();
         if (w == -1) {
@@ -239,7 +246,32 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         Console.OUT.println(here.id + "x" + producerId + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
     }
 
-    public def printThroughput(store:TxStore, workerResults:HashMap[Long,Any], iteration:Long, h:Long, o:Long, p:Long, t:Long, warmup:Boolean) {
+    private static def prepopulateKeys(store:TxStore, r:Long, i:Float) {
+        val activePlaces = store.fixAndGetActivePlaces();
+        val places = activePlaces.size();
+        val keysPerPlace = r / places;
+        
+        val distClosure = (tx:Tx) => {
+            for (var p:Long = 0; p < places; p++) {
+                tx.asyncAt(p, () => {
+                    val rand = new Random(here.id);
+                    val initKeys = keysPerPlace * i;
+                    var count:Long = 0;
+                    while (count < initKeys) {
+                        val k = Math.abs(rand.nextLong())%keysPerPlace;
+                        if (tx.get(k) == null) {
+                            tx.put(k, new CloneableLong(0));
+                            count++;
+                        }
+                    }
+                    Console.OUT.println(here + " = prepopulated "+count+" keys");
+                });
+            }
+        };
+        store.executeTransaction(distClosure);
+    }
+    
+    private def printThroughput(store:TxStore, workerResults:HashMap[Long,Any], iteration:Long, h:Long, o:Long, p:Long, t:Long, warmup:Boolean) {
         try {
             Console.OUT.println("========================================================================");
             Console.OUT.println("Collecting throughput information ..... .....");
@@ -375,7 +407,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
     }
     
     /***********************   Utils  *****************************/
-    public static def printRunConfigurations(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, 
+    public static def printRunConfigurations(r:Long, i:Float, u:Float, n:Long, p:Long, t:Long, w:Long, 
             d:Long, h:Long, o:Long, g:Long, s:Long, f:Boolean, vp:String, vt:Long) {
         Console.OUT.println("TxBench starting with the following parameters:");        
         Console.OUT.println("X10_NPLACES="  + Place.numPlaces());
@@ -390,6 +422,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         Console.OUT.println("BUSY_LOCK=" + System.getenv("BUSY_LOCK"));
         
         Console.OUT.println("r=" + r);
+        Console.OUT.println("i=" + i);
         Console.OUT.println("u=" + u);
         Console.OUT.println("n=" + n);
         Console.OUT.println("p=" + p);
