@@ -463,12 +463,6 @@ class ProducerThroughput {
     }
 }
 
-class TxBenchFailed extends Exception {
-    public def this(message:String) {
-        super(message);
-    }
-}
-
 class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
         h:Long, o:Long, g:Long, s:Long, f:Boolean, vp:String, vt:Long) {
     var virtualPlaceId:Long = -1;
