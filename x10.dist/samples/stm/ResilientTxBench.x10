@@ -87,6 +87,8 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         } else {
             Console.OUT.println("warmup started");
             executor.run();
+            val results = executor.workerResults();
+            app.printThroughput(executor.store(), results, -1, h, o, p, t, true);
             Console.OUT.println("warmup completed, warmup elapsed time ["+(Timer.milliTime() - startWarmup)+"]  ms ");
         }
         
@@ -96,7 +98,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
                 executor.run();
                 val results = executor.workerResults();
                 Console.OUT.println("iteration:" + iter + " completed, iteration elapsedTime ["+(Timer.milliTime() - startIter)+"]  ms ");
-                app.printThroughput(executor.store(), results, iter, h, o, p, t);
+                app.printThroughput(executor.store(), results, iter, h, o, p, t, false);
             }
             val elapsed = Timer.milliTime() - mainStart;
             Console.OUT.println("+++ TxBench Succeeded +++  [totalTime:"+(elapsed/1000)+" sec]");
@@ -237,7 +239,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         Console.OUT.println(here.id + "x" + producerId + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds]");
     }
 
-    public def printThroughput(store:TxStore, workerResults:HashMap[Long,Any], iteration:Long, h:Long, o:Long, p:Long, t:Long) {
+    public def printThroughput(store:TxStore, workerResults:HashMap[Long,Any], iteration:Long, h:Long, o:Long, p:Long, t:Long, warmup:Boolean) {
         try {
             Console.OUT.println("========================================================================");
             Console.OUT.println("Collecting throughput information ..... .....");
@@ -255,7 +257,8 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
             val allOperations = cnt * h * o;
             val producers = p * t;
             val throughput = (allOperations as Double) / (allTimeNS/1e6) * producers;
-            Console.OUT.println("iteration:" + iteration + ":txCount:"+cnt+":OpCount:"+allOperations+":timeNS:"+allTimeNS+":globalthroughput(op/MS):"+throughput);
+            val tag = warmup ? "warmupthroughput" : "globalthroughput";
+            Console.OUT.println("iteration:" + iteration + ":txCount:"+cnt+":OpCount:"+allOperations+":timeNS:"+allTimeNS+":"+tag+"(op/MS):"+throughput);
             Console.OUT.println("========================================================================");
     
         } catch(ex:Exception) {
@@ -381,7 +384,6 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         Console.OUT.println("X10_RESILIENT_MODE=" + x10.xrx.Runtime.RESILIENT_MODE);
         Console.OUT.println("TM=" + System.getenv("TM"));
         Console.OUT.println("LOCK_FREE=" + System.getenv("LOCK_FREE"));
-        Console.OUT.println("DISABLE_INCR_PARALLELISM=" + System.getenv("DISABLE_INCR_PARALLELISM"));
         Console.OUT.println("X10_EXIT_BY_SIGKILL=" + System.getenv("X10_EXIT_BY_SIGKILL"));
         Console.OUT.println("DISABLE_SLAVE=" + System.getenv("DISABLE_SLAVE"));
         Console.OUT.println("ENABLE_STAT=" + System.getenv("ENABLE_STAT"));
