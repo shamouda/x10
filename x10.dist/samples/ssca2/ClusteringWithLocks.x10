@@ -451,7 +451,6 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         Console.OUT.println("X10_RESILIENT_MODE=" + x10.xrx.Runtime.RESILIENT_MODE);
         Console.OUT.println("TM=" + System.getenv("TM"));
         Console.OUT.println("LOCK_FREE=" + System.getenv("LOCK_FREE"));
-        Console.OUT.println("DISABLE_INCR_PARALLELISM=" + System.getenv("DISABLE_INCR_PARALLELISM"));
         Console.OUT.println("X10_EXIT_BY_SIGKILL=" + System.getenv("X10_EXIT_BY_SIGKILL"));
         Console.OUT.println("DISABLE_SLAVE=" + System.getenv("DISABLE_SLAVE"));
         Console.OUT.println("ENABLE_STAT=" + System.getenv("ENABLE_STAT"));
