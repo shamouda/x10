@@ -174,13 +174,20 @@ public class TxResilient extends Tx {
         val plh = this.plh;
         
         for (p in liveMasters) {
-            at (Place(p)) @Immediate("abort_mastersOnly_request") async {
-                //gc
+            if (here.id as Int == p) {
                 optimisticGC(gcId);
                 plh().getMasterStore().abort(id);
                 val me = here.id as Int;
-                at (gr) @Immediate("abort_mastersOnly_response") async {
-                    (gr() as TxResilient).notifyAbortOrCommit(me, MASTER);
+                notifyAbortOrCommit(me, MASTER);
+            } else {
+                at (Place(p)) @Immediate("abort_mastersOnly_request") async {
+                    //gc
+                    optimisticGC(gcId);
+                    plh().getMasterStore().abort(id);
+                    val me = here.id as Int;
+                    at (gr) @Immediate("abort_mastersOnly_response") async {
+                        (gr() as TxResilient).notifyAbortOrCommit(me, MASTER);
+                    }
                 }
             }
         }
@@ -243,39 +250,44 @@ public class TxResilient extends Tx {
         } else {
             for (p in liveMasters) {
                 val slaveId = masterSlave.getOrElse(p, DEAD_SLAVE);
-                at (Place(p)) @Immediate("prep_request_res") async {
-                    Runtime.submitUncounted(()=> { //some times validation blocks, so we cannot execute this body within an immediate thread.
-                        var vote:Boolean = true;
-                        if (TxConfig.get().VALIDATION_REQUIRED) {
-                            try {
-                                plh().getMasterStore().validate(id);
-                            }catch (e:Exception) {
-                                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] validation excp["+e.getMessage()+"] ...");
-                                vote = false;
-                            }
-                        }        
-                        var localReadOnly:Boolean = false;
-                        if (!readOnly && slaveId != DEAD_SLAVE) {
-                            val ownerPlaceIndex = plh().virtualPlaceId;
-                            val log = plh().getMasterStore().getTxCommitLog(id);
-                            if (log != null && log.size() > 0) {
-                                at (Place(slaveId as Long)) @Immediate("slave_prep11") async {
-                                    plh().slaveStore.prepare(id, log, ownerPlaceIndex);
-                                    at (gr) @Immediate("slave_prep_response11") async {
-                                        (gr() as TxResilient).notifyPrepare(slaveId, SLAVE, true /*vote*/, false /*is master RO*/); 
-                                    }
+                val closure = ()=> { //some times validation blocks, so we cannot execute this body within an immediate thread.
+                    var vote:Boolean = true;
+                    if (TxConfig.get().VALIDATION_REQUIRED) {
+                        try {
+                            plh().getMasterStore().validate(id);
+                        }catch (e:Exception) {
+                            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] validation excp["+e.getMessage()+"] ...");
+                            vote = false;
+                        }
+                    }        
+                    var localReadOnly:Boolean = false;
+                    if (!readOnly && slaveId != DEAD_SLAVE) {
+                        val ownerPlaceIndex = plh().virtualPlaceId;
+                        val log = plh().getMasterStore().getTxCommitLog(id);
+                        if (log != null && log.size() > 0) {
+                            at (Place(slaveId as Long)) @Immediate("slave_prep11") async {
+                                plh().slaveStore.prepare(id, log, ownerPlaceIndex);
+                                at (gr) @Immediate("slave_prep_response11") async {
+                                    (gr() as TxResilient).notifyPrepare(slaveId, SLAVE, true /*vote*/, false /*is master RO*/); 
                                 }
                             }
-                            else 
-                                localReadOnly = true;
                         }
-                        val isMasterRO = localReadOnly;
-                        val v = vote;
-                        val masterId = here.id as Int;
-                        at (gr) @Immediate("prep_response_res11") async {
-                            (gr() as TxResilient).notifyPrepare(masterId, MASTER, v, isMasterRO);
-                        }
-                    });
+                        else 
+                            localReadOnly = true;
+                    }
+                    val isMasterRO = localReadOnly;
+                    val v = vote;
+                    val masterId = here.id as Int;
+                    at (gr) @Immediate("prep_response_res11") async {
+                        (gr() as TxResilient).notifyPrepare(masterId, MASTER, v, isMasterRO);
+                    }
+                };
+                if (here.id as Int != p) {
+                    at (Place(p)) @Immediate("prep_request_res") async {
+                        Runtime.submitUncounted(closure);
+                    }
+                } else {
+                    Runtime.submitUncounted(closure);
                 }
             }
         }
@@ -382,37 +394,53 @@ public class TxResilient extends Tx {
         lock.unlock();
         
         for (p in liveMasters) {
-            at (Place(p)) @Immediate("abort_master_request") async {
+            if (here.id as Int != p) {
+                at (Place(p)) @Immediate("abort_master_request") async {
+                    //gc
+                    optimisticGC(gcId);
+                    if (isCommit)
+                        plh().getMasterStore().commit(id);
+                    else
+                        plh().getMasterStore().abort(id);
+                    val me = here.id as Int;
+                    at (gr) @Immediate("abort_master_response") async {
+                        (gr() as TxResilient).notifyAbortOrCommit(me, MASTER);
+                    }
+                }
+            } else {
                 //gc
                 optimisticGC(gcId);
-
                 if (isCommit)
                     plh().getMasterStore().commit(id);
                 else
                     plh().getMasterStore().abort(id);
-                
                 val me = here.id as Int;
-                at (gr) @Immediate("abort_master_response") async {
-                    (gr() as TxResilient).notifyAbortOrCommit(me, MASTER);
-                }
-            }            
+                notifyAbortOrCommit(me, MASTER);
+            }
         }
         
         for (p in liveSlaves) {
-            at (Place(p)) @Immediate("abort_slave_request") async {
+            if (here.id as Int != p) {
+                at (Place(p)) @Immediate("abort_slave_request") async {
+                    if (isCommit)
+                        plh().slaveStore.commit(id);
+                    else
+                        plh().slaveStore.abort(id);
+                    val me = here.id as Int;
+                    at (gr) @Immediate("abort_slave_response") async {
+                        (gr() as TxResilient).notifyAbortOrCommit(me, SLAVE);
+                    }
+                }
+            } else {
                 if (isCommit)
                     plh().slaveStore.commit(id);
                 else
                     plh().slaveStore.abort(id);
-                
                 val me = here.id as Int;
-                at (gr) @Immediate("abort_slave_response") async {
-                    (gr() as TxResilient).notifyAbortOrCommit(me, SLAVE);
-                }
-            }            
+                notifyAbortOrCommit(me, SLAVE);
+            }
         }
     }
-    
     
     private def notifyAbortOrCommit(place:Int, ptype:Int) {
         var rel:Boolean = false;
@@ -529,14 +557,10 @@ public class TxResilient extends Tx {
         
         if (rel) {
             if (ph2Started) {
-                //Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead-> release()");
                 release();
             } else {
-                //Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead-> commitOrAbort()");
                 commitOrAbort(vote);
             }
-        } else {
-            //Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead-> no release yet");
         }
     }
     
