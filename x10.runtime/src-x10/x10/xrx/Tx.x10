@@ -97,16 +97,16 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
     public def addMember(m:Int, ro:Boolean){
         if (TxConfig.TM_DEBUG) 
             Console.OUT.println(getAddMemberPrintMsg(m, ro, "add member"));
-        if (lock == null) {
-            Console.OUT.println(here + "Tx["+id+"] " + TxConfig.txIdToString (id)+ " obj["+this+"] FATAL EXCEPTION in Tx.addMember lock is null. ");
-            System.killHere();
+        if (lock != null) {
+            lock.lock();
+            if (members == null)
+                members = new HashSet[Int]();
+            members.add(m);
+            readOnly = readOnly & ro;
+            lock.unlock();
+        } else {
+            Console.OUT.println(here + "Tx["+id+"] " + TxConfig.txIdToString (id)+ " obj["+this+"] WARNING Tx.addMember lock is null add member["+m+"] ");
         }
-        lock.lock();
-        if (members == null)
-            members = new HashSet[Int]();
-        members.add(m);
-        readOnly = readOnly & ro;
-        lock.unlock();
     }
     
     public def addSubMembers(subMembers:Set[Int], subReadOnly:Boolean) {
