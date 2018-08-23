@@ -63,7 +63,7 @@ public class TxResilient extends Tx {
     }
     
     public def initialize(fid:FinishResilient.Id, backup:Int) {
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] FID["+fid+"] activity["+Runtime.activity()+"] backup["+backup+"] initialize called ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] FID["+fid+"] activity["+Runtime.activity()+"] backup["+backup+"] initialize called ...");
         gcId = fid;
         lock = new Lock();
         gr = GlobalRef[Tx](this);
@@ -75,7 +75,7 @@ public class TxResilient extends Tx {
 
     public def initializeNewMaster(fid:FinishResilient.Id,
             _mem:Set[Int], _excs:GrowableRail[CheckedThrowable], _ro:Boolean, backup:Int) {
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] FID["+fid+"] activity["+Runtime.activity()+"] initializeNewMaster called ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] FID["+fid+"] activity["+Runtime.activity()+"] initializeNewMaster called ...");
         gcId = fid;
         lock = new Lock();
         gr = GlobalRef[Tx](this);
@@ -108,7 +108,7 @@ public class TxResilient extends Tx {
     }
     
     public def finalizeWithBackup(finObj:Releasable, abort:Boolean, backupId:Int) {
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] backup["+backupId+"] finalize abort="+abort+" ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] backup["+backupId+"] finalize abort="+abort+" ...");
         this.finishObj = finObj;
         if (FinishReplicator.PLACE0_BACKUP)
         	this.backupId = backupId;
@@ -135,12 +135,12 @@ public class TxResilient extends Tx {
     }
     
     public def markAsCommitting() {
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] backup running markAsCommitting ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] backup running markAsCommitting ...");
         vote = true;
     }
     
     public def backupFinalize(finObj:Releasable) {
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] backupFinalize vote["+vote+"] ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] backupFinalize vote["+vote+"] ...");
         masterSlave = plh().getMapping(members);
         this.finishObj = finObj;
         commitOrAbort(vote);
@@ -160,7 +160,7 @@ public class TxResilient extends Tx {
             liveMasters.add(m);
         }
          
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] abortMastersOnly  count="+count+" ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] abortMastersOnly  count="+count+" ...");
         lock.unlock();
         
         abort(liveMasters);
@@ -235,7 +235,7 @@ public class TxResilient extends Tx {
                 }
             }
         }
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] tag[PREPARE] pending["+printPending()+"] count["+count+"] ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] tag[PREPARE] pending["+printPending()+"] count["+count+"] ...");
         lock.unlock();
         
         if (switchToAbort) { //if any of the masters is dead, abort the transaction
@@ -250,7 +250,7 @@ public class TxResilient extends Tx {
                             try {
                                 plh().getMasterStore().validate(id);
                             }catch (e:Exception) {
-                                debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] validation excp["+e.getMessage()+"] ...");
+                                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] validation excp["+e.getMessage()+"] ...");
                                 vote = false;
                             }
                         }        
@@ -283,13 +283,13 @@ public class TxResilient extends Tx {
     
     private def notifyPrepare(place:Int, ptype:Int, v:Boolean, isMasterRO:Boolean) {
         var prep:Boolean = false;
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPrepare place="+place+" ptype="+ptype+" v="+v+" isMRO="+isMasterRO+" ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPrepare place="+place+" ptype="+ptype+" v="+v+" isMRO="+isMasterRO+" ...");
         lock.lock();
         if (!Place(place as Long).isDead()) {
             if (ptype == MASTER) {
                 count--;
                 if (pending.getOrElse(TxMember(place, MASTER),-1n) == -1n)
-                    debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPrepare FATALERROR place["+place+"] type["+MASTER+"] count="+count+" doesn't exist...");
+                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPrepare FATALERROR place["+place+"] type["+MASTER+"] count="+count+" doesn't exist...");
        
                 FinishResilient.decrement(pending, TxMember(place, MASTER));
                 if (!readOnly && isMasterRO) { //we don't except an acknowledgement from the slave
@@ -299,7 +299,7 @@ public class TxResilient extends Tx {
                         FinishResilient.decrement(pending, TxMember(slave, SLAVE));
                     }
                     else {
-                        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPrepare place="+place+" ptype="+ptype+" isMRO="+isMasterRO+" slave is dead, don't decrement count");
+                        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPrepare place="+place+" ptype="+ptype+" isMRO="+isMasterRO+" slave is dead, don't decrement count");
                     }
                 }
                 
@@ -325,7 +325,7 @@ public class TxResilient extends Tx {
                     addExceptionUnsafe(new TxStoreConflictException(here + " Tx["+id+"] validation failed", here));
             }
         }
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPrepare place["+place+"] ptype="+ptype+" localVote["+v+"] vote["+vote+"] completed, count="+count+" ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPrepare place["+place+"] ptype="+ptype+" localVote["+v+"] vote["+vote+"] completed, count="+count+" ...");
         lock.unlock();
         
         if (prep) {
@@ -378,7 +378,7 @@ public class TxResilient extends Tx {
                 }
             }
         }
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] tag[COMMIT_OR_ABORT] pending["+printPending()+"] count["+count+"] ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] tag[COMMIT_OR_ABORT] pending["+printPending()+"] count["+count+"] ...");
         lock.unlock();
         
         for (p in liveMasters) {
@@ -422,12 +422,12 @@ public class TxResilient extends Tx {
             if (!Place(place as Long).isDead()) {
                 count--;
                 if (pending == null) {
-                    debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit FATALERROR pending is NULL");
+                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit FATALERROR pending is NULL");
                     throw new TxStoreFatalException("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit FATALERROR pending is NULL");
                 }
 
                 if (pending.getOrElse(TxMember(place, ptype),-1n) == -1n)
-                    debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit FATALERROR place["+place+"] type["+ptype+"] count="+count+" doesn't exist...");
+                    if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit FATALERROR place["+place+"] type["+ptype+"] count="+count+" doesn't exist...");
                 
                 FinishResilient.decrement(pending, TxMember(place, ptype));
                 if (count == 0n) {
@@ -435,7 +435,7 @@ public class TxResilient extends Tx {
                     pending = null;
                 }
             }
-            debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit place["+place+"]  count="+count+" ...");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit place["+place+"]  count="+count+" ...");
         } finally {
             lock.unlock();
         }
@@ -454,24 +454,24 @@ public class TxResilient extends Tx {
     }
     
     public def isImpactedByDeadPlaces(newDead:HashSet[Int]) {
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces called");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces called");
         try {
             lock.lock();
             if (newDead.contains(gcId.home))
                 return true;
             if (backupId != -1n && newDead.contains(backupId)) {
-                debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces returning true, backup is: " + backupId);
+                if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces returning true, backup is: " + backupId);
                 return true;
             }
             if (pending != null) {
                 for (key in pending.keySet()) {
                     if (newDead.contains(key.place)) {
-                        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces returning true, pending contains: " + key.place);
+                        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces returning true, pending contains: " + key.place);
                         return true;
                     }
                 }
             }
-            debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces returning false");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces returning false");
             return false;
         } finally {
             lock.unlock();
@@ -516,7 +516,7 @@ public class TxResilient extends Tx {
             
             val cnt = pending.remove(t);
             count -= cnt;
-            debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead remove place="+t.place+" type="+t.ptype+" cnt="+cnt+" count="+count+"...");
+            if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead remove place="+t.place+" type="+t.ptype+" cnt="+cnt+" count="+count+"...");
         }
         
         if (oldCnt > 0 && count == 0n) {
@@ -524,7 +524,7 @@ public class TxResilient extends Tx {
             rel = true;
         }
         //Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead pending["+printPending()+"] count["+count+"] ...");
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead completed, pending count=" + count);
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyPlaceDead completed, pending count=" + count);
         lock.unlock();
         
         if (rel) {
@@ -540,10 +540,6 @@ public class TxResilient extends Tx {
         }
     }
     
-    private static def debug(msg:String) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println( msg );
-    }
-    
     private def updateBackup() {
         val bId:Int;
         lock.lock();
@@ -553,7 +549,7 @@ public class TxResilient extends Tx {
         val gcId = this.gcId;
         val gr = this.gr;
         val backup = Place(bId as Long);
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] updateBackup place"+backup+" ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] updateBackup place"+backup+" ...");
         at (backup) @Immediate("notify_backup_commit") async {
             val bFin = FinishReplicator.findBackupOrThrow(gcId) as FinishResilientOptimistic.OptimisticBackupState;
             bFin.notifyCommit();
@@ -569,14 +565,14 @@ public class TxResilient extends Tx {
         val old = backupId;
         backupId = newBackupId;
         restart = pendingOnBackup;
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyBackupChange newBackup["+newBackupId+"] restart["+restart+"] ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyBackupChange newBackup["+newBackupId+"] restart["+restart+"] ...");
         lock.unlock();
         if (restart)
             updateBackup();
     }
     
     private def notifyBackupUpdated() {
-        debug("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] received notifyBackupUpdated ...");
+        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] received notifyBackupUpdated ...");
         commitOrAbort(vote);
     }
 }

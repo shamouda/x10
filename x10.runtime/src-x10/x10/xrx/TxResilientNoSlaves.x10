@@ -75,8 +75,4 @@ public class TxResilientNoSlaves extends Tx {
             FinishResilientOptimistic.OptimisticRemoteState.deleteObject(fid);
         }
     }
-        
-    private static def debug(msg:String) {
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println( msg );
-    }
 }
