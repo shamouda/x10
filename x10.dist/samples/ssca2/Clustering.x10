@@ -192,7 +192,8 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         val time0 = System.currentTimeMillis();
         var totalFailedRetries:Long = 0;
         val all = end - start;
-        Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1) + ":killG:"+killG);
+        if (killG != -1.0)
+            Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1) + ":killG:"+killG);
         // Iterate over each of the vertices in my portion.
         var c:Long = 1;
         for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++c) { 
