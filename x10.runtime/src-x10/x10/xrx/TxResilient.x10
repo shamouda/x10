@@ -512,6 +512,8 @@ public class TxResilient extends Tx {
     }
     
     public def isImpactedByDeadPlaces(newDead:HashSet[Int]) {
+    	if (lock == null)
+    		return null;
         if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces called");
         try {
             lock.lock();
