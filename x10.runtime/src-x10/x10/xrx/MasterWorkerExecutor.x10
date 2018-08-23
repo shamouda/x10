@@ -67,7 +67,11 @@ public class MasterWorkerExecutor {
                 runWorker(vid, store, app, master, false);
             }
         }
+        
+        Runtime.increaseParallelism();
         p0Latch.await();
+        Runtime.decreaseParallelism(1n);
+        
         print(here + " MasterWorkerExecutor.await() completed p0Cnt="+p0Cnt);
         if (p0Excs != null)
             throw new MultipleExceptions(p0Excs);
