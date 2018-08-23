@@ -180,11 +180,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         val values = new Rail[Long] (h*o);
         val readFlags = new Rail[Boolean] (h*o);
         
-        while (timeNS < duration*1e6) {
-            if (!state.isActive()) {
-                System.threadSleep(100); //the place is dying
-                continue;
-            }
+        while (timeNS < duration*1e6 && state.isActive()) {
             val innerStr = nextTransactionMembers(rand, p, h, vid, virtualMembers, f);
             nextRandomOperations(rand, p, virtualMembers, r, u, o, keys, values, readFlags, tmpKeys);
             
@@ -251,6 +247,12 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
                     Console.OUT.println(here + " Progress " + vid + "x" + producerId + ":" + myThroughput.txCount );
             }
         }
+        
+        if (!state.isActive()) {
+            Console.OUT.println(here + " Hammer calling killHere" );
+            System.killHere();
+        }
+        
         myThroughput.avgTxTime /= myThroughput.txCount;
         myThroughput.avgTxTrials /= myThroughput.txCount;
         //Console.OUT.println(here.id + "x" + producerId + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds] averageMS["+myThroughput.avgTxTime+"]");
@@ -409,7 +411,6 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
                             System.sleep(sleepTime);
                         }
                         
-                        plh().deactivate();
                         val prev = store.plh().getMaster(here);
                         val myThroughput = plh();
                         myThroughput.setElapsedTime(System.nanoTime() - startedNS);
@@ -419,9 +420,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
                             plh().rightPlaceDeathTimeNS =  System.nanoTime();
                             Console.OUT.println(here + " Received suicide note from " + me + " througputValues: " + myThroughput);
                         }
-                        
-                        Console.OUT.println(here + " Hammer calling killHere" );
-                        System.killHere();
+                        plh().deactivate();                        
                     }
                 }
             }
