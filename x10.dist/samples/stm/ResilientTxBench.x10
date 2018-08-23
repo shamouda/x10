@@ -181,6 +181,10 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         val readFlags = new Rail[Boolean] (h*o);
         
         while (timeNS < duration*1e6) {
+            if (!state.isActive()) {
+                System.threadSleep(100); //the place is dying
+                continue;
+            }
             val innerStr = nextTransactionMembers(rand, p, h, vid, virtualMembers, f);
             nextRandomOperations(rand, p, virtualMembers, r, u, o, keys, values, readFlags, tmpKeys);
             
@@ -405,6 +409,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
                             System.sleep(sleepTime);
                         }
                         
+                        plh().deactivate();
                         val prev = store.plh().getMaster(here);
                         val myThroughput = plh();
                         myThroughput.setElapsedTime(System.nanoTime() - startedNS);
@@ -464,7 +469,7 @@ class ProducerThroughput {
 
     public var avgTxTime:Float;
     public var avgTxTrials:Float;
-
+    
     public def this (placeId:Long, threadId:Long, elapsedTimeNS:Long, txCount:Long) {
         this.elapsedTimeNS = elapsedTimeNS;
         this.txCount = txCount;
@@ -490,6 +495,9 @@ class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
     var rightPlaceDeathTimeNS:Long = -1;
     var recovered:Boolean = false;
     var iteration:Long = -1; //for the warmup iteration
+    
+    val active = new AtomicInteger(1n);
+    
     public def this() {
         property(-1, -1F, -1, -1, -1, -1, -1, -1, -1, -1, -1, true, null, -1);
     }
@@ -512,6 +520,7 @@ class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
         rightTxBenchState = null;
         rightPlaceDeathTimeNS = -1;
         recovered = false;
+        active.set(1n);
     }
     
     public def reinit(other:TxBenchState, iter:Long) {
@@ -519,6 +528,7 @@ class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
         thrds = other.thrds;
         recovered = true;
         iteration = iter;
+        active.set(1n);
     }
     
     public def toString() {
@@ -571,6 +581,14 @@ class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
             sumTrials += t.avgTxTrials;
         }
         return (sumTrials/thrds.size);
+    }
+    
+    public def isActive() {
+        return active.get() == 1n;
+    }
+    
+    public def deactivate() {
+        active.set(0n);
     }
     
 }
