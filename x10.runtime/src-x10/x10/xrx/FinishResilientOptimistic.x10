@@ -865,7 +865,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 latch.lock();
                 
                 if (isTx && tx != null) {
-                    tx.addMember(dstId as Int, isTxRO);
+                    tx.addMember(dstId as Int, isTxRO, 0n);
                 }
                 
                 if (verbose>=1) debug(">>>> Master(id="+id+").transitToCompleted srcId=" + srcId + ", dstId=" + dstId + " called");
@@ -1095,7 +1095,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                         latch.lock();
                         
                         if (isTx && tx != null) {
-                            tx.addMember(dstId as Int, isTxRO);
+                            tx.addMember(dstId as Int, isTxRO, 1n);
                         }
                         
                         resp.backupPlaceId = -1n;
@@ -1305,7 +1305,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             
             try {
                 latch.lock();
-                tx.addMember(here.id as Int, isTxRO);
+                tx.addMember(here.id as Int, isTxRO, 2n);
                 txFlag = txFlag | isTx;
                 txReadOnlyFlag = txReadOnlyFlag & isTxRO;
                 if (verbose>=1) debug("<<<< Root(id="+id+").setTxFlags("+isTx+","+isTxRO+") returning ");
@@ -1349,7 +1349,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (tx == null || tx.isEmpty() || !isRootTx) {
                 latch.release();
             } else {
-                tx.addMember(here.id as Int, txReadOnlyFlag);
+                tx.addMember(here.id as Int, txReadOnlyFlag, 3n);
                 var abort:Boolean = false;
                 if (excs != null && excs.size() > 0) {
                     abort = true;
@@ -1757,7 +1757,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 ilock.lock();
                 
                 if (isTx && tx != null) {
-                    tx.addMember(dstId as Int, isTxRO);
+                    tx.addMember(dstId as Int, isTxRO, 4n);
                 }
                 
                 if (verbose>=1) debug(">>>> Backup(id="+id+").transitToCompleted called (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ") ");
@@ -1942,7 +1942,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 try {
                     ilock.lock();
                     if (isTx && tx != null) {
-                        tx.addMember(dstId as Int, isTxRO);
+                        tx.addMember(dstId as Int, isTxRO, 5n);
                     }
                     for (e in map.entries()) {
                         val srcId = e.getKey().place;

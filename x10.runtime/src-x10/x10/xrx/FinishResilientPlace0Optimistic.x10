@@ -402,7 +402,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                         val state = new State(id, parentId, gfs, tx, rootTx);
                         if (tx != null) {
                             tx.initialize(id, -1n);
-                            tx.addMember(id.home, isRO);
+                            tx.addMember(id.home, isRO, 10n);
                         }
                         if (verbose>=1) debug(">>>> finalizeLocalTx: creating new State id="+ id +" parentId="+parentId + " tx="+tx);
                         state.numActive = 0;
@@ -692,7 +692,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                     val state = states(id);
                     if (t != null) state.addException(t);
                     if (isTx && state.tx != null) {
-                        state.tx.addMember(dstId, isTxRO);
+                        state.tx.addMember(dstId, isTxRO, 11n);
                     }
                     for (e in map.entries()) {
                         val srcId = e.getKey().place;
@@ -714,7 +714,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 val state = states(id);
                 if (t != null) state.addException(t);
                 if (isTx && state.tx != null) {
-                    state.tx.addMember(dstId, isTxRO);
+                    state.tx.addMember(dstId, isTxRO, 12n);
                 }
                 for (e in map.entries()) {
                     val srcId = e.getKey().place;
@@ -754,7 +754,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             }
             else {
                 if (isTx && tx != null) {
-                    tx.addMember(dstId as Int, isTxRO);
+                    tx.addMember(dstId as Int, isTxRO, 13n);
                 }
                 
                 val e = Edge(srcId, dstId, kind);
@@ -1522,7 +1522,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             
             try {
                 latch.lock();
-                tx.addMember(here.id as Int, isTxRO);
+                tx.addMember(here.id as Int, isTxRO, 14n);
                 txFlag = txFlag | isTx;
                 txReadOnlyFlag = txReadOnlyFlag & isTxRO;
                 if (verbose>=1) debug("<<<< Root(id="+id+").setTxFlags("+isTx+","+isTxRO+") returning ");
@@ -1727,12 +1727,6 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         		//We don't need to do parentTx.addSubMembers because this place is part of the transaction any way
         	} else {
         	    State.p0FinalizeLocalTx(id, parentId, ref, tx, txReadOnlyFlag, excs);
-        		/*tx.addMember(here.id as Int, txReadOnlyFlag);
-                var abort:Boolean = false;
-                if (excs != null && excs.size() > 0) {
-                    abort = true;
-                }
-                tx.finalizeLocal(this, abort);*/
         	}
         }
         

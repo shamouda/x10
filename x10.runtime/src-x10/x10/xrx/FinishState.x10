@@ -689,7 +689,7 @@ public abstract class FinishState {
             
             if (tx != null) {
                 if (isTx)
-                    tx.addMember(here.id as Int, readOnly);
+                    tx.addMember(here.id as Int, readOnly, 20n);
                 
                 val subTxMem = Runtime.activity().subMembers;
                 val subTxRO = Runtime.activity().subReadOnly;
@@ -803,7 +803,7 @@ public abstract class FinishState {
             }
             if (tx != null) {
                 if (isTx)                
-                    tx.addMember(src, txRO);
+                    tx.addMember(src, txRO, 21n);
                 if (subMembers != null)
                     tx.addSubMembers(subMembers, subReadOnly);
             }
@@ -855,7 +855,7 @@ public abstract class FinishState {
         
             if (tx != null) {
                 if (isTx)
-                    tx.addMember(remoteEntry.first as Int, txRO);
+                    tx.addMember(remoteEntry.first as Int, txRO, 22n);
                 if (subMembers != null)
                     tx.addSubMembers(subMembers, subReadOnly);
             }

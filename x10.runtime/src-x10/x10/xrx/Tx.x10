@@ -94,7 +94,7 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
     }
     
     /***************** Members *****************/
-    public def addMember(m:Int, ro:Boolean){
+    public def addMember(m:Int, ro:Boolean, tag:Int){
         if (TxConfig.TM_DEBUG) 
             Console.OUT.println(getAddMemberPrintMsg(m, ro, "add member"));
         if (lock != null) {
@@ -105,7 +105,7 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
             readOnly = readOnly & ro;
             lock.unlock();
         } else {
-            Console.OUT.println(here + "Tx["+id+"] " + TxConfig.txIdToString (id)+ " obj["+this+"] WARNING Tx.addMember lock is null add member["+m+"] ");
+            Console.OUT.println(here + "Tx["+id+"] " + TxConfig.txIdToString (id)+ " obj["+this+"] WARNING Tx.addMember lock is null add member["+m+"] tag["+tag+"]");
         }
     }
     
