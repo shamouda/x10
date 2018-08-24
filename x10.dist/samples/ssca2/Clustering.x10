@@ -236,8 +236,6 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         val startVertex = (N as Long*placeId/max) as Int;
         val endVertex = (N as Long*(placeId+1)/max) as Int;
         
-        Console.OUT.println(here + " starting: " + startVertex + "-" + (endVertex-1));
-        
         var killProgress:Double = 0.0;
         /** Scheduler a hammer activity to kill the place at the specified time **/
         if (resilient && state.vp != null && state.vt != null) {
