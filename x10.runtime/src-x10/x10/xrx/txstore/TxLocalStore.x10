@@ -229,20 +229,6 @@ public class TxLocalStore[K] {K haszero} {
         }
     }
     
-    public def nextPlaceChange() {
-        try {
-            lock();
-            if (oldSlave.id != slave.id) {
-                oldSlave = slave;
-                return new SlaveChange(true, slave);
-            }
-            else
-                return new SlaveChange(false, slave);
-        }finally {
-            unlock();
-        }
-    }
-    
     public def getPlace(virtualId:Long) {
         try {
             lock();

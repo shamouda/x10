@@ -44,7 +44,8 @@ public class TxConfig {
 // 4 : start + submit + valid + commit  (default)
     private static val instance = new TxConfig();
     private static val WAIT_MS = System.getenv("WAIT_MS") == null ? 10 : Long.parseLong(System.getenv("WAIT_MS"));
-       
+    private static val MASTER_WAIT_MS = System.getenv("MASTER_WAIT_MS") == null ? 50 : Long.parseLong(System.getenv("MASTER_WAIT_MS"));
+    
     private def this(){
         if ( System.getenv("TM") == null || System.getenv("TM").equals(""))
             TM = "RL_EA_UL";

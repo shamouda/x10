@@ -110,15 +110,13 @@ public abstract class TxManager[K] {K haszero} {
     	if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxMasterStore.waitUntilPaused started ...");
         try {
             Runtime.increaseParallelism();
-            
             while (true) {
                 if (!txLogManager.activeTransactionsExist()) {
                     break;
                 }
-                TxConfig.waitSleep();
+                System.threadSleep(TxConfig.MASTER_WAIT_MS);
             }
-        
-        }finally {
+        } finally {
             Runtime.decreaseParallelism(1n);
         }
         paused();
@@ -130,8 +128,7 @@ public abstract class TxManager[K] {K haszero} {
             statusLock();
             if (status != STATUS_ACTIVE)
                 throw new TxStorePausedException(here + " TxMasterStore paused for recovery");
-        }
-        finally {
+        } finally {
             statusUnlock();
         }
     }
