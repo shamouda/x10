@@ -17,14 +17,12 @@ import x10.util.HashSet;
 import x10.util.concurrent.Future;
 import x10.xrx.txstore.TxLocalStore;
 import x10.util.resilient.localstore.Cloneable;
-import x10.util.resilient.concurrent.LowLevelFinish;
 import x10.compiler.Immediate;
 import x10.xrx.txstore.TxConfig;
 import x10.xrx.TxStoreConflictException;
 import x10.util.concurrent.Lock;
 import x10.util.HashMap;
 import x10.xrx.TxStoreFatalException;
-import x10.util.resilient.concurrent.ResilientCondition;
 import x10.util.concurrent.Condition;
 import x10.util.GrowableRail;
 
@@ -63,7 +61,14 @@ public class TxResilient extends Tx {
     }
     
     public def initialize(fid:FinishResilient.Id, backup:Int) {
-        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] FID["+fid+"] activity["+Runtime.activity()+"] backup["+backup+"] initialize called ...");
+        if (TxConfig.TM_DEBUG) {
+            var str:String = "";
+            if (members != null) {
+                for (w in members) 
+                    str += w + ":";
+            }
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] FID["+fid+"] activity["+Runtime.activity()+"] backup["+backup+"] members["+str+"] initialize called ...");
+        }
         gcId = fid;
         lock = new Lock();
         gr = GlobalRef[Tx](this);
@@ -75,7 +80,15 @@ public class TxResilient extends Tx {
 
     public def initializeNewMaster(fid:FinishResilient.Id,
             _mem:Set[Int], _excs:GrowableRail[CheckedThrowable], _ro:Boolean, backup:Int) {
-        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] FID["+fid+"] activity["+Runtime.activity()+"] initializeNewMaster called ...");
+        if (TxConfig.TM_DEBUG) {
+            var str:String = "";
+            if (_mem != null) {
+                for (w in _mem) {
+                    str += w + " : ";
+                }
+            }
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] FID["+fid+"] activity["+Runtime.activity()+"] initializeNewMaster called, members are="+str+" ...");
+        }
         gcId = fid;
         lock = new Lock();
         gr = GlobalRef[Tx](this);
@@ -193,6 +206,15 @@ public class TxResilient extends Tx {
         }
     }
     
+    private def printReadOnlyMasters() {
+        var str:String = "";
+        if (readOnlyMasters != null) {
+            for (s in readOnlyMasters) {
+                str += s + " : ";
+            }
+        }
+        return str;
+    }
     private def printPending() {
         var str:String = "";
         if (pending != null) {
@@ -393,30 +415,45 @@ public class TxResilient extends Tx {
         ph2Started = true;
         pending = new HashMap[TxMember,Int]();
         count = 0n;
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] commitOrAbortX readOnly["+readOnly+"] ...");
         if (readOnly) {
             for (m in members) {
+                if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] commitOrAbortX checkMem["+m+"] ...");
                 if (!Place(m as Long).isDead()) {
                     count++;
                     FinishResilient.increment(pending, TxMember(m, MASTER));
                     liveMasters.add(m);
+                    if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] commitOrAbortX Mem["+m+"] isLiveMaster ...");
                 }
+                else 
+                    if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] commitOrAbortX Mem["+m+"] isDeadMaster ...");
             }
         } else {
             for (e in masterSlave.entries()) {
                 val m = e.getKey();
                 val s = e.getValue();
-                
+                if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] commitOrAbortX master["+m+"] slave["+s+"] ...");
+               
+                if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] commitOrAbortX checkMem["+m+"] ...");
                 if (!Place(m as Long).isDead()) {
                     count++;
                     FinishResilient.increment(pending, TxMember(m, MASTER));
                     liveMasters.add(m);
-                }
+                    if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] commitOrAbortX Mem["+m+"] isLiveMaster ...");
+                } else
+                    if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] commitOrAbortX Mem["+m+"] isDeadMaster ...");
+                
+                if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] commitOrAbortX readOnlyMasters["+printReadOnlyMasters()+"] ...");
                 if (readOnlyMasters == null || !readOnlyMasters.contains(m)) {
+                    if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] commitOrAbortX readOnlyMastersPath checkSlave["+s+"]  ...");
                     if (!Place(s as Long).isDead()) {
                         count++;
                         FinishResilient.increment(pending, TxMember(s, SLAVE));
                         liveSlaves.add(s);
+                        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] commitOrAbortX readOnlyMastersPath Slave["+s+"] isLiveSlave ...");
                     }
+                    else 
+                        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] commitOrAbortX readOnlyMastersPath Slave["+s+"] isDeadSlave ...");
                 }
             }
         }
@@ -512,9 +549,17 @@ public class TxResilient extends Tx {
     }
     
     public def isImpactedByDeadPlaces(newDead:HashSet[Int]) {
-    	if (lock == null)
+        if (TxConfig.TM_DEBUG) {
+            var str:String = "";
+            for (newD in newDead) {
+                str += newD + " : ";
+            }
+            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces called, newDead["+str+"] ");
+        }
+    	if (lock == null) {
+    	    if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces lock is null, return false");
     		return false;
-        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces called");
+    	}
         try {
             lock.lock();
             if (newDead.contains(gcId.home))
@@ -525,11 +570,14 @@ public class TxResilient extends Tx {
             }
             if (pending != null) {
                 for (key in pending.keySet()) {
+                    if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces check if pending place["+key.place+"] ");
                     if (newDead.contains(key.place)) {
                         if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces returning true, pending contains: " + key.place);
                         return true;
                     }
                 }
+            } else {
+                if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces pending is null");    
             }
             if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] isImpactedByDeadPlaces returning false");
             return false;
