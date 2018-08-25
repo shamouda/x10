@@ -198,7 +198,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         var c:Long = 1;
         for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++c) { 
             val s = vertexIndex;
-            val clusterId = vertexIndex;
+            val clusterId = vertexIndex as Long;
             val closure = (tx:Tx) => {
                 createCluster(store, tx, s, placeId, clusterId, plh, verbose);
             };
@@ -232,7 +232,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         val g = state.g;
         val verbose = state.verbose;
         val verticesPerPlace = state.verticesPerPlace;
-        val verticesPerWorker = Math.ceil((state.verticesPerPlace as Double)/state.workersPerPlace) as Long;
+        val verticesPerWorker = Math.ceil((state.verticesPerPlace as Double)/state.workersPerPlace) as Int;
         val startVertex = (N as Long*placeId/max) as Int;
         val endVertex = (N as Long*(placeId+1)/max) as Int;
         
@@ -272,11 +272,11 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         
         finish {
             for (workerId in 1..state.workersPerPlace) {
-                val start = startVertex + (workerId-1) * verticesPerWorker;
-                val end = start + verticesPerWorker;
+                val start = (startVertex + (workerId-1) * verticesPerWorker) as Int;
+                val end = start + verticesPerWorker as Int;
                 val end2 = end >= state.N ? state.N : end;
                 val killG = (workerId == 1 && killProgress != 0.0) ? killProgress : -1.0;
-                async execute(store, state, placeId, workerId, start as Int, end2 as Int, plh, verbose, killG);
+                async execute(store, state, placeId, workerId, start, end2, plh, verbose, killG);
             }
         }
         val totalRetries = state.totalRetries;

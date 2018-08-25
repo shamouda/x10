@@ -331,16 +331,16 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         val g = state.g;
         val verbose = state.verbose;
         val verticesPerPlace = state.verticesPerPlace;
-        val verticesPerWorker = Math.ceil((state.verticesPerPlace as Double)/state.workersPerPlace) as Long;
+        val verticesPerWorker = Math.ceil((state.verticesPerPlace as Double)/state.workersPerPlace) as Int;
         val startVertex = (N as Long*placeId/max) as Int;
         val endVertex = (N as Long*(placeId+1)/max) as Int;
         
         finish {
             for (workerId in 1..state.workersPerPlace) {
-                val start = startVertex + (workerId-1) * verticesPerWorker;
+                val start = (startVertex + (workerId-1) * verticesPerWorker) as Int;
                 val end = start + verticesPerWorker;
                 val end2 = end >= state.N ? state.N : end;
-                async execute(state, placeId, workerId, start as Int, end2 as Int, store, plh, verbose);
+                async execute(state, placeId, workerId, start, end2, store, plh, verbose);
             }
         }
         val totalRetries = state.totalRetries;
