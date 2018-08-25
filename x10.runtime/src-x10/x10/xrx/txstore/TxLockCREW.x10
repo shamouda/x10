@@ -93,7 +93,7 @@ public class TxLockCREW extends TxLock {
                 conflict = false;
             }
             else if (waitingWriter == -1 && stronger(txId, writer)) {
-                if (waitReaderWriterLocked(txId)) {
+                if (TxConfig.MAX_LOCK_WAIT !=0 && waitReaderWriterLocked(txId)) {
                     readers.add(txId);
                     conflict = false;
                 }
@@ -132,13 +132,13 @@ public class TxLockCREW extends TxLock {
                 conflict = false;
             }
             else if (readers.size() > 0 && !readers.contains(txId) && strongerThanReaders(txId)) {  
-                if (waitWriterReadersLocked(0, txId)) {
+                if (TxConfig.MAX_LOCK_WAIT !=0 && waitWriterReadersLocked(0, txId)) {
                     writer = txId;
                     conflict = false;
                 }
             }
             else if (readers.size() > 0 && readers.contains(txId)) {
-                if (waitWriterReadersLocked(1, txId)) {
+                if (TxConfig.MAX_LOCK_WAIT !=0 && waitWriterReadersLocked(1, txId)) {
                     readers.remove(txId);
                     writer = txId;
                     conflict = false;
@@ -148,13 +148,13 @@ public class TxLockCREW extends TxLock {
                 }
             }           
             else if (writer != -1 && stronger(txId, writer)){ 
-                if (waitWriterWriterLocked(txId)) {
+                if (TxConfig.MAX_LOCK_WAIT !=0 && waitWriterWriterLocked(txId)) {
                     writer = txId;
                     conflict = false;
                 }
             }
             else if (waitingWriter != -1 && stronger(txId, waitingWriter)){
-                if (waitWriterWriterLocked(txId)) {
+                if (TxConfig.MAX_LOCK_WAIT !=0 && waitWriterWriterLocked(txId)) {
                     writer = txId;
                     conflict = false;
                 }
