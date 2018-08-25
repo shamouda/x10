@@ -155,7 +155,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             this.numActive = 1;
             this.tx = tx;
             this.isRootTx = rootTx;
-            if ((TxConfig.get().TM_DEBUG || verbose>=1) && tx != null)
+            if ((TxConfig.TM_DEBUG || verbose>=1) && tx != null)
                 Console.OUT.println("Finish["+id+"] has Tx["+tx.id+"] " + TxConfig.txIdToString (tx.id) );
             sent.put(FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
             transit.put(FinishResilient.Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
@@ -167,7 +167,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 for (e in states.entries()) {
                     val state = e.getValue();
                     if (state.tx != null) {
-                        if (TxConfig.get().TM_DEBUG || verbose>=1) {
+                        if (TxConfig.TM_DEBUG || verbose>=1) {
                             Console.OUT.println("printTxStates: Finish["+state.id+"] has Tx["+state.tx.id+"] " + TxConfig.txIdToString (state.tx.id)+ " isRootTx["+state.isRootTx+"] numActive["+state.numActive+"] ");
                             state.dump();
                         }
@@ -1848,7 +1848,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             }
             State.convertDeadActivities(merged);
         }
-        if (TxConfig.get().TM_DEBUG) State.printTxStates();
+        if (TxConfig.TM_DEBUG) State.printTxStates();
         if (verbose>=1) debug("<<<< notifyPlaceDeath returning");
         Console.OUT.println("p0FinishRecoveryTime:" + (Timer.milliTime()-start) + "ms  for dead places:" + str);
     }

@@ -27,11 +27,7 @@ public class MemoryUnit[K] {K haszero} {
     
     public def this(v:Cloneable) {
         value = v;
-        if (TxConfig.get().BASELINE) { //Baseline
-            txLock = null;
-            internalLock = null;
-        }
-        else if (TxConfig.get().LOCKING) { //Locking
+        if (TxConfig.LOCKING) { //Locking
             txLock = new TxLockCREWBlocking();
             internalLock = new Lock();
         }
@@ -74,11 +70,11 @@ public class MemoryUnit[K] {K haszero} {
         version = oldVersion; 
         value = oldValue;
         deleted = false;
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " here["+here+"] rollsetvv key["+key+"] ver["+version+"] val["+value+"]");
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " here["+here+"] rollsetvv key["+key+"] ver["+version+"] val["+value+"]");
     }
        
     public def lockRead(txId:Long) {
-        if (!TxConfig.get().LOCK_FREE) {
+        if (!TxConfig.LOCK_FREE) {
             txLock.lockRead(txId);
             try {
                 ensureNotDeleted();
@@ -91,7 +87,7 @@ public class MemoryUnit[K] {K haszero} {
     }
     
     public def tryLockRead(txId:Long):Boolean {
-        if (TxConfig.get().LOCK_FREE) {
+        if (TxConfig.LOCK_FREE) {
             return true;
         }
         val s  = txLock.tryLockRead(txId);
@@ -107,7 +103,7 @@ public class MemoryUnit[K] {K haszero} {
     }
     
     public def tryLockWrite(txId:Long):Boolean {
-        if (TxConfig.get().LOCK_FREE) {
+        if (TxConfig.LOCK_FREE) {
             return true;
         }
         val s  = txLock.tryLockWrite(txId);
@@ -123,12 +119,12 @@ public class MemoryUnit[K] {K haszero} {
     }
     
     public def unlockRead(txId:Long) {
-        if (!TxConfig.get().LOCK_FREE)
+        if (!TxConfig.LOCK_FREE)
             txLock.unlockRead(txId);
     }
     
     public def lockWrite(txId:Long) {
-        if (!TxConfig.get().LOCK_FREE) {
+        if (!TxConfig.LOCK_FREE) {
             txLock.lockWrite(txId);
             try {
                 ensureNotDeleted();
@@ -141,7 +137,7 @@ public class MemoryUnit[K] {K haszero} {
     }
     
     public def unlockWrite(txId:Long) {
-        if (!TxConfig.get().LOCK_FREE)
+        if (!TxConfig.LOCK_FREE)
             txLock.unlockWrite(txId);
     }
 
@@ -175,7 +171,7 @@ public class MemoryUnit[K] {K haszero} {
         if (copy) {
             v = value == null?null:value.clone();
         }
-        if (TxConfig.get().TM_DEBUG && print) 
+        if (TxConfig.TM_DEBUG && print) 
             Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " here["+here+"] getvv key["+key+"] ver["+version+"] val["+v+"]");
         return v;
     }
@@ -191,18 +187,18 @@ public class MemoryUnit[K] {K haszero} {
         version++;
         value = v;
         this.deleted = deleted;
-        if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " here["+here+"] setvv key["+key+"] ver["+version+"] val["+value+"] deleted["+deleted+"] ");
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " here["+here+"] setvv key["+key+"] ver["+version+"] val["+value+"] deleted["+deleted+"] ");
         return oldValue;
     }
     
     /**************************************/
     private def lockExclusive() {
-        if (!TxConfig.get().LOCK_FREE)
+        if (!TxConfig.LOCK_FREE)
             internalLock.lock();
     }
     
     private def unlockExclusive() {
-        if (!TxConfig.get().LOCK_FREE)
+        if (!TxConfig.LOCK_FREE)
             internalLock.unlock();
     }
     

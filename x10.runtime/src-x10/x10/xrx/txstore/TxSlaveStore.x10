@@ -34,7 +34,7 @@ public class TxSlaveStore[K] {K haszero} {
         assert(resilient);
         masterState = new HashMap[K,Cloneable]();
         logs = new ArrayList[TxSlaveLog[K]]();
-        if (!TxConfig.get().LOCK_FREE) {
+        if (!TxConfig.LOCK_FREE) {
             lock = new Lock();
         } else {
             lock = null;
@@ -45,7 +45,7 @@ public class TxSlaveStore[K] {K haszero} {
         assert(resilient);
         masterState = state;
         logs = new ArrayList[TxSlaveLog[K]]();
-        if (!TxConfig.get().LOCK_FREE) {
+        if (!TxConfig.LOCK_FREE) {
             lock = new Lock();
         } else {
             lock = null;
@@ -75,7 +75,7 @@ public class TxSlaveStore[K] {K haszero} {
     
     /*Used by Tx to commit a transaction that was previously prepared. TransLog is removed from the logs map after commit*/
     public def commit(id:Long) {
-        if (TxConfig.get().TM_DEBUG) 
+        if (TxConfig.TM_DEBUG) 
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] Slave.commit ...");
         try {
             slaveLock();
@@ -107,7 +107,7 @@ public class TxSlaveStore[K] {K haszero} {
     }
     
     public def prepare(id:Long, entries:HashMap[K,Cloneable], ownerPlaceIndex:Long) {
-        if (TxConfig.get().TM_DEBUG) 
+        if (TxConfig.TM_DEBUG) 
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] Slave.prepare ...");
         try {
             slaveLock();
@@ -135,7 +135,7 @@ public class TxSlaveStore[K] {K haszero} {
     }
     
     public def abort(id:Long) {
-        if (TxConfig.get().TM_DEBUG) 
+        if (TxConfig.TM_DEBUG) 
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] Slave.abort ...");
         try {
             slaveLock();
@@ -203,12 +203,12 @@ public class TxSlaveStore[K] {K haszero} {
     }
     
     private def slaveLock(){
-        if (!TxConfig.get().LOCK_FREE)
+        if (!TxConfig.LOCK_FREE)
             lock.lock();
     }
     
     private def slaveUnlock(){
-        if (!TxConfig.get().LOCK_FREE)
+        if (!TxConfig.LOCK_FREE)
             lock.unlock();
     }
     
@@ -216,7 +216,7 @@ public class TxSlaveStore[K] {K haszero} {
     public def waitUntilPaused() {
         try {
             slaveLock();
-            if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " - TxSlaveStore.waitUntilPaused started logsSize["+logs.size() +"] ...");
+            if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " - TxSlaveStore.waitUntilPaused started logsSize["+logs.size() +"] ...");
             Runtime.increaseParallelism();
             var count:Long = 0;
             var printMsg:Boolean = false;
@@ -235,7 +235,7 @@ public class TxSlaveStore[K] {K haszero} {
             }
             if (printMsg) Console.OUT.println(here + " NOT a bug, slave finished waiting ...");
         } finally {
-        	if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " - TxSlaveStore.waitUntilPaused completed ...");
+        	if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " - TxSlaveStore.waitUntilPaused completed ...");
             Runtime.decreaseParallelism(1n);
             slaveUnlock();
         }

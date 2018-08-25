@@ -85,7 +85,7 @@ public class TxMapData[K] {K haszero} {
     
     public def initLog(key:K, active:Boolean, log:TxLog[K], keyLog:TxKeyChange[K], lockRead:Boolean):MemoryUnit[K] {        
         val txId = log.id();
-        //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " here["+here+"] TxMapData.initLog(" + key + ")");
+        //if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " here["+here+"] TxMapData.initLog(" + key + ")");
         
         if (txId < 0) 
             throw new TxStoreFatalException(here + " fatal error, TxMapData.initLog txId = -1");
@@ -128,7 +128,7 @@ public class TxMapData[K] {K haszero} {
         try {
             lock(txId);
             metadata.delete(key);
-            //if (TxConfig.get().TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " here["+here+"] TxMapData.delete(" + key + ")");
+            //if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " here["+here+"] TxMapData.delete(" + key + ")");
         }finally {
             unlock(txId);
         }
@@ -150,13 +150,13 @@ public class TxMapData[K] {K haszero} {
     }
     
     public def lock(txId:Long){
-        if (!TxConfig.get().LOCK_FREE) {
+        if (!TxConfig.LOCK_FREE) {
             lock.lock();
         }
     }
     
     public def unlock(txId:Long) {
-        if (!TxConfig.get().LOCK_FREE) {
+        if (!TxConfig.LOCK_FREE) {
             lock.unlock();
         }
     }

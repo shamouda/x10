@@ -104,12 +104,12 @@ public class TxLocking(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
             val dest = members(i);
             val start = opPerPlace*i;
             finish at (Place(dest)) async { //locking must be done sequentially to avoid out of order locking
-                if (!TxConfig.get().LOCK_FREE)
+                if (!TxConfig.LOCK_FREE)
                     Runtime.increaseParallelism();
                 
                 plh().getMasterStore().lockAll(id, start, opPerPlace, keys, readFlags);
                 
-                if (!TxConfig.get().LOCK_FREE)
+                if (!TxConfig.LOCK_FREE)
                     Runtime.decreaseParallelism(1n);
             }
         }

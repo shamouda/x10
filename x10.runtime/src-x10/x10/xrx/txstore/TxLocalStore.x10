@@ -245,12 +245,12 @@ public class TxLocalStore[K] {K haszero} {
         
     /*******************************************/
     public def lock() {
-        if (!TxConfig.get().LOCK_FREE)
+        if (!TxConfig.LOCK_FREE)
             lock.lock();
     }
     
     public def unlock() {
-        if (!TxConfig.get().LOCK_FREE)
+        if (!TxConfig.LOCK_FREE)
             lock.unlock();
     }
     
@@ -268,7 +268,7 @@ public class TxLocalStore[K] {K haszero} {
             }
             activePlaces = new SparsePlaceGroup(rail);
             
-            if (TxConfig.get().TMREC_DEBUG) {
+            if (TxConfig.TMREC_DEBUG) {
                 var str:String = "";
                 for (p in activePlaces)
                     str += p + ",  " ;

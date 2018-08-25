@@ -75,7 +75,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         
         assert (h <= activePlaces.size()) : "invalid value for parameter h, h should not exceed the number of active places" ;
 
-        if (TxConfig.get().LOCK_FREE) {
+        if (TxConfig.LOCK_FREE) {
             assert (p * t == 1): "lock free mode can only be used with only 1 producer thread";
         }
         
@@ -187,7 +187,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
             //time starts here
             val start = System.nanoTime();
             var includeTx:Boolean = true;
-            if (TxConfig.get().LOCKING) {
+            if (TxConfig.LOCKING) {
                 val distClosure = (tx:TxLocking) => {
                     for (var m:Long = 0; m < h; m++) {
                         val start = m*o;
@@ -342,7 +342,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
                 selected++;
             }
         }
-        if (TxConfig.get().LOCKING)
+        if (TxConfig.LOCKING)
             RailUtils.sort(result);
         
         var mstr:String = "";
@@ -382,7 +382,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
                 }while (repeated);
             }
             
-            if (TxConfig.get().LOCKING)
+            if (TxConfig.LOCKING)
                 RailUtils.sort(tmpKeys);
             
             for (var x:Long = 0; x < o; x++) {

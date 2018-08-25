@@ -31,7 +31,7 @@ public class TxLogManager[K] {K haszero} {
     
     public def this() {
         //pre-allocate transaction logs
-        if (TxConfig.get().STM) {
+        if (TxConfig.STM) {
             if (TXLOG_NEW) {
                 txLogs = null;
                 map = new HashMap[Long,TxLog[K]]();
@@ -153,12 +153,12 @@ public class TxLogManager[K] {K haszero} {
     
     
     public def lock() {
-        if (!TxConfig.get().LOCK_FREE)
+        if (!TxConfig.LOCK_FREE)
             lock.lock();
     }
     
     public def unlock() {
-        if (!TxConfig.get().LOCK_FREE)
+        if (!TxConfig.LOCK_FREE)
             lock.unlock();
     }
 }

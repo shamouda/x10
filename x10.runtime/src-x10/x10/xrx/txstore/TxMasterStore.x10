@@ -125,9 +125,9 @@ public class TxMasterStore[K] {K haszero} {
     }
     
     public def pausing() {
-        if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxMasterStore.pasuing started");
+        if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxMasterStore.pasuing started");
     	txManager.pausing();
-    	if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxMasterStore.pasuing completed");
+    	if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxMasterStore.pasuing completed");
     }
     
     public def paused() {

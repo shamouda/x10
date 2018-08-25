@@ -15,14 +15,6 @@ package x10.xrx.txstore;
 import x10.xrx.TxStoreFatalException;
 
 public class TxConfig {
-    public val TM:String; //baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB
-    public val VALIDATION_REQUIRED:Boolean;
-    public val WRITE_BUFFERING:Boolean;
-    public val BASELINE:Boolean;
-    public val STM:Boolean;
-    public val LOCKING:Boolean;
-    public val LOCK_FREE:Boolean;
-	
     public static val TM_DEBUG = System.getenv("TM_DEBUG") != null && System.getenv("TM_DEBUG").equals("1");
     public static val TMREC_DEBUG = System.getenv("TMREC_DEBUG") != null && System.getenv("TMREC_DEBUG").equals("1");
     public static val DPE_SLEEP_MS = System.getenv("DPE_SLEEP_MS") == null ? 10 : Long.parseLong(System.getenv("DPE_SLEEP_MS"));
@@ -38,49 +30,25 @@ public class TxConfig {
     
     public static val MAX_LOCK_WAIT = System.getenv("MAX_LOCK_WAIT") == null ? -1 : Long.parseLong(System.getenv("MAX_LOCK_WAIT"));
     
+    public static val STM = System.getenv("TM") == null || !System.getenv("TM").equals("locking");
+    public static val LOCKING = System.getenv("TM") != null && System.getenv("TM").equals("locking");
+    public static val WRITE_BUFFERING = System.getenv("TM") != null && !System.getenv("TM").equals("locking") && System.getenv("TM").contains("WB");
+
+    public static val LOCK_FREE = (System.getenv("LOCK_FREE") == null || System.getenv("LOCK_FREE").equals("")) ? false : Long.parseLong(System.getenv("LOCK_FREE")) == 1;
+   
+    //TM=locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB
+    public static val TM = ( System.getenv("TM") == null || System.getenv("TM").equals("")) ? "RL_EA_UL" : System.getenv("TM");
+    
+    public static val VALIDATION_REQUIRED = System.getenv("TM") != null && (System.getenv("TM").equals("RL_LA_WB") || 
+                                                                            System.getenv("TM").equals("RV_EA_UL") || 
+                                                                            System.getenv("TM").equals("RV_EA_WB") || 
+                                                                            System.getenv("TM").equals("RV_LA_WB"));
 // 1 : start 
 // 2 : start + submit
 // 3 : start + submit + valid  
 // 4 : start + submit + valid + commit  (default)
-    private static val instance = new TxConfig();
     private static val WAIT_MS = System.getenv("WAIT_MS") == null ? 10 : Long.parseLong(System.getenv("WAIT_MS"));
     public static val MASTER_WAIT_MS = System.getenv("MASTER_WAIT_MS") == null ? 50 : Long.parseLong(System.getenv("MASTER_WAIT_MS"));
-    
-    private def this(){
-        if ( System.getenv("TM") == null || System.getenv("TM").equals(""))
-            TM = "RL_EA_UL";
-        else
-            TM = System.getenv("TM");
-
-        if (TM.equals("baseline") || TM.startsWith("locking") || TM.equals("RL_EA_UL") || TM.equals("RL_EA_WB")) {
-            VALIDATION_REQUIRED = false;
-        }
-        else if (TM.equals("RL_LA_WB") || TM.equals("RV_EA_UL") || TM.equals("RV_EA_WB") || TM.equals("RV_LA_WB")) {
-            VALIDATION_REQUIRED = true;
-        }
-        else {
-            VALIDATION_REQUIRED = false;
-            throw new TxStoreFatalException ("Invalid TM value, possible values are: baseline|locking|RL_EA_UL|RL_EA_WB|RL_LA_WB|RV_EA_UL|RV_EA_WB|RV_LA_WB");
-        }
-        
-        WRITE_BUFFERING = TM.contains("WB");
-
-        if (TM.equals("baseline"))
-            BASELINE = true;
-        else
-            BASELINE = false;
-        
-        if (BASELINE || TM.startsWith("locking")) 
-            STM = false;
-        else
-            STM = true;
-        
-        LOCKING = ! ( STM || BASELINE);
-        LOCK_FREE = BASELINE || (System.getenv("LOCK_FREE") == null || System.getenv("LOCK_FREE").equals("")) ? false : Long.parseLong(System.getenv("LOCK_FREE")) == 1;
-    }
-    
-    public static def get() = instance;
-    
     
     public static def getTxPlaceId(txId:Long):Int {
     	return (txId >> 32) as Int;

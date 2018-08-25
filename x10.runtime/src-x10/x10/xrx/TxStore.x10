@@ -188,11 +188,11 @@ public class TxStore {
     public def asyncRecover() {
         val ls = plh();
         if (!ls.immediateRecovery || !ls.slave.isDead()) {
-            if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Runtime.asyncRecover returning  immediate["+ls.immediateRecovery+"] slaveDead["+ls.slave.isDead()+"] ...");
+            if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Runtime.asyncRecover returning  immediate["+ls.immediateRecovery+"] slaveDead["+ls.slave.isDead()+"] ...");
             return;
         }
         
-        if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Runtime.asyncRecover starting  immediate["+ls.immediateRecovery+"] slaveDead["+ls.slave.isDead()+"] masterActive["+ls.masterStore.isActive()+"] ...");
+        if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Runtime.asyncRecover starting  immediate["+ls.immediateRecovery+"] slaveDead["+ls.slave.isDead()+"] masterActive["+ls.masterStore.isActive()+"] ...");
         if ( ls.slave.isDead() && ls.masterStore.isActive() ) {
              ls.masterStore.pausing();
             @Uncounted async recoverSlave();
@@ -200,7 +200,7 @@ public class TxStore {
     }
     
     public def recoverSlave() {
-        if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxStore.recoverSlave: started ...");
+        if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxStore.recoverSlave: started ...");
         val start = System.nanoTime();
         val deadPlace = plh().slave;
         val oldActivePlaces = plh().getActivePlaces();
@@ -215,7 +215,7 @@ public class TxStore {
     public static def recoverSlave(plh:PlaceLocalHandle[TxLocalStore[Any]], deadPlace:Place, spare:Place, timeStartRecoveryNS:Long) {
         assert (timeStartRecoveryNS != -1);
         val startTimeNS = System.nanoTime();
-        if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxStore.recoverSlave: started given already allocated spare " + spare);
+        if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxStore.recoverSlave: started given already allocated spare " + spare);
         val deadMaster = here;
         val oldActivePlaces = plh().getActivePlaces();
         val deadVirtualId = oldActivePlaces.indexOf(deadPlace);
@@ -248,16 +248,16 @@ public class TxStore {
     }
     
     private static def createMasterStoreAtSpare(plh:PlaceLocalHandle[TxLocalStore[Any]], spare:Place, deadPlace:Place, deadVirtualId:Long, newActivePlaces:PlaceGroup, deadMaster:Place) {
-        if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Slave of the dead master ...");
+        if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Slave of the dead master ...");
         
         plh().slaveStore.waitUntilPaused();
         
         val map = plh().slaveStore.getSlaveMasterState();
-        if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Slave prepared a consistent master replica to the spare master spare=["+spare+"] ...");
+        if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Slave prepared a consistent master replica to the spare master spare=["+spare+"] ...");
         
         val deadPlaceSlave = here;
         at (spare) async {
-            if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Spare received the master replica from slave ["+deadPlaceSlave+"] ...");    
+            if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Spare received the master replica from slave ["+deadPlaceSlave+"] ...");    
             plh().setMasterStore (new TxMasterStore(map, plh().immediateRecovery));
             plh().getMasterStore().pausing();
             plh().getMasterStore().paused();
@@ -274,13 +274,13 @@ public class TxStore {
     }
     
     private static def createSlaveStoreAtSpare(plh:PlaceLocalHandle[TxLocalStore[Any]], spare:Place, deadPlace:Place, deadVirtualId:Long) {
-        if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Master of the dead slave, prepare a slave replica for the spare place ...");
+        if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Master of the dead slave, prepare a slave replica for the spare place ...");
         plh().getMasterStore().waitUntilPaused();
         val masterState = plh().getMasterStore().getState().getKeyValueMap();
-        if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Master prepared a consistent slave replica to the spare slave ...");
+        if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Master prepared a consistent slave replica to the spare slave ...");
         val me = here;
         at (spare) async {
-            if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Spare received the slave replica from master ["+me+"] ...");    
+            if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Spare received the slave replica from master ["+me+"] ...");    
             plh().slaveStore = new TxSlaveStore(masterState);
         }        
     }
@@ -311,7 +311,7 @@ public class TxStore {
                 continue;
             
             val masterRes = new GlobalRef[TxStoreAllocateSpareResponse](new TxStoreAllocateSpareResponse());
-            if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Try to allocate " + Place(i) );
+            if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Try to allocate " + Place(i) );
             val master = Place(i);
             val rCond = ResilientCondition.make(master);
             val closure = (gr:GlobalRef[Condition]) => {
@@ -331,11 +331,11 @@ public class TxStore {
             }
             rCond.forget();
             masterRes.forget();
-            
-            if (!success)
-                if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Failed to allocate " + Place(i) + ", is it dead? " + Place(i).isDead());
+            if (!success) {
+                if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Failed to allocate " + Place(i) + ", is it dead? " + Place(i).isDead());
+            }
             else {
-                if (TxConfig.get().TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Succeeded to allocate " + Place(i) );
+                if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Succeeded to allocate " + Place(i) );
                 placeIndx = i;
                 break;
             }
