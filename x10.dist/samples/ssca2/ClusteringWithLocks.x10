@@ -335,8 +335,6 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         val startVertex = (N as Long*placeId/max) as Int;
         val endVertex = (N as Long*(placeId+1)/max) as Int;
         
-        Console.OUT.println(here + " starting: " + startVertex + "-" + (endVertex-1));
-        
         finish {
             for (workerId in 1..state.workersPerPlace) {
                 val start = startVertex + (workerId-1) * verticesPerWorker;
