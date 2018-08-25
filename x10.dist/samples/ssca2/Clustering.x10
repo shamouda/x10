@@ -197,7 +197,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         // Iterate over each of the vertices in my portion.
         var c:Long = 1;
         for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++c) { 
-            val s:Int = state.verticesToWorkOn(vertexIndex);
+            val s = vertexIndex;
             val clusterId = vertexIndex;
             val closure = (tx:Tx) => {
                 createCluster(store, tx, s, placeId, clusterId, plh, verbose);
@@ -274,7 +274,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
             for (workerId in 1..state.workersPerPlace) {
                 val start = startVertex + (workerId-1) * verticesPerWorker;
                 val end = start + verticesPerWorker;
-                val end2 = end >= state.verticesToWorkOn.size ? state.verticesToWorkOn.size : end;
+                val end2 = end >= state.N ? state.N : end;
                 val killG = (workerId == 1 && killProgress != 0.0) ? killProgress : -1.0;
                 async execute(store, state, placeId, workerId, start as Int, end2 as Int, plh, verbose, killG);
             }
@@ -429,9 +429,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         }
         graph.compress();
         val N = graph.numVertices();
-        val verticesToWorkOn = new Rail[Int](N, (i:Long)=>i as Int);
-        
-        val plh = PlaceLocalHandle.make[ClusteringState](Place.places(), ()=>new ClusteringState(graph, verticesToWorkOn, places, workers, verbose, clusterSize, g, vp, vt, vg));
+        val plh = PlaceLocalHandle.make[ClusteringState](Place.places(), ()=>new ClusteringState(graph, places, workers, verbose, clusterSize, g, vp, vt, vg));
         val app = new Clustering(plh);
         val executor = MasterWorkerExecutor.make(activePlaces, app);
         
@@ -459,7 +457,6 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
 class ClusteringState(N:Int) {
     val graph:Graph;
     val verbose:Int;
-    val verticesToWorkOn:Rail[Int];// = new Rail[Int](N, (i:Long)=>i as Int);
     val places:Long;
     val workersPerPlace:Long;
     val verticesPerPlace:Long;
@@ -473,7 +470,7 @@ class ClusteringState(N:Int) {
 
     var totalRetries:Long = 0;
     
-    public def this(graph:Graph, verticesToWorkOn:Rail[Int], places:Long, workersPerPlace:Long,
+    public def this(graph:Graph, places:Long, workersPerPlace:Long,
             verbose:Int, clusterSize:Long, g:Long, vp:String, vt:String, vg:Int) {
         property(graph.numVertices());
         this.graph = graph;
@@ -487,7 +484,6 @@ class ClusteringState(N:Int) {
         this.vp = vp;
         this.vt = vt;
         this.vg = vg;
-        this.verticesToWorkOn = verticesToWorkOn;
     }
     
     public def addRetries(r:Long) {
