@@ -1009,7 +1009,9 @@ public final class Runtime {
             };
             
             if (verbose>=4) debug("---- runImmediateAt waiting for cond");
-            rCond.run(closure);
+            if (NUM_IMMEDIATE_THREADS == 0n) increaseParallelism();
+            rCond.run(closure, false);
+            if (NUM_IMMEDIATE_THREADS == 0n) decreaseParallelism(1n);
             if (verbose>=4) debug("---- runImmediateAt released from cond");
             rCond.forget();
             exc.forget();
@@ -1285,7 +1287,9 @@ public final class Runtime {
         };
         
         if (verbose>=4) debug("---- evalImmediateAt waiting for cond");
-        rCond.run(closure);
+        if (NUM_IMMEDIATE_THREADS == 0n) increaseParallelism();
+        rCond.run(closure, false);
+        if (NUM_IMMEDIATE_THREADS == 0n) decreaseParallelism(1n);
         if (verbose>=4) debug("---- evalImmediateAt released from cond");
         
         val t = exc()();
