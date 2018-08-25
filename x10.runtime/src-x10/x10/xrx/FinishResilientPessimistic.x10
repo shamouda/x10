@@ -508,7 +508,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                     }
                 }; 
             };
-            rCond.run(closure);
+            rCond.run(closure, false);
             if (rCond.failed()) {
                 val excp = new DeadPlaceException(backup);
             }
@@ -2077,7 +2077,7 @@ class FinishResilientPessimistic extends FinishResilient implements CustomSerial
                         }
                     }
                 };
-                rCond.run(closure);
+                rCond.run(closure, true);
             }
         }
         
