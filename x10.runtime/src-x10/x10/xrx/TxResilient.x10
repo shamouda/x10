@@ -525,31 +525,21 @@ public class TxResilient extends Tx {
         try {
             lock.lock(); //altering the counts must be within lock/unlock
             if (!Place(place as Long).isDead()) {
-                var accept:Boolean = true;
-            /*
-                if (ptype == MASTER) {
-                    accept = true;
-                } else { //drop preparation message from a slave whose master died because notifyPlaceDead will remove them
-                    for (m in members) {
-                        if (masterSlave.getOrElse(m, DEAD_SLAVE) == place && !Place(m).isDead()) {
-                            accept = true;
-                            break;
-                        }
-                    }
-                } */
-                if (accept) {
-                    count--;
-                    if (pending == null) {
-                        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit FATALERROR pending is NULL");
-                        throw new TxStoreFatalException("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit FATALERROR pending is NULL");
-                    }
-                    if (pending.getOrElse(TxMember(place, ptype),-1n) == -1n)
-                        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit FATALERROR place["+place+"] type["+ptype+"] count="+count+" doesn't exist...");
+                //FIXME: when I try to ignore slaves who's master died, the execution hangs!
+                count--;
+                if (pending != null) {
                     FinishResilient.decrement(pending, TxMember(place, ptype));
-                }
-                if (count == 0n) {
-                    rel = true;
-                    pending = null;
+                    if (count == 0n) {
+                        rel = true;
+                        pending = null;
+                    }
+                } else {
+                    if (pending == null) {
+                        Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit bug FATALERROR place["+place+"] type["+ptype+"] pending is NULL");
+                    }
+                    else if (pending.getOrElse(TxMember(place, ptype),-1n) == -1n) {
+                        Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit bug FATALERROR place["+place+"] type["+ptype+"] count="+count+" doesn't exist...");
+                    }
                 }
             }
             if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] notifyAbortOrCommit place["+place+"]  count="+count+" ...");
