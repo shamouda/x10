@@ -753,7 +753,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     }
                 }; 
             };
-            rCond.run(closure);
+            rCond.run(closure, false);
             //TODO: redo if backup is dead
             if (rCond.failed()) {
                 val excp = new DeadPlaceException(backup);
@@ -861,6 +861,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         
         def transitToCompleted(srcId:Long, dstId:Long, kind:Int, t:CheckedThrowable, isTx:Boolean,
                 isTxRO:Boolean, tag:String, resp:MasterResponse) {
+            var callRel:Boolean = false;
             try {
                 latch.lock();
                 
@@ -877,7 +878,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 assert numActive>=0 : here + " FATAL error, Master(id="+id+").numActive reached -ve value";
                 if (t != null) addExceptionUnsafe(t);
                 if (quiescent()) {
-                    tryRelease();
+                    callRel = true; //call tryRelease outside of the latch scope
                 }
                 if (verbose>=1) debug("<<<< Master(id="+id+").transitToCompleted returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
                 resp.backupPlaceId = backupPlaceId;
@@ -885,9 +886,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             } finally {
                 latch.unlock();
             }
+            if (callRel) {
+                tryRelease();
+            }
         }
         
         def removeGhostChild(childId:Id, t:CheckedThrowable, subMembers:Set[Int], subReadOnly:Boolean, resp:MasterResponse) {
+            var callRel:Boolean = false;
             try {
                 latch.lock();
                 if (tx != null && subMembers != null){
@@ -905,7 +910,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     assert numActive>=0 : here + " FATAL error, Master(id="+id+").numActive reached -ve value";
                     if (t != null) addExceptionUnsafe(t);
                     if (quiescent()) {
-                        tryRelease();
+                        callRel = true;
                     }
                 }
                 if (verbose>=1) debug("<<<< Master(id="+id+").removeGhostChild childId=" + childId + ", t=" + t + " returning");
@@ -913,6 +918,9 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 resp.backupChanged = backupChanged;
             } finally {
                 latch.unlock();
+            }
+            if (callRel) {
+                tryRelease();
             }
         }
         
@@ -928,7 +936,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 latch.unlock();
             }
         }
-        
+
         def transitToCompletedUnsafe(srcId:Long, dstId:Long, kind:Int, cnt:Int, ex:CheckedThrowable , tag:String, resp:MasterResponse) {
             if (verbose>=1) debug(">>>> Master(id="+id+").transitToCompletedMul srcId=" + srcId + ", dstId=" + dstId + " called");
             
@@ -939,12 +947,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             //don't decrement 'sent' 
             
             numActive-=cnt;
-            if (quiescent()) {
-                tryRelease();
-            }
             resp.backupPlaceId = backupPlaceId;
             resp.backupChanged = backupChanged;
             if (verbose>=1) debug("<<<< Master(id="+id+").transitToCompletedMul returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId + " set backup="+resp.backupPlaceId+ " set backupChanged="+resp.backupChanged);
+            if (quiescent()) {
+                return true;
+            }
+            return false;
         }
         
         def quiescent():Boolean {
@@ -967,7 +976,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (excs != null && excs.size() > 0) {
                     abort = true;
                 }
-                tx.finalizeWithBackup(this, abort, backupPlaceId); //this also performs gc
+                tx.finalizeWithBackup(this, abort, backupPlaceId, isRecovered); //this also performs gc
             }
             if (verbose>=1) debug("<<<< Master.tryRelease(id="+id+").tryRelease returning tx="+tx);
         }
@@ -1091,22 +1100,25 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     // drop termination messages from a dead place; only simulated termination signals are accepted
                     if (verbose>=1) debug("==== notifyActivityTermination(id="+id+") suppressed: "+dstId);
                 } else {
+                    var callRel:Boolean = false;
                     try {
                         latch.lock();
-                        
                         if (isTx && tx != null) {
                             tx.addMember(dstId as Int, isTxRO, 1n);
                         }
-                        
                         resp.backupPlaceId = -1n;
                         for (e in map.entries()) {
                             val srcId = e.getKey().place;
                             val kind = e.getKey().kind;
                             val cnt = e.getValue();
-                            transitToCompletedUnsafe(srcId, dstId, kind, cnt, ex, "notifyActivityTermination", resp);
+                            if (transitToCompletedUnsafe(srcId, dstId, kind, cnt, ex, "notifyActivityTermination", resp))
+                                callRel = true;
                         }
                     } finally {
                         latch.unlock();
+                    }
+                    if (callRel) {
+                        tryRelease(); //call tryRelease outside of the latch scope
                     }
                     resp.submit = true;
                 }
@@ -1337,7 +1349,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 tryReleaseLocal();
                 return;
             }
-            if (verbose>=1) debug("==== Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
+            if (verbose>=1) debug("==== Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+",isRootTx="+isRootTx+", txFlag="+txFlag+", txReadOnlyFlag="+txReadOnlyFlag+") called");
             val req = FinishRequest.makeOptTermRequest(id, parentId, srcId, dstId, kind, null, tx, isRootTx, txFlag, txReadOnlyFlag);
             FinishReplicator.asyncExec(req, this);
             if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
@@ -1427,19 +1439,24 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         /*******************   Failure Recovery Methods   ********************/
         /*********************************************************************/
         public def isImpactedByDeadPlaces(newDead:HashSet[Int]) {
-            if (tx != null && tx instanceof TxResilient && (tx as TxResilient).isImpactedByDeadPlaces(newDead)) {
-                return true;
-            }
-            if (!isGlobal)
-                return false;
-            if (newDead.contains(backupPlaceId)) /*needs re-replication*/
-                return true;
-            for (e in transit.entries()) {
-                val edge = e.getKey();
-                if (newDead.contains(edge.src) || newDead.contains(edge.dst))
+            try {
+                latch.lock();
+                if (tx != null && tx instanceof TxResilient && (tx as TxResilient).isImpactedByDeadPlaces(newDead)) {
                     return true;
+                }
+                if (!isGlobal)
+                    return false;
+                if (newDead.contains(backupPlaceId)) /*needs re-replication*/
+                    return true;
+                for (e in transit.entries()) {
+                    val edge = e.getKey();
+                    if (newDead.contains(edge.src) || newDead.contains(edge.dst))
+                        return true;
+                }
+                return false;
+            } finally {
+                latch.unlock();
             }
-            return false;
         }
         
         public def convertToDead(newDead:HashSet[Int], countChildrenBackups:HashMap[FinishResilient.Id, HashSet[FinishResilient.Id]]) {
@@ -1563,8 +1580,22 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             isRootTx = rootTx;
             if (tx != null) {
                 tx.initialize(id, -1n);
+                
             }
-            if (verbose>=1) debug(">>>> Backup(id="+id+", parentId="+parentId+", tx="+tx+") created by simple constructor");
+            if (verbose>=1) {
+                var str:String = "";
+                if (tx != null){
+                    str = " txIsReadOnly=" + tx.isReadOnly() + " txMem={";
+                    val mems = tx.getMembers();
+                    if (mems != null) {
+                        for (w in mems) {
+                            str += w + " : ";
+                        }
+                    }
+                    str += "}";
+                }
+                debug(">>>> Backup(id="+id+", parentId="+parentId+", tx="+tx+", txDesc="+str+") created by simple constructor");
+            }
         }
         
         def this(id:FinishResilient.Id, _parentId:FinishResilient.Id, _numActive:Long, 
@@ -1603,23 +1634,25 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
 
         def removeBackupOrMarkToDelete():void {
+            var rm:Boolean = false;
             ilock.lock();
             if (verbose>=1) debug(">>>> Backup(id="+id+").removeBackupOrMarkToDelete  isReleased["+isReleased+"] numActive["+numActive+"] ");
             if (isReleased) {
                 if (verbose>=1) debug("<<<< Backup(id="+id+").removeBackupOrMarkToDelete  will delete");
-                FinishReplicator.removeBackup(id);
+                rm = true;
             } else {
                 if (verbose>=1) debug("<<<< Backup(id="+id+").removeBackupOrMarkToDelete  will mark only for future delete");
                 canDelete = true;
             }
             ilock.unlock();
+            if (rm) {
+                FinishReplicator.removeBackup(id);
+            }
         }
         
         
-        static def removeBackupAndSendGC(id:FinishResilient.Id) {       
-            val backup = FinishReplicator.findBackup(id) as OptimisticBackupState;
-            if (backup != null)
-                backup.gc();
+        def removeBackupAndSendGC() {       
+            this.gc();
             FinishReplicator.removeBackup(id);
         }
         
@@ -1699,7 +1732,9 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         
         public def getPlaceOfMaster() {
             try {
+                if (verbose>=1) debug(">>>> Backup(id="+id+").getPlaceOfMaster called ");
                 lock();
+                if (verbose>=1) debug(">>>> Backup(id="+id+").getPlaceOfMaster returning " + placeOfMaster);
                 return placeOfMaster;
             } finally {
                 unlock();
@@ -1753,6 +1788,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         
         def transitToCompleted(srcId:Long, dstId:Long, kind:Int, ex:CheckedThrowable, isTx:Boolean,
                 isTxRO:Boolean, tag:String) {
+            var rmAndGC:Boolean = false;
             try {
                 ilock.lock();
                 
@@ -1760,7 +1796,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     tx.addMember(dstId as Int, isTxRO, 4n);
                 }
                 
-                if (verbose>=1) debug(">>>> Backup(id="+id+").transitToCompleted called (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ") ");
+                if (verbose>=1) debug(">>>> Backup(id="+id+").transitToCompleted called (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ", isTx="+isTx+", isTxRO="+isTxRO+", tx="+tx+") ");
                 val e = FinishResilient.Edge(srcId, dstId, kind);
                 decrement(transit, e);
                 //don't decrement 'sent'
@@ -1770,16 +1806,22 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 if (ex != null) addExceptionUnsafe(ex);
                 if (quiescent()) {
                     isReleased = true;
-                    if (tx == null || tx instanceof TxResilientNoSlaves || canDelete) 
-                        removeBackupAndSendGC(id);
+                    if (tx == null || tx instanceof TxResilientNoSlaves || canDelete) {
+                        rmAndGC = true;
+                    }
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").transitToCompleted returning (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ") ");
             } finally {
                 ilock.unlock();
             }
+            
+            if (rmAndGC) {
+                removeBackupAndSendGC();
+            }
         }
         
         def removeGhostChild(childId:Id, ex:CheckedThrowable, subMembers:Set[Int], subReadOnly:Boolean) {
+            var rmAndGC:Boolean = false;
             try {
                 ilock.lock();
                 if (tx != null && subMembers != null) {
@@ -1800,13 +1842,17 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     if (ex != null) addExceptionUnsafe(ex);
                     if (quiescent()) {
                         isReleased = true;
-                        if (tx == null || tx instanceof TxResilientNoSlaves || canDelete) 
-                            removeBackupAndSendGC(id);
+                        if (tx == null || tx instanceof TxResilientNoSlaves || canDelete) {
+                            rmAndGC = true;
+                        }
                     }
                     if (verbose>=1) debug("<<<< Backup(id="+id+").removeGhostChild returning (childId="+childId+", ex=" + ex + ") numActive=" + numActive + " isReleased=" + isReleased);
                 }
             } finally {
                 ilock.unlock();
+            }
+            if (rmAndGC) {
+                removeBackupAndSendGC();
             }
         }
         
@@ -1822,27 +1868,24 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
                 
         def transitToCompletedUnsafe(srcId:Long, dstId:Long, kind:Int, cnt:Int, ex:CheckedThrowable, tag:String) {
-            try {
-                ilock.lock();
-                
-                if (ex != null) addExceptionUnsafe(ex);
-                
-                if (verbose>=1) debug(">>>> Backup(id="+id+").transitToCompletedMul called (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ", cnt="+cnt+") ");
-                val e = FinishResilient.Edge(srcId, dstId, kind);
-                FinishResilient.deduct(transit, e, cnt);
-                //don't decrement 'sent'
-                numActive-=cnt;
-                if (verbose>=3) debug("==== Backup(id="+id+").transitToCompletedMul (srcId=" + srcId + ", dstId=" + dstId + ") dumping after update");
-                if (verbose>=3) dump();
-                if (quiescent()) {
-                    isReleased = true;
-                    if (tx == null || tx instanceof TxResilientNoSlaves || canDelete) 
-                        removeBackupAndSendGC(id);
+            var rmAndGC:Boolean = false;
+            if (ex != null) addExceptionUnsafe(ex);
+            
+            if (verbose>=1) debug(">>>> Backup(id="+id+").transitToCompletedMul called (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ", cnt="+cnt+") ");
+            val e = FinishResilient.Edge(srcId, dstId, kind);
+            FinishResilient.deduct(transit, e, cnt);
+            //don't decrement 'sent'
+            numActive-=cnt;
+            if (verbose>=3) debug("==== Backup(id="+id+").transitToCompletedMul (srcId=" + srcId + ", dstId=" + dstId + ") dumping after update");
+            if (verbose>=3) dump();
+            if (quiescent()) {
+                isReleased = true;
+                if (tx == null || tx instanceof TxResilientNoSlaves || canDelete) { 
+                    rmAndGC = true;
                 }
-                if (verbose>=1) debug("<<<< Backup(id="+id+").transitToCompletedMul returning (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ", cnt="+cnt+") ");
-            } finally {
-                ilock.unlock();
             }
+            if (verbose>=1) debug("<<<< Backup(id="+id+").transitToCompletedMul returning (numActive="+numActive+", srcId=" + srcId + ", dstId=" + dstId + ", cnt="+cnt+") ");
+            return rmAndGC;
         }
         
         def quiescent():Boolean {
@@ -1937,7 +1980,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 val ex = req.ex;
                 val isTx = req.isTx;
                 val isTxRO = req.isTxRO;
-                
+                var callRel:Boolean = false;
                 if (verbose>=1) debug(">>>> Backup(id="+id+").exec [req=TERM_MUL, dstId=" + dstId +", mapSz="+map.size()+", isTx="+isTx+", isTxRO="+isTxRO+"] called");
                 try {
                     ilock.lock();
@@ -1948,10 +1991,14 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                         val srcId = e.getKey().place;
                         val kind = e.getKey().kind;
                         val cnt = e.getValue();
-                        transitToCompletedUnsafe(srcId, dstId, kind, cnt, ex, "notifyActivityTermination");
+                        if (transitToCompletedUnsafe(srcId, dstId, kind, cnt, ex, "notifyActivityTermination"))
+                            callRel = true;
                     }
                 }finally {
                     ilock.unlock();
+                }
+                if (callRel) {
+                    removeBackupAndSendGC();
                 }
                 if (verbose>=1) debug("<<<< Backup(id="+id+").exec [req=TERM_MUL, dstId=" + dstId +", mapSz="+map.size()+", isTx="+isTx+", isTxRO="+isTxRO+"] returning");
             } else if (xreq instanceof RemoveGhostChildRequestOpt) {
@@ -2095,7 +2142,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         public def releaseFinish(excs:GrowableRail[CheckedThrowable]) {
             if (verbose>=1) debug(">>>> Backup(id="+id+").releaseFinish called");
             backupNotifyParent();
-            removeBackupAndSendGC(id);
+            removeBackupAndSendGC();
             if (verbose>=1) debug("<<<< Backup(id="+id+").releaseFinish returning");
         }
         
@@ -2502,7 +2549,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                         }
                     }
                 };
-                rCond.run(closure);
+                rCond.run(closure, true);
             }
         }
 

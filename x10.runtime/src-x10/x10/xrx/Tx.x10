@@ -193,7 +193,7 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
         nonResilientLocal(abort);
     }
     
-    public def finalizeWithBackup(finObj:Releasable, abort:Boolean, backupId:Int) { 
+    public def finalizeWithBackup(finObj:Releasable, abort:Boolean, backupId:Int, isRecovered:Boolean) { 
         finalize(finObj, abort);
     }
     

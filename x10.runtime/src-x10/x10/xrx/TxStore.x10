@@ -324,7 +324,7 @@ public class TxStore {
                     }
                 }
             };
-            rCond.run(closure);
+            rCond.run(closure, true);
             var success:Boolean = true;
             if (rCond.failed() || !masterRes().allocated) {
                 success = false;

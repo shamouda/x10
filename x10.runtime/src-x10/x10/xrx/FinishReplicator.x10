@@ -83,25 +83,32 @@ public final class FinishReplicator {
         }
     }
     
-    static def sendPendingAct(id:FinishResilient.Id, num:Long) {
+    static def removePendingAct(num:Long) {
         try {
             glock.lock();
             val pendingAct = transitPendingAct.getOrElse(num, NULL_PENDING_ACT);
-            if (pendingAct == NULL_PENDING_ACT)
-                throw new Exception(here + " FATAL ERROR req["+num+"] lost its pending activity");
+            if (pendingAct == NULL_PENDING_ACT) {
+                Console.OUT.println(here + " FATAL ERROR req["+num+"] lost its pending activity");
+                System.killHere();
+            }
             transitPendingAct.remove(num);
-            val preSendAction = ()=>{ };
-            if (verbose>=1) debug("<<<< Replicator.sendPendingAct(id="+id+", num="+num+", dst="+pendingAct.dst+", fs="+pendingAct.fs+") returned");
-            val bytes = pendingAct.bodyBytes;
-            val wrappedBody = ()=> @AsyncClosure {
-                val deser = new Deserializer(bytes);
-                val bodyPrime = deser.readAny() as ()=>void;
-                bodyPrime();
-            };
-            x10.xrx.Runtime.x10rtSendAsync(pendingAct.dst, wrappedBody, pendingAct.fs, pendingAct.prof, preSendAction);
+            return pendingAct;
         } finally {
             glock.unlock();
         }
+        
+    }
+    static def sendPendingAct(id:FinishResilient.Id, num:Long) {
+        val pendingAct = removePendingAct(num);
+        val preSendAction = ()=>{ };
+        if (verbose>=1) debug("<<<< Replicator.sendPendingAct(id="+id+", num="+num+", dst="+pendingAct.dst+", fs="+pendingAct.fs+") returned");
+        val bytes = pendingAct.bodyBytes;
+        val wrappedBody = ()=> @AsyncClosure {
+            val deser = new Deserializer(bytes);
+            val bodyPrime = deser.readAny() as ()=>void;
+            bodyPrime();
+        };
+        x10.xrx.Runtime.x10rtSendAsync(pendingAct.dst, wrappedBody, pendingAct.fs, pendingAct.prof, preSendAction);
     }
     
     //we don't insert a master request if master is dead
@@ -185,55 +192,56 @@ public final class FinishReplicator {
     }
     
     private static def finalizeAsyncExec(num:Long, backupPlaceId:Long) {
-        try {
+        glock.lock();
+        val req = pendingBackup.remove(num);
+        glock.unlock();
+        if (req == null) {
+            if (!Place(backupPlaceId).isDead()) {
+                Console.OUT.println(here + " FATAL ERROR, pending backup request not found although backup is alive");
+                System.killHere();
+            }
+        }
+        else {
+            if (verbose>=1) debug(">>>> Replicator.finalizeAsyncExec(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") called");    
             glock.lock();
-            val req = pendingBackup.remove(num);
-            if (verbose>=1) debug(">>>> Replicator.finalizeAsyncExec(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") called");
-            if (req == null) {
-                if (!Place(backupPlaceId).isDead())
-                    throw new Exception (here + " FATAL ERROR, pending backup request not found although backup is alive");
-            }
-            else {
-                val postSendAction = postActions.remove(req.num); 
-                if (postSendAction != null) {
-                    if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(id="+req.id+") executing postSendAction(submit="+req.getOutSubmit()+",adopterId="+req.getOutAdopterId()+")");
-                    postSendAction(req.getOutSubmit(), req.getOutAdopterId());
-                } else {
-                    if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") NO_POST_ACTION_FOUND");
-                }
-                if (verbose>=1) debug("<<<< Replicator.finalizeAsyncExec(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") returned");
-                /////FinishRequest.deallocReq(req);
-            }
-        } finally {
+            val postSendAction = postActions.remove(req.num);
             glock.unlock();
+            
+            if (postSendAction != null) {
+                if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(id="+req.id+") executing postSendAction(submit="+req.getOutSubmit()+",adopterId="+req.getOutAdopterId()+")");
+                postSendAction(req.getOutSubmit(), req.getOutAdopterId());
+            } else {
+                if (verbose>=1) debug("==== Replicator.finalizeAsyncExec(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") NO_POST_ACTION_FOUND");
+            }
+            if (verbose>=1) debug("<<<< Replicator.finalizeAsyncExec(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") returned");
         }
     }
     
     private static def finalizeAsyncExecForP0Finish(num:Long, submit:Boolean) {
-        try {
-            glock.lock();
-            val req = pendingMaster.remove(num);
+        glock.lock();
+        val req = pendingMaster.remove(num);
+        glock.unlock();
+        
+        if (req == null) {
+            Console.OUT.println(here + " FATAL ERROR in finalizeAsyncExecForP0Finish, pending backup request num="+num+" not found ");
+            System.killHere();
+        }
+        else {
             if (verbose>=1) debug(">>>> Replicator.finalizeAsyncExecForP0Finish(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") called");
-            if (req == null) {
-                throw new Exception (here + " FATAL ERROR in finalizeAsyncExecForP0Finish, pending backup request num="+num+" not found ");
-            }
-            else {
-                req.setOutSubmit(submit);
-                val postSendAction = postActions.remove(req.num); 
-                if (postSendAction != null) {
-                    if (verbose>=1) debug("==== Replicator.finalizeAsyncExecForP0Finish(id="+req.id+") executing postSendAction(submit="+req.getOutSubmit()+",adopterId="+req.getOutAdopterId()+")");
-                    postSendAction(req.getOutSubmit(), req.getOutAdopterId());
-                } else {
-                    if (verbose>=1) debug("==== Replicator.finalizeAsyncExecForP0Finish(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") NO_POST_ACTION_FOUND");
-                }
-                if (verbose>=1) debug("<<<< Replicator.finalizeAsyncExecForP0Finish(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") returned");
-                /////FinishRequest.deallocReq(req);
-            }
-        } finally {
+            req.setOutSubmit(submit);
+            glock.lock();
+            val postSendAction = postActions.remove(req.num);
             glock.unlock();
+            
+            if (postSendAction != null) {
+                if (verbose>=1) debug("==== Replicator.finalizeAsyncExecForP0Finish(id="+req.id+") executing postSendAction(submit="+req.getOutSubmit()+",adopterId="+req.getOutAdopterId()+")");
+                postSendAction(req.getOutSubmit(), req.getOutAdopterId());
+            } else {
+                if (verbose>=1) debug("==== Replicator.finalizeAsyncExecForP0Finish(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") NO_POST_ACTION_FOUND");
+            }
+            if (verbose>=1) debug("<<<< Replicator.finalizeAsyncExecForP0Finish(id="+req.id+", num="+req.num+", submit="+req.getOutSubmit()+", backupPlace="+req.backupPlaceId+") returned");
         }
     }
-    
     
     static def asyncExec(req:FinishRequest, localMaster:FinishMasterState):void {
         val rc = addMasterPending(req, null);
@@ -615,7 +623,7 @@ public final class FinishReplicator {
             }
         };
         
-        rCond.run(closure);
+        rCond.run(closure, false);
         
         if (rCond.failed()) {
             rCond.forget();
@@ -695,7 +703,7 @@ public final class FinishReplicator {
             }
         };
         
-        rCond.run(closure);
+        rCond.run(closure, false);
         
         if (rCond.failed()) {
             rCond.forget();
@@ -774,7 +782,7 @@ public final class FinishReplicator {
                         }
                     };
                     
-                    rCond.run(closure);
+                    rCond.run(closure, true);
                     if (rCond.failed()) {
                         Console.OUT.println("FATAL: backupGetNewMaster(id="+id+") backup="+backup  + "  failed: MasterAndBackupDied");
                         //throw new MasterAndBackupDied();
@@ -851,7 +859,7 @@ public final class FinishReplicator {
             }
         };
         
-        rCond.run(closure);
+        rCond.run(closure, true);
         
         if (rCond.failed()) {
             rCond.forget();
@@ -949,7 +957,7 @@ public final class FinishReplicator {
                     }
                 }
             };
-            rCond.run(closure);
+            rCond.run(closure, true);
             
             if (rCond.failed()) {
                 Console.OUT.println(here + " WARNING - another place["+nextPlace+"] failed while searching for backup");
@@ -1067,20 +1075,24 @@ public final class FinishReplicator {
     static def getImpactedMasters(newDead:HashSet[Int]) {
         if (verbose>=1) debug(">>>> lockAndGetImpactedMasters called");
         val result = new HashSet[FinishMasterState]();
+        val tmp = new HashSet[FinishMasterState]();
         try {
             glock.lock();
-            for (e in fmasters.entries()) {
-                val id = e.getKey();
+            for (e in fmasters.entries()) { //copy to another list to avoid locking glock while calling isImpactedBy...
                 val mFin = e.getValue();
-                var im:Boolean = false;
-                if (mFin.isImpactedByDeadPlaces(newDead)) {
-                    result.add(mFin);
-                    im = true;
-                }
-                if (verbose>=1) debug("==== lockAndGetImpactedMasters id=" +  id + " isImpacted? " + im);
+                tmp.add(mFin);
             }
         } finally {
             glock.unlock();
+        }
+        
+        for (mFin in tmp) {
+            var im:Boolean = false;
+            if (mFin.isImpactedByDeadPlaces(newDead)) {
+                result.add(mFin);
+                im = true;
+            }
+            if (verbose>=1) debug("==== lockAndGetImpactedMasters id=" +  mFin.getId() + " isImpacted? " + im);
         }
         if (verbose>=1) {
             var s:String = "";
@@ -1105,50 +1117,56 @@ public final class FinishReplicator {
     
     static def getImpactedBackups(newDead:HashSet[Int]):ArrayList[FinishBackupState] {
         if (verbose>=1) debug(">>>> lockAndGetImpactedBackups called");
+        val tmp2 = new HashSet[FinishBackupState]();
         val unordered = new HashSet[FinishBackupState]();
         val list = new ArrayList[FinishBackupState]();
+        
         try {
             glock.lock();
             for (e in fbackups.entries()) {
-                val id = e.getKey();
                 val bFin = e.getValue();
-                if ( bFin.getId().id != -5555n && ( 
-                     OPTIMISTIC && (newDead.contains(bFin.getPlaceOfMaster()) || bFin.getTxStarted() )  || 
-                    !OPTIMISTIC && newDead.contains(bFin.getId().home) ) ) {
-                    unordered.add(bFin);
-                }
-            }
-            if (verbose>=1) {
-                var str:String = "";
-                for (k in unordered)
-                    str += k.getId() + " , ";
-                debug("==== lockAndGetImpactedBackups unordered ["+str+"]");
-            }
-            while (unordered.size() > 0) {
-                var tmp:FinishBackupState = null;
-                var rm:Boolean = false;
-                for (node in unordered) {
-                    if (isLeaf(node.getId(), unordered)) {
-                        rm = true;
-                        tmp = node;
-                        break;
-                    }
-                }
-                if (rm) {
-                    unordered.remove(tmp);
-                    list.add(tmp);
-                    if (unordered.size() == 0)
-                        break;
-                }
-            }
-            if (verbose>=1) {
-                var str:String = "";
-                for (k in list)
-                    str += k.getId() + " , ";
-                debug("<<<< lockAndGetImpactedBackups returning ["+str+"]");
-            }
+                tmp2.add(bFin);
+            } 
         } finally {
             glock.unlock();
+        }
+            
+        if (verbose>=1) debug(">>>> lockAndGetImpactedBackups obtained lock");
+        for (bFin in tmp2) {
+            if ( bFin.getId().id != -5555n && ( 
+                 OPTIMISTIC && (newDead.contains(bFin.getPlaceOfMaster()) || bFin.getTxStarted() )  || 
+                !OPTIMISTIC && newDead.contains(bFin.getId().home) ) ) {
+                unordered.add(bFin);
+            }
+        }
+        if (verbose>=1) {
+            var str:String = "";
+            for (k in unordered)
+                str += k.getId() + " , ";
+            debug("==== lockAndGetImpactedBackups unordered ["+str+"]");
+        }
+        while (unordered.size() > 0) {
+            var tmp:FinishBackupState = null;
+            var rm:Boolean = false;
+            for (node in unordered) {
+                if (isLeaf(node.getId(), unordered)) {
+                    rm = true;
+                    tmp = node;
+                    break;
+                }
+            }
+            if (rm) {
+                unordered.remove(tmp);
+                list.add(tmp);
+                if (unordered.size() == 0)
+                    break;
+            }
+        }
+        if (verbose>=1) {
+            var str:String = "";
+            for (k in list)
+                str += k.getId() + " , ";
+            debug("<<<< lockAndGetImpactedBackups returning ["+str+"]");
         }
         return list;
     }

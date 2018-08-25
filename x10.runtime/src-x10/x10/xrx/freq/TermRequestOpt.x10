@@ -26,7 +26,7 @@ public class TermRequestOpt extends FinishRequest {
  
     public def this(id:FinishResilient.Id, masterPlaceId:Int, parentId:FinishResilient.Id,
             srcId:Int, dstId:Int, kind:Int, ex:CheckedThrowable,
-            tx:Tx, isTx:Boolean, isTxRO:Boolean, rootTx:Boolean) {
+            tx:Tx, rootTx:Boolean, isTx:Boolean, isTxRO:Boolean) {
         super(id, masterPlaceId, parentId);
         this.srcId = srcId;
         this.dstId = dstId;
