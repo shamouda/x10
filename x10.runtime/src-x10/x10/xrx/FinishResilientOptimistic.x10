@@ -1511,19 +1511,22 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     val edge = Edge(query.src, query.dst, query.kind);
                     val oldTransit = transit.get(edge);
                     val oldActive = numActive;
-                    
-                    if (oldActive < dropped)
-                        throw new Exception(here + " FATAL: dropped tasks counting error id = " + id);
-                    
-                    numActive -= dropped;
-                    if (verbose>=1) debug(">>>> Master(id="+id+").convertFromDead removed "+dropped+" dropped message(s)");
-                    if (oldTransit - dropped == 0n) {
+                    if (Place(query.dst).isDead()) {
+                        numActive -= oldTransit;
                         transit.remove(edge);
+                    } else {
+                        if (oldActive < dropped)
+                            throw new Exception(here + " FATAL: dropped tasks counting error id = " + id);
+                        
+                        numActive -= dropped;
+                        if (verbose>=1) debug(">>>> Master(id="+id+").convertFromDead removed "+dropped+" dropped message(s)");
+                        if (oldTransit - dropped == 0n) {
+                            transit.remove(edge);
+                        }
+                        else {
+                            transit.put(edge, oldTransit - dropped);
+                        }
                     }
-                    else {
-                        transit.put(edge, oldTransit - dropped);
-                    }
-                    assert numActive >= 0 : here + " Master(id="+id+").convertFromDead FATAL error, numActive must not be negative";
                 }
             }
             
@@ -2239,7 +2242,26 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 val requests = countingReqs.getOrThrow(p);
                 if (verbose>=1) debug("==== processCountingRequests  moving from " + here + " to " + Place(p));
                 if (Place(p).isDead()) {
-                    (gr as GlobalRef[LowLevelFinish]{self.home == here})().notifyFailure();
+                    val countChildrenBackups = requests.countChildren ;
+                    if (countChildrenBackups.size() > 0) {
+                        (gr as GlobalRef[LowLevelFinish]{self.home == here})().notifyFailure();    
+                    } else {
+                        val countDropped = requests.countDropped;
+                        if (countDropped.size() > 0) {
+                            for (r in countDropped.entries()) {
+                                val key = r.getKey();
+                                val dropped = key.sent;
+                                if (verbose>=1) debug("==== processCountingRequests  dropped of id " + key.id + " from src " + key.src + " is " + dropped);
+                                countDropped.put(key, dropped);
+                            }
+                        }
+                        val me = p;
+                        val output = (outputGr as GlobalRef[HashMap[Int,OptResolveRequest]]{self.home == here})().getOrThrow(me);
+                        for (vr in countDropped.entries()) {
+                            output.countDropped.put(vr.getKey(), vr.getValue());
+                        }
+                        (gr as GlobalRef[LowLevelFinish]{self.home == here})().notifyTermination(me);
+                    }
                 } else {
                     at (Place(p)) @Immediate("counting_request") async {
                         if (verbose>=1) debug("==== processCountingRequests  reached from " + gr.home + " to " + here);
