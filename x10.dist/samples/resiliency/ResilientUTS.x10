@@ -9,11 +9,7 @@
  *  (C) Copyright IBM Corporation 2006-2015.
  */
 
-import java.security.DigestException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Random;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import x10.util.Random;
 
 import x10.compiler.Uncounted;
 import x10.interop.Java;
@@ -21,15 +17,25 @@ import x10.io.Unserializable;
 import x10.util.concurrent.AtomicLong;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.PlaceManager;
-import x10.util.resilient.store.PlaceLocalStore;
 import x10.util.HashMap;
 import x10.util.Collection;
 import x10.util.Map.Entry;
 import x10.xrx.Runtime;
+import x10.compiler.Uncounted;
+import x10.xrx.TxStore;
 
-final public class ResilientUTS implements Unserializable {
+/*
+ * Testing command:
+ * X10_RESILIENT_MODE=1 X10_LAUNCHER_TTY=false X10_NPLACES=23 X10_NTHREADS=1 X10RT_DATASTORE=native ResilientUTS.sock -d 17 -workers 3 -spares 3 -kill 5:20s -kill 10:40s -kill 15:60s
+ * 
+ * #small socket test
+ * X10_RESILIENT_MODE=1 X10_LAUNCHER_TTY=false X10_NPLACES=7 X10RT_DATASTORE=native ./ResilientUTS.sock -d 13 -workers 1 -spares 2 -kill 2:6s -kill 4:12s
+ * #small mpi test
+ * X10_EXIT_BY_SIGKILL=1 X10_NUM_IMMEDIATE_THREADS=1 X10_RESILIENT_MODE=1 X10RT_DATASTORE=native mpirun -np 7 -am ft-enable-mpi ./ResilientUTS.mpi -d 15 -workers 1 -spares 2 -kill 2:6s -kill 4:12s
+ * */
+final class ResilientUTS implements Unserializable {
   val time0:Long;
-  val map:PlaceLocalStore[UTS];
+  val map:TxStore;
   val wave:Int;
   val group:PlaceGroup;
   val workers:Rail[Worker];
@@ -47,7 +53,7 @@ final public class ResilientUTS implements Unserializable {
     return time;
   }
 
-  def this(wave:Int, group:PlaceGroup, power:Int, resilient:Boolean, time0:Long, map:PlaceLocalStore[UTS]) {
+  def this(wave:Int, group:PlaceGroup, power:Int, resilient:Boolean, time0:Long, map:TxStore) {
     this.map = map;
     this.group = group;
     this.wave = wave;
@@ -71,27 +77,18 @@ final public class ResilientUTS implements Unserializable {
   }
   
   public static def startKiller() {
-	  killer.startKiller();
+      @Uncounted async {
+          killer.run();
+      }
   }
   
-  private static class Killer implements java.lang.Runnable {
+  private static class Killer  {
 	  def this() {
 		  this.started = false;
 	  }
 	  
 	  public def setTime0(time0:Long) {
 		  this.time0 = time0;
-	  }
-	  
-	  public def startKiller() {
-		  if(killDelay > 0) {
-			  this.started = true;
-			  val t = new java.lang.Thread(this, "Suicide (delayed) thread");
-			  t.setDaemon(true);
-			  t.start();
-			  // we can lose the to reference, since there is no
-			  // way to cancel suicide :-
-		  }
 	  }
 	  
 	  def setKillTime(newTime:Long) {
@@ -110,29 +107,28 @@ final public class ResilientUTS implements Unserializable {
 		  if(killDelay <= 0) {
 			  return;
 		  }
-		  val startTime = java.lang.System.nanoTime();
+		  this.started = true;
+		  val startTime = System.nanoTime();
 
 		  val endTime = startTime + killDelay;
 		  var curTime : Long;
 		  
-		  while ((curTime = java.lang.System.nanoTime()) < endTime) {
+		  while ((curTime = System.nanoTime()) < endTime) {
 			  val timeLeftNs = endTime - curTime;
 			  val timeLeftMspart = timeLeftNs / 1000;
 			  val timeLeftNspart = timeLeftNs % 1000;
-			  try {
-				  java.lang.Thread.sleep(timeLeftMspart, timeLeftNspart as Int);
-			  } catch (iex:java.lang.InterruptedException) {}
+			  System.threadSleep(timeLeftMspart);
 		  }
 		  // time ran out.  time to commit suicide
 		  // NB: do not use -1, since this will be
 		  // interpreted by the X10Launcher as ssh failing to start the process
 		  println(time0, "Suicide at " + here);
-		  java.lang.Runtime.getRuntime().halt(1n);
+		  //java.lang.Runtime.getRuntime().halt(1n);
+		  System.killHere();
 	  }
   };
   
   private static killer:Killer = new Killer();
-  
   
   static def init(plh:PlaceLocalHandle[ResilientUTS], time0:Long, killTime:Long) {
     val me = plh();
@@ -169,10 +165,10 @@ final public class ResilientUTS implements Unserializable {
     val random:Random;
     val md = UTS.encoder();
     val bag = new UTS(64n);
-    val thieves:ConcurrentLinkedQueue = new ConcurrentLinkedQueue();
+    val thieves = new ConcurrentQueue[Request]();
     val lifeline:AtomicLong;
     var state:Int;
-    var thread:java.lang.Thread;
+    //var thread:java.lang.Thread;
     var failed:Long;
     val stack = new CheckedThrowable();
     val lock = new Lock();
@@ -204,7 +200,7 @@ final public class ResilientUTS implements Unserializable {
     }
 
     def run() {
-      thread = java.lang.Thread.currentThread();
+      //thread = java.lang.Thread.currentThread();
       try {
         try {
           lock.lock();
@@ -245,8 +241,8 @@ final public class ResilientUTS implements Unserializable {
         }
         distribute();
         lifelinesteal();
-      } catch (DigestException) {
-      } finally {
+      } /*catch (DigestException) {
+      }*/ finally {
         if (state == -3n) {
           val now = println(time0, "Aborting worker " + me); 
           if(now - failed > 2500) stack.printStackTrace();
@@ -291,7 +287,8 @@ final public class ResilientUTS implements Unserializable {
         } finally {
           lock.unlock();
         }
-        java.util.concurrent.locks.LockSupport.park();
+        //////java.util.concurrent.locks.LockSupport.park();
+        //////Runtime.worker().park();
       }
     }
 
@@ -324,7 +321,8 @@ final public class ResilientUTS implements Unserializable {
           bag.merge(loot);
         }
         state = -1n;
-        java.util.concurrent.locks.LockSupport.unpark(thread);
+        //////java.util.concurrent.locks.LockSupport.unpark(thread);
+        /////Runtime.worker().unpark();
 //      notifyAll();
       } finally {
         lock.unlock();
@@ -333,11 +331,12 @@ final public class ResilientUTS implements Unserializable {
 
     def unblock(p:Place) {
       failed = println(time0, "Unblocking " + me);
-      @x10.compiler.Native("java", "if (stack != null && thread != null) stack.setStackTrace(thread.getStackTrace());") {}
+      //@x10.compiler.Native("java", "if (stack != null && thread != null) stack.setStackTrace(thread.getStackTrace());") {}
       try {
         lock.lock();
         state = -3n;
-        java.util.concurrent.locks.LockSupport.unpark(thread);
+        //////java.util.concurrent.locks.LockSupport.unpark(thread);
+        /////Runtime.worker().unpark();
 //      notifyAll();
       } finally {
         lock.unlock();
@@ -382,7 +381,7 @@ final public class ResilientUTS implements Unserializable {
     }
   }
   
-  static def step(group:PlaceGroup, bag: UTS, wave:Int, power:Int, resilient:Boolean, map:PlaceLocalStore[UTS], time0:Long, killTimes:HashMap[Long,Long]) {
+  static def step(group:PlaceGroup, bag: UTS, wave:Int, power:Int, resilient:Boolean, map:TxStore, time0:Long, killTimes:HashMap[Long,Long]) {
     val max = group.size() as Int << power;
     if (wave >= 0) println(time0, "Wave " + wave + ": PLH init beginning");
     val plh = PlaceLocalHandle.make[ResilientUTS](group, () => new ResilientUTS(wave, group, power, resilient, time0, map));
@@ -470,23 +469,29 @@ final public class ResilientUTS implements Unserializable {
     val maxPlaces = Place.places().size();
     Console.OUT.println("Depth: " + opt.depth + ", Warmup: " + opt.warmupDepth + ", Places: " + maxPlaces
         + ", Workers/P: " + (1n << opt.power) + ", Res mode: " + Runtime.RESILIENT_MODE
-        + ", Spare places: " + opt.spares);
-
-    val resilient = Runtime.RESILIENT_MODE != 0n;
+        + ", Spare places: " + opt.spares + ", UTS_CKPT:" +  System.getenv("UTS_CKPT") + ", TM=" + System.getenv("TM"));
+    
+    val ckpt = System.getenv("UTS_CKPT") == null? 0 : Long.parseLong(System.getenv("UTS_CKPT"));
+    if (opt.victimsExist() && (ckpt == 0 || Runtime.RESILIENT_MODE == 0n)) {
+        Console.ERR.println("With victims, you must set UTS_CKPT=1 and X10_RESILIENT_MODE=1");
+        System.setExitCode(-1n);
+        return;
+    }
+    val resilient = Runtime.RESILIENT_MODE != 0n || ckpt == 1;
     val power = opt.power;
-
+    
+    val mgr = new PlaceManager(opt.spares, false);
+    val activePlaces = mgr.activePlaces();
+    val asyncRecovery = false;
     val md = UTS.encoder();
-    val map0 = resilient ? PlaceLocalStore.make[UTS]("map0", Place.places()): null;
-
+    val map0 = resilient ? TxStore.make(activePlaces, asyncRecovery, null) : null;
     println(time0, "Warmup...");
 
     val tmp = new UTS(64n);
     tmp.seed(md, 19n, opt.warmupDepth);
     finish step(Place.places(), tmp, -1n, opt.power, resilient, map0, time0, null);
-
-    val manager = new PlaceManager(opt.spares, false);
-    val map = resilient ? PlaceLocalStore.make[UTS]("map", manager.activePlaces()): null;
-
+    
+    val map:TxStore = resilient ? TxStore.make(activePlaces, asyncRecovery, null) : null;
     println(time0, "Begin");
     val startTime = System.nanoTime();
 
@@ -705,6 +710,8 @@ final public class ResilientUTS implements Unserializable {
 		  }
 		  return Long.parseLong(timeString) * units;
 	  }
+	  
+	  public def victimsExist() = killTimes.size() > 0 ;
 	  
 	  static def printUsage() {
 		  Console.ERR.println("invoked as ResilientUTS ARGS where ARGS can be from");

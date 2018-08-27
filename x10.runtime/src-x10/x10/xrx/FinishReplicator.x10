@@ -623,7 +623,7 @@ public final class FinishReplicator {
             }
         };
         
-        rCond.run(closure, false);
+        rCond.run(closure, true);
         
         if (rCond.failed()) {
             rCond.forget();
@@ -703,7 +703,7 @@ public final class FinishReplicator {
             }
         };
         
-        rCond.run(closure, false);
+        rCond.run(closure, true);
         
         if (rCond.failed()) {
             rCond.forget();

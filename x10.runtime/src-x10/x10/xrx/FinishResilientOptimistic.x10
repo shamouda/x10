@@ -753,7 +753,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                     }
                 }; 
             };
-            rCond.run(closure, false);
+            rCond.run(closure, true);
             //TODO: redo if backup is dead
             if (rCond.failed()) {
                 val excp = new DeadPlaceException(backup);
