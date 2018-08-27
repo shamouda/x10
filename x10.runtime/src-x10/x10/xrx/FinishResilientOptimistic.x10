@@ -1360,6 +1360,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             if (verbose>=1) debug(">>>> Root(id="+id+").tryReleaseLocal called ");
             if (tx == null || tx.isEmpty() || !isRootTx) {
                 latch.release();
+                FinishReplicator.removeMaster(id);
             } else {
                 tx.addMember(here.id as Int, txReadOnlyFlag, 3n);
                 var abort:Boolean = false;
@@ -1423,14 +1424,11 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 val req = FinishRequest.makeOptMergeSubTxRequest(parentId, tx.getMembers(), tx.isReadOnly());
                 val myId = id;
                 val myBackupId = backupPlaceId;
-                val preSendAction = ()=>{};
-                val postSendAction = (submit:Boolean, adopterId:Id)=>{
-                    at (Place(myBackupId)) @Immediate("optdist_release_backup2") async {
-                        if (verbose>=1) debug("==== releaseFinish(id="+myId+") reached backup");
-                        FinishReplicator.removeBackupOrMarkToDelete(myId);
-                    }
-                };
-                FinishReplicator.asyncExec(req, this, preSendAction, postSendAction);
+                FinishReplicator.exec(req, this);
+                at (Place(myBackupId)) @Immediate("optdist_release_backup2") async {
+                    if (verbose>=1) debug("==== releaseFinish(id="+myId+") reached backup");
+                    FinishReplicator.removeBackupOrMarkToDelete(myId);
+                }
                 if (verbose>=1) debug("<<<< Root(id="+id+").notifyRootTx returning");
             }
         }
@@ -1633,7 +1631,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }
         }
 
-        def removeBackupOrMarkToDelete():void {
+        def removeBackupOrMarkToDelete():Boolean {
             var rm:Boolean = false;
             ilock.lock();
             if (verbose>=1) debug(">>>> Backup(id="+id+").removeBackupOrMarkToDelete  isReleased["+isReleased+"] numActive["+numActive+"] ");
@@ -1645,9 +1643,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 canDelete = true;
             }
             ilock.unlock();
-            if (rm) {
-                FinishReplicator.removeBackup(id);
-            }
+            return rm;
         }
         
         
@@ -2513,6 +2509,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             }
         }
         
+        val syncMasters = new HashSet[FinishMasterState]();
         //update counts and check if quiecent reached
         for (m in masters) {
             val master = m as OptimisticMasterState;
@@ -2530,13 +2527,16 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 }
             }
             
-            master.migrating = true; //prevent updates to masters as we are copying the data, 
-                                     //and we want to ensure that backup is created before processing new requests
+            if (master.numActive > 0) {
+                master.migrating = true; //prevent updates to masters as we are copying the data, 
+                                         //and we want to ensure that backup is created before processing new requests
+                syncMasters.add(master);
+            }
             master.unlock();
         }
         
-        if (masters.size() > 0)
-            createOrSyncBackups(newDead, masters);
+        if (syncMasters.size() > 0)
+            createOrSyncBackups(newDead, syncMasters);
         else {
             if (myBackupDied) {
                 val newBackup = Place(FinishReplicator.updateBackupPlaceIfDead(hereId));

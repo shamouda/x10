@@ -1210,6 +1210,7 @@ public final class FinishReplicator {
     }
     
     static def updateBackupPlaceIfDead(idHome:Int) {
+        if (verbose>=1) debug(">>>> nominateBackupPlace(idHome="+idHome+") called");
         var b:Int;
         var maxIter:Int = NUM_PLACES;
         var i:Int = 0n;
@@ -1244,15 +1245,20 @@ public final class FinishReplicator {
     
     static def removeBackupOrMarkToDelete(id:FinishResilient.Id) {
         try {
+            if (verbose>=1) debug(">>>> removeBackupOrMarkToDelete(id="+id+") called");
             glock.lock();
             val bFin = fbackups.getOrElse(id, null);
             if (bFin != null) {
-                bFin.removeBackupOrMarkToDelete();
+                val rm = bFin.removeBackupOrMarkToDelete();
+                if (rm) {
+                    fbackups.delete(id);
+                    if (verbose>=1) debug("==== removeBackupOrMarkToDelete delete backup(id="+id+") ...");
+                }
             }
+            if (verbose>=1) debug("<<<< removeBackupOrMarkToDelete(id="+id+") returning");
         } finally {
             glock.unlock();
         }
-        
     }
     
     static def removeBackup(id:FinishResilient.Id) {

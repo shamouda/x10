@@ -143,6 +143,9 @@ public class TxStore {
                 System.threadSleep(TxConfig.DPE_SLEEP_MS);
                 dpe = true;
             }
+            if (confExList != null && confExList.size != 0 && TxConfig.CONFLICT_SLEEP_MS > 0) {
+                System.threadSleep(TxConfig.CONFLICT_SLEEP_MS);
+            }
         } else if (ex instanceof DeadPlaceException) {
             if (!immediateRecovery) {
                 throw ex;
@@ -154,6 +157,8 @@ public class TxStore {
             System.threadSleep(TxConfig.DPE_SLEEP_MS);
         } else if (ex instanceof TxStoreConcurrencyLimitException) {
             System.threadSleep(TxConfig.DPE_SLEEP_MS);
+        } else if (ex instanceof TxStoreConflictException && TxConfig.CONFLICT_SLEEP_MS > 0) {
+            System.threadSleep(TxConfig.CONFLICT_SLEEP_MS);
         } else if (!(ex instanceof TxStoreConflictException || ex instanceof TxStoreAbortedException  )) {
             throw ex;
         }

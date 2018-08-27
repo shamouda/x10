@@ -26,6 +26,7 @@ import x10.util.concurrent.SimpleLatch;
 import x10.util.concurrent.AtomicInteger;
 import x10.util.GrowableRail;
 
+//X10_RESILIENT_VERBOSE=4 TM_DEBUG=1 X10_NUM_IMMEDIATE_THREADS=1 TM=RV_LA_WB X10_RESILIENT_MODE=14 X10_NTHREADS=8 X10_NPLACES=8 ./a.out -t 8 -s 2 -vp 1,2 -vt -1 -w -1 &> tmp
 public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements MasterWorkerApp {
     public static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     

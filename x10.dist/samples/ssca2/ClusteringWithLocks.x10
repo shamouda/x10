@@ -287,6 +287,9 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
                 if (verbose > 1n) result().print(tx.id);
             } catch (ex:Exception) {
                 success = false;
+                if (TxConfig.CONFLICT_SLEEP_MS > 0){
+                    System.threadSleep(TxConfig.CONFLICT_SLEEP_MS);
+                }
             }
             unlockObtainedKeys(result(), tx, success, verbose);
             retryCount++;
@@ -504,8 +507,12 @@ public final class ClusteringWithLocks(plh:PlaceLocalHandle[ClusteringState]) im
         val procPct = procTime*100.0/totalTime;
         if(verbose > 2 || r > 0) 
             app.printClusters(executor.store());
-
-        Console.OUT.println("Places:" + places + ":N:" + plh().N + ":SetupInSeconds:" + distTime + ":ProcessingInSeconds:" + procTime + ":TotalInSeconds:" + totalTime + ":retries:"+retries+":(proc:" + procPct  + "%).");
+        var dead:String = "";
+        for (var i:Long = 0; i < (places + spare); i++) {
+            if (Place(i).isDead())
+                dead += "Place("+i+") ";
+        }
+        Console.OUT.println("Places:" + places + ":N:" + plh().N + ":SetupInSeconds:" + distTime + ":ProcessingInSeconds:" + procTime + ":TotalInSeconds:" + totalTime + ":retries:"+retries+":(proc:" + procPct  + "%):dead:"+dead);
     }
     
 }

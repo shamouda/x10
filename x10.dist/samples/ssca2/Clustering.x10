@@ -26,6 +26,7 @@ import x10.util.GrowableRail;
 //assumptions:
 //graph generated using the R-MAT algorithm
 //all edge costs are considered equal
+//test command: X10_RESILIENT_VERBOSE=0 TM_DEBUG=0 CONFLICT_SLEEP_MS=0 X10_NUM_IMMEDIATE_THREADS=1 TM=locking X10_RESILIENT_MODE=14 X10_NTHREADS=1 X10_NPLACES=5 ./a.out -w 1 -n 10 -vp 3,1 -sp 2 -vt 0.25,0.8 -vg 1
 public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements MasterWorkerApp {
     public static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
@@ -450,7 +451,12 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         if(verbose > 2 || r > 0) 
             app.printClusters(executor.store());
 
-        Console.OUT.println("Places:" + places + ":N:" + plh().N + ":SetupInSeconds:" + distTime + ":ProcessingInSeconds:" + procTime + ":TotalInSeconds:" + totalTime + ":retries:"+retries+":(proc:" + procPct  + "%).");
+        var dead:String = "";
+        for (var i:Long = 0; i < (places + spare); i++) {
+            if (Place(i).isDead())
+                dead += "Place("+i+") ";
+        }
+        Console.OUT.println("Places:" + places + ":N:" + plh().N + ":SetupInSeconds:" + distTime + ":ProcessingInSeconds:" + procTime + ":TotalInSeconds:" + totalTime + ":retries:"+retries+":(proc:" + procPct  + "%):dead:"+dead);
     }
 }
 
