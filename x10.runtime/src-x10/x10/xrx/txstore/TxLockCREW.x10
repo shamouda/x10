@@ -178,7 +178,8 @@ public class TxLockCREW extends TxLock {
         lock.lock();
         if (! (readers.contains(txId) && writer == -1)) {
             if (TxConfig.TM_DEBUG) Console.OUT.println(here + " this["+this+"] unlockRead bug, unlocking an unlocked Tx[" + txId + "] writer["+writer+"] readers["+readers.toString()+"] ");
-            throw new TxStoreFatalException (here + " this["+this+"] unlockRead bug, unlocking an unlocked Tx[" + txId + "] writer["+writer+"] readers["+readers.toString()+"] ");
+            lock.unlock();
+            return;
         }
         readers.remove(txId);
         lock.unlock();
@@ -189,7 +190,8 @@ public class TxLockCREW extends TxLock {
         lock.lock();
         if (! (readers.size() == 0 && writer == txId) ) {
             if (TxConfig.TM_DEBUG) Console.OUT.println(here + " this["+this+"] unlockWrite bug, unlocking an unlocked Tx[" + txId + "] writer["+writer+"] readers["+readers.toString()+"] ");
-            throw new TxStoreFatalException (here + " this["+this+"] unlockWrite bug, unlocking an unlocked Tx[" + txId + "] writer["+writer+"] readers["+readers.toString()+"] ");
+            lock.unlock();
+            return;
         }
         writer = -1;
         lock.unlock();
