@@ -181,7 +181,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         val values = new Rail[Long] (h*o);
         val readFlags = new Rail[Boolean] (h*o);
         
-        while (timeNS < duration*1e6) {
+        while (timeNS < duration*1e6 && state.isActive()) {
             val innerStr = nextTransactionMembers(rand, p, h, vid, virtualMembers, f);
             nextRandomOperations(rand, p, virtualMembers, r, u, o, keys, values, readFlags, tmpKeys);
             
@@ -248,6 +248,12 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
                     Console.OUT.println(here + " Progress " + vid + "x" + producerId + ":" + myThroughput.txCount );
             }
         }
+        
+        if (!state.isActive()) {
+            Console.OUT.println(here + " Hammer calling killHere" );
+            System.killHere();
+        }
+        
         myThroughput.avgTxTime /= myThroughput.txCount;
         myThroughput.avgTxTrials /= myThroughput.txCount;
         //Console.OUT.println(here.id + "x" + producerId + "==FinalProgress==> txCount["+myThroughput.txCount+"] elapsedTime["+(myThroughput.elapsedTimeNS/1e9)+" seconds] averageMS["+myThroughput.avgTxTime+"]");
@@ -415,9 +421,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
                             plh().rightPlaceDeathTimeNS =  System.nanoTime();
                             Console.OUT.println(here + " Received suicide note from " + me + " througputValues: " + myThroughput);
                         }
-                        
-                        Console.OUT.println(here + " Hammer calling killHere" );
-                        System.killHere();
+                        plh().deactivate();                        
                     }
                 }
             }
@@ -492,6 +496,9 @@ class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
     var rightPlaceDeathTimeNS:Long = -1;
     var recovered:Boolean = false;
     var iteration:Long = -1; //for the warmup iteration
+    
+    val active = new AtomicInteger(1n);
+    
     public def this() {
         property(-1, -1F, -1, -1, -1, -1, -1, -1, -1, -1, -1, true, null, -1);
     }
@@ -514,6 +521,7 @@ class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
         rightTxBenchState = null;
         rightPlaceDeathTimeNS = -1;
         recovered = false;
+        active.set(1n);
     }
     
     public def reinit(other:TxBenchState, iter:Long) {
@@ -521,6 +529,7 @@ class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
         thrds = other.thrds;
         recovered = true;
         iteration = iter;
+        active.set(1n);
     }
     
     public def toString() {
@@ -573,6 +582,14 @@ class TxBenchState(r:Long, u:Float, n:Long, p:Long, t:Long, w:Long, d:Long,
             sumTrials += t.avgTxTrials;
         }
         return (sumTrials/thrds.size);
+    }
+    
+    public def isActive() {
+        return active.get() == 1n;
+    }
+    
+    public def deactivate() {
+        active.set(0n);
     }
     
 }
