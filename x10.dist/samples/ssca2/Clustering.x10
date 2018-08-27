@@ -393,6 +393,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         Console.OUT.println("DISABLE_SLAVE=" + System.getenv("DISABLE_SLAVE"));
         Console.OUT.println("ENABLE_STAT=" + System.getenv("ENABLE_STAT"));
         Console.OUT.println("BUSY_LOCK=" + System.getenv("BUSY_LOCK"));
+        Console.OUT.println("CONFLICT_SLEEP_MS=" + System.getenv("CONFLICT_SLEEP_MS"));
         
         Console.OUT.println("clusterSize = " + clusterSize);
         Console.OUT.println("seed = " + seed);
