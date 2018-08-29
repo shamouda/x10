@@ -109,7 +109,7 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
         }
     }
     
-    public def addSubMembers(subMembers:Set[Int], subReadOnly:Boolean) {
+    public def addSubMembers(subMembers:Set[Int], subReadOnly:Boolean, tag:Int) {
         if (subMembers == null)
             return;
         lock.lock();
@@ -117,7 +117,7 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
             members = new HashSet[Int]();
         for (s in subMembers) {
             if (TxConfig.TM_DEBUG) 
-                Console.OUT.println(getAddMemberPrintMsg(s, subReadOnly, "add sub member"));
+                Console.OUT.println(getAddMemberPrintMsg(s, subReadOnly, "tag["+tag+"] add sub member"));
             members.add(s);
         }
         readOnly = readOnly & subReadOnly;
@@ -180,20 +180,20 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
     
     /********** Finalizing a transaction **********/
     public def finalize(finObj:Releasable, abort:Boolean) {
-        if (TxConfig.TM_DEBUG) 
+        if (TxConfig.TM_DEBUG)
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] finalize abort="+abort+" ...");
         this.finishObj = finObj;
         nonResilient2PC(abort);
     }
     
     public def finalizeLocal(finObj:Releasable, abort:Boolean) {
-        if (TxConfig.TM_DEBUG) 
+        if (TxConfig.TM_DEBUG)
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] finalizeLocal abort="+abort+" ...");
         this.finishObj = finObj;
         nonResilientLocal(abort);
     }
     
-    public def finalizeWithBackup(finObj:Releasable, abort:Boolean, backupId:Int, isRecovered:Boolean) { 
+    public def finalizeWithBackup(finObj:Releasable, abort:Boolean, backupId:Int, isRecovered:Boolean) {
         finalize(finObj, abort);
     }
     
@@ -264,7 +264,6 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
             at (Place(p)) @Immediate("comm_request") async {
                 //gc
                 Runtime.finishStates.remove(gcGR);
-                
                 if (isCommit)
                     plh().getMasterStore().commit(id);
                 else

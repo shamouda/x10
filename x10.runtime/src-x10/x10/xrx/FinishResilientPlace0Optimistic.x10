@@ -751,8 +751,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 //       Must happen exactly once and is done
                 //       when Place0 is notified of a dead place.
                 if (verbose>=1) debug("<<<< State(id="+id+").transitToCompleted returning suppressed dead dst id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
-            }
-            else {
+            } else {
                 if (isTx && tx != null) {
                     tx.addMember(dstId as Int, isTxRO, 13n);
                 }
@@ -899,7 +898,7 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 return;
             }
             val parentState = states(parentId);
-            parentState.tx.addSubMembers(tx.getMembers(), tx.isReadOnly());
+            parentState.tx.addSubMembers(tx.getMembers(), tx.isReadOnly(), 3333n);
             if (verbose>=1) debug("<<<< State(id="+id+").notifyRootTx(parentId=" + parentId +", parentTxId="+parentState.tx.id+", parentTx="+parentState.tx+") returning");
         }
         
@@ -995,6 +994,14 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             txFlag = txFlag | isTx;
             txReadOnlyFlag = txReadOnlyFlag & isTxRO;
         }
+        
+        def setTxFlags(isTx:Boolean, isTxRO:Boolean) {
+            ilock.lock();
+            txFlag = txFlag | isTx;
+            txReadOnlyFlag = txReadOnlyFlag & isTxRO;
+            ilock.unlock();
+        }
+
         
         public static def countDropped(id:Id, src:Int, kind:Int, sent:Int) {
             if (verbose>=1) debug(">>>> countDropped(id="+id+", src="+src+", kind="+kind+", sent="+sent+") called");
@@ -1722,10 +1729,12 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
 
         private def tryReleaseLocal() {
+            if (verbose>=1) debug(">>>> Root(id="+id+").tryReleaseLocal called");
             if (tx == null || tx.isEmpty() || !isRootTx) {
+                if (verbose>=1) debug("<<<< Root(id="+id+").tryReleaseLocal returning, calling latch.release()");
         		latch.release();
-        		//We don't need to do parentTx.addSubMembers because this place is part of the transaction any way
         	} else {
+        	    if (verbose>=1) debug("<<<< Root(id="+id+").tryReleaseLocal returning, calling State.p0FinalizeLocalTx()");
         	    State.p0FinalizeLocalTx(id, parentId, ref, tx, txReadOnlyFlag, excs);
         	}
         }
@@ -1751,6 +1760,21 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             latch.await(); // wait for the termination (latch may already be released)
             if (verbose>=2) debug("returned from latch.await for id="+id);
 
+            //local finish -> for cases activities other than the finish main activity have created Tx work 
+            if (!isGlobal && tx != null && !tx.isEmpty() && !isRootTx) {
+                //notify parent of transaction status
+                if (parent instanceof FinishResilientPlace0Optimistic) {
+                    val frParent = parent as FinishResilientPlace0Optimistic;
+                    if (frParent.me instanceof P0OptimisticMasterState) {
+                        if (verbose>=1) debug("local finish with id="+id+" set Tx flag to root parent");
+                        (frParent.me as P0OptimisticMasterState).tx.addMember(here.id as Int, tx.isReadOnly(), 897n);
+                    } else {
+                        if (verbose>=1) debug("local finish with id="+id+" set Tx flag to remote parent");
+                        (frParent.me as P0OptimisticRemoteState).setTxFlags(true, tx.isReadOnly());
+                    }
+                }
+            }
+            
             // no more messages will come back to this finish state 
             forgetGlobalRefs();
             

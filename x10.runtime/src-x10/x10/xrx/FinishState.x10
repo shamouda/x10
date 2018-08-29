@@ -690,11 +690,10 @@ public abstract class FinishState {
             if (tx != null) {
                 if (isTx)
                     tx.addMember(here.id as Int, readOnly, 20n);
-                
+                //never called by an immediate thread
                 val subTxMem = Runtime.activity().subMembers;
-                val subTxRO = Runtime.activity().subReadOnly;
                 if (subTxMem != null){
-                    tx.addSubMembers(subTxMem, subTxRO);
+                    tx.addSubMembers(subTxMem, Runtime.activity().subReadOnly, 2222n);
                 }
             }
             
@@ -805,7 +804,7 @@ public abstract class FinishState {
                 if (isTx)                
                     tx.addMember(src, txRO, 21n);
                 if (subMembers != null)
-                    tx.addSubMembers(subMembers, subReadOnly);
+                    tx.addSubMembers(subMembers, subReadOnly, 9999n);
             }
         
             // add anything in the remote set which ran here to my local count, and remove from the remote set
@@ -857,7 +856,7 @@ public abstract class FinishState {
                 if (isTx)
                     tx.addMember(remoteEntry.first as Int, txRO, 22n);
                 if (subMembers != null)
-                    tx.addSubMembers(subMembers, subReadOnly);
+                    tx.addSubMembers(subMembers, subReadOnly, 1111n);
             }
             
             // check if anything is pending locally

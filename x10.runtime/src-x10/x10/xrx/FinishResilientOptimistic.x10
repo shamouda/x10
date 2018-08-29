@@ -537,6 +537,13 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             txReadOnlyFlag = txReadOnlyFlag & isTxRO;
         }
         
+        def setTxFlags(isTx:Boolean, isTxRO:Boolean) {
+            ilock.lock();
+            txFlag = txFlag | isTx;
+            txReadOnlyFlag = txReadOnlyFlag & isTxRO;
+            ilock.unlock();
+        }
+        
         def notifyActivityTermination(srcPlace:Place, kind:Int, t:CheckedThrowable, isTx:Boolean, isTxRO:Boolean):void {
             val srcId = srcPlace.id as Int; 
             val dstId = here.id as Int;
@@ -896,7 +903,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             try {
                 latch.lock();
                 if (tx != null && subMembers != null){
-                    tx.addSubMembers(subMembers, subReadOnly);
+                    tx.addSubMembers(subMembers, subReadOnly, 4444n);
                 }
                 if (verbose>=1) debug(">>>> Master(id="+id+").removeGhostChild childId=" + childId + ", t=" + t + " called");
                 if (ghostChildren == null || !ghostChildren.contains(childId)) {
@@ -928,7 +935,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             try {
                 latch.lock();
                 if (tx != null) {
-                    tx.addSubMembers(subMembers, subReadOnly);
+                    tx.addSubMembers(subMembers, subReadOnly, 5555n);
                 }
                 resp.backupPlaceId = backupPlaceId;
                 resp.backupChanged = backupChanged;
@@ -1402,7 +1409,22 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
 
             if (isGlobal)
                 notifyRootTx();
-            
+            else {
+              //local finish -> for cases activities other than the finish main activity have created Tx work 
+                if (tx != null && !tx.isEmpty() && !isRootTx) {
+                    //notify parent of transaction status
+                    if (parent instanceof FinishResilientOptimistic) {
+                        val frParent = parent as FinishResilientOptimistic;
+                        if (frParent.me instanceof OptimisticMasterState) {
+                            if (verbose>=1) debug("local finish with id="+id+" set Tx flag to root parent");
+                            (frParent.me as OptimisticMasterState).tx.addMember(here.id as Int, tx.isReadOnly(), 897n);
+                        } else {
+                            if (verbose>=1) debug("local finish with id="+id+" set Tx flag to remote parent");
+                            (frParent.me as OptimisticRemoteState).setTxFlags(true, tx.isReadOnly());
+                        }
+                    }
+                }
+            }
             // no more messages will come back to this finish state 
             //if (REMOTE_GC) gc();   Backup is in charge of GC because the remote object may be checked when the backup recovers the master
             
@@ -1824,7 +1846,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             try {
                 ilock.lock();
                 if (tx != null && subMembers != null) {
-                    tx.addSubMembers(subMembers, subReadOnly);
+                    tx.addSubMembers(subMembers, subReadOnly, 6666n);
                 }
                 if (verbose>=1) debug(">>>> Backup(id="+id+").removeGhostChild called (childId="+childId+", ex=" + ex + ") ");
                 if (ghostChildren == null || !ghostChildren.contains(childId)) {
@@ -1860,7 +1882,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 return;
             try {
                 ilock.lock();
-                tx.addSubMembers(subMembers, subReadOnly);
+                tx.addSubMembers(subMembers, subReadOnly, 7777n);
             } finally {
                 ilock.unlock();
             }
