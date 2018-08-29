@@ -28,9 +28,6 @@ public class TxKeyChange[K] {K haszero} {
     /*Initial version at Tx start*/
     private var initVersion:Int = -1n;
     
-    /*Initial version at Tx start*/
-    private var initTxId:Long = -1;
-    
     /*A flag to indicate if the value was used for read only operations*/
     private var readOnly:Boolean = true;
     private var lockedRead:Boolean = false;
@@ -46,10 +43,9 @@ public class TxKeyChange[K] {K haszero} {
         
     }
     
-    public def init(key:K, initTxId:Long, lockedRead:Boolean, memU:MemoryUnit[K], added:Boolean,
+    public def init(key:K, lockedRead:Boolean, memU:MemoryUnit[K], added:Boolean,
             initValue:Cloneable, initVersion:Int) {
         this.key = key;
-        this.initTxId = initTxId;
         this.lockedRead = lockedRead;
         this.memU = memU;
         this.added = added;
@@ -102,7 +98,6 @@ public class TxKeyChange[K] {K haszero} {
     public def getReadOnly() = readOnly;
     public def getDeleted() = deleted;
     public def getInitVersion() = initVersion;
-    public def getInitTxId() = initTxId;
     public def getLockedRead() = lockedRead;
     public def getLockedWrite() = lockedWrite;
     public def getAdded() = added;

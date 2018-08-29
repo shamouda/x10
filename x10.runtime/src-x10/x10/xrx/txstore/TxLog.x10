@@ -59,7 +59,6 @@ public class TxLog[K] {K haszero} implements x10.io.Unserializable {
         
         public def add(log:TxKeyChange[K]) {
             rdKeys.add(log);
-            //Console.OUT.println("TxLogKeysList adding key  { " + log + " } ");
             log.setIndx(rdKeys.size()-1);
         }
         
@@ -249,11 +248,6 @@ public class TxLog[K] {K haszero} implements x10.io.Unserializable {
         return keysList.getOrThrow(key).getInitVersion();
     }
     
-    // get TxId
-    public def getInitTxId(key:K) {
-        return keysList.getOrThrow(key).getInitTxId();
-    }
-       
     public def getMemoryUnit(key:K) {
         var log:TxKeyChange[K] = keysList.get(key);
         if (log == null)

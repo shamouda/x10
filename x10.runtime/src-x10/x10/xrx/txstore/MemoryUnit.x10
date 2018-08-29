@@ -61,7 +61,7 @@ public class MemoryUnit[K] {K haszero} {
                 lockExclusive(); 
             ensureNotDeleted();
             val v = value == null?null:value.clone();
-            keyLog.init(key, txId, locked, this, added, v, version);
+            keyLog.init(key, locked, this, added, v, version);
         }
         finally {
             if (!locked)
