@@ -756,8 +756,11 @@ public abstract class FinishState {
         }
         
         public def saveSubTx() {
-            if (tx != null && !tx.isEmpty() && !isRootTx) {
-                Runtime.activity().setSubTransaction(tx.getMembers(), tx.isReadOnly());
+            if (tx != null && !tx.isEmpty() ) {
+                if (!isRootTx)
+                    Runtime.activity().setSubTransaction(tx.getMembers(), tx.isReadOnly());
+                else
+                    Runtime.activity().setSubTransaction(null, true);
             }
         }
         
