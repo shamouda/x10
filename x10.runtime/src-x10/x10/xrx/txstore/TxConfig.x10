@@ -44,6 +44,9 @@ public class TxConfig {
                                                                             System.getenv("TM").equals("RV_EA_UL") || 
                                                                             System.getenv("TM").equals("RV_EA_WB") || 
                                                                             System.getenv("TM").equals("RV_LA_WB"));
+    
+    public static val MUST_PROGRESS = System.getenv("MUST_PROGRESS") != null && System.getenv("MUST_PROGRESS").equals("1");
+    
 // 1 : start 
 // 2 : start + submit
 // 3 : start + submit + valid  

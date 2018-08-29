@@ -34,4 +34,14 @@ public abstract class TxLock {
     public def unlock(txId:Long) {
         unlockWrite(txId);
     }
+    
+    public static def make() {
+        if (TxConfig.LOCKING) { //Locking
+            return new TxLockCREWBlocking();
+        } else if (TxConfig.MUST_PROGRESS) { 
+            return new TxLockCREW();
+        } else {
+            return new TxLockCREWSimple();
+        }
+    }
 }

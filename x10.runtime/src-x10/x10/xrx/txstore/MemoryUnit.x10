@@ -32,7 +32,10 @@ public class MemoryUnit[K] {K haszero} {
             internalLock = new Lock();
         }
         else { //STM
-            txLock = new TxLockCREW();
+            if (TxConfig.MUST_PROGRESS)
+                txLock = new TxLockCREW();
+            else
+                txLock = new TxLockCREWSimple();
             internalLock = new Lock();
         }
     }
