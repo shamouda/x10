@@ -195,7 +195,7 @@ public class TxLockCREW extends TxLock {
         }
         writer = -1;
         lock.unlock();
-        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " TXLOCK unlockWrite done");
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+ txId +"] " + TxManager.txIdToString(txId) + " here["+here+"] TXLOCK unlockWrite done");
     }
     
     public def tryLockRead(txId:Long) { 
