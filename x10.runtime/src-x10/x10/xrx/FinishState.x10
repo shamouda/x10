@@ -34,36 +34,6 @@ import x10.util.Set;
 
 public abstract class FinishState {
 
-    /*
-     * for debug
-     */
-    public static val verbose = isVerbosePlace()? 4 : getEnvLong("X10_RESILIENT_VERBOSE") ; // should be copied to subclass
-    protected static def getEnvLong(name:String) {
-        val env = System.getenv(name);
-        val v = (env!=null) ? Long.parseLong(env) : 0;
-        if (v>0 && here.id==0) Console.OUT.println(name + "=" + v);
-        return v;
-    }
-    protected static def debug(msg:String) {
-        val nsec = System.nanoTime();
-        val output = "[nsec=" + nsec + " place=" + here.id + " " + Runtime.activity() + "] " + msg;
-        Console.OUT.println(output); Console.OUT.flush();
-    }
-    protected static def dumpStack(msg:String) {
-        try { throw new Exception(msg); } catch (e:Exception) { e.printStackTrace(); }
-    }
-    
-    private static def isVerbosePlace() {
-        if (System.getenv("VERBOSE_PLACE") != null) {
-            val arr = System.getenv("VERBOSE_PLACE").split(";");
-            for (var i:Long = 0; i < arr.size; i++) {
-                if (Long.parseLong(arr(i)) == here.id)
-                    return true;
-            }
-        }
-        return false;
-    }
-    
     // Turn this on to debug deadlocks within the finish implementation
     static VERBOSE = Configuration.envOrElse("X10_FINISH_VERBOSE", false);
     protected static REMOTE_GC = Configuration.envOrElse("X10_FINISH_REMOTE_GC", true);
@@ -680,21 +650,16 @@ public abstract class FinishState {
             }
         }
        public def notifySubActivitySpawn(place:Place):void {
-           val srcId = here.id as Int;
-           val dstId = place.id as Int;
-           if (verbose>=1) debug(">>>> Root(id="+this+",tx="+(tx==null?-1:tx.id)+",root="+isRootTx+").notifySubActivitySpawn(srcId="+srcId + ",dstId="+dstId+") ");
-           val p = place.parent(); // CUDA
-           latch.lock();
-           if (p == ref().home) {
+            val p = place.parent(); // CUDA
+            latch.lock();
+            if (p == ref().home) {
                 count++;
-                if (verbose>=1) debug("<<<< Root(id="+this+",tx="+(tx==null?-1:tx.id)+",root="+isRootTx+").notifySubActivitySpawn(srcId="+srcId + ",dstId="+dstId+") returning local, lc="+count);
                 latch.unlock();
                 return;
-           }
-           ensureRemoteActivities();
-           remoteActivities.put(p.id, remoteActivities.getOrElse(p.id, 0n)+1n);
-           if (verbose>=1) debug("<<<< Root(id="+this+",tx="+(tx==null?-1:tx.id)+",root="+isRootTx+").notifySubActivitySpawn(srcId="+srcId + ",dstId="+dstId+") returning remote, lc="+count);
-           latch.unlock();
+            }
+            ensureRemoteActivities();
+            remoteActivities.put(p.id, remoteActivities.getOrElse(p.id, 0n)+1n);
+            latch.unlock();
         }
         public def notifyShiftedActivitySpawn(place:Place):void {
             notifySubActivitySpawn(place);
@@ -703,13 +668,10 @@ public abstract class FinishState {
             latch.lock();
             ensureRemoteActivities();
             latch.unlock();
-            if (verbose>=1) debug("<<<< Root(id="+this+",tx="+(tx==null?-1:tx.id)+",root="+isRootTx+").notifyRemoteContinuationCreated()");
         }
         public def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void {
-            if (verbose>=1) debug(">>>> Root(id="+this+",tx="+(tx==null?-1:tx.id)+",root="+isRootTx+").notifyActivityCreationFailed(srcId="+srcPlace.id+", t="+t+") called");
             pushException(t);
             notifyActivityTermination(srcPlace);
-            if (verbose>=1) debug("<<<< Root(id="+this+",tx="+(tx==null?-1:tx.id)+",root="+isRootTx+").notifyActivityCreationFailed(srcId="+srcPlace.id+", t="+t+") returning");
         }
         
         public def notifyActivityTermination(srcPlace:Place):void {
@@ -721,7 +683,6 @@ public abstract class FinishState {
         }
         
         public def notifyTermination(srcPlace:Place, isTx:Boolean, readOnly:Boolean, t:CheckedThrowable):void {
-            if (verbose>=1) debug(">>>> Root(id="+this+",tx="+(tx==null?-1:tx.id)+",root="+isRootTx+").notifyTermination(srcId="+srcPlace.id+", isTx="+isTx+", readOnly="+readOnly+", t="+t+") called");
             latch.lock();
             if (t != null)
                 process(t);
@@ -750,7 +711,6 @@ public abstract class FinishState {
                 }
             }
             latch.unlock();
-            if (verbose>=1) debug("<<<< Root(id="+this+",tx="+(tx==null?-1:tx.id)+",root="+isRootTx+").notifyTermination(srcId="+srcPlace.id+", isTx="+isTx+", readOnly="+readOnly+", t="+t+") returning, call tryRelease next");
             tryRelease();
         }
         
@@ -773,7 +733,6 @@ public abstract class FinishState {
             latch.unlock();
         }
         public def waitForFinish():void {
-            if (verbose>=1) debug(">>>> Root(id="+this+",tx="+(tx==null?-1:tx.id)+",root="+isRootTx+").waitForFinish() called");
             // remove our own activity from count
             if (Runtime.activity().tx)
                 notifyTxActivityTermination(here, Runtime.activity().txReadOnly, null);
@@ -784,8 +743,7 @@ public abstract class FinishState {
                 Runtime.worker().join(latch);
             }
             latch.await(); // sit here, waiting for all child activities to complete
-            if (verbose>=1) debug("==== Root(id="+this+",tx="+(tx==null?-1:tx.id)+",root="+isRootTx+").latch.await() completed");
-            
+
             saveSubTx();
             
             if (REMOTE_GC) gc();
@@ -793,7 +751,7 @@ public abstract class FinishState {
             // throw exceptions here if any were collected via the execution of child activities
             val t = MultipleExceptions.make(exceptions);
             if (null != t) throw t;
-            if (verbose>=1) debug("<<<< Root(id="+this+",tx="+(tx==null?-1:tx.id)+",root="+isRootTx+").waitForFinish() retunring");
+            
             // if no exceptions, simply return
         }
         
@@ -943,9 +901,7 @@ public abstract class FinishState {
         }
         
         def tryRelease() {
-            if (verbose>=1) debug(">>>> Root(id="+this+",tx="+(tx==null?-1:tx.id)+",root="+isRootTx+").tryRelease called");
             if (tx == null || tx.isEmpty() || !isRootTx) {
-                if (verbose>=1) debug("<<<< Root(id="+this+",tx="+(tx==null?-1:tx.id)+",root="+isRootTx+").tryRelease returning. calling releaseFinish");
                 releaseFinish(null);
             } else {
                 var abort:Boolean = false;
@@ -958,7 +914,6 @@ public abstract class FinishState {
                         Console.OUT.println("Tx["+tx.id+"] " + TxConfig.txIdToString (tx.id)+ " here["+here+"] finalize with abort because ["+str+"] ");
                     }
                 }
-                if (verbose>=1) debug("<<<< Root(id="+this+",tx="+(tx==null?-1:tx.id)+",root="+isRootTx+").tryRelease returning. calling tx.finalize");
                 tx.finalize(this, abort);
             }
         }
