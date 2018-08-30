@@ -26,10 +26,11 @@ import x10.util.HashMap;
 import x10.util.GrowableRail;
 import x10.xrx.TxStoreConflictException;
 import x10.xrx.TxStoreFatalException;
+import x10.xrx.FinishNonResilientCustom;
 
 public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {   
     static resilient = Runtime.RESILIENT_MODE > 0;
-    
+    protected transient var gcId:FinishResilient.Id;
     protected transient var finishObj:Releasable = null;
     protected transient var members:Set[Int] = null;
     protected transient var readOnly:Boolean = false;      // transient is initialized as false by default    
@@ -38,6 +39,7 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
     protected transient var vote:Boolean = false;          // transient is initialized as false by default
     protected transient var gr:GlobalRef[Tx];
     protected transient var excs:GrowableRail[CheckedThrowable];    //fatal exception or Conflict exception
+    protected transient var custom:Boolean = false;   //custom non-resilient finish
     
     private transient var gcGR:GlobalRef[FinishState];
     
@@ -75,7 +77,18 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
         gr = GlobalRef[Tx](this);
         vote = true;
         readOnly = true;
+        custom = false;
     }
+    
+    public def initializeCustom(id:FinishResilient.Id) {
+    	gcId = id;
+        lock = new Lock();
+        gr = GlobalRef[Tx](this);
+        vote = true;
+        readOnly = true;
+        custom = true;
+    }
+    
     
     /**
      * Used in resilient mode only
@@ -259,13 +272,19 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
         val gr = this.gr;
         val id = this.id;
         val gcGR = this.gcGR;
+        val gcId = this.gcId;
         val plh = this.plh;
+        val custom = this.custom;
         
         for (p in members) {
             if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] commitOrAbort["+p+"] totalMembers["+members.size()+"] ...");
             at (Place(p)) @Immediate("comm_request") async {
                 //gc
-                Runtime.finishStates.remove(gcGR);
+            	if (custom){
+            		FinishNonResilientCustom.NonResilientCustomRemoteState.deleteObject(gcId);
+            	} else {
+            		Runtime.finishStates.remove(gcGR);
+            	}
                 if (isCommit)
                     plh().getMasterStore().commit(id);
                 else

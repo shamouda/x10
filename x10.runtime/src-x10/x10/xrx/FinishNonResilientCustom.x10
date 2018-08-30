@@ -36,9 +36,11 @@ import x10.xrx.freq.RemoveGhostChildRequestOpt;
 import x10.xrx.freq.TransitRequestOpt;
 import x10.xrx.freq.MergeSubTxRequestOpt;
 import x10.util.Set;
+import x10.util.Pair;
+import x10.xrx.txstore.TxConfig;
 
 class FinishNonResilientCustom extends FinishState implements CustomSerialization {
-    protected transient var me:FinishResilient; // local finish object
+    protected transient var me:FinishState; // local finish object
     val id:Id;
 
     public def toString():String { 
@@ -90,7 +92,7 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
     public def this (parent:FinishState) {
         id = Id(here.id as Int, nextId.getAndIncrement());
         me = new NonResilientCustomMasterState(id, parent);
-        FinishReplicator.addMaster(id, me as FinishMasterState);
+        NonResilientCustomMasterState.addRoot(id, me as NonResilientCustomMasterState);
         if (verbose>=1) debug("<<<< RootFinish(id="+id+") created");
     }
     
@@ -120,23 +122,30 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
     public static final class NonResilientCustomRemoteState extends FinishState implements x10.io.Unserializable {
         val id:Id; //parent root finish
         private static val remoteLock = new Lock();
-        private static val remotes = new HashMap[Id, OptimisticRemoteState]() ; //a cache for remote finish objects
+        private static val remotes = new HashMap[Id, NonResilientCustomRemoteState]() ; //a cache for remote finish objects
 
         var exceptions:GrowableRail[CheckedThrowable];
-        var lock:Lock = @Embed new Lock();
+        val lock = new Lock();
         var count:Int = 0n;
         var remoteActivities:HashMap[Long,Int]; // key is place id, value is count for that place.
         val local = new AtomicInteger(0n); // local count
         
-        private var tx:Boolean = false;
-        private var txReadOnly:Boolean = true;
+        private var txFlag:Boolean = false;
+        private var txReadOnlyFlag:Boolean = true;
         
         public def toString() {
-            return "OptimisticRemote(id="+id+", localCount="+lc.get()+")";
+            return "Remote(id="+id+", localCount="+local.get()+", count="+count+")";
         }
         
         public def this (val id:Id) {
             this.id = id;
+        }
+        
+        def setTxFlags(isTx:Boolean, isTxRO:Boolean) {
+        	lock.lock();
+            txFlag = txFlag | isTx;
+            txReadOnlyFlag = txReadOnlyFlag & isTxRO;
+            lock.unlock();
         }
         
         public static def deleteObjects(gcReqs:Set[Id]) {
@@ -165,21 +174,33 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
             }
         }
         
+        def ensureRemoteActivities() {
+            if (remoteActivities == null) {
+                remoteActivities = new HashMap[Long,Int]();
+            }
+        }
+        
         def dump() {
             val s = new x10.util.StringBuilder();
             s.add("Remote dump:\n");
             s.add("           here:" + here.id); s.add('\n');
             s.add("             id:" + id); s.add('\n');            
-            s.add("     localCount:"); s.add(lc); s.add('\n');
+            s.add("     localCount:"); s.add(local); s.add('\n');
+            if (remoteActivities != null) {
+            	s.add("     remote acts:"); s.add('\n');
+            	for (e in remoteActivities.entries()) {
+            		s.add("place "); s.add(e.getKey()); s.add(":"); s.add(e.getValue());s.add('\n');	
+            	}
+            }
             debug(s.toString());
         }
         
         public static def getOrCreateRemote(id:Id) {
             try {
                 remoteLock.lock();
-                var remoteState:OptimisticRemoteState = remotes.getOrElse(id, null);
+                var remoteState:NonResilientCustomRemoteState = remotes.getOrElse(id, null);
                 if (remoteState == null) {
-                    remoteState = new OptimisticRemoteState(id);
+                    remoteState = new NonResilientCustomRemoteState(id);
                     remotes.put(id, remoteState);
                     if (verbose>=1) debug("<<<< getOrCreateRemote(id="+id+") added a new remote ...");
                 }
@@ -201,37 +222,29 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
             val dstId = dstPlace.id as Int;
             if (verbose>=1) debug(">>>> Remote(id="+id+").notifySubActivitySpawn(srcId="+srcId+",dstId="+dstId+",kind="+kind+") called");
             lock.lock();
-            if (place.id == here.id) {
+            if (dstPlace.id == here.id) {
                 count++;
                 lock.unlock();
                 return;
             }
             ensureRemoteActivities();
-            val old = remoteActivities.getOrElse(place.id, 0n);
-            remoteActivities.put(place.id, old+1n);
+            val old = remoteActivities.getOrElse(dstPlace.id, 0n);
+            remoteActivities.put(dstPlace.id, old+1n);
             lock.unlock();
             if (verbose>=1) debug("<<<< Remote(id="+id+").notifySubActivitySpawn(srcId="+srcId+",dstId="+dstId+",kind="+kind+") returning");
         }
         
-        def spawnRemoteActivity(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
+        def spawnRemoteActivity(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void { //done
             val kind = ASYNC;
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
             val parentId = UNASSIGNED;
-            val id = this.id; //don't serialize this
-            
-            val start = prof != null ? System.nanoTime() : 0;
-            val ser = new Serializer();
-            ser.writeAny(body);
-            if (prof != null) {
-                val end = System.nanoTime();
-                prof.serializationNanos += (end-start);
-                prof.bytes += ser.dataBytesWritten();
-            }
-            val bytes = ser.toRail();
-            
-
-            //FILL
+            if (verbose>=1) debug(">>>> Remote(id="+id+").spawnRemoteActivity(srcId=" + srcId +",dstId="+dstId+",kind="+kind+") called");
+            notifySubActivitySpawn(dstPlace, kind);
+            val preSendAction = ()=>{ };
+            val fs = Runtime.activity().finishState(); //the outer finish
+            x10.xrx.Runtime.x10rtSendAsync(dstPlace.id, body, fs, prof, preSendAction);
+            if (verbose>=1) debug("<<<< Remote(id="+id+").spawnRemoteActivity(srcId=" + srcId +",dstId="+dstId+",kind="+kind+") returning");
         }
         
         /*
@@ -309,28 +322,31 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
             notifyActivityTermination(srcPlace, ASYNC, t, true, readOnly);
         }
         
+        def setTxFlagsUnsafe(isTx:Boolean, isTxRO:Boolean) {
+            txFlag = txFlag | isTx;
+            txReadOnlyFlag = txReadOnlyFlag & isTxRO;
+        }
+        
         def notifyActivityTermination(srcPlace:Place, kind:Int, t:CheckedThrowable, isTx:Boolean, readOnly:Boolean):void {
-            val id = this.id;
+            val id = this.id; //don't copy this
             val srcId = srcPlace.id as Int; 
             val dstId = here.id as Int;
-            if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+",isTx="+isTx+",isTxRO="+isTxRO+") called ");
+            if (verbose>=1) debug(">>>> Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+",isTx="+isTx+",isTxRO="+readOnly+") called ");
             lock.lock();
             if (t != null) {
                 if (null == exceptions) exceptions = new GrowableRail[CheckedThrowable]();
                 exceptions.add(t);
             }
-            tx = tx | isTx;
-            txReadOnly = txReadOnly & readOnly;
+            if (isTx)
+                setTxFlagsUnsafe(isTx, readOnly);
             count--;
             if (local.decrementAndGet() > 0) {
                 lock.unlock();
                 return;
             }
-            val cTx = tx;
-            val cTxReadyOnly = txReadOnly;
+            val cTx = txFlag;
+            val cTxReadyOnly = txReadOnlyFlag;
             
-            val subTxMem = Runtime.activity() == null? null : Runtime.activity().subMembers;
-            val subTxRO = Runtime.activity() == null? true : Runtime.activity().subReadOnly;
             val excs = exceptions == null || exceptions.isEmpty() ? null : exceptions.toRail();
             exceptions = null;
             val home = id.home as Long;
@@ -345,11 +361,13 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
                 lock.unlock();
                 if (null != excs) {
                     at(Place(home)) @Immediate("nonResCustom_notifyActivityTermination_1") async {
-                        FinishReplicator.findMaster(id).notify(serializedTable, excs, cTx, cTxReadyOnly, subTxMem, subTxRO);
+                    	val fin = NonResilientCustomMasterState.getRoot(id);
+                    	fin.notify(serializedTable, excs, cTx, cTxReadyOnly);
                     }
                 } else {
                     at(Place(home)) @Immediate("nonResCustom_notifyActivityTermination_2") async {
-                        FinishReplicator.findMaster(id).notify(serializedTable, cTx, cTxReadyOnly, subTxMem, subTxRO);
+                    	val fin = NonResilientCustomMasterState.getRoot(id);
+                    	fin.notify(serializedTable, cTx, cTxReadyOnly);
                     }
                 }
             } else {
@@ -358,15 +376,17 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
                 lock.unlock();
                 if (null != excs) {
                     at(Place(home)) @Immediate("nonResCustom_notifyActivityTermination_3") async {
-                        (FinishReplicator.findMaster(id) as NonResilientCustomMasterState).notify(message, excs, cTx, cTxReadyOnly, subTxMem, subTxRO);
+                    	val fin = NonResilientCustomMasterState.getRoot(id);
+                        fin.notify(message, excs, cTx, cTxReadyOnly);
                     }
                 } else {
                     at(Place(home)) @Immediate("nonResCustom_notifyActivityTermination_4") async {
-                        (FinishReplicator.findMaster(id) as NonResilientCustomMasterState).notify(message, cTx, cTxReadyOnly, subTxMem, subTxRO);
+                    	val fin = NonResilientCustomMasterState.getRoot(id);
+                        fin.notify(message, cTx, cTxReadyOnly);
                     }
                 }
             }
-            if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+",isTx="+isTx+",isTxRO="+isTxRO+") returning");
+            if (verbose>=1) debug("<<<< Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+",isTx="+isTx+",isTxRO="+readOnly+") returning");
         }
 
         def waitForFinish():void {
@@ -383,35 +403,43 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
     }
     
     //ROOT
-    public static final class NonResilientCustomMasterState extends FinishMasterState implements x10.io.Unserializable, Releasable {
-    
-        //finish variables
-        val parent:FinishState; //the direct parent finish object (used in globalInit for recursive initializing)
-        val latch:SimpleLatch; //latch for blocking the finish activity, and a also used as the instance lock
-        var lc:Int;
+    public static final class NonResilientCustomMasterState extends FinishState implements x10.io.Unserializable, Releasable {
+    	private static val rootLock = new Lock();
+        private static val roots = new HashMap[Id, NonResilientCustomMasterState]() ; //a cache for remote finish objects
+        public static def addRoot(id:Id, obj:NonResilientCustomMasterState) {
+        	rootLock.lock();
+        	roots.put(id, obj);
+        	rootLock.unlock();
+        }
+        public static def getRoot(id:Id) {
+        	rootLock.lock();
+        	val obj = roots.getOrElse(id, null);
+        	rootLock.unlock();
+        	return obj;
+        }
         
-        //resilient-finish variables
+        public static def removeRoot(id:Id) {
+        	rootLock.lock();
+        	roots.remove(id);
+        	rootLock.unlock();
+        }
+        
         val id:Id;
-        val parentId:Id; //the direct parent of this finish (could be a remote finish) 
-        var numActive:Long;
-        var excs:GrowableRail[CheckedThrowable];
-        val sent:HashMap[Edge,Int]; //increasing counts    
-        val transit:HashMap[Edge,Int];
-        var ghostChildren:HashSet[Id] = null;  //lazily allocated in addException
-        var ghostsNotifiedEarly:HashSet[Id] = null; //used to save racing (remove ghost requests when the master is yet to calculate the ghostChildren)
-        var isRecovered:Boolean = false; //set to true when backup recreates a master
+        val parentId:Id; 
+        val parent:FinishState;
         
-        var migrating:Boolean = false; //used to stop updates to the object during recovery
-        var backupPlaceId:Int = FinishReplicator.updateBackupPlaceIfDead(here.id as Int);  //may be updated in notifyPlaceDeath
-        var backupChanged:Boolean = false;
-        var isGlobal:Boolean = false;//flag to indicate whether finish has been resiliently replicated or not
-        var strictFinish:Boolean = false;
+        val latch:SimpleLatch;
+        var count:Int = 1n; // locally created activities
+        var exceptions:GrowableRail[CheckedThrowable]; // captured remote exceptions.  lazily initialized
+        // remotely spawned activities (created RemoteFinishes). lazily initialized
+        var remoteActivities:HashMap[Long,Int]; // key is place id, value is count for that place.
 
-        private var txFlag:Boolean = false;
-        private var txReadOnlyFlag:Boolean = true;
-    
-        private var txStarted:Boolean = false; //if true - this.notifyPlaceDeath() will call tx.notifyPlaceDeath();
-    
+        def ensureRemoteActivities():void {
+            if (remoteActivities == null) {
+                remoteActivities = new HashMap[Long,Int]();
+            }
+        }
+        
         public def registerFinishTx(old:Tx, rootTx:Boolean):void {
             latch.lock();
             this.isRootTx = rootTx;
@@ -419,48 +447,14 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
                 this.tx = old;
             else
                 this.tx = Tx.clone(old);
-            this.tx.initialize(id, backupPlaceId);
+            this.tx.initializeCustom(id);
             latch.unlock();
         }
     
-        //initialize from backup values
-        def this(_id:Id, _parentId:Id, _numActive:Long, _sent:HashMap[Edge,Int],
-        		_transit:HashMap[Edge,Int], ghostChildren:HashSet[Id],
-                _excs:GrowableRail[CheckedThrowable], _backupPlaceId:Int, _tx:Tx, _rootTx:Boolean,
-                _tx_mem:Set[Int], _tx_excs:GrowableRail[CheckedThrowable], _tx_ro:Boolean) {
-            this.id = _id;
-            this.parentId = _parentId;
-            this.numActive = _numActive;
-            this.sent = _sent;
-            this.transit = _transit;
-            this.ghostChildren = ghostChildren;
-            this.backupPlaceId = _backupPlaceId;
-            this.excs = _excs;
-            this.strictFinish = false;
-            this.parent = null;
-            this.latch = new SimpleLatch();
-            this.isGlobal = true;
-            this.backupChanged = true;
-            this.lc = 0n;
-            this.isRecovered = true; // will have to call notifyParent
-            if (_tx != null) {
-                this.tx = _tx;
-                this.isRootTx = _rootTx;
-                this.tx.initializeNewMaster(_id, _tx_mem, _tx_excs, _tx_ro, _backupPlaceId);
-            }
-            if (verbose>=1) debug("<<<< recreated master(id="+id+") using backup values");
-        }
-        
         def this(id:Id, parent:FinishState) {
             this.latch = new SimpleLatch();
             this.id = id;
-            this.numActive = 1;
             this.parent = parent;
-            this.lc = 1n;
-            sent = new HashMap[Edge,Int]();
-            sent.put(Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
-            transit = new HashMap[Edge,Int]();
-            transit.put(Edge(id.home, id.home, FinishResilient.ASYNC), 1n);
             if (parent instanceof FinishNonResilientCustom) {
                 parentId = (parent as FinishNonResilientCustom).id;
             }
@@ -470,469 +464,22 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
         }
         
         public def toString() {
-            return "OptimisticRoot(id="+id+", parentId="+parentId+", localCount="+lc_get()+")";
-        }
-        
-        public def getId() = id;
-        public def getBackupId() = backupPlaceId;
-        
-        def lc_get() {
-            var x:Int = 0n;
-            latch.lock();
-            x = lc;
-            latch.unlock();
-            return x;
-        }
-        
-        def lc_incrementAndGet() {
-            var x:Int = 0n;
-            latch.lock();
-            x = ++lc;
-            latch.unlock();
-            return x;
-        }
-        
-        def lc_decrementAndGet() {
-            var x:Int = 0n;
-            latch.lock();
-            x = --lc;
-            latch.unlock();
-            return x;
-        }
-        
-        def globalInit() {
-            latch.lock();
-            if (!isGlobal) {
-                strictFinish = true;
-                if (verbose>=1) debug(">>>> doing globalInit for id="+id);
-                
-                if (parent instanceof FinishNonResilientCustom) {
-                    val frParent = parent as FinishNonResilientCustom;
-                    if (frParent.me instanceof NonResilientCustomMasterState) {
-                        val par = (frParent.me as NonResilientCustomMasterState);
-                        if (!par.isGlobal) par.globalInit();
-                    }
-                }
-                
-                createBackup(backupPlaceId);
-                isGlobal = true;
-                if (verbose>=1) debug("<<<< globalInit(id="+id+") returning");
-            }
-            latch.unlock();
-        }
-        
-        private def createBackup(backupPlaceId:Int) {
-            //TODO: redo if backup dies
-            if (verbose>=1) debug(">>>> createBackup(id="+id+") called fs="+this);
-            val backup = Place(backupPlaceId);
-            if (backup.isDead()) {
-                 if (verbose>=1) debug("<<<< createBackup(id="+id+") returning fs="+this + " dead backup");
-                 return false;
-            }
-            val myId = id; //don't copy this
-            val home = here;
-            val myParentId = parentId;
-            val myTx = tx;
-            val myRootTx = isRootTx;
-            val rCond = ResilientCondition.make(backup);
-            val closure = (gr:GlobalRef[Condition]) => {
-                at (backup) @Immediate("backup_create") async {
-                    val bFin = FinishReplicator.findBackupOrCreate(myId, myParentId, myTx, myRootTx);
-                    at (gr) @Immediate("backup_create_response") async {
-                        gr().release();
-                    }
-                }; 
-            };
-            rCond.run(closure, true);
-            //TODO: redo if backup is dead
-            if (rCond.failed()) {
-                val excp = new DeadPlaceException(backup);
-            }
-            rCond.forget();
-            return true;
-        }
-        
-        public def lock() {
-            latch.lock();
-        }
-        
-        public def unlock() {
-            latch.unlock();
+            return "Root(id="+id+", parentId="+parentId+", count="+count+")";
         }
         
         public def dump() {
             val s = new x10.util.StringBuilder();
             s.add("Root dump:\n");
             s.add("             id:" + id); s.add('\n');
-            s.add("     localCount:"); s.add(lc); s.add('\n');
-            s.add("      numActive:"); s.add(numActive); s.add('\n');
+            s.add("     localCount:"); s.add(count); s.add('\n');
             s.add("       parentId: " + parentId); s.add('\n');
-            if (sent.size() > 0) {
-                s.add("   sent-transit:\n"); 
-                for (e in sent.entries()) {
-                    s.add("\t\t"+e.getKey()+" = "+e.getValue()+" - "+transit.getOrElse(e.getKey(), 0n)+"\n");
-                }
+            if (remoteActivities != null) {
+            	s.add("    remote acts:"); s.add('\n');
+            	for (e in remoteActivities.entries()) {
+            		s.add("place "); s.add(e.getKey()); s.add(":"); s.add(e.getValue());s.add('\n');	
+            	}
             }
             debug(s.toString());
-        }
-                
-        def addExceptionUnsafe(t:CheckedThrowable) {
-            if (excs == null) excs = new GrowableRail[CheckedThrowable]();
-            excs.add(t);
-            if (verbose>=1) debug("<<<< addExceptionUnsafe(id="+id+") t="+t.getMessage() + " exceptions size = " + excs.size());
-        }
-        
-        def addDeadPlaceException(placeId:Long, resp:MasterResponse) {
-            try {
-                latch.lock();
-                val dpe = new DeadPlaceException(Place(placeId));
-                dpe.fillInStackTrace();
-                addExceptionUnsafe(dpe);
-                resp.backupPlaceId = backupPlaceId;
-                resp.backupChanged = backupChanged;
-            } finally {
-                latch.unlock();
-            }
-        }
-        
-        def addException(t:CheckedThrowable, resp:MasterResponse) {
-            try {
-                latch.lock();
-                addExceptionUnsafe(t);
-                resp.backupPlaceId = backupPlaceId;
-                resp.backupChanged = backupChanged;
-            } finally {
-                latch.unlock();
-            }
-        }
-        
-        
-        def updateBackup(newBackup:Int) {
-            try {
-                latch.lock();
-                backupPlaceId = newBackup;
-            } finally {
-                latch.unlock();
-            }
-        }
-        
-       def localFinishExceptionPushed(t:CheckedThrowable) {
-            try { 
-                latch.lock();
-                if (!isGlobal) {
-                    if (verbose>=1) debug(">>>> localFinishExceptionPushed(id="+id+") true");
-                    addExceptionUnsafe(t);
-                    return true;
-                } 
-                if (verbose>=1) debug("<<<< localFinishExceptionPushed(id="+id+") false: global finish");
-                return false;
-            } finally {
-                latch.unlock();
-            }
-        }
-        
-        def inTransit(srcId:Long, dstId:Long, kind:Int, tag:String, resp:MasterResponse) {
-            if (verbose>=1) debug(">>>> Master(id="+id+").inTransit srcId=" + srcId + ", dstId=" + dstId + " called");
-            try {
-                latch.lock();
-                val e = Edge(srcId, dstId, kind);
-                increment(sent, e);
-                increment(transit, e);
-                numActive++;
-                if (verbose>=3) debug("==== Master(id="+id+").inTransit srcId=" + srcId + ", dstId=" + dstId + " dumping after update");
-                if (verbose>=3) dump();
-                if (verbose>=1) debug("<<<< Master(id="+id+").inTransit returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
-                resp.backupPlaceId = backupPlaceId;
-                resp.backupChanged = backupChanged;
-            } finally {
-                 latch.unlock();
-            }
-        }
-        
-        def transitToCompleted(srcId:Long, dstId:Long, kind:Int, t:CheckedThrowable, isTx:Boolean,
-                isTxRO:Boolean, tag:String, resp:MasterResponse) {
-            var callRel:Boolean = false;
-            try {
-                latch.lock();
-                
-                if (isTx && tx != null) {
-                    tx.addMember(dstId as Int, isTxRO, 0n);
-                }
-                
-                if (verbose>=1) debug(">>>> Master(id="+id+").transitToCompleted srcId=" + srcId + ", dstId=" + dstId + " called");
-                val e = Edge(srcId, dstId, kind);
-                decrement(transit, e);
-                //don't decrement 'sent' 
-                
-                numActive--;
-                assert numActive>=0 : here + " FATAL error, Master(id="+id+").numActive reached -ve value";
-                if (t != null) addExceptionUnsafe(t);
-                if (quiescent()) {
-                    callRel = true; //call tryRelease outside of the latch scope
-                }
-                if (verbose>=1) debug("<<<< Master(id="+id+").transitToCompleted returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId );
-                resp.backupPlaceId = backupPlaceId;
-                resp.backupChanged = backupChanged;
-            } finally {
-                latch.unlock();
-            }
-            if (callRel) {
-                tryRelease();
-            }
-        }
-        
-        def removeGhostChild(childId:Id, t:CheckedThrowable, subMembers:Set[Int], subReadOnly:Boolean, resp:MasterResponse) {
-            var callRel:Boolean = false;
-            try {
-                latch.lock();
-                if (tx != null && subMembers != null){
-                    tx.addSubMembers(subMembers, subReadOnly, 4444n);
-                }
-                if (verbose>=1) debug(">>>> Master(id="+id+").removeGhostChild childId=" + childId + ", t=" + t + " called");
-                if (ghostChildren == null || !ghostChildren.contains(childId)) {
-                    if (ghostsNotifiedEarly == null)
-                        ghostsNotifiedEarly = new HashSet[Id]();
-                    ghostsNotifiedEarly.add(childId);
-                    if (verbose>=1) debug("<<<< Master(id="+id+").removeGhostChild returning - child buffered (childId="+childId+", ex=" + t + ") ");
-                } else {
-                    ghostChildren.remove(childId);
-                    numActive--;
-                    assert numActive>=0 : here + " FATAL error, Master(id="+id+").numActive reached -ve value";
-                    if (t != null) addExceptionUnsafe(t);
-                    if (quiescent()) {
-                        callRel = true;
-                    }
-                }
-                if (verbose>=1) debug("<<<< Master(id="+id+").removeGhostChild childId=" + childId + ", t=" + t + " returning");
-                resp.backupPlaceId = backupPlaceId;
-                resp.backupChanged = backupChanged;
-            } finally {
-                latch.unlock();
-            }
-            if (callRel) {
-                tryRelease();
-            }
-        }
-        
-        def addSubTxMembers(subMembers:Set[Int], subReadOnly:Boolean, resp:MasterResponse) {
-            try {
-                latch.lock();
-                if (tx != null) {
-                    tx.addSubMembers(subMembers, subReadOnly, 5555n);
-                }
-                resp.backupPlaceId = backupPlaceId;
-                resp.backupChanged = backupChanged;
-            } finally {
-                latch.unlock();
-            }
-        }
-
-        def transitToCompletedUnsafe(srcId:Long, dstId:Long, kind:Int, cnt:Int, ex:CheckedThrowable , tag:String, resp:MasterResponse) {
-            if (verbose>=1) debug(">>>> Master(id="+id+").transitToCompletedMul srcId=" + srcId + ", dstId=" + dstId + " called");
-            
-            if (ex != null) addExceptionUnsafe(ex);
-            
-            val e = Edge(srcId, dstId, kind);
-            deduct(transit, e, cnt);
-            //don't decrement 'sent' 
-            
-            numActive-=cnt;
-            resp.backupPlaceId = backupPlaceId;
-            resp.backupChanged = backupChanged;
-            if (verbose>=1) debug("<<<< Master(id="+id+").transitToCompletedMul returning id="+id + ", srcId=" + srcId + ", dstId=" + dstId + " set backup="+resp.backupPlaceId+ " set backupChanged="+resp.backupChanged);
-            if (quiescent()) {
-                return true;
-            }
-            return false;
-        }
-        
-        def quiescent():Boolean {
-            val quiet = numActive == 0;
-            if (verbose>=3) dump();
-            if (verbose>=2 || (verbose>=1 && quiet)) debug("<<<< Master(id="+id+").quiescent returning " + quiet + " tx="+tx);
-            return quiet;
-        }
-        
-        def tryRelease() {
-            if (verbose>=1) debug(">>>> Master.tryRelease(id="+id+").tryRelease called tx="+tx);
-            if (tx == null || tx.isEmpty() || !isRootTx) {
-                releaseLatch();
-                notifyParent();
-                FinishReplicator.removeMaster(id);
-            } else {
-                if (verbose>=1) debug("==== Master.tryRelease(id="+id+").tryRelease calling finalizeWithBackup ");
-                txStarted = true;
-                var abort:Boolean = false;
-                if (excs != null && excs.size() > 0) {
-                    abort = true;
-                }
-                tx.finalizeWithBackup(this, abort, backupPlaceId, isRecovered); //this also performs gc
-            }
-            if (verbose>=1) debug("<<<< Master.tryRelease(id="+id+").tryRelease returning tx="+tx);
-        }
-        
-        public def releaseFinish(excs:GrowableRail[CheckedThrowable]) {
-            if (verbose>=1) debug(">>>> Master(id="+id+").releaseFinish called");
-            if (tx != null && !(tx instanceof TxResilientNoSlaves) ) {
-                val myId = id;
-                at (Place(backupPlaceId)) @Immediate("optdist_release_backup") async {
-                    if (verbose>=1) debug("==== releaseFinish(id="+myId+") reached backup");
-                    FinishReplicator.removeBackupOrMarkToDelete(myId);
-                }
-            }
-            if (excs != null) {
-                for (t in excs.toRail())
-                    addExceptionUnsafe(t);//unsafe: only one thread reaches this method
-            }
-            releaseLatch();
-            notifyParent();
-            FinishReplicator.removeMaster(id);
-            if (verbose>=1) debug("<<<< Master(id="+id+").releaseFinish returning");
-        }
-        
-        def releaseLatch() {
-            if (isRecovered) {
-                if (verbose>=1) debug("releaseLatch(id="+id+") called on adopted finish; not releasing latch");
-            } else {
-                latch.release();
-            }
-            if (verbose>=2) debug("Master(id="+id+").releaseLatch returning");
-        }
-        
-        def notifyParent() {
-            if (!isRecovered || parentId == FinishResilient.UNASSIGNED) {
-                if (verbose>=1) debug("<<< Master(id="+id+").notifyParent returning, not adopted or parent["+parentId+"] does not exist");
-                return;
-            }
-            var subMembers:Set[Int] = null;
-            var subReadOnly:Boolean = true;
-            if (tx != null && !isRootTx) {
-                subMembers = tx.getMembers();
-                subReadOnly = tx.isReadOnly();
-            }
-            val mem = subMembers;
-            val ro = subReadOnly;
-            Runtime.submitUncounted( ()=>{
-                if (verbose>=1) debug(">>>> Master(id="+id+").notifyParent(parentId="+parentId+") called");
-                val req = FinishRequest.makeOptRemoveGhostChildRequest(parentId, id, mem, ro);
-                val resp = FinishReplicator.exec(req);
-                if (verbose>=1) debug("<<<< Master(id="+id+").notifyParent(parentId="+parentId+") returning");
-            });
-        }
-        
-        public def exec(xreq:FinishRequest) {
-            val id = xreq.id;
-            val resp = new MasterResponse();
-            try {
-                lock();
-                if (migrating) {
-                    resp.errMasterMigrating = true;
-                    return resp;
-                }
-            } finally {
-                unlock();
-            }
-            if (xreq instanceof TransitRequestOpt) {
-                val req = xreq as TransitRequestOpt;
-                val srcId = req.srcId;
-                val dstId = req.dstId;
-                val kind = req.kind;
-                if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=TRANSIT, srcId=" + srcId + ", dstId="+ dstId + ", kind=" + kind + " ] called");
-                if (Place(srcId).isDead()) {
-                    if (verbose>=1) debug("==== notifySubActivitySpawn(id="+id+") src "+srcId + "is dead; dropping async");
-                } else if (Place(dstId).isDead()) {
-                    if (kind == FinishResilient.ASYNC) {
-                        if (verbose>=1) debug("==== notifySubActivitySpawn(id="+id+") destination "+dstId + "is dead; pushed DPE for async");
-                        addDeadPlaceException(dstId, resp);
-                        resp.transitSubmitDPE = true;
-                    } else {
-                        if (verbose>=1) debug("==== notifySubActivitySpawn(id="+id+") destination "+dstId + "is dead; dropped at");
-                    }
-                } else {
-                    inTransit(srcId, dstId, kind, "notifySubActivitySpawn", resp);
-                    resp.submit = true;
-                }
-                if (verbose>=1) debug("<<<< Master(id="+id+").exec [req=TRANSIT, srcId=" + srcId + ", dstId=" + dstId + ", kind=" + kind + ", submit="+resp.submit+" ] returning");
-            } else if (xreq instanceof TermRequestOpt) {
-                val req = xreq as TermRequestOpt;
-                val srcId = req.srcId;
-                val dstId = req.dstId;
-                val kind = req.kind;
-                val ex = req.ex;
-                val isTx = req.isTx;
-                val isTxRO = req.isTxRO;
-                if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=TERM, srcId=" + srcId + ", dstId=" + dstId + ", kind=" + kind + ", ex="+ ex + " ] called");
-                if (Place(dstId).isDead()) {
-                    // drop termination messages from a dead place; only simulated termination signals are accepted
-                    if (verbose>=1) debug("==== notifyActivityTermination(id="+id+") suppressed: "+dstId+" kind="+kind);
-                } else {
-                    transitToCompleted(srcId, dstId, kind, ex, isTx, isTxRO, "notifyActivityTermination", resp);
-                    resp.submit = true;
-                }
-                if (verbose>=1) debug("<<<< Master(id="+id+").exec [req=TERM, srcId=" + srcId + ", dstId=" + dstId + ", kind=" + kind + ", ex="+ ex + " ] returning");
-            } else if (xreq instanceof ExcpRequestOpt) {
-                val req = xreq as ExcpRequestOpt;
-                val ex = req.ex;
-                if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=EXCP, ex="+ex+" ] called");
-                addException(ex, resp);
-                resp.submit = true;
-                if (verbose>=1) debug("<<<< Master(id="+id+").exec [req=EXCP, ex="+ex+" ] returning");
-            } else if (xreq instanceof TermMulRequestOpt) {
-                val req = xreq as TermMulRequestOpt;
-                val map = req.map;
-                val dstId = req.dstId;
-                val ex = req.ex;
-                val isTx = req.isTx;
-                val isTxRO = req.isTxRO;
-                
-                if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=TERM_MUL, dstId=" + dstId +", mapSz="+map.size()+",isTx="+isTx+",isTxRO="+isTxRO+"] called");
-                if (Place(dstId).isDead()) {
-                    // drop termination messages from a dead place; only simulated termination signals are accepted
-                    if (verbose>=1) debug("==== notifyActivityTermination(id="+id+") suppressed: "+dstId);
-                } else {
-                    var callRel:Boolean = false;
-                    try {
-                        latch.lock();
-                        if (isTx && tx != null) {
-                            tx.addMember(dstId as Int, isTxRO, 1n);
-                        }
-                        resp.backupPlaceId = -1n;
-                        for (e in map.entries()) {
-                            val srcId = e.getKey().place;
-                            val kind = e.getKey().kind;
-                            val cnt = e.getValue();
-                            if (transitToCompletedUnsafe(srcId, dstId, kind, cnt, ex, "notifyActivityTermination", resp))
-                                callRel = true;
-                        }
-                    } finally {
-                        latch.unlock();
-                    }
-                    if (callRel) {
-                        tryRelease(); //call tryRelease outside of the latch scope
-                    }
-                    resp.submit = true;
-                }
-                if (verbose>=1) debug("<<<< Master(id="+id+").exec [req=TERM_MUL, dstId=" + dstId +", mapSz="+map.size()+",isTx="+isTx+",isTxRO="+isTxRO+"] returning, backup="+resp.backupPlaceId);
-            } else if (xreq instanceof RemoveGhostChildRequestOpt) {
-                val req = xreq as RemoveGhostChildRequestOpt;
-                val childId = req.childId;
-                val mem = req.subMembers;
-                val ro = req.subReadOnly;
-                val dpe = new DeadPlaceException(Place(childId.home));
-                if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=REM_GHOST, child="+childId+", ex="+dpe+" ] called");
-                removeGhostChild(childId, dpe, mem, ro, resp);
-                resp.submit = true;
-                if (verbose>=1) debug("<<<< Master(id="+id+").exec [req=REM_GHOST, child="+childId+", ex="+dpe+" ] returning");
-            } else if (xreq instanceof MergeSubTxRequestOpt) {
-                val req = xreq as MergeSubTxRequestOpt;
-                val mem = req.subMembers;
-                val ro = req.subReadOnly;
-                if (verbose>=1) debug(">>>> Master(id="+id+").exec [req=MERGE_SUB_TX] called");
-                addSubTxMembers(mem, ro, resp);
-                resp.submit = true;
-                if (verbose>=1) debug("<<<< Master(id="+id+").exec [req=MERGE_SUB_TX] returning");
-            }
-            return resp;
         }
         
         def notifySubActivitySpawn(place:Place):void {
@@ -946,93 +493,44 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
         def notifySubActivitySpawn(dstPlace:Place, kind:Int):void {
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
-            if (srcId == dstId) {
-                lc_incrementAndGet();
-                if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called locally, localCount now "+lc);
-            } else {
-                if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
-                
-                isGlobal = true;
-                //globalize parent if not global - cannot postpone this till sendPendingAct because it is called in an immediate thread and globalInit is blocking
-                if (parent instanceof FinishNonResilientCustom) {
-                    val frParent = parent as FinishNonResilientCustom;
-                    if (frParent.me instanceof NonResilientCustomMasterState) {
-                        val par = (frParent.me as NonResilientCustomMasterState);
-                        if (!par.isGlobal) par.globalInit();
-                    }
-                }
-                
-                val req = FinishRequest.makeOptTransitRequest(id, parentId, srcId, dstId, kind, tx, isRootTx);
-                FinishReplicator.exec(req, this);
-                if (verbose>=1) debug("<<<< Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
+            if (verbose>=1) debug(">>>> Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
+            latch.lock();
+            if (here.id == dstPlace.id) {
+                count++;
+                latch.unlock();
+                return;
             }
+            ensureRemoteActivities();
+            remoteActivities.put(dstPlace.id, remoteActivities.getOrElse(dstPlace.id, 0n)+1n);
+            latch.unlock();
+            if (verbose>=1) debug("<<<< Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
         }
         
-        def spawnRemoteActivity(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
+        def spawnRemoteActivity(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void { //done
             val kind = ASYNC;
             val srcId = here.id as Int;
             val dstId = dstPlace.id as Int;
-            val id = this.id;
-            
-            isGlobal = true;
-            //globalize parent if not global - cannot postpone this till sendPendingAct because it is called in an immediate thread and globalInit is blocking
-            if (parent instanceof FinishNonResilientCustom) {
-                val frParent = parent as FinishNonResilientCustom;
-                if (frParent.me instanceof NonResilientCustomMasterState) {
-                    val par = (frParent.me as NonResilientCustomMasterState);
-                    if (!par.isGlobal) par.globalInit();
-                }
-            }
-            
-            val start = prof != null ? System.nanoTime() : 0;
-            val ser = new Serializer();
-            ser.writeAny(body);
-            if (prof != null) {
-                val end = System.nanoTime();
-                prof.serializationNanos += (end-start);
-                prof.bytes += ser.dataBytesWritten();
-            }
-            val bytes = ser.toRail();
-            
-            if (verbose>=1) debug(">>>> Root(id="+id+").spawnRemoteActivity(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") called");
-            val req = FinishRequest.makeOptTransitRequest(id, parentId, srcId, dstId, kind, tx, isRootTx);
-            val num = req.num;
+            val parentId = UNASSIGNED;
+            if (verbose>=1) debug(">>>> Root(id="+id+").spawnRemoteActivity(srcId=" + srcId +",dstId="+dstId+",kind="+kind+") called");
+            notifySubActivitySpawn(dstPlace, kind);
+            val preSendAction = ()=>{ };
             val fs = Runtime.activity().finishState(); //the outer finish
-            val preSendAction = ()=>{FinishReplicator.addPendingAct(id, num, dstId, fs, bytes, prof);};
-            val postSendAction = (submit:Boolean, adopterId:Id)=>{
-                if (submit) {
-                    FinishReplicator.sendPendingAct(id, num);
-                }
-                fs.notifyActivityTermination(Place(srcId)); // terminate synthetic activity
-            };
-            val count = lc_incrementAndGet(); // synthetic activity to keep finish locally live during async replication
-            FinishReplicator.asyncExec(req, this, preSendAction, postSendAction);
-            if (verbose>=1) debug("<<<< Root(id="+id+").spawnRemoteActivity(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning, incremented localCount to " + count);
+            x10.xrx.Runtime.x10rtSendAsync(dstPlace.id, body, fs, prof, preSendAction);
+            if (verbose>=1) debug("<<<< Root(id="+id+").spawnRemoteActivity(srcId=" + srcId +",dstId="+dstId+",kind="+kind+") returning");
         }
         
-        /*
-         * This method can't block because it may run on an @Immediate worker.  
-         */
         def notifyActivityCreation(srcPlace:Place, activity:Activity):Boolean {
-            val srcId = srcPlace.id as Int;
-            val dstId = here.id as Int;
-            if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreation(srcId=" + srcId +") returning");
             return true;
         }
         
-        /*
-         * See similar method: notifyActivityCreation
-         */
         def notifyShiftedActivityCreation(srcPlace:Place):Boolean {
-            val srcId = srcPlace.id as Int;
-            val dstId = here.id as Int;
-            if (verbose>=1) debug("<<<< Root(id="+id+").notifyShiftedActivityCreation(srcId=" + srcId +") returning");
             return true;
         }
         
-        def notifyRemoteContinuationCreated():void { 
-            strictFinish = true;
-            if (verbose>=1) debug("<<<< Root(id="+id+").notifyRemoteContinuationCreated() isGlobal = "+isGlobal);
+        public def notifyRemoteContinuationCreated():void {
+            latch.lock();
+            ensureRemoteActivities();
+            latch.unlock();
         }
 
         def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable):void { 
@@ -1042,205 +540,260 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
         def notifyActivityCreationFailed(srcPlace:Place, t:CheckedThrowable, kind:Int):void { 
             val srcId = srcPlace.id as Int;
             val dstId = here.id as Int;
-            
-            isGlobal = true;
-            //globalize parent if not global - cannot postpone this till sendPendingAct because it is called in an immediate thread and globalInit is blocking
-            if (parent instanceof FinishNonResilientCustom) {
-                val frParent = parent as FinishNonResilientCustom;
-                if (frParent.me instanceof NonResilientCustomMasterState) {
-                    val par = (frParent.me as NonResilientCustomMasterState);
-                    if (!par.isGlobal) par.globalInit();
-                }
-            }
-            
             if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") called");
-            val req = FinishRequest.makeOptTermRequest(id, parentId, srcId, dstId, kind, t, null, false, false, false);
-            FinishReplicator.asyncExec(req, this);
+            pushException(t);
+            notifyActivityTermination(srcPlace);
             if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreationFailed(srcId=" + srcId + ",dstId="+dstId+",kind="+kind+",t="+t.getMessage()+") returning");
         }
 
         def notifyActivityCreatedAndTerminated(srcPlace:Place):void {
-            val srcId = srcPlace.id as Int;
-            val dstId = here.id as Int;
-            if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") called");
-            //no need to call notifyActivityCreation() since it does NOOP in Root finish
-            notifyActivityTermination(srcPlace, ASYNC, false, false);
-            if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
+        	notifyActivityTermination(srcPlace);
         }
         
-        def pushException(t:CheckedThrowable):void {
-            if (localFinishExceptionPushed(t)) {
-                if (verbose>=1) debug("<<<< Root(id="+id+").pushException(t="+t.getMessage()+") returning");
-                return;
+        protected def process(t:CheckedThrowable):void {
+            if (null == exceptions) exceptions = new GrowableRail[CheckedThrowable]();
+            exceptions.add(t);
+        }
+        protected def process(excs:Rail[CheckedThrowable]):void {
+            for (e in excs) {
+                process(e);
             }
-            assert (Runtime.activity() != null) : here + " >>>> Root(id="+id+").pushException(t="+t.getMessage()+") blocking method called within an immediate thread";
-            
-            isGlobal = true;
-            //globalize parent if not global - cannot postpone this till sendPendingAct because it is called in an immediate thread and globalInit is blocking
-            if (parent instanceof FinishNonResilientCustom) {
-                val frParent = parent as FinishNonResilientCustom;
-                if (frParent.me instanceof NonResilientCustomMasterState) {
-                    val par = (frParent.me as NonResilientCustomMasterState);
-                    if (!par.isGlobal) par.globalInit();
-                }
-            }
-            
-            if (verbose>=1) debug(">>>> Root(id="+id+").pushException(t="+t.getMessage()+") called");
-            val req = FinishRequest.makeOptExcpRequest(id, parentId, t);
-            FinishReplicator.exec(req, this);
+        }
+        public def pushException(t:CheckedThrowable):void {
+        	if (verbose>=1) debug(">>>> Root(id="+id+").pushException(t="+t.getMessage()+") called");
+            latch.lock();
+            process(t);
+            latch.unlock();
             if (verbose>=1) debug("<<<< Root(id="+id+").pushException(t="+t.getMessage()+") returning");
         }
-
+        
         def notifyActivityTermination(srcPlace:Place):void {
-            notifyActivityTermination(srcPlace, ASYNC, false, false);
+            notifyActivityTermination(srcPlace, ASYNC, false, false, null);
         }
         def notifyShiftedActivityCompletion(srcPlace:Place):void {
-            notifyActivityTermination(srcPlace, AT, false, false);
-        }
-        
-        def setTxFlags(isTx:Boolean, isTxRO:Boolean) {
-            if (verbose>=1) debug(">>>> Root(id="+id+").setTxFlags("+isTx+","+isTxRO+")");
-            if (tx == null) {
-                if (verbose>=1) debug("<<<< Root(id="+id+").setTxFlags("+isTx+","+isTxRO+") returning, tx is null");
-                return;
-            }
-            
-            try {
-                latch.lock();
-                tx.addMember(here.id as Int, isTxRO, 2n);
-                txFlag = txFlag | isTx;
-                txReadOnlyFlag = txReadOnlyFlag & isTxRO;
-                if (verbose>=1) debug("<<<< Root(id="+id+").setTxFlags("+isTx+","+isTxRO+") returning ");
-            } catch (e:Exception) {
-                if (verbose>=1) debug("<<<< Root(id="+id+").setTxFlags("+isTx+","+isTxRO+") returning with exception " + e.getMessage());
-                throw e;
-            } finally {
-                latch.unlock();
-            }
+            notifyActivityTermination(srcPlace, AT, false, false, null);
         }
         
         def notifyTxActivityTermination(srcPlace:Place, readOnly:Boolean, t:CheckedThrowable) {
-            notifyActivityTermination(srcPlace, ASYNC, true, readOnly);
+            notifyActivityTermination(srcPlace, ASYNC, true, readOnly, t);
         }
         
-        def notifyActivityTermination(srcPlace:Place, kind:Int, isTx:Boolean, isTxRO:Boolean):void {
+        def notifyActivityTermination(srcPlace:Place, kind:Int, isTx:Boolean, readOnly:Boolean, t:CheckedThrowable):void {
             val srcId = srcPlace.id as Int; 
             val dstId = here.id as Int;
-            if (isTx)
-                setTxFlags(isTx, isTxRO);
-            val count = lc_decrementAndGet();
             if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityTermination(srcId="+srcId + " dstId="+dstId+",kind="+kind
-                    +",isTx="+isTx+",isTxRO="+isTxRO+") called, decremented localCount to "+count);
-            if (count > 0) {
+                    +",isTx="+isTx+",isTxRO="+readOnly+") called");
+            latch.lock();
+            if (t != null)
+                process(t);
+            
+            if (tx != null && isTx) {
+            	tx.addMember(here.id as Int, readOnly, 20n);
+            }
+            
+            if (--count != 0n) {
+                latch.unlock();
                 return;
             }
-            if (!isGlobal) { //only one activity is here, no need to lock/unlock latch
-                if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(srcId="+srcId + " dstId="+dstId+",kind="+kind+") returning");
-                tryReleaseLocal();
-                return;
+            
+            if (remoteActivities != null && remoteActivities.size() != 0) {
+                for (entry in remoteActivities.entries()) {
+                    if (entry.getValue() != 0n) {
+                        latch.unlock();
+                        return;
+                    }
+                }
             }
-            if (verbose>=1) debug("==== Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+",isRootTx="+isRootTx+", txFlag="+txFlag+", txReadOnlyFlag="+txReadOnlyFlag+") called");
-            val req = FinishRequest.makeOptTermRequest(id, parentId, srcId, dstId, kind, null, tx, isRootTx, txFlag, txReadOnlyFlag);
-            FinishReplicator.asyncExec(req, this);
+            latch.unlock();
+            tryRelease();
             if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
         }
         
-        
-        private def tryReleaseLocal() {
-            if (verbose>=1) debug(">>>> Root(id="+id+").tryReleaseLocal called ");
-            if (tx == null || tx.isEmpty() || !isRootTx) {
-                latch.release();
-                FinishReplicator.removeMaster(id);
-            } else {
-                tx.addMember(here.id as Int, txReadOnlyFlag, 3n);
-                var abort:Boolean = false;
-                if (excs != null && excs.size() > 0) {
-                    abort = true;
-                    if (verbose>=1) {
-                        var s:String = "";
-                        for (var i:Long = 0; i < excs.size(); i++) {
-                            s += excs(i) + ", ";
-                        }
-                        debug("==== Master.tryRelease(id="+id+").tryReleaseLocal finalizeLocal abort because["+s+"]");
-                    }
-                }
-                tx.finalizeLocal(this, abort);
-            }
-            if (verbose>=1) debug("<<<< Root(id="+id+").tryReleaseLocal returning ");
-        }
-        
         def waitForFinish():void {
-            if (verbose>=1) debug(">>>> Root(id="+id+").waitForFinish called, lc = " + lc );
-
-            // terminate myself
+            if (verbose>=1) debug(">>>> Root(id="+id+").waitForFinish called");
+            // remove our own activity from count
             if (Runtime.activity().tx)
-                notifyActivityTermination(here, ASYNC, true, Runtime.activity().txReadOnly);
+                notifyTxActivityTermination(here, Runtime.activity().txReadOnly, null);
             else
-                notifyActivityTermination(here, ASYNC, false, false);
+                notifyActivityTermination(here);
             
-            // If we haven't gone remote with this finish yet, see if this worker
-            // can execute other asyncs that are governed by the finish before waiting on the latch.
-            if ((!Runtime.STRICT_FINISH) && (Runtime.STATIC_THREADS || !strictFinish)) {
-                if (verbose>=2) debug("calling worker.join for id="+id);
-                Runtime.worker().join(this.latch);
+            if ((!Runtime.STRICT_FINISH) && (Runtime.STATIC_THREADS || remoteActivities == null)) {
+                Runtime.worker().join(latch);
             }
-
-            // wait for the latch release
             if (verbose>=2) debug("calling latch.await for id="+id);
-            latch.await(); // wait for the termination (latch may already be released)
+            latch.await(); // sit here, waiting for all child activities to complete
             if (verbose>=2) debug("returned from latch.await for id="+id);
-
-            if (isGlobal)
-                notifyRootTx();
-            else {
-              //local finish -> for cases activities other than the finish main activity have created Tx work 
-                if (tx != null && !tx.isEmpty() && !isRootTx) {
-                    //notify parent of transaction status
-                    if (parent instanceof FinishNonResilientCustom) {
-                        val frParent = parent as FinishNonResilientCustom;
-                        if (frParent.me instanceof NonResilientCustomMasterState) {
-                            if (verbose>=1) debug("local finish with id="+id+" set Tx flag to root parent");
-                            (frParent.me as NonResilientCustomMasterState).tx.addMember(here.id as Int, tx.isReadOnly(), 897n);
-                        } else {
-                            if (verbose>=1) debug("local finish with id="+id+" set Tx flag to remote parent");
-                            (frParent.me as NonResilientCustomRemoteState).setTxFlags(true, tx.isReadOnly());
+            //local finish -> for cases activities other than the finish main activity have created Tx work 
+            if (tx != null && !tx.isEmpty() && !isRootTx) {
+            	val subMembers = tx.getMembers();
+            	val ro = tx.isReadOnly();
+                //notify parent of transaction status
+                if (parent instanceof FinishNonResilientCustom) {
+                	val parentId = this.parentId;
+                    val frParent = parent as FinishNonResilientCustom;
+                    if (frParent.me instanceof NonResilientCustomMasterState) {
+                    	(frParent.me as NonResilientCustomMasterState).tx.addSubMembers(subMembers, ro, 6666n);
+                    } else if (frParent.me instanceof NonResilientCustomRemoteState && parentId.home as Long == here.id) {
+                        NonResilientCustomMasterState.getRoot(parentId).tx.addSubMembers(subMembers, ro, 7777n);
+                    } else if (frParent.me instanceof NonResilientCustomRemoteState) {
+                        at(Place(parentId.home as Long)) @Immediate("nonResCustom_mergeSubMembers") async {
+                        	NonResilientCustomMasterState.getRoot(parentId).tx.addSubMembers(subMembers, ro, 8888n);
                         }
                     }
                 }
             }
-            // no more messages will come back to this finish state 
-            //if (REMOTE_GC) gc();   Backup is in charge of GC because the remote object may be checked when the backup recovers the master
             
-            // get exceptions and throw wrapped in a ME if there are any
-            if (excs != null) {
-                if (verbose>=1) debug("<<<< Root(id="+id+").waitForFinish returning with exceptions, size=" + excs.size() );
-                throw new MultipleExceptions(excs);
-            }
+            gc();
+            
+            // throw exceptions here if any were collected via the execution of child activities
+            val t = MultipleExceptions.make(exceptions);
+            if (null != t) throw t;
+            
+            // if no exceptions, simply return
         }
         
-        def notifyRootTx() {
-            if (tx != null && !tx.isEmpty() && !isRootTx) {
-                if (verbose>=1) debug(">>>> Root(id="+id+").notifyRootTx called");
-                val req = FinishRequest.makeOptMergeSubTxRequest(parentId, tx.getMembers(), tx.isReadOnly());
-                val myId = id;
-                val myBackupId = backupPlaceId;
-                FinishReplicator.exec(req, this);
-                at (Place(myBackupId)) @Immediate("optdist_release_backup2") async {
-                    if (verbose>=1) debug("==== releaseFinish(id="+myId+") reached backup");
-                    FinishReplicator.removeBackupOrMarkToDelete(myId);
+        
+        def gc() {
+        	val id = this.id;
+            // if there were remote activities spawned, clean up the RemoteFinish objects which tracked them
+            if (remoteActivities != null && remoteActivities.size() != 0) {
+                remoteActivities.remove(here.id);
+                if (tx == null || tx.isEmpty()) {
+                    for (placeId in remoteActivities.keySet()) {
+                        at(Place(placeId)) @Immediate("nonResCustom_remoteFinishCleanup1") async {
+                        	NonResilientCustomRemoteState.deleteObject(id);
+                        }
+                    }
+                } else {
+                    for (placeId in remoteActivities.keySet()) {
+                        if (tx.contains(placeId as Int))
+                            continue;
+                        at(Place(placeId)) @Immediate("nonResCustom_remoteFinishCleanup2") async {
+                        	NonResilientCustomRemoteState.deleteObject(id);
+                        }
+                    }
                 }
-                if (verbose>=1) debug("<<<< Root(id="+id+").notifyRootTx returning");
             }
         }
-    }
-    
-    static def setToString(set:HashSet[Id]) {
-        if (set == null)
-            return "set = NULL";
-        var str:String = "{";
-        for (e in set)
-            str += e + "  ";
-        str += "}";
-        return str;
+
+        protected def process(remoteMap:HashMap[Long, Int], isTx:Boolean, txRO:Boolean):void {
+            ensureRemoteActivities();
+            var src:Int = -1n;
+            // add the remote set of records to the local set
+            for (remoteEntry in remoteMap.entries()) {
+                remoteActivities.put(remoteEntry.getKey(), remoteActivities.getOrElse(remoteEntry.getKey(), 0n)+remoteEntry.getValue());
+                if (remoteEntry.getValue() < 0) {
+                    src = remoteEntry.getKey() as Int;
+                }
+            }
+            if (tx != null && isTx) {
+            	tx.addMember(src, txRO, 21n);
+            }
+        
+            // add anything in the remote set which ran here to my local count, and remove from the remote set
+            count += remoteActivities.getOrElse(here.id, 0n);
+            remoteActivities.remove(here.id);
+            
+            // check if anything is pending locally
+            if (count != 0n) return;
+            
+            // check to see if anything is still pending remotely
+            for (entry in remoteActivities.entries()) {
+                if (entry.getValue() != 0n) return;
+            }
+            
+            // nothing is pending.  Release the latch
+            tryRelease();
+        }
+
+        def notify(remoteMapBytes:Rail[Byte]):void {
+            notify(remoteMapBytes, false, false);
+        }
+        
+        def notify(remoteMapBytes:Rail[Byte], isTx:Boolean, txRO:Boolean):void {
+            remoteMap:HashMap[Long, Int] = new x10.io.Deserializer(remoteMapBytes).readAny() as HashMap[Long, Int]; 
+            latch.lock();
+            process(remoteMap, isTx, txRO);
+            latch.unlock();
+        }
+
+        def notify(remoteMapBytes:Rail[Byte], excs:Rail[CheckedThrowable]):void {
+            notify(remoteMapBytes, excs, false, false);
+        }
+        
+        def notify(remoteMapBytes:Rail[Byte], excs:Rail[CheckedThrowable], isTx:Boolean, txRO:Boolean):void {
+            remoteMap:HashMap[Long, Int] = new x10.io.Deserializer(remoteMapBytes).readAny() as HashMap[Long, Int];
+            latch.lock();
+            process(excs);
+            process(remoteMap, isTx, txRO);
+            latch.unlock();
+        }
+        
+        protected def process(remoteEntry:Pair[Long, Int], isTx:Boolean, txRO:Boolean):void {
+            ensureRemoteActivities();
+            // add the remote record to the local set
+            remoteActivities.put(remoteEntry.first, remoteActivities.getOrElse(remoteEntry.first, 0n)+remoteEntry.second);
+        
+            if (tx != null && isTx) {
+            	tx.addMember(remoteEntry.first as Int, txRO, 22n);
+            }
+            
+            // check if anything is pending locally
+            if (count != 0n) return;
+        
+            // check to see if anything is still pending remotely
+            for (entry in remoteActivities.entries()) {
+                if (entry.getValue() != 0n) return;
+            }
+
+            // nothing is pending.  Release the latch
+            tryRelease();
+        }
+
+        def notify(remoteEntry:Pair[Long, Int]) {
+            notify(remoteEntry, false, false);
+        }
+        
+        def notify(remoteEntry:Pair[Long, Int], isTx:Boolean, txRO:Boolean):void {
+            latch.lock();
+            process(remoteEntry, isTx, txRO);
+            latch.unlock();
+        }
+        def notify(remoteEntry:Pair[Long, Int], excs:Rail[CheckedThrowable]) {
+            notify(remoteEntry, excs, false, false);
+        }
+        
+        def notify(remoteEntry:Pair[Long, Int], excs:Rail[CheckedThrowable], isTx:Boolean, txRO:Boolean):void {
+            latch.lock();
+            process(excs);
+            process(remoteEntry, isTx, txRO);
+            latch.unlock();
+        }
+        
+        public def releaseFinish(excs:GrowableRail[CheckedThrowable]) {
+            if (excs != null) {
+                for (t in excs.toRail())
+                    process(t);
+            }
+            latch.release();
+        }
+        
+        def tryRelease() {
+            if (tx == null || tx.isEmpty() || !isRootTx) {
+                releaseFinish(null);
+            } else {
+                var abort:Boolean = false;
+                if (exceptions != null && exceptions.size() > 0) {
+                    abort = true;
+                    if (TxConfig.TM_DEBUG) {
+                        var str:String = "";
+                        for (var m:Long = 0; m < exceptions.size(); m++)
+                            str += exceptions(m).getMessage() + " , ";
+                        Console.OUT.println("Tx["+tx.id+"] " + TxConfig.txIdToString (tx.id)+ " here["+here+"] finalize with abort because ["+str+"] ");
+                    }
+                }
+                tx.finalize(this, abort);
+            }
+        }
     }
 }

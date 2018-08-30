@@ -35,7 +35,6 @@ import x10.util.GrowableRail;
  *    We always supress DPEs occuring to the slaves
  * */
 public class TxResilient extends Tx {
-    private transient var gcId:FinishResilient.Id;
     private transient var readOnlyMasters:Set[Int] = null; //read-only masters in a non ready-only transaction
     private transient var masterSlave:HashMap[Int, Int]; 
     private transient var pending:HashMap[TxMember, Int];     //pending resilient communication

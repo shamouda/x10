@@ -84,6 +84,7 @@ public abstract class FinishState {
     public static val AT = 0n;
     public static val ASYNC = 1n;
     
+    protected static val nextId = new AtomicInteger(); // per-place portion of unique id
     
     // Turn this on to debug deadlocks within the finish implementation
     static VERBOSE = Configuration.envOrElse("X10_FINISH_VERBOSE", false);
@@ -254,6 +255,13 @@ public abstract class FinishState {
             notifyActivityTermination(srcPlace);
     }
 
+    /***
+     * Relevant only in optimistic counting
+     */
+    def getSource():Place {
+        return Place(-1);
+    }
+    
     static def deref[T](root:GlobalRef[FinishState]) = (root as GlobalRef[FinishState]{home==here})() as T;
 
     // a finish with local asyncs only
