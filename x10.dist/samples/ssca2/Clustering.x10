@@ -191,7 +191,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
     private def execute(store:TxStore, state:ClusteringState, placeId:Long, workerId:Long, start:Int, end:Int, 
             plh:PlaceLocalHandle[ClusteringState], verbose:Int, killG:Double) {
         val time0 = System.currentTimeMillis();
-        var totalFailedRetries:Long = 0;
+        var totalConflicts:Long = 0;
         val all = end - start;
         if (killG != -1.0)
             Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1) + ":killG:"+killG);
@@ -203,17 +203,19 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
             val closure = (tx:Tx) => {
                 createCluster(store, tx, s, placeId, clusterId, plh, verbose);
             };
-            totalFailedRetries += store.executeTransaction(closure);
+            val conf = store.executeTransaction(closure);
+            totalConflicts += conf;
+            
             if (state.g > -1 && c % state.g == 0) {
-                printProgress(here + ":worker:"+workerId+":progress -> " + c + "/" + all , time0);
+                printProgress(here + ":worker:"+workerId+":progress -> " + c + "/" + all + " conflicts="+conf, time0);
             }
             if (killG > -1.0 && ((c as Double)/all) >= killG) {
             	Console.OUT.println(here + " Hammer calling killHere " + c + "/" + all );
                 System.killHere();
             }
         }
-        //Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":totalConflicts:"+totalFailedRetries);
-        state.addConflicts(totalFailedRetries);
+        //Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":totalConflicts:"+totalConflicts);
+        state.addConflicts(totalConflicts);
     }
     
     private def printProgress(message:String, time0:Long) {
