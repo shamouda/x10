@@ -22,57 +22,6 @@ import x10.util.HashSet;
  * Common abstract class for Resilient Finish
  */
 public abstract class FinishResilient extends FinishState {
-    /*
-     * for debug
-     */
-    public static val verbose = isVerbosePlace()? 4 : getEnvLong("X10_RESILIENT_VERBOSE") ; // should be copied to subclass
-    protected static def getEnvLong(name:String) {
-        val env = System.getenv(name);
-        val v = (env!=null) ? Long.parseLong(env) : 0;
-        if (v>0 && here.id==0) Console.OUT.println(name + "=" + v);
-        return v;
-    }
-    protected static def debug(msg:String) {
-        val nsec = System.nanoTime();
-        val output = "[nsec=" + nsec + " place=" + here.id + " " + Runtime.activity() + "] " + msg;
-        Console.OUT.println(output); Console.OUT.flush();
-    }
-    protected static def dumpStack(msg:String) {
-        try { throw new Exception(msg); } catch (e:Exception) { e.printStackTrace(); }
-    }
-    
-    private static def isVerbosePlace() {
-        if (System.getenv("VERBOSE_PLACE") != null) {
-            val arr = System.getenv("VERBOSE_PLACE").split(";");
-            for (var i:Long = 0; i < arr.size; i++) {
-                if (Long.parseLong(arr(i)) == here.id)
-                    return true;
-            }
-        }
-        return false;
-    }
-    // TODO: We should empirically tune this size for performance.
-    //       Initially I am picking a size that will make it very likely
-    //       that we will use a mix of both direct and indirect protocols
-    //       for a large number of test cases to shake out mixed-mode problems.
-    protected static val ASYNC_SIZE_THRESHOLD = Long.parse(Runtime.env.getOrElse("X10_RESILIENT_FINISH_SMALL_ASYNC_SIZE", "0"));
-    
-    public static struct Id(home:int,id:int) {
-        public def toString() = "<"+home+","+id+">";
-    }
-    
-    public static val UNASSIGNED = Id(-1n,-1n);
-    
-    /* The implicit top finish is not replicated in the replication-based implementations.
-     * Place 0 starts the shutdown procedure when that finish is released, and sometimes, shutting down
-     * occurs while places are exchanging final replication messages. 
-     * This behaviour caused the programs to hang while shutting down. Therefore special termination logic
-     * is added for the TOP_FINISH in replication-based implementations */
-    public static val TOP_FINISH = Id(0n,0n);
-    
-    public static val AT = 0n;
-    public static val ASYNC = 1n;
-
     public static struct Task(place:Int, kind:Int) {
         public def toString() {
             if (Runtime.RESILIENT_MODE == Configuration.RESILIENT_MODE_DIST_OPTIMISTIC ||
@@ -187,6 +136,13 @@ public abstract class FinishResilient extends FinishState {
            val o = p as Any;
            fs = makeFinishResilientHCLocal(o);
            break;
+        }
+        case Configuration.NON_RESILIENT_CUSTOM:
+        {
+            val p = (parent!=null) ? parent : getCurrentFS();
+            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
+            fs = FinishNonResilientCustom.make(p);
+            break;
         }
         default:
             throw new UnsupportedOperationException("Unsupported RESILIENT_MODE " + Runtime.RESILIENT_MODE);

@@ -12,8 +12,8 @@ public class Bench {
         val places= activePlaces.size();
         Console.OUT.println("Starting Bench with "+places+" places");
         Console.OUT.println("X10_RESILIENT_MODE=" + x10.xrx.Runtime.RESILIENT_MODE);
-        val OUTER = 30;
-        val INNER = 10;
+        val OUTER = 1;
+        val INNER = 3;
         val TX_PLACES = places / 3;
         val time0 = System.nanoTime();
         for (var i:Long = 0; i < OUTER; i++) {
@@ -32,7 +32,7 @@ public class Bench {
                             }
                         }
                     }
-                    //Console.OUT.println("iter["+i+"]: finish"+j+" completed");
+                    Console.OUT.println("iter["+i+"]: finish"+j+" completed");
                 }
             }
             val t2 = System.nanoTime();

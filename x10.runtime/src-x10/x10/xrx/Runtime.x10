@@ -1404,6 +1404,8 @@ public final class Runtime {
             // The launcher is responsible for tear-down in the case of place death, nothing we need to do.
         } else if (RESILIENT_MODE == Configuration.RESILIENT_MODE_X10RT_ONLY) {
             // Nothing to do at the XRX level in this mode.
+        } else if (RESILIENT_MODE == Configuration.NON_RESILIENT_CUSTOM) {
+            // Nothing to do. Technically non-resilient.
         } else {
             ResilientCondition.notifyPlaceDeath();
             LowLevelFinish.notifyPlaceDeath();

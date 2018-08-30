@@ -45,10 +45,19 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
     static class Result {
         val locked = new HashSet[Int]();
         val lockedLast = new HashSet[Int]();
-    
+        val lc = new Lock();
         public def merge() {
+            lc.lock();
             locked.addAll(lockedLast);
             lockedLast.clear();
+            lc.unlock();
+        }
+        
+        
+        public def addToLockedLast(l:HashSet[Int]) {
+            lc.lock();
+            lockedLast.addAll(l);
+            lc.unlock();
         }
         
         public def print(txId:Long, placeId:Long, clusterId:Long) {
@@ -139,9 +148,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
                     }
                     val me = here.id;
                     at (result) async {
-                        atomic {
-                            result().lockedLast.addAll(locked);
-                        }
+                        result().addToLockedLast(locked);
                     }
                 });
             }
