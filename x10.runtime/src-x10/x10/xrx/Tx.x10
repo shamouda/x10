@@ -234,7 +234,7 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
         val plh = this.plh;
         
         for (p in members) {
-            
+            if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] prepare["+p+"] totalMembers["+members.size()+"] ...");
             at (Place(p)) @Immediate("prep_request") async {
                 //validate may block, so we cannot do it in this immediate thread
                 Runtime.submitUncounted(()=> {
@@ -244,6 +244,7 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
                     } catch (e:Exception) {
                         vote = false;
                     }
+                    if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] prepare["+p+"] vote["+vote+"] ...");
                     val v = vote;
                     at (gr) @Immediate("prep_response") async {
                         gr().notifyPrepare(v);
@@ -261,6 +262,7 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
         val plh = this.plh;
         
         for (p in members) {
+            if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] commitOrAbort["+p+"] totalMembers["+members.size()+"] ...");
             at (Place(p)) @Immediate("comm_request") async {
                 //gc
                 Runtime.finishStates.remove(gcGR);
@@ -280,6 +282,8 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
     
         lock.lock();
         count--;
+        
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] notifyPrepare vote["+v+"] count="+count+"...");
         vote = vote & v;
         if (count == 0n) {
             prep = true;
@@ -296,9 +300,9 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
     
     protected def notifyAbortOrCommit() {
         var rel:Boolean = false;
-    
         lock.lock();
         count--;
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] notifyAbortOrCommit count="+count+"...");
         if (count == 0n) {
             rel = true;
         }
