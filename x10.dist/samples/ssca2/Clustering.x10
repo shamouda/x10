@@ -212,8 +212,8 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
                 System.killHere();
             }
         }
-        Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":totalRetries:"+totalFailedRetries);
-        state.addRetries(totalFailedRetries);
+        //Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":totalConflicts:"+totalFailedRetries);
+        state.addConflicts(totalFailedRetries);
     }
     
     private def printProgress(message:String, time0:Long) {
@@ -280,10 +280,10 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
                 async execute(store, state, placeId, workerId, start, end2, plh, verbose, killG);
             }
         }
-        val totalRetries = state.totalRetries;
-        
-        Console.OUT.println(here + " ==> completed successfully ");
-        return totalRetries;
+        val totalConflicts = state.totalConflicts;
+        state.totalConflicts = 0;
+        //Console.OUT.println(here + " ==> completed successfully ");
+        return totalConflicts;
     }
     
     /**
@@ -361,6 +361,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
             Option("g", "", "Progress"),
             Option("r", "", "Print resulting clusters"),
             Option("w", "", "Workers"),
+            Option("i", "", "Iterations"),
             Option("vp","victims","victim places to kill (comma separated)"),
             Option("vt","victimsTimes","times to kill victim places(comma separated)"),
             Option("vg","killByProgress","whether we kill by time or progress: default 0 (by time)"),
@@ -369,6 +370,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         val spare:Long = cmdLineParams("-sp", 0);
         val clusterSize:Long = cmdLineParams("-cs", 10);
         val seed:Long = cmdLineParams("-s", 2);
+        val iters:Long = cmdLineParams("-i", 3);
         val n:Int = cmdLineParams("-n", 2n);
         val a:Double = cmdLineParams("-a", 0.55);
         val b:Double = cmdLineParams("-b", 0.1);
@@ -433,31 +435,31 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         val N = graph.numVertices();
         val plh = PlaceLocalHandle.make[ClusteringState](Place.places(), ()=>new ClusteringState(graph, places, workers, verbose, clusterSize, g, vp, vt, vg));
         val app = new Clustering(plh);
-        val executor = MasterWorkerExecutor.make(activePlaces, app);
-        
-        val distTime = (System.nanoTime()-time)/1e9;
-        
-        time = System.nanoTime();
-        executor.run();
-        time = System.nanoTime() - time;
-        
-        val results = executor.workerResults();
-        var retries:Long = 0;
-        for (entry in results.entries()) {
-            retries += entry.getValue() as Long;
+        var distTime:Double = 0;
+        for (var i:Long = 0 ; i < iters; i++) {
+            val executor = MasterWorkerExecutor.make(activePlaces, app);
+            if (i == 0)
+                distTime = (System.nanoTime()-time)/1e9;       
+            time = System.nanoTime();
+            executor.run();
+            time = System.nanoTime() - time;        
+            val results = executor.workerResults();
+            var conflicts:Long = 0;
+            for (entry in results.entries()) {
+                conflicts += entry.getValue() as Long;
+            }
+            val procTime = time/1E9;
+            val totalTime = distTime + procTime;
+            val procPct = procTime*100.0/totalTime;
+            if(verbose > 2 || r > 0) 
+                app.printClusters(executor.store());
+            var dead:String = "";
+            for (var dx:Long = 0; dx < (places + spare); dx++) {
+                if (Place(dx).isDead())
+                    dead += "Place("+dx+") ";
+            }
+            Console.OUT.println("Iter:"+i+":Places:" + places + ":N:" + plh().N + ":SetupInSeconds:" + distTime + ":ProcessingInSeconds:" + procTime + ":TotalInSeconds:" + totalTime + ":conflicts:"+conflicts+":(proc:" + procPct  + "%):dead:"+dead);
         }
-        val procTime = time/1E9;
-        val totalTime = distTime + procTime;
-        val procPct = procTime*100.0/totalTime;
-        if(verbose > 2 || r > 0) 
-            app.printClusters(executor.store());
-
-        var dead:String = "";
-        for (var i:Long = 0; i < (places + spare); i++) {
-            if (Place(i).isDead())
-                dead += "Place("+i+") ";
-        }
-        Console.OUT.println("Places:" + places + ":N:" + plh().N + ":SetupInSeconds:" + distTime + ":ProcessingInSeconds:" + procTime + ":TotalInSeconds:" + totalTime + ":retries:"+retries+":(proc:" + procPct  + "%):dead:"+dead);
     }
 }
 
@@ -475,7 +477,8 @@ class ClusteringState(N:Int) {
     val vp:String;
     val vg:Int;
 
-    var totalRetries:Long = 0;
+    var totalConflicts:Long = 0;
+    val lock = new Lock();
     
     public def this(graph:Graph, places:Long, workersPerPlace:Long,
             verbose:Int, clusterSize:Long, g:Long, vp:String, vt:String, vg:Int) {
@@ -493,7 +496,9 @@ class ClusteringState(N:Int) {
         this.vg = vg;
     }
     
-    public def addRetries(r:Long) {
-        atomic { totalRetries += r; }
+    public def addConflicts(r:Long) {
+        lock.lock();
+        totalConflicts += r;
+        lock.unlock();
     }
 }
