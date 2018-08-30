@@ -22,6 +22,35 @@ import x10.util.HashSet;
  * Common abstract class for Resilient Finish
  */
 public abstract class FinishResilient extends FinishState {
+    /*
+     * for debug
+     */
+    public static val verbose = isVerbosePlace()? 4 : getEnvLong("X10_RESILIENT_VERBOSE") ; // should be copied to subclass
+    protected static def getEnvLong(name:String) {
+        val env = System.getenv(name);
+        val v = (env!=null) ? Long.parseLong(env) : 0;
+        if (v>0 && here.id==0) Console.OUT.println(name + "=" + v);
+        return v;
+    }
+    protected static def debug(msg:String) {
+        val nsec = System.nanoTime();
+        val output = "[nsec=" + nsec + " place=" + here.id + " " + Runtime.activity() + "] " + msg;
+        Console.OUT.println(output); Console.OUT.flush();
+    }
+    protected static def dumpStack(msg:String) {
+        try { throw new Exception(msg); } catch (e:Exception) { e.printStackTrace(); }
+    }
+    
+    private static def isVerbosePlace() {
+        if (System.getenv("VERBOSE_PLACE") != null) {
+            val arr = System.getenv("VERBOSE_PLACE").split(";");
+            for (var i:Long = 0; i < arr.size; i++) {
+                if (Long.parseLong(arr(i)) == here.id)
+                    return true;
+            }
+        }
+        return false;
+    }
     // TODO: We should empirically tune this size for performance.
     //       Initially I am picking a size that will make it very likely
     //       that we will use a mix of both direct and indirect protocols
