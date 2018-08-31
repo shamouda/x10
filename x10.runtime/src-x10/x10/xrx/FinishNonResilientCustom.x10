@@ -99,7 +99,10 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
     //create remote finish
     private def this(deser:Deserializer) {
         id = deser.readAny() as Id;
-        me = NonResilientCustomRemoteState.getOrCreateRemote(id);
+        if (id.home as Long == here.id)
+            me = NonResilientCustomMasterState.getRoot(id);
+        else
+            me = NonResilientCustomRemoteState.getOrCreateRemote(id);
     }
     
     //make root finish    
@@ -187,9 +190,9 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
             s.add("             id:" + id); s.add('\n');            
             s.add("     localCount:"); s.add(local); s.add('\n');
             if (remoteActivities != null) {
-            	s.add("     remote acts:"); s.add('\n');
+                s.add("     remote acts:"); s.add('\n');
             	for (e in remoteActivities.entries()) {
-            		s.add("place "); s.add(e.getKey()); s.add(":"); s.add(e.getValue());s.add('\n');	
+            	    s.add("         place "); s.add(e.getKey()); s.add(":"); s.add(e.getValue());s.add('\n');	
             	}
             }
             debug(s.toString());
@@ -474,9 +477,9 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
             s.add("     localCount:"); s.add(count); s.add('\n');
             s.add("       parentId: " + parentId); s.add('\n');
             if (remoteActivities != null) {
-            	s.add("    remote acts:"); s.add('\n');
+                s.add("    remote acts:"); s.add('\n');
             	for (e in remoteActivities.entries()) {
-            		s.add("place "); s.add(e.getKey()); s.add(":"); s.add(e.getValue());s.add('\n');	
+            	    s.add("       place "); s.add(e.getKey()); s.add(":"); s.add(e.getValue());s.add('\n');	
             	}
             }
             debug(s.toString());
@@ -497,13 +500,16 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
             latch.lock();
             if (here.id == dstPlace.id) {
                 count++;
+                if (verbose>=4) dump();
+                if (verbose>=1) debug("<<<< Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") local activity added, count=" + count);
                 latch.unlock();
                 return;
             }
             ensureRemoteActivities();
             remoteActivities.put(dstPlace.id, remoteActivities.getOrElse(dstPlace.id, 0n)+1n);
-            latch.unlock();
+            if (verbose>=4) dump();
             if (verbose>=1) debug("<<<< Root(id="+id+").notifySubActivitySpawn(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
+            latch.unlock();
         }
         
         def spawnRemoteActivity(dstPlace:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void { //done
@@ -592,6 +598,8 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
             }
             
             if (--count != 0n) {
+                if (verbose>=4) dump();
+                if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning, count="+count);
                 latch.unlock();
                 return;
             }
@@ -599,14 +607,16 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
             if (remoteActivities != null && remoteActivities.size() != 0) {
                 for (entry in remoteActivities.entries()) {
                     if (entry.getValue() != 0n) {
+                        if (verbose>=4) dump();
+                        if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning, pending remote activities, count="+count);
                         latch.unlock();
                         return;
                     }
                 }
             }
+            if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning, call tryRelease()");
             latch.unlock();
             tryRelease();
-            if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
         }
         
         def waitForFinish():void {
@@ -677,6 +687,7 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
         }
 
         protected def process(remoteMap:HashMap[Long, Int], isTx:Boolean, txRO:Boolean):void {
+            if (verbose>=1) debug(">>>> Root(id="+id+").process(map) called");
             ensureRemoteActivities();
             var src:Int = -1n;
             // add the remote set of records to the local set
@@ -695,13 +706,22 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
             remoteActivities.remove(here.id);
             
             // check if anything is pending locally
-            if (count != 0n) return;
+            if (count != 0n) {
+                if (verbose>=4) dump();
+                if (verbose>=1) debug("<<<< Root(id="+id+").process(map) returning");
+                return;
+            }
             
             // check to see if anything is still pending remotely
             for (entry in remoteActivities.entries()) {
-                if (entry.getValue() != 0n) return;
+                if (entry.getValue() != 0n) {
+                    if (verbose>=4) dump();
+                    if (verbose>=1) debug("<<<< Root(id="+id+").process(map) returning");
+                    return;
+                }
             }
-            
+            if (verbose>=4) dump();
+            if (verbose>=1) debug("<<<< Root(id="+id+").process(map) returning, call tryRelease");
             // nothing is pending.  Release the latch
             tryRelease();
         }
@@ -730,6 +750,7 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
         }
         
         protected def process(remoteEntry:Pair[Long, Int], isTx:Boolean, txRO:Boolean):void {
+            if (verbose>=1) debug(">>>> Root(id="+id+").process(pair) called");
             ensureRemoteActivities();
             // add the remote record to the local set
             remoteActivities.put(remoteEntry.first, remoteActivities.getOrElse(remoteEntry.first, 0n)+remoteEntry.second);
@@ -739,13 +760,23 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
             }
             
             // check if anything is pending locally
-            if (count != 0n) return;
+            if (count != 0n) {
+                if (verbose>=4) dump();
+                if (verbose>=1) debug("<<<< Root(id="+id+").process(pair) returning");
+                return;
+            }
         
             // check to see if anything is still pending remotely
             for (entry in remoteActivities.entries()) {
-                if (entry.getValue() != 0n) return;
+                if (entry.getValue() != 0n) {
+                    if (verbose>=4) dump();
+                    if (verbose>=1) debug("<<<< Root(id="+id+").process(pair) returning");
+                    return;
+                }
             }
 
+            if (verbose>=4) dump();
+            if (verbose>=1) debug("<<<< Root(id="+id+").process(pair) returning, call tryRelease");
             // nothing is pending.  Release the latch
             tryRelease();
         }
