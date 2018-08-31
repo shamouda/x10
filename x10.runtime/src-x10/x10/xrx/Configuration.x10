@@ -118,7 +118,7 @@ final class Configuration {
     static val RESILIENT_MODE_DIST_OPTIMISTIC = 14n;  // Distributed finish implementation that tracks transit tasks only
     static val RESILIENT_MODE_X10RT_ONLY  = 99n; // Resilient/Elastic X10RT, no resilient finish
 
-    static val NON_RESILIENT_CUSTOM = 15n; //new non-resilient implementation
+    static val NON_RESILIENT_CUSTOM = -1n; //new non-resilient implementation
     
     
     static def resilient_mode():Int { // called from Runtime.x10
