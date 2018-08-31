@@ -25,6 +25,7 @@ import x10.util.resilient.localstore.Cloneable;
 import x10.util.concurrent.Future;
 import x10.xrx.txstore.TxConfig;
 import x10.xrx.txstore.TxLocalStore;
+import x10.xrx.txstore.TxMasterStoreForRail;
 
 /*should be used in non-resilient mode only*/
 public class TxLocking(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
@@ -55,9 +56,17 @@ public class TxLocking(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
         return plh().getMasterStore().get(id, key);
     }
     
+    public def getRail(index:Long):Any {
+        return (plh().getMasterStore() as TxMasterStoreForRail[Any]).getRailLocking(id, index);
+    }
+    
     /***************** PUT ********************/
     public def put(key:Any, value:Cloneable):Cloneable {
         return plh().getMasterStore().put(id, key, value);
+    }
+    
+    public def putRail(index:Long, value:Any) {
+        (plh().getMasterStore() as TxMasterStoreForRail[Any]).putRailLocking(id, index, value);
     }
     
     /***************** Delete *****************/

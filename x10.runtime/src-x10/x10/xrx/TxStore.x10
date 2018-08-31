@@ -31,6 +31,7 @@ import x10.util.resilient.concurrent.ResilientCondition;
 import x10.compiler.Immediate;
 import x10.util.resilient.PlaceManager;
 import x10.util.resilient.PlaceManager.ChangeDescription;
+import x10.xrx.txstore.TxMasterStoreForRail;
 
 /**
  * 
@@ -44,13 +45,9 @@ public class TxStore {
         this.callback = callback;
     }
     
-    public static def make(pg:PlaceGroup, immediateRecovery:Boolean) {
-        return make (pg, immediateRecovery, null);
-    }
-    
     public static def make(pg:PlaceGroup, immediateRecovery:Boolean, callback:(Long, Place, TxStore)=>void) {
         Console.OUT.println("Creating a transactional store with "+pg.size()+" active places, immediateRecovery = " + immediateRecovery);
-        val plh = PlaceLocalHandle.make[TxLocalStore[Any]](Place.places(), ()=> new TxLocalStore[Any](pg, immediateRecovery) );
+        val plh = PlaceLocalHandle.make[TxLocalStore[Any]](Place.places(), ()=> new TxLocalStore[Any](pg, immediateRecovery, TxLocalStore.KV_TYPE, -1, null) );
         val store = new TxStore(plh, callback);
         Place.places().broadcastFlat(()=> { 
             plh().setPLH(plh); 
@@ -60,6 +57,19 @@ public class TxStore {
         return store;
     }
 
+    
+    public static def makeRail(pg:PlaceGroup, immediateRecovery:Boolean, callback:(Long, Place, TxStore)=>void, size:Long, init:(Long)=>Any) {
+        Console.OUT.println("Creating a transactional store with "+pg.size()+" active places, immediateRecovery = " + immediateRecovery);
+        val plh = PlaceLocalHandle.make[TxLocalStore[Any]](Place.places(), ()=> new TxLocalStore[Any](pg, immediateRecovery, TxLocalStore.RAIL_TYPE, size, init) );
+        val store = new TxStore(plh, callback);
+        Place.places().broadcastFlat(()=> { 
+            plh().setPLH(plh); 
+            Runtime.addTxStore(store);
+        });
+        Console.OUT.println("store created successfully ...");
+        return store;
+    }
+    
     public def prevPlace() {
         return plh().getMaster(here);
     }
@@ -197,9 +207,9 @@ public class TxStore {
             return;
         }
         
-        if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Runtime.asyncRecover starting  immediate["+ls.immediateRecovery+"] slaveDead["+ls.slave.isDead()+"] masterActive["+ls.masterStore.isActive()+"] ...");
-        if ( ls.slave.isDead() && ls.masterStore.isActive() ) {
-             ls.masterStore.pausing();
+        if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Runtime.asyncRecover starting  immediate["+ls.immediateRecovery+"] slaveDead["+ls.slave.isDead()+"] masterActive["+ls.getMasterStore().isActive()+"] ...");
+        if ( ls.slave.isDead() && ls.getMasterStore().isActive() ) {
+             ls.getMasterStore().pausing();
             @Uncounted async recoverSlave();
         }
     }
@@ -281,12 +291,15 @@ public class TxStore {
     private static def createSlaveStoreAtSpare(plh:PlaceLocalHandle[TxLocalStore[Any]], spare:Place, deadPlace:Place, deadVirtualId:Long) {
         if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Master of the dead slave, prepare a slave replica for the spare place ...");
         plh().getMasterStore().waitUntilPaused();
-        val masterState = plh().getMasterStore().getState().getKeyValueMap();
+        val recData = plh().getMasterStore().getDataForRecovery();
+        val storeType = plh().getMasterStore().getType();
+        val state1:HashMap[Any,Cloneable] = (storeType == TxLocalStore.KV_TYPE)? recData as HashMap[Any,Cloneable]:null;
+        val state2:Rail[Any] = (storeType == TxLocalStore.KV_TYPE)? recData as Rail[Any]:null;
         if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Master prepared a consistent slave replica to the spare slave ...");
         val me = here;
         at (spare) async {
             if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Spare received the slave replica from master ["+me+"] ...");    
-            plh().slaveStore = new TxSlaveStore(masterState);
+            plh().slaveStore = new TxSlaveStore(state1, state2);
         }        
     }
     

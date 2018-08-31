@@ -26,9 +26,12 @@ import x10.compiler.Immediate;
 import x10.util.resilient.concurrent.ResilientCondition;
 
 public class TxLocalStore[K] {K haszero} {
+    public static val RAIL_TYPE = 1n;
+    public static val KV_TYPE = 2n;
+    
 	public val immediateRecovery:Boolean;
     private static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
-    public transient var masterStore:TxMasterStore[K] = null;   
+    private transient var masterStore:TxMasterStore[K] = null;   
     public transient var slaveStore:TxSlaveStore[K] = null;
     private var plh:PlaceLocalHandle[TxLocalStore[K]];
     private transient var lock:Lock;
@@ -59,15 +62,18 @@ public class TxLocalStore[K] {K haszero} {
         }
     };
     
-    public def this(active:PlaceGroup, immediateRecovery:Boolean) {
+    public def this(active:PlaceGroup, immediateRecovery:Boolean, storeType:Int, size:Long, init:(Long)=>K) {
         this.immediateRecovery = immediateRecovery;
         lock = new Lock();
         this.activePlaces = active;
         if (active.contains(here)) {
             virtualPlaceId = active.indexOf(here);
-            masterStore = new TxMasterStore[K](new HashMap[K,Cloneable](), immediateRecovery);
+            if (storeType == RAIL_TYPE)
+                masterStore = new TxMasterStoreForRail[K](size, init, immediateRecovery);
+            else
+                masterStore = new TxMasterStore[K](new HashMap[K,Cloneable](), immediateRecovery);
             if (resilient && !TxConfig.DISABLE_SLAVE) {
-                slaveStore = new TxSlaveStore[K]();
+                slaveStore = new TxSlaveStore[K](storeType, size, init);
                 slave = active.next(here);
                 oldSlave = this.slave;
             }

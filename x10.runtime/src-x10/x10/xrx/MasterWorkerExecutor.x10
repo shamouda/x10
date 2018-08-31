@@ -45,6 +45,20 @@ public class MasterWorkerExecutor {
         return executor;
     }
     
+    public static def makeRail(activePlaces:PlaceGroup, app:MasterWorkerApp, size:Long, init:(Long)=>Any) {
+        val asyncRecovery = true;
+        val executor = new MasterWorkerExecutor(app);
+        val master = executor.master;
+        val callback = (vid:Long, newPlace:Place, store:TxStore)=>{
+            at (newPlace) @Uncounted async {
+                executor.runWorker(vid, store, app, master, true);
+            }
+        };
+        val store = TxStore.makeRail(activePlaces, asyncRecovery, callback, size, init);
+        executor.store = store;
+        return executor;
+    }
+    
     public def store() = store;
     
     private def print(msg:String) {

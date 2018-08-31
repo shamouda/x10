@@ -17,6 +17,7 @@ import x10.util.resilient.localstore.Cloneable;
 
 public class TxSlaveLog[K] {K haszero} {
     public var transLog:HashMap[K,Cloneable];
+    public var transLogRail:HashMap[Long,K];
     public val id:Long;
     public val ownerPlaceIndex:Long;
 
@@ -25,10 +26,11 @@ public class TxSlaveLog[K] {K haszero} {
     	this.ownerPlaceIndex = ownerPlaceIndex;
     }
     
-    public def this(id:Long, ownerPlaceIndex:Long, transLog:HashMap[K,Cloneable]) {
+    public def this(id:Long, ownerPlaceIndex:Long, transLog:HashMap[K,Cloneable], transLogRail:HashMap[Long,K]) {
     	this.id = id;
     	this.ownerPlaceIndex = ownerPlaceIndex;
     	this.transLog = transLog;
+    	this.transLogRail = transLogRail;
     }
     
     public def toString() {

@@ -27,6 +27,7 @@ import x10.util.GrowableRail;
 import x10.xrx.TxStoreConflictException;
 import x10.xrx.TxStoreFatalException;
 import x10.xrx.FinishNonResilientCustom;
+import x10.xrx.txstore.TxMasterStoreForRail;
 
 public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {   
     static resilient = Runtime.RESILIENT_MODE > 0;
@@ -163,11 +164,23 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
         return plh().getMasterStore().get(id, key);
     }
     
+    
+    public def getRail(index:Long):Any {
+        Runtime.activity().tx = true;
+        return (plh().getMasterStore() as TxMasterStoreForRail[Any]).getRail(id, index);
+    }
+    
     /***************** PUT ********************/
     public def put(key:Any, value:Cloneable):Cloneable {
         Runtime.activity().tx = true;
         Runtime.activity().txReadOnly = false;
         return plh().getMasterStore().put(id, key, value);
+    }
+    
+    public def putRail(index:Long, value:Any) {
+        Runtime.activity().tx = true;
+        Runtime.activity().txReadOnly = false;
+        (plh().getMasterStore() as TxMasterStoreForRail[Any]).putRail(id, index, value);
     }
     
     /***************** Delete *****************/

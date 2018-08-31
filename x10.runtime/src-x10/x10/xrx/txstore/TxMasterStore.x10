@@ -23,10 +23,16 @@ import x10.util.resilient.localstore.Cloneable;
 
 public class TxMasterStore[K] {K haszero} {
     /*Each map has an object of TxManager (same object even after failures)*/
-    private val txManager:TxManager[K];
-    private val sequence:AtomicInteger;
-    private val immediateRecovery:Boolean;
+    protected val txManager:TxManager[K];
+    protected val sequence:AtomicInteger;
+    protected val immediateRecovery:Boolean;
     public static val TX_FACTOR=1000000;
+    
+    public def this(immediateRecovery:Boolean) {
+        this.immediateRecovery = immediateRecovery;
+        this.sequence = new AtomicInteger();
+        this.txManager = null;
+    }
     
     public def this(masterMap:HashMap[K,Cloneable], immediateRecovery:Boolean) {
         this.immediateRecovery = immediateRecovery;
@@ -34,11 +40,11 @@ public class TxMasterStore[K] {K haszero} {
         this.txManager = TxManager.make[K](new TxMapData[K](masterMap), immediateRecovery);
     }   
     
-    public def isReadOnlyTransaction(id:Long) {
-        return txManager.isReadOnlyTransaction(id);
+    public def getType():Int {
+        return TxLocalStore.KV_TYPE;
     }
     
-    public def getTxCommitLog(id:Long) {
+    public def getTxCommitLog(id:Long):Any {
         return txManager.getTxCommitLog(id);
     }
     
@@ -90,7 +96,9 @@ public class TxMasterStore[K] {K haszero} {
         txManager.unlockWrite(id, key);
     }
 
-    public def getState() = txManager.data;
+    public def getDataForRecovery():Any {
+        return txManager.data.getKeyValueMap();
+    }
     
     public def getNextTransactionId() {
         val placeId = here.id as Int;

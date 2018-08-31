@@ -18,6 +18,7 @@ import x10.util.resilient.localstore.Cloneable;
 import x10.util.HashSet;
 import x10.xrx.TxStorePausedException;
 import x10.xrx.TxStoreFatalException;
+import x10.xrx.TxStoreConflictException;
 
 public class TxRail[K](size:Long) {K haszero} {
     val values:Rail[K];
@@ -45,42 +46,96 @@ public class TxRail[K](size:Long) {K haszero} {
         lc = new Lock();
     }
     
-    public def this(packedValues:HashMap[Long,TxItem[K]]) {
-        property(packedValues.size());
+    public def this(size:Long, init:(Long)=>K) {
+        property(size);
+        values = new Rail[K](size, init);
+        locks = new Rail[TxLock](size, (i:Long) => TxLock.make());
+        versions = new Rail[Int](size, 0n);
+        lc = new Lock();
+    }
+    
+    
+    public def this(backupValues:HashMap[Long,K]) {
+        property(backupValues.size());
         values = new Rail[K](size);
         locks = new Rail[TxLock](size, (i:Long) => TxLock.make());
-        versions = new Rail[Int](size);
+        versions = new Rail[Int](size, 0n);
         lc = new Lock();
         
-        for (var i:Long = 0; i < packedValues.size(); i++) {
-            val item = packedValues.getOrThrow(i);
-            values(i) = item.value;
-            versions(i) = item.version;
+        for (var i:Long = 0; i < backupValues.size(); i++) {
+            values(i) = backupValues.getOrThrow(i);
         }
     }
     
-    public def packItemsForReplication() {
+    public def getRailForRecovery() {
         try {
             lock(-1);
-            val result = new HashMap[Long,TxItem[K]]();
-            for (var i:Long = 0; i < size; i++) {
-                result.put(i, new TxItem[K](values(i), versions(i), null));
-            }
-            return result;
-            
+            return new Rail[K](values);
+        } finally {
+            unlock(-1);
+        }
+    }
+    
+    public def logValueAndVersion(index:Long, location:Long, log:TxLogForRail[K]) {
+        try {
+            lock(-1);
+            log.initialize(location, versions(index), values(index));
         }finally {
             unlock(-1);
         }
     }
     
-    public def getItem(i:Long):TxItem[K] {
+    
+    public def lockReadAndValidateVersion(id:Long, index:Long, initVersion:Int) {
+        locks(index).lockRead(id);
         try {
             lock(-1);
-            return new TxItem[K](values(i), versions(i), locks(i));
+            if (initVersion != versions(index))
+                throw new TxStoreConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
         }finally {
             unlock(-1);
         }
     }
+    
+    public def lockWriteAndValidateVersion(id:Long, index:Long, initVersion:Int) {
+        locks(index).lockWrite(id);
+        try {
+            lock(-1);
+            if (initVersion != versions(index))
+                throw new TxStoreConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
+        } finally {
+            unlock(-1);
+        }
+    }
+    
+    public def lockWriteFast(id:Long, index:Long) {
+        locks(index).lockWrite(id);
+    }
+    
+    public def lockReadFast(id:Long, index:Long) {
+        locks(index).lockRead(id);
+    }
+    
+    public def unlockWriteFast(id:Long, index:Long) {
+        locks(index).unlockWrite(id);
+    }
+    
+    public def unlockReadFast(id:Long, index:Long) {
+        locks(index).unlockRead(id);
+    }
+    
+    
+    public def updateAndunlockWrite(id:Long, index:Long, currValue:K) {
+        try {
+            lock(-1);
+            values(index) = currValue;
+            versions(index)++;
+        } finally {
+            unlock(-1);
+        }
+        locks(index).unlockWrite(id);
+    }
+    
     
     public def lock(txId:Long){
         if (!TxConfig.LOCK_FREE) {

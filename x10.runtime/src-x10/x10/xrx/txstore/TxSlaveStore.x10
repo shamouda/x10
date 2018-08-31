@@ -25,14 +25,22 @@ public class TxSlaveStore[K] {K haszero} {
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     private var masterState:HashMap[K,Cloneable];
+    private var masterStateRail:Rail[K];
+    
+    private val storeType:Int;
+    
     // the order of the transactions in this list is important for recovery
     // TODO: change to a HashMap[place index, list]
     private var logs:ArrayList[TxSlaveLog[K]]; 
     private transient val lock:Lock;
     
-    public def this() {
+    public def this(storeType:Int, size:Long, init:(Long)=>K) {
         assert(resilient);
-        masterState = new HashMap[K,Cloneable]();
+        this.storeType = storeType;
+        if (storeType == TxLocalStore.KV_TYPE)
+            masterState = new HashMap[K,Cloneable]();
+        else 
+            masterStateRail = new Rail[K](size, init);
         logs = new ArrayList[TxSlaveLog[K]]();
         if (!TxConfig.LOCK_FREE) {
             lock = new Lock();
@@ -41,9 +49,15 @@ public class TxSlaveStore[K] {K haszero} {
         }
     }
     
-    public def this(state:HashMap[K,Cloneable]) {
+    public def this(state:HashMap[K,Cloneable], rail:Rail[K]) {
         assert(resilient);
-        masterState = state;
+        if (state != null) {
+            masterState = state;
+            storeType = TxLocalStore.KV_TYPE;
+        } else {
+            masterStateRail = rail;
+            storeType = TxLocalStore.RAIL_TYPE;
+        }
         logs = new ArrayList[TxSlaveLog[K]]();
         if (!TxConfig.LOCK_FREE) {
             lock = new Lock();
@@ -53,20 +67,26 @@ public class TxSlaveStore[K] {K haszero} {
     }
     
     /******* Recovery functions (called by one place) , no risk of race condition *******/
-    public def addMasterPlace(state:HashMap[K,Cloneable]) {
+    public def addMasterPlace(state:HashMap[K,Cloneable], state2:Rail[K]) {
         masterState = state;
+        masterStateRail = state2;
         logs = new ArrayList[TxSlaveLog[K]]();
     }
     
     public def getSlaveMasterState():HashMap[K,Cloneable] {
         return masterState;
     }
+    
+    public def getSlaveMasterStateRail():Rail[K] {
+        return masterStateRail;
+    }
+    
     /******* Prepare/Commit/Abort functions *******/
     /*Used by LocalTx to commit a transaction. TransLog is applied immediately and not saved in the logs map*/
-    public def commit(id:Long, transLog:HashMap[K,Cloneable], ownerPlaceIndex:Long) {
+    public def commit(id:Long, transLog:HashMap[K,Cloneable], transLogRail:HashMap[Long,K], ownerPlaceIndex:Long) {
         try {
             slaveLock();
-            commitLockAcquired(new TxSlaveLog[K](id, ownerPlaceIndex, transLog));
+            commitLockAcquired(new TxSlaveLog[K](id, ownerPlaceIndex, transLog, transLogRail));
         }
         finally {
             slaveUnlock();
@@ -91,22 +111,32 @@ public class TxSlaveStore[K] {K haszero} {
     
     private def commitLockAcquired(txLog:TxSlaveLog[K]) {
         try {
-            val data = masterState;
-            val iter = txLog.transLog.keySet().iterator();
-            while (iter.hasNext()) {
-                val key = iter.next();
-                val value = txLog.transLog.getOrThrow(key);
-                if (value == null)
-                    data.delete(key);
-                else
-                    data.put(key, value);
+            if (storeType == TxLocalStore.KV_TYPE) {
+                val data = masterState;
+                val iter = txLog.transLog.keySet().iterator();
+                while (iter.hasNext()) {
+                    val key = iter.next();
+                    val value = txLog.transLog.getOrThrow(key);
+                    if (value == null)
+                        data.delete(key);
+                    else
+                        data.put(key, value);
+                }
+            } else {
+                val data = masterStateRail;
+                val iter = txLog.transLogRail.keySet().iterator();
+                while (iter.hasNext()) {
+                    val index = iter.next();
+                    val value = txLog.transLogRail.getOrThrow(index);
+                    data(index) = value;
+                }
             }
         }catch(ex:Exception){
             throw ex;
         }
     }
     
-    public def prepare(id:Long, entries:HashMap[K,Cloneable], ownerPlaceIndex:Long) {
+    public def prepare(id:Long, entries1:HashMap[K,Cloneable], entries2:HashMap[Long,K], ownerPlaceIndex:Long) {
         if (TxConfig.TM_DEBUG) 
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] Slave.prepare ...");
         try {
@@ -116,20 +146,10 @@ public class TxSlaveStore[K] {K haszero} {
                 txSlaveLog = new TxSlaveLog[K](id, ownerPlaceIndex);
                 logs.add(txSlaveLog);
             }
-            txSlaveLog.transLog = entries;
+            txSlaveLog.transLog = entries1;
+            txSlaveLog.transLogRail = entries2;
         }
         finally {
-            slaveUnlock();
-        }
-    }
-    
-    public def isPrepared(id:Long) {
-        try {
-            slaveLock();
-            if (getLog(id) == null)
-                return false;
-            else return true;
-        } finally {
             slaveUnlock();
         }
     }
@@ -141,53 +161,6 @@ public class TxSlaveStore[K] {K haszero} {
             slaveLock();
             val log = getLog(id);
             logs.remove(log);
-        }
-        finally {
-            slaveUnlock();
-        }
-    }
-    
-    public def clusterTransactions() {
-        val map = new HashMap[Long,ArrayList[Long]]();
-        try {
-            slaveLock();
-            for (log in logs) {
-                var list:ArrayList[Long] = map.getOrElse(log.ownerPlaceIndex, null);
-                if (list == null){
-                    list = new ArrayList[Long]();
-                    map.put(log.ownerPlaceIndex, list);
-                }
-                list.add(log.id);
-            }
-        } 
-        finally {
-            slaveUnlock();
-        }
-        return map;
-    }
-    
-    public def getPendingTransactions() {
-        val list = new ArrayList[Long]();
-        try {
-            slaveLock();
-            for (log in logs){
-                list.add(log.id);
-            }
-        } 
-        finally {
-            slaveUnlock();
-        }
-        return list;
-    }
-    
-    public def commitAll(committed:ArrayList[Long]) {
-        try {
-            slaveLock();
-            for (log in logs){
-                if (committed.contains(log.id))
-                    commitLockAcquired(log);
-            }
-            logs.clear();
         }
         finally {
             slaveUnlock();

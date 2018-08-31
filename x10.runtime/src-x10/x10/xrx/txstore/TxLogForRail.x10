@@ -22,6 +22,7 @@ import x10.xrx.Runtime;
 import x10.xrx.TxStoreFatalException;
 
 public class TxLogForRail[K] {K haszero} implements x10.io.Unserializable {
+    public static val INIT_VERSION_UNKNOWN = -1n;
 	/*************************************************************/
 	static val LONG_ITEMS_PER_INDEX = 1; //index:
 	static val INT_ITEMS_PER_INDEX = 1; //initVersion
@@ -79,10 +80,8 @@ public class TxLogForRail[K] {K haszero} implements x10.io.Unserializable {
 	}
 
     public def logPut(location:Long, newValue:K) {
-    	val oldValue = KItems(location*K_ITEMS_PER_INDEX + K_CURRENT_VALUE_INDEX);
     	KItems(location*K_ITEMS_PER_INDEX + K_CURRENT_VALUE_INDEX) = newValue;
     	boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_READ_ONLY_INDEX) = false;
-        return oldValue;
     }
     
     public def setAllWriteFlags(location:Long, locked:Boolean) {
@@ -90,10 +89,22 @@ public class TxLogForRail[K] {K haszero} implements x10.io.Unserializable {
     	boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_WRITE_INDEX) = locked;
     }
     
-    public def getOrAddItem(itemIndex:Long) {
+    private def grow() {
+        longItems.grow(longItems.capacity()+LONG_ITEMS_PER_INDEX);
+        KItems.grow(KItems.capacity()+K_ITEMS_PER_INDEX);
+        boolItems.grow(boolItems.capacity()+BOOLEAN_ITEMS_PER_INDEX);
+        intItems.grow(intItems.capacity()+INT_ITEMS_PER_INDEX);
+    }
+    
+    public def getOrAddItem(itemIndex:Long):Boolean {
+        var added:Boolean = false;
     	var location:Long = getLocation(itemIndex);
     	if (location == -1) {
+    	    added = true;
+    	    if (size == longItems.capacity()) grow();
     		location = size;
+    		longItems(location*LONG_ITEMS_PER_INDEX + 0) = itemIndex;
+    		intItems(location*INT_ITEMS_PER_INDEX + 0) = INIT_VERSION_UNKNOWN; //initial version not known
     		boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_READ_ONLY_INDEX) = true;
     		boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_READ_INDEX) = false;
         	boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_WRITE_INDEX) = false;
@@ -102,7 +113,13 @@ public class TxLogForRail[K] {K haszero} implements x10.io.Unserializable {
     		size++;
     	}
     	lastUsedLocation = location; //check this
-    	return location;
+    	return added;
+    }
+    
+    public def initialize(location:Long, initVersion:Int, initValue:K) {
+        KItems(location*K_ITEMS_PER_INDEX + K_INIT_VALUE_INDEX) = initValue;
+        KItems(location*K_ITEMS_PER_INDEX + K_CURRENT_VALUE_INDEX) = initValue;
+        intItems(location*INT_ITEMS_PER_INDEX + 0) = initVersion;
     }
 
     public def reset() {
@@ -113,7 +130,7 @@ public class TxLogForRail[K] {K haszero} implements x10.io.Unserializable {
         lastUsedLocation = -1;
     }
 
-    public def getCurrValue(location:Long) {
+    public def getCurrentValue(location:Long) {
         return KItems(location*K_ITEMS_PER_INDEX + K_CURRENT_VALUE_INDEX);
     }
     
@@ -140,41 +157,72 @@ public class TxLogForRail[K] {K haszero} implements x10.io.Unserializable {
     public def setLockedRead(location:Long, lr:Boolean) {
     	boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_READ_INDEX) = lr;
     }
-    /*
-    public def prepareCommitLog():HashMap[K,Cloneable] {
-        val wtKeys = keysList.getWriteKeys();
-        if (wtKeys.size() == 0)
-            return null;
-        //Console.OUT.println("prepareCommitLog readKeys {" + keysList.readKeysAsString() + "}  writeKeys {" + keysList.writeKeysAsString() + "} ");
-        val map = new HashMap[K,Cloneable]();
-        if (TxConfig.WRITE_BUFFERING) {
-            for (var i:Long = 0 ; i < wtKeys.size(); i++) {
-                val log = wtKeys(i);
-                map.put( log.key() , log.getValue());   
-            }
-        }
-        else {
-            for (var i:Long = 0 ; i < wtKeys.size(); i++) {
-                val log = wtKeys(i);
-                val key = log.key();
-                val memory = log.getMemoryUnit();
-                if (memory == null) {
-                    Console.OUT.println("TxLog fatal bug, key["+key+"] has null memory unit");
-                    throw new TxStoreFatalException("TxLog fatal bug, key["+key+"] has null memory unit");
-                }
-                
-                if (memory.isDeletedLocked()) {
-                    map.put(key, null);
+    
+    public def validateRV_LA_WB(data:TxRail[K]):Boolean {
+        var writeTx:Boolean = false;
+        for (var location:Long = 0; location < size; location++) {
+            val index = longItems(location);
+            val ro = boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_READ_ONLY_INDEX);
+            val initVersion = intItems(location);
+            if (ro) { //read only
+                data.lockReadAndValidateVersion(id, index, initVersion);
+                boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_READ_INDEX) = true;
+            } else {
+                if (initVersion != INIT_VERSION_UNKNOWN) {
+                    data.lockWriteAndValidateVersion(id, index, initVersion);
                 }
                 else {
-                    map.put(key, memory.getValueLocked(false, key, id));   
+                    data.lockWriteFast(id, index);
                 }
-            
+                writeTx = true;
+                boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_WRITE_INDEX) = true;
             }
         }
-        return map;
+        return writeTx;
     }
-    */
+    
+    
+    public def abortRV_LA_WB(data:TxRail[K]) {
+        for (var location:Long = 0; location < size; location++) {
+            val index = longItems(location);
+            if (boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_READ_INDEX)) {
+                data.unlockReadFast(id, index);
+                boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_READ_INDEX) = false;
+            } else if (boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_WRITE_INDEX)) {
+                data.unlockWriteFast(id, index);
+                boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_WRITE_INDEX) = false;
+            }
+        }
+    }
+    
+    public def commitRV_LA_WB(data:TxRail[K]) {
+        for (var location:Long = 0; location < size; location++) {
+            val index = longItems(location);
+            if (boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_READ_INDEX)) {
+                data.unlockReadFast(id, index);
+                boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_READ_INDEX) = false;
+            } else if (boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_WRITE_INDEX)) {
+                val currValue = KItems(location*K_ITEMS_PER_INDEX + K_CURRENT_VALUE_INDEX);
+                data.updateAndunlockWrite(id, index, currValue);
+                boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_WRITE_INDEX) = false;
+            }
+        }
+    }
+    
+    public def getTxCommitLogRV_LA_WB():HashMap[Long,K] {
+        var result:HashMap[Long,K] = null;
+        for (var location:Long = 0; location < size; location++) {
+            val index = longItems(location);
+            val ro = boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_READ_ONLY_INDEX);
+            if (!ro) { //read only
+                val currValue = KItems(location*K_ITEMS_PER_INDEX + K_CURRENT_VALUE_INDEX);
+                if (result == null)
+                    result = new HashMap[Long,K]();
+                result.put(index,currValue);
+            }
+        }
+        return result;
+    }
     
     public def lock(i:Long) {
         if (!TxConfig.LOCK_FREE) {
