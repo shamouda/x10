@@ -51,18 +51,6 @@ public abstract class TxManagerForRail[K] {K haszero} {
             throw new Exception("Wrong Tx Manager Configuration (undo logging can not be selected with late acquire");
     }
   
-    public def isReadOnlyTransaction(id:Long) {
-        val log = txLogManager.searchTxLog(id);
-        if (log == null || log.id() == -1)
-            return true;
-        try {
-            log.lock(1);
-            return log.isReadOnlyTransaction();
-        }finally {
-            log.unlock(1);
-        }
-    }
-    
     /**************   Pausing for Recovery    ****************/
     public def waitUntilPaused() {
     	if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxMasterStore.waitUntilPaused started ...");

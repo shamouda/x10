@@ -55,16 +55,12 @@ public class TxRail[K](size:Long) {K haszero} {
     }
     
     
-    public def this(backupValues:HashMap[Long,K]) {
-        property(backupValues.size());
-        values = new Rail[K](size);
+    public def this(backupValues:Rail[K]) {
+        property(backupValues.size);
+        values = backupValues;
         locks = new Rail[TxLock](size, (i:Long) => TxLock.make());
         versions = new Rail[Int](size, 0n);
         lc = new Lock();
-        
-        for (var i:Long = 0; i < backupValues.size(); i++) {
-            values(i) = backupValues.getOrThrow(i);
-        }
     }
     
     public def getRailForRecovery() {
@@ -90,8 +86,10 @@ public class TxRail[K](size:Long) {K haszero} {
         locks(index).lockRead(id);
         try {
             lock(-1);
-            if (initVersion != versions(index))
+            if (initVersion != versions(index)) {
+                locks(index).unlockRead(id);        
                 throw new TxStoreConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
+            }
         }finally {
             unlock(-1);
         }
@@ -101,8 +99,10 @@ public class TxRail[K](size:Long) {K haszero} {
         locks(index).lockWrite(id);
         try {
             lock(-1);
-            if (initVersion != versions(index))
+            if (initVersion != versions(index)) {
+                locks(index).unlockWrite(id);        
                 throw new TxStoreConflictException("ConflictException["+here+"] Tx["+id+"] ", here);
+            }
         } finally {
             unlock(-1);
         }
@@ -130,6 +130,7 @@ public class TxRail[K](size:Long) {K haszero} {
             lock(-1);
             values(index) = currValue;
             versions(index)++;
+            if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] HARDWRITE["+index+"]="+currValue+" newVersion="+versions(index));
         } finally {
             unlock(-1);
         }

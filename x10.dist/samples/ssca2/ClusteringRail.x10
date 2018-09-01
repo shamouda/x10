@@ -27,7 +27,7 @@ import x10.util.GrowableRail;
 //graph generated using the R-MAT algorithm
 //all edge costs are considered equal
 //test command: X10_RESILIENT_VERBOSE=0 TM_DEBUG=0 CONFLICT_SLEEP_MS=0 X10_NUM_IMMEDIATE_THREADS=1 TM=locking X10_RESILIENT_MODE=14 X10_NTHREADS=1 X10_NPLACES=5 ./a.out -w 1 -n 10 -vp 3,1 -sp 2 -vt 0.25,0.8 -vg 1
-public final class ClusteringForRail(plh:PlaceLocalHandle[ClusteringState]) implements MasterWorkerApp {
+public final class ClusteringRail(plh:PlaceLocalHandle[ClusteringState]) implements MasterWorkerApp {
     public static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     public static val NO_COLOR = 0;
     
@@ -296,7 +296,8 @@ public final class ClusteringForRail(plh:PlaceLocalHandle[ClusteringState]) impl
         val places = activePlaces.size();
         Console.OUT.println("==============  Collecting clusters  ===============");
         val map = new HashMap[Long,ArrayList[Int]]();
-        store.executeLockingTx(new Rail[Long](0),new Rail[Any](0), new Rail[Boolean](0), 0, (tx:TxLocking) => {
+        
+        store.executeTransaction((tx:Tx) => {
             for (var tmpP:Long = 0; tmpP < places; tmpP++) {
                 val localMap = at (activePlaces(tmpP)) {
                     val setIter = tx.keySet().iterator();                    
@@ -436,7 +437,7 @@ public final class ClusteringForRail(plh:PlaceLocalHandle[ClusteringState]) impl
         val N = graph.numVertices();
         val verticesPerPlace = Math.ceil((graph.numVertices() as Double)/places) as Long;
         val plh = PlaceLocalHandle.make[ClusteringState](Place.places(), ()=>new ClusteringState(graph, places, workers, verticesPerPlace, verbose, clusterSize, g, vp, vt, vg));
-        val app = new ClusteringForRail(plh);
+        val app = new ClusteringRail(plh);
         var distTime:Double = 0;
         for (var i:Long = 0 ; i < iters; i++) {
                                                 

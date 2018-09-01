@@ -266,14 +266,18 @@ public class TxStore {
         if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Slave of the dead master ...");
         
         plh().slaveStore.waitUntilPaused();
-        
-        val map = plh().slaveStore.getSlaveMasterState();
+        val storeType = plh().getMasterStore().getType();
+        val rail = storeType == TxLocalStore.RAIL_TYPE ? plh().slaveStore.getSlaveMasterStateRail(): null;
+        val map = storeType == TxLocalStore.KV_TYPE ? plh().slaveStore.getSlaveMasterState() : null;
         if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Slave prepared a consistent master replica to the spare master spare=["+spare+"] ...");
         
         val deadPlaceSlave = here;
         at (spare) async {
-            if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Spare received the master replica from slave ["+deadPlaceSlave+"] ...");    
-            plh().setMasterStore (new TxMasterStore(map, plh().immediateRecovery));
+            if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Spare received the master replica from slave ["+deadPlaceSlave+"] ...");
+            if (storeType == TxLocalStore.KV_TYPE)
+                plh().setMasterStore (new TxMasterStore(map, plh().immediateRecovery));
+            else
+                plh().setMasterStore (new TxMasterStoreForRail(rail, plh().immediateRecovery));
             plh().getMasterStore().pausing();
             plh().getMasterStore().paused();
             

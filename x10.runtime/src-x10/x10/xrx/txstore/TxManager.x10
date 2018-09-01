@@ -70,19 +70,6 @@ public abstract class TxManager[K] {K haszero} {
             throw new Exception("Wrong Tx Manager Configuration (undo logging can not be selected with late acquire");
     }
 
-    public def isReadOnlyTransaction(id:Long) {
-        val log = txLogManager.searchTxLog(id);
-        if (log == null || log.id() == -1) /*SS_CHECK  txLogManager.isAborted(log.id()) */
-            return true;
-        
-        try {
-            log.lock(1);
-            return log.isReadOnlyTransaction();
-        }finally {
-            log.unlock(1);
-        }
-    }
-    
     /* Used in resilient mode to transfer the changes done by a transaction to the Slave.
      * We filter the TxLog object to remove read-only keys,
      * so that we transfer only the update operations.

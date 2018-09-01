@@ -95,8 +95,7 @@ public class TxSlaveStore[K] {K haszero} {
     
     /*Used by Tx to commit a transaction that was previously prepared. TransLog is removed from the logs map after commit*/
     public def commit(id:Long) {
-        if (TxConfig.TM_DEBUG) 
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] Slave.commit ...");
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] Slave.commit ...");
         try {
             slaveLock();
             val txLog = getLog(id);
@@ -123,6 +122,7 @@ public class TxSlaveStore[K] {K haszero} {
                         data.put(key, value);
                 }
             } else {
+                if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] " + TxConfig.txIdToString (txLog.id)+ " here["+here+"] Slave.commitLockAcquired, masterStateRail="+masterStateRail+", transLogRail="+txLog.transLogRail+"...");
                 val data = masterStateRail;
                 val iter = txLog.transLogRail.keySet().iterator();
                 while (iter.hasNext()) {
@@ -132,6 +132,7 @@ public class TxSlaveStore[K] {K haszero} {
                 }
             }
         }catch(ex:Exception){
+            if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] " + TxConfig.txIdToString (txLog.id)+ " here["+here+"] Slave.commitLockAcquired failed ex["+ex.getMessage()+"], masterStateRail="+masterStateRail+", transLogRail="+txLog.transLogRail+"...");
             throw ex;
         }
     }

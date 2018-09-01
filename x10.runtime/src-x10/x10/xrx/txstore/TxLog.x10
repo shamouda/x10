@@ -45,10 +45,6 @@ public class TxLog[K] {K haszero} implements x10.io.Unserializable {
             wtKeys.clear();
         }
         
-        public def isReadOnlyTransaction() {
-            return wtKeys.size() == 0;
-        }
-        
         public def getWriteKeys()  {
             return wtKeys;
         }
@@ -280,10 +276,6 @@ public class TxLog[K] {K haszero} implements x10.io.Unserializable {
     // mark as locked for read
     public def setLockedRead(key:K, lr:Boolean) {
         keysList.getOrThrow(key).setLockedRead(lr);
-    }
-    
-    public def isReadOnlyTransaction() {
-        return keysList.isReadOnlyTransaction();
     }
     
     public def prepareCommitLog():HashMap[K,Cloneable] {

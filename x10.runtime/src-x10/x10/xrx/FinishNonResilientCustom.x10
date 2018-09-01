@@ -349,7 +349,7 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
             }
             val cTx = txFlag;
             val cTxReadyOnly = txReadOnlyFlag;
-            
+            if (verbose>=1) debug("==== Remote(id="+id+").notifyActivityTermination(srcId="+srcId+",dstId="+dstId+",kind="+kind+",isTx="+isTx+",isTxRO="+readOnly+") calculated cTx=" + cTx + ", cTxReadyOnly="+cTxReadyOnly);
             val excs = exceptions == null || exceptions.isEmpty() ? null : exceptions.toRail();
             exceptions = null;
             val home = id.home as Long;
@@ -476,6 +476,7 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
             s.add("             id:" + id); s.add('\n');
             s.add("     localCount:"); s.add(count); s.add('\n');
             s.add("       parentId: " + parentId); s.add('\n');
+            s.add("             tx: " + tx); s.add('\n');
             if (remoteActivities != null) {
                 s.add("    remote acts:"); s.add('\n');
             	for (e in remoteActivities.entries()) {
@@ -750,7 +751,7 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
         }
         
         protected def process(remoteEntry:Pair[Long, Int], isTx:Boolean, txRO:Boolean):void {
-            if (verbose>=1) debug(">>>> Root(id="+id+").process(pair) called");
+            if (verbose>=1) debug(">>>> Root(id="+id+").process(pair) called, isTx=" + isTx + ", txRO=" + txRO + ", tx="+tx);
             ensureRemoteActivities();
             // add the remote record to the local set
             remoteActivities.put(remoteEntry.first, remoteActivities.getOrElse(remoteEntry.first, 0n)+remoteEntry.second);

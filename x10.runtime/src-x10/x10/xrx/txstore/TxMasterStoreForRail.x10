@@ -25,10 +25,10 @@ public class TxMasterStoreForRail[K] {K haszero} extends TxMasterStore[K] {
     /*Each map has an object of TxManager (same object even after failures)*/
     private val txManagerForRail:TxManagerForRail[K];
     private val size:Long;
-    public def this(backupRail:HashMap[Long,K], immediateRecovery:Boolean) {
+    public def this(backupRail:Rail[K], immediateRecovery:Boolean) {
         super(immediateRecovery);
         this.txManagerForRail = TxManagerForRail.make[K](new TxRail[K](backupRail), immediateRecovery);
-        this.size = backupRail.size();
+        this.size = backupRail.size;
     }
     
     public def this(size:Long, init:(Long)=>K, immediateRecovery:Boolean) {
@@ -60,25 +60,25 @@ public class TxMasterStoreForRail[K] {K haszero} extends TxMasterStore[K] {
     public def putRailLocking(id:Long, index:Long, value:K) {
         txManagerForRail.putLocking(id, index%size, value);
     }
-    
-    public def validateRail(id:Long) {
-        txManagerForRail.validate(id);
-    }
-    
-    public def commitRail(id:Long) {
-        txManagerForRail.commit(id);
-    }
-    
-    public def abortRail(id:Long) {
-        txManagerForRail.abort(id);
-    }
-    
+
     public def lockAllRail(id:Long, start:Long, opPerPlace:Long, indices:Rail[Long],readFlags:Rail[Boolean]) {
         txManagerForRail.lockAll(id, start, opPerPlace, indices, readFlags);
     }
     
     public def unlockAllRail(id:Long, start:Long, opPerPlace:Long, indices:Rail[Long],readFlags:Rail[Boolean]) {
         txManagerForRail.unlockAll(id, start, opPerPlace, indices, readFlags);
+    }
+    
+    public def validate(id:Long) {
+        txManagerForRail.validate(id);
+    }
+    
+    public def commit(id:Long) {
+        txManagerForRail.commit(id);
+    }
+    
+    public def abort(id:Long) {
+        txManagerForRail.abort(id);
     }
     
     public def isActive() {
