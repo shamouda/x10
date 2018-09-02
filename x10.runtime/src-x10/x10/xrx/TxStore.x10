@@ -126,6 +126,59 @@ public class TxStore {
         return retryCount;
     }
     
+    public def set2(key:Any, value:Cloneable, place:Place, key2:Any, value2:Cloneable) {
+        while(true) {
+            val tx = makeTx();
+            try {
+                val r:Cloneable;
+                finish {
+                    Runtime.registerFinishTx(tx, true);
+                    tx.put(key, value);
+                    at (place) async {
+                        tx.put(key2, value2);
+                    }
+                }
+                break;
+            } catch(ex:Exception) {
+                throwIfFatalSleepIfRequired(tx.id, ex);
+            }
+        }
+    }
+    
+    public def set(key:Any, value:Cloneable) {
+        while(true) {
+            val tx = makeTx();
+            try {
+                val r:Cloneable;
+                finish {
+                    Runtime.registerFinishTx(tx, true);
+                    tx.put(key, value);
+                }
+                break;
+            } catch(ex:Exception) {
+                throwIfFatalSleepIfRequired(tx.id, ex);
+            }
+        }
+    }
+    public def get(key:Any):Cloneable {
+        var result:Cloneable = null;
+        while(true) {
+            val tx = makeTx();
+            try {
+                val r:Cloneable;
+                finish {
+                    Runtime.registerFinishTx(tx, true);
+                    r = tx.get(key);
+                }
+                result = r;
+                break;
+            } catch(ex:Exception) {
+                throwIfFatalSleepIfRequired(tx.id, ex);
+            }
+        }
+        return result;
+    }
+    
     private def throwIfFatalSleepIfRequired(txId:Long, ex:Exception) {
         val immediateRecovery = plh().immediateRecovery;
         var dpe:Boolean = false;

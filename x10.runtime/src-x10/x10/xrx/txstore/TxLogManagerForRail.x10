@@ -16,10 +16,11 @@ import x10.xrx.txstore.TxConfig;
 import x10.util.concurrent.Lock;
 import x10.xrx.TxStoreConcurrencyLimitException;
 import x10.util.HashMap;
+import x10.util.GrowableRail;
 
 public class TxLogManagerForRail[K] {K haszero} {
     public static val TXLOG_NEW = System.getenv("TXLOG_NEW") != null && System.getenv("TXLOG_NEW").equals("1");
-    private val txLogs:Rail[TxLogForRail[K]];
+    private val txLogs:GrowableRail[TxLogForRail[K]];
     private val lock:Lock;
     private var insertIndex:Long;
     private var lastTaken:Long = -1;
@@ -31,9 +32,9 @@ public class TxLogManagerForRail[K] {K haszero} {
                 txLogs = null;
                 map = new HashMap[Long,TxLogForRail[K]]();
             } else {
-                txLogs = new Rail[TxLogForRail[K]](TxConfig.MAX_CONCURRENT_TXS);
-                for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
-                    txLogs(i) = new TxLogForRail[K]();
+                txLogs = new GrowableRail[TxLogForRail[K]](TxConfig.MIN_CONCURRENT_TXS);
+                for (var i:Long = 0 ; i < txLogs.capacity(); i++) {
+                    txLogs.add(new TxLogForRail[K]());
                 }
                 map = null;
             }
@@ -51,7 +52,7 @@ public class TxLogManagerForRail[K] {K haszero} {
             if (TXLOG_NEW)
                 return map.getOrElse(id, null);
             else {
-                for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
+                for (var i:Long = 0 ; i < txLogs.size(); i++) {
                     if (txLogs(i).id() == id) {
                         return txLogs(i);
                     }
@@ -76,26 +77,34 @@ public class TxLogManagerForRail[K] {K haszero} {
                 return log;
             }
             else {
-                for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
+                for (var i:Long = 0 ; i < txLogs.size(); i++) {
                     if (txLogs(i).id() == id)
                         return txLogs(i);
                 }
                 var obj:TxLogForRail[K] = null;
-                for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
+                for (var i:Long = 0 ; i < txLogs.size(); i++) {
                     if (txLogs(i).id() == -1) {
-                        obj = txLogs(i);                  
+                        obj = txLogs(i);
                         break;
                     }
                 }
                 if (obj == null) {
-                    Console.OUT.println(here + "FATAL ERROR: TxStoreConcurrencyLimitException");
-                    System.killHere();
+                    if (txLogs.size() < TxConfig.MAX_CONCURRENT_TXS) {
+                        val oldSize = txLogs.capacity();
+                        txLogs.grow(txLogs.capacity() + TxConfig.MIN_CONCURRENT_TXS);
+                        for (var x:Long = oldSize; x < txLogs.capacity(); x++) {
+                            txLogs.add(new TxLogForRail[K]());
+                        }
+                        obj = txLogs(oldSize);
+                    } else {
+                        Console.OUT.println(here + "FATAL ERROR: TxStoreConcurrencyLimitException");
+                        System.killHere();
+                    }
                 }
                 obj.setId(id); //allocate it
                 return obj;                
             }
-        }
-        finally {
+        } finally {
             unlock();
         }
     }

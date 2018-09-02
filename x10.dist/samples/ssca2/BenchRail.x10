@@ -2,7 +2,6 @@ import x10.xrx.TxStore;
 import x10.xrx.Tx;
 import x10.util.resilient.PlaceManager;
 import x10.xrx.Runtime;
-import x10.util.resilient.localstore.CloneableLong;
 
 public class BenchRail {
     public static def main(args:Rail[String]):void {

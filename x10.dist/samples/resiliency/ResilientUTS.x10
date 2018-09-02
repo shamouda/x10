@@ -16,13 +16,14 @@ import x10.interop.Java;
 import x10.io.Unserializable;
 import x10.util.concurrent.AtomicLong;
 import x10.util.concurrent.Lock;
-import x10.util.resilient.PlaceManager;
 import x10.util.HashMap;
 import x10.util.Collection;
 import x10.util.Map.Entry;
 import x10.xrx.Runtime;
 import x10.compiler.Uncounted;
 import x10.xrx.TxStore;
+import x10.xrx.Tx;
+import x10.util.resilient.PlaceManager;
 
 /*
  * Testing command:
@@ -190,7 +191,7 @@ final class ResilientUTS implements Unserializable {
 
     def resume() {
       if (resilient) {
-        val b = map.get(me.toString());
+        val b = map.get(me.toString()) as UTS;
         if (b != null) {
           if (b.size > 0n) bag.merge(b);
           bag.count = b.count;
@@ -394,7 +395,7 @@ final class ResilientUTS implements Unserializable {
     if (bag != null) {
       if (bag.upper(0) > group.size()) {
         if (resilient) {
-          map.set(0n.toString(), bag);
+            map.set(0n.toString(), bag);
         } else {
           plh().workers(0).bag.count = bag.count;
           plh().workers(0).bag.merge(bag);
@@ -417,7 +418,7 @@ final class ResilientUTS implements Unserializable {
             val d = (i * group.size()) / b.upper(0);
             at (group(d)) async {
               if (resilient) {
-                map.set(((d as Int) << power).toString(), b);
+                  map.set(((d as Int) << power).toString(), b);
               } else {
                 plh().workers(0).bag.merge(b);
               }
@@ -479,19 +480,19 @@ final class ResilientUTS implements Unserializable {
     }
     val resilient = Runtime.RESILIENT_MODE != 0n || ckpt == 1;
     val power = opt.power;
-    
-    val mgr = new PlaceManager(opt.spares, false);
-    val activePlaces = mgr.activePlaces();
-    val asyncRecovery = false;
+
     val md = UTS.encoder();
-    val map0 = resilient ? TxStore.make(activePlaces, asyncRecovery, null) : null;
+    val map0 = resilient ? TxStore.make(Place.places(), false, null): null;
+
     println(time0, "Warmup...");
 
     val tmp = new UTS(64n);
     tmp.seed(md, 19n, opt.warmupDepth);
     finish step(Place.places(), tmp, -1n, opt.power, resilient, map0, time0, null);
-    
-    val map:TxStore = resilient ? TxStore.make(activePlaces, asyncRecovery, null) : null;
+
+    val manager = new PlaceManager(opt.spares, false);
+    val map = resilient ? TxStore.make(manager.activePlaces(), false, null): null;
+
     println(time0, "Begin");
     val startTime = System.nanoTime();
 

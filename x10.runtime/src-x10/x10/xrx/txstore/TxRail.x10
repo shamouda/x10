@@ -125,6 +125,11 @@ public class TxRail[K](size:Long) {K haszero} {
     }
     
     
+    public def readLocked(index:Long) {
+        return values(index);
+    }
+    
+    
     public def updateAndunlockWrite(id:Long, index:Long, currValue:K) {
         try {
             lock(-1);
