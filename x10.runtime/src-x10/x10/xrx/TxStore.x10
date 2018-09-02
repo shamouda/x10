@@ -262,7 +262,6 @@ public class TxStore {
         
         if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Runtime.asyncRecover starting  immediate["+ls.immediateRecovery+"] slaveDead["+ls.slave.isDead()+"] masterActive["+ls.getMasterStore().isActive()+"] ...");
         if ( ls.slave.isDead() && ls.getMasterStore().isActive() ) {
-             ls.getMasterStore().pausing();
             @Uncounted async recoverSlave();
         }
     }
@@ -346,8 +345,11 @@ public class TxStore {
     }
     
     private static def createSlaveStoreAtSpare(plh:PlaceLocalHandle[TxLocalStore[Any]], spare:Place, deadPlace:Place, deadVirtualId:Long) {
+        try {
         if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Master of the dead slave, prepare a slave replica for the spare place ...");
+        plh().getMasterStore().pausing();
         plh().getMasterStore().waitUntilPaused();
+        if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Master is paused ...");
         val recData = plh().getMasterStore().getDataForRecovery();
         val storeType = plh().getMasterStore().getType();
         val state1:HashMap[Any,Cloneable] = (storeType == TxLocalStore.KV_TYPE)? recData as HashMap[Any,Cloneable]:null;
@@ -357,24 +359,33 @@ public class TxStore {
         at (spare) async {
             if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Spare received the slave replica from master ["+me+"] ...");    
             plh().slaveStore = new TxSlaveStore(state1, state2);
-        }        
+        }    
+        }catch(ex:Exception) {
+            ex.printStackTrace();
+            throw ex;
+        }
     }
     
     private static def waitForSlaveStore(plh:PlaceLocalHandle[TxLocalStore[Any]], sender:Place)  {
-        if (plh().slaveStoreExists())
+        if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " waitForSlaveStore called ");
+        if (plh().slaveStoreExists()) {
+            if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " waitForSlaveStore returning ");
             return;
+        }
         try {
             Runtime.increaseParallelism();
             
             while (!plh().slaveStoreExists()) {
-                if (sender.isDead())
+                if (sender.isDead()) {
+                    if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " waitForSlaveStore returning, sender("+sender+") is dead ");
                     throw new DeadPlaceException(sender);
+                }
                 TxConfig.waitSleep();
             }
-        }
-        finally {
+        } finally {
             Runtime.decreaseParallelism(1n);
         }
+        if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " waitForSlaveStore returning successfully");
     }
     
     private static def allocateSparePlace(plh:PlaceLocalHandle[TxLocalStore[Any]], deadVirtualId:Long, oldActivePlaces:PlaceGroup) {

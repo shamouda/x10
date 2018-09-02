@@ -39,6 +39,9 @@ final class UTS implements Cloneable {
     this.upper = new Rail[Int](n);
   }
 
+  public def toString() {
+      return "count["+count+"] size["+size+"]";
+  }
   private def digest(md:SHA, d:Int) throws SHAException {
     if (size >= depth.size) {
       grow();

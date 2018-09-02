@@ -141,16 +141,14 @@ public class TxLogManager[K] {K haszero} {
                 return false;
             }
             else {
-                for (var i:Long = 0 ; i < TxConfig.MAX_CONCURRENT_TXS; i++) {
+                for (var i:Long = 0 ; i < txLogs.size(); i++) {
                     if (txLogs(i).id() != -1 && txLogs(i).writeValidated) {
-                        Console.OUT.println("Recovering " + here + " TxMasterStore.waitUntilPaused  found a non-aborted transaction Tx["+txLogs(i).id()+"] " + TxManager.txIdToString (txLogs(i).id()));
                         return true;
                     }
                 }
                 return false;
             }
-        }
-        finally {
+        } finally {
             unlock();
         }
     }

@@ -89,17 +89,23 @@ public abstract class TxManager[K] {K haszero} {
     	if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxMasterStore.waitUntilPaused started ...");
         try {
             Runtime.increaseParallelism();
-            while (true) {
-                if (!txLogManager.activeTransactionsExist()) {
-                    break;
+            try {
+                while (true) {
+                    if (!txLogManager.activeTransactionsExist()) {
+                        break;
+                    }
+                    System.threadSleep(TxConfig.MASTER_WAIT_MS);
                 }
-                System.threadSleep(TxConfig.MASTER_WAIT_MS);
+            } catch (ex:Exception) {
+                if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxMasterStore.waitUntilPaused failed ex["+ex.getMessage()+"] ...");
+                ex.printStackTrace();
+                throw ex;
             }
         } finally {
             Runtime.decreaseParallelism(1n);
         }
-        paused();
         if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxMasterStore.waitUntilPaused completed ...");
+        paused();
     }
     
     private def ensureActiveStatus() {

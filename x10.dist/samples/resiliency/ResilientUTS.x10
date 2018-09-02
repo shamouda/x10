@@ -192,6 +192,7 @@ final class ResilientUTS implements Unserializable {
     def resume() {
       if (resilient) {
         val b = map.get(me.toString()) as UTS;
+        Console.OUT.println(here + " map.get("+me.toString()+") => " + b);
         if (b != null) {
           if (b.size > 0n) bag.merge(b);
           bag.count = b.count;
@@ -224,12 +225,16 @@ final class ResilientUTS implements Unserializable {
             }
             if (distribute()) i = 0n;
             if (resilient && (i = (i+1n) % 20000n) == 0n) {
-                println(time0, "Committing worker " + me);
-                map.set(me.toString(), bag.trim());
+                //println(time0, "Committing worker " + me);
+                val v = bag.trim();
+                Console.OUT.println(here + " map.set("+me.toString()+") => " + v);
+                map.set(me.toString(), v);
             }
           }
           if (resilient) {
-            map.set(me.toString(), bag.trim());
+            val v = bag.trim();
+            Console.OUT.println(here + " map.set("+me.toString()+") => " + v);
+            map.set(me.toString(), v);
           }
           steal();
         }
@@ -355,7 +360,11 @@ final class ResilientUTS implements Unserializable {
         val loot = bag.split();
         if (loot != null && resilient) {
           loot.count = thief.count;
-          map.set2(me.toString(), bag.trim(), group(t >> power), t.toString(), loot);
+          val v1 = bag.trim();
+          val v2 = loot;
+          val place = group(t >> power);
+          Console.OUT.println(here + " map.set("+me.toString()+") => " + v1 + ", to place["+place+"] map.set("+t.toString()+") => " + v2 );
+          map.set2(me.toString(), v1, place, t.toString(), v2);
           commit = true;
         }
         val id = t & mask;
@@ -369,7 +378,11 @@ final class ResilientUTS implements Unserializable {
           loot.count = lifelineCount;
           val t = next;
           if (resilient) {
-            map.set2(me.toString(), bag.trim(), group(t >> power), t.toString(), loot);
+            val v1 = bag.trim();
+            val v2 = loot;
+            val place = group(t >> power);
+            Console.OUT.println(here + " map.set("+me.toString()+") => " + v1 + ", to place["+place+"] map.set("+t.toString()+") => " + v2 );
+            map.set2(me.toString(), v1, place, t.toString(), v2);
             commit = true;
           }
           lifeline.set(-1);
@@ -395,6 +408,7 @@ final class ResilientUTS implements Unserializable {
     if (bag != null) {
       if (bag.upper(0) > group.size()) {
         if (resilient) {
+            Console.OUT.println(here + " map.set("+0n.toString()+") => " + bag);
             map.set(0n.toString(), bag);
         } else {
           plh().workers(0).bag.count = bag.count;
@@ -409,6 +423,7 @@ final class ResilientUTS implements Unserializable {
           if (i == 0n) {
             if (resilient) {
               b.count = 1n;
+              Console.OUT.println(here + " map.set("+0n.toString()+") => " + b);
               map.set(0n.toString(), b);
             } else {
               plh().workers(0).bag.count = 1;
@@ -418,7 +433,9 @@ final class ResilientUTS implements Unserializable {
             val d = (i * group.size()) / b.upper(0);
             at (group(d)) async {
               if (resilient) {
-                  map.set(((d as Int) << power).toString(), b);
+                  val key = ((d as Int) << power).toString();
+                  Console.OUT.println(here + " map.set("+key+") => " + b);
+                  map.set(key, b);
               } else {
                 plh().workers(0).bag.merge(b);
               }
@@ -473,12 +490,12 @@ final class ResilientUTS implements Unserializable {
         + ", Spare places: " + opt.spares + ", UTS_CKPT:" +  System.getenv("UTS_CKPT") + ", TM=" + System.getenv("TM"));
     
     val ckpt = System.getenv("UTS_CKPT") == null? 0 : Long.parseLong(System.getenv("UTS_CKPT"));
-    if (opt.victimsExist() && (ckpt == 0 || Runtime.RESILIENT_MODE == 0n)) {
-        Console.ERR.println("With victims, you must set UTS_CKPT=1 and X10_RESILIENT_MODE=1");
+    if (opt.victimsExist() && (ckpt == 0 || Runtime.RESILIENT_MODE < 1n)) {
+        Console.ERR.println("With victims, you must set UTS_CKPT=1 and X10_RESILIENT_MODE > 0");
         System.setExitCode(-1n);
         return;
     }
-    val resilient = Runtime.RESILIENT_MODE != 0n || ckpt == 1;
+    val resilient = Runtime.RESILIENT_MODE > 0n || ckpt == 1;
     val power = opt.power;
 
     val md = UTS.encoder();
