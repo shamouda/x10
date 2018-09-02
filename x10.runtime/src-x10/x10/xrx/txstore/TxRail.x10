@@ -81,6 +81,10 @@ public class TxRail[K](size:Long) {K haszero} {
         }
     }
     
+    public def logValueAndVersionLocked(index:Long, location:Long, log:TxLogForRail[K]) {
+    	log.initialize(location, versions(index), values(index));
+    }
+    
     
     public def lockReadAndValidateVersion(id:Long, index:Long, initVersion:Int) {
         locks(index).lockRead(id);
@@ -128,7 +132,11 @@ public class TxRail[K](size:Long) {K haszero} {
     public def readLocked(index:Long) {
         return values(index);
     }
-    
+
+    public def writeLocked(index:Long, v:K) {
+    	values(index) = v;
+    	versions(index)++;
+    }
     
     public def updateAndunlockWrite(id:Long, index:Long, currValue:K) {
         try {
@@ -141,7 +149,13 @@ public class TxRail[K](size:Long) {K haszero} {
         }
         locks(index).unlockWrite(id);
     }
-    
+
+    public def rollbackAndunlockWrite(id:Long, index:Long, initValue:K, initVersion:Int) {//RL_EA_UL
+    	values(index) = initValue;
+        versions(index) = initVersion;
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] rollback HARDWRITE["+index+"]="+initValue+" newVersion="+initVersion);
+        locks(index).unlockWrite(id);
+    }
     
     public def lock(txId:Long){
         if (!TxConfig.LOCK_FREE) {

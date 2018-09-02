@@ -47,6 +47,8 @@ public abstract class TxManagerForRail[K] {K haszero} {
     public static def make[K](data:TxRail[K], immediateRecovery:Boolean){K haszero}:TxManagerForRail[K] {
         if (TxConfig.TM.equals("RV_LA_WB"))
             return new TxManagerForRail_RV_LA_WB[K](data, immediateRecovery);
+        else if (TxConfig.TM.equals("RL_EA_UL"))
+        	return new TxManagerForRail_RL_EA_UL[K](data, immediateRecovery);
         else
             throw new Exception("Wrong Tx Manager Configuration (undo logging can not be selected with late acquire");
     }

@@ -64,43 +64,31 @@ public class TxManagerForRail_RL_EA_UL[K] {K haszero} extends TxManagerForRail[K
             log.lock(1);
             if (resilient && immediateRecovery)
                 ensureActiveStatus();
-            
-            log.getOrAddItem(index);
+            val added = log.getOrAddItem(index);
             val location = log.getLastUsedLocation();
-            log.logPut(location, newValue);
+            if (!log.isLockedWrite(location)) {
+            	log.setLockedRead(location, false);
+            	data.lockWriteFast(id, index);
+            	log.setLockedWriteAndReadOnly(location, /*locked write*/true, /*read only*/false);
+            	data.logValueAndVersionLocked(index, location, log); //for aborting
+            }
+            data.writeLocked(index, newValue);
             if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] put rail["+index+"]="+newValue+" done successfully...");
+        } catch (ex:Exception) {
+            if (TxConfig.TM_DEBUG) {
+                Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] get put rail["+index+"]="+newValue+" failed  ex["+ex.getMessage()+"] will call abort...");
+                ex.printStackTrace();
+            }
+            log.abortRL_EA_UL(data);
+            txLogManager.deleteAbortedTxLog(log);
+            throw ex;
         } finally {
             log.unlock(1);
         }
     }
     
     public def validate(id:Long):void {
-        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validate ...");
-        val log = txLogManager.searchTxLog(id);
-        if (log == null || log.id() == -1) {
-            if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validate failed, log not found!!...");
-            return;
-        }
-        try {
-            log.lock(1);
-            val writeTx = log.validateRV_LA_WB(data);
-            if (writeTx) {
-                if (resilient && immediateRecovery)
-                    ensureActiveStatus();
-                log.writeValidated = true;
-            }
-            if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validate succeeded ...");
-        } catch (ex:Exception) {
-            if (TxConfig.TM_DEBUG) {
-                Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] validate failed  ex["+ex.getMessage()+"] will call abort...");
-                ex.printStackTrace();
-            }
-            log.abortRV_LA_WB(data);
-            txLogManager.deleteAbortedTxLog(log);
-            throw ex;
-        } finally {
-            log.unlock(1);
-        }
+    	throw new Exception("validate() is not needed for TxManagerForRail_RL_EA_UL");
     }
     
     public def commit(id:Long):void {
@@ -144,7 +132,7 @@ public class TxManagerForRail_RL_EA_UL[K] {K haszero} extends TxManagerForRail[K
             if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] getTxCommitLog failed, log not found !!!...");
             return null;
         }
-        val l = log.getTxCommitLogRV_LA_WB();
+        val l = log.getTxCommitLogRL_EA_UL(data);
         if (TxConfig.TM_DEBUG) {
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] getTxCommitLog succeeded, log = "+getCommitLogAsString(l)+" ...");
         }

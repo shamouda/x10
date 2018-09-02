@@ -147,6 +147,10 @@ public class TxLogForRail[K] {K haszero} implements x10.io.Unserializable {
         return KItems(location*K_ITEMS_PER_INDEX + K_CURRENT_VALUE_INDEX);
     }
     
+    public def setInitValue(location:Long, ivalue:K) {
+    	KItems(location*K_ITEMS_PER_INDEX + K_INIT_VALUE_INDEX) = ivalue;
+    }
+    
     public def getInitValue(location:Long) {
         return KItems(location*K_ITEMS_PER_INDEX + K_INIT_VALUE_INDEX);
     }
@@ -169,6 +173,19 @@ public class TxLogForRail[K] {K haszero} implements x10.io.Unserializable {
     // mark as locked for read
     public def setLockedRead(location:Long, lr:Boolean) {
     	boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_READ_INDEX) = lr;
+    }
+    
+    public def isLockedRead(location:Long) {
+    	return boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_READ_INDEX);
+    }
+
+    public def setLockedWriteAndReadOnly(location:Long, lr:Boolean, ro:Boolean) {
+    	boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_WRITE_INDEX) = lr;
+    	boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_READ_ONLY_INDEX) = ro;
+    }
+    
+    public def isLockedWrite(location:Long) {
+    	return boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_WRITE_INDEX);
     }
     
     public def validateRV_LA_WB(data:TxRail[K]):Boolean {
@@ -231,16 +248,45 @@ public class TxLogForRail[K] {K haszero} implements x10.io.Unserializable {
                 if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] commitRV_LA_WB update and unlockWrite(index="+index+")");
             }
         }
-        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] abortRV_LA_WB returning, dump="+dump());
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] commitRV_LA_WB returning, dump="+dump());
     }
     
     
     public def abortRL_EA_UL(data:TxRail[K]) {
-        
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] abortRL_EA_UL called, dump="+dump());
+        for (var location:Long = 0; location < size; location++) {
+            val index = longItems(location);
+            if (boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_READ_INDEX)) {
+                data.unlockReadFast(id, index);
+                boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_READ_INDEX) = false;
+                if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] abortRL_EA_UL unlockRead(index="+index+")");
+            } else if (boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_WRITE_INDEX)) {
+            	val initValue = KItems(location*K_ITEMS_PER_INDEX + K_INIT_VALUE_INDEX);
+            	val initVer = intItems(location*INT_ITEMS_PER_INDEX + 0);
+                data.rollbackAndunlockWrite(id, index, initValue, initVer);
+                boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_WRITE_INDEX) = false;
+                if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] abortRL_EA_UL unlockWrite(index="+index+")");
+            }
+        }
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] abortRV_LA_WB returning, dump="+dump());
     }
     
     public def commitRL_EA_UL(data:TxRail[K]) {
-        
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] commitRL_EA_UL called, dump="+dump());
+        for (var location:Long = 0; location < size; location++) {
+            val index = longItems(location);
+            if (boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_READ_INDEX)) {
+                data.unlockReadFast(id, index);
+                boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_READ_INDEX) = false;
+                if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] commitRL_EA_UL unlockRead(index="+index+")");
+            } else if (boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_WRITE_INDEX)) {
+                val currValue = KItems(location*K_ITEMS_PER_INDEX + K_CURRENT_VALUE_INDEX);
+                data.unlockWriteFast(id, index);
+                boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_LOCKED_WRITE_INDEX) = false;
+                if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] commitRL_EA_UL unlockWrite(index="+index+")");
+            }
+        }
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] commitRL_EA_UL returning, dump="+dump());
     }
 
     
@@ -258,6 +304,23 @@ public class TxLogForRail[K] {K haszero} implements x10.io.Unserializable {
         }
         return result;
     }
+    
+    
+    public def getTxCommitLogRL_EA_UL(data:TxRail[K]):HashMap[Long,K] {
+        var result:HashMap[Long,K] = null;
+        for (var location:Long = 0; location < size; location++) {
+            val index = longItems(location);
+            val ro = boolItems(location*BOOLEAN_ITEMS_PER_INDEX + BOOLEAN_READ_ONLY_INDEX);
+            if (!ro) { //read only
+                val currValue = data.readLocked(index);
+                if (result == null)
+                    result = new HashMap[Long,K]();
+                result.put(index, currValue);
+            }
+        }
+        return result;
+    }
+    
     
     public def lock(i:Long) {
         if (!TxConfig.LOCK_FREE) {
