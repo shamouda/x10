@@ -55,8 +55,9 @@ public class TxSlaveStore[K] {K haszero} {
             masterState = state;
             storeType = TxLocalStore.KV_TYPE;
         } else {
-            masterStateRail = rail;
+            masterStateRail = rail;            
             storeType = TxLocalStore.RAIL_TYPE;
+            if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " TxSlaveStore created, received rail["+masterStateRail+"] ..."); 
         }
         logs = new ArrayList[TxSlaveLog[K]]();
         if (!TxConfig.LOCK_FREE) {
@@ -122,7 +123,6 @@ public class TxSlaveStore[K] {K haszero} {
                         data.put(key, value);
                 }
             } else {
-                if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] " + TxConfig.txIdToString (txLog.id)+ " here["+here+"] Slave.commitLockAcquired, masterStateRail="+masterStateRail+", transLogRail="+txLog.transLogRail+"...");
                 val data = masterStateRail;
                 val iter = txLog.transLogRail.keySet().iterator();
                 while (iter.hasNext()) {

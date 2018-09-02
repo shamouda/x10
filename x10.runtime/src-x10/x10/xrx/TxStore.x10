@@ -298,7 +298,7 @@ public class TxStore {
         val recData = plh().getMasterStore().getDataForRecovery();
         val storeType = plh().getMasterStore().getType();
         val state1:HashMap[Any,Cloneable] = (storeType == TxLocalStore.KV_TYPE)? recData as HashMap[Any,Cloneable]:null;
-        val state2:Rail[Any] = (storeType == TxLocalStore.KV_TYPE)? recData as Rail[Any]:null;
+        val state2:Rail[Any] = (storeType == TxLocalStore.RAIL_TYPE)? recData as Rail[Any]:null;
         if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Master prepared a consistent slave replica to the spare slave ...");
         val me = here;
         at (spare) async {
