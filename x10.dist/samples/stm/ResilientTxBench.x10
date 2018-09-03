@@ -180,7 +180,7 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         val tmpKeys = new Rail[Long] (o);
         val values = new Rail[Long] (h*o);
         val readFlags = new Rail[Boolean] (h*o);
-        
+        var firstTx:Boolean = true;
         while (timeNS < duration*1e6 && state.isActive()) {
             val innerStr = nextTransactionMembers(rand, p, h, vid, virtualMembers, f);
             nextRandomOperations(rand, p, virtualMembers, r, u, o, keys, values, readFlags, tmpKeys);
@@ -229,7 +229,13 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
                 val remainingTime =  (duration*1e6 - timeNS) as Long;
                 try {
                     val txStart = Timer.milliTime();
-                    val trials = store.executeTransaction(distClosure, -1, remainingTime);
+                    val trials:Long;
+                    if (firstTx) {
+                        trials = store.executeTransaction(distClosure, -1, -1); //run at least one transaction successfully
+                        firstTx = false;
+                    } else {
+                        trials = store.executeTransaction(distClosure, -1, remainingTime);
+                    }
                     myThroughput.avgTxTime += Timer.milliTime()-txStart;
                     myThroughput.avgTxTrials += trials;
                 } catch(expf:TxStoreFatalException) {
