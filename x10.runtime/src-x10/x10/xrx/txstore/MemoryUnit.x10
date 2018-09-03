@@ -27,7 +27,7 @@ public class MemoryUnit[K] {K haszero} {
     
     public def this(v:Cloneable) {
         value = v;
-        if (TxConfig.LOCKING) { //Locking
+        if (TxConfig.LOCKING && !TxConfig.LOCKING_COMPLEX) { //Locking
             txLock = new TxLockCREWBlocking();
             internalLock = new Lock();
         }

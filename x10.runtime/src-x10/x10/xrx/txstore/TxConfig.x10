@@ -34,6 +34,7 @@ public class TxConfig {
     
     public static val STM = System.getenv("TM") == null || !System.getenv("TM").equals("locking");
     public static val LOCKING = System.getenv("TM") != null && System.getenv("TM").equals("locking");
+    public static val LOCKING_COMPLEX = System.getenv("LOCKING_COMPLEX") != null && System.getenv("LOCKING_COMPLEX").equals("1");
     public static val WRITE_BUFFERING = System.getenv("TM") != null && !System.getenv("TM").equals("locking") && System.getenv("TM").contains("WB");
 
     public static val LOCK_FREE = (System.getenv("LOCK_FREE") == null || System.getenv("LOCK_FREE").equals("")) ? false : Long.parseLong(System.getenv("LOCK_FREE")) == 1;
