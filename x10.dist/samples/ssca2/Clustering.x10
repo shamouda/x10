@@ -379,7 +379,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         val spare:Long = cmdLineParams("-sp", 0);
         val clusterSize:Long = cmdLineParams("-cs", 10);
         val seed:Long = cmdLineParams("-s", 2);
-        val iters:Long = cmdLineParams("-i", 3);
+        val iters:Long = cmdLineParams("-i", 1);
         val n:Int = cmdLineParams("-n", 2n);
         val a:Double = cmdLineParams("-a", 0.55);
         val b:Double = cmdLineParams("-b", 0.1);
