@@ -29,6 +29,7 @@ import x10.util.GrowableRail;
 //test command: X10_RESILIENT_VERBOSE=0 TM_DEBUG=0 CONFLICT_SLEEP_MS=0 X10_NUM_IMMEDIATE_THREADS=1 TM=locking X10_RESILIENT_MODE=14 X10_NTHREADS=1 X10_NPLACES=5 ./a.out -w 1 -n 10 -vp 3,1 -sp 2 -vt 0.25,0.8 -vg 1
 public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements MasterWorkerApp {
     public static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
+    public static val READ_SUB_TX = System.getenv("READ_SUB_TX") != null && System.getenv("READ_SUB_TX").equals("1");
     
     public static struct Color implements Cloneable {
         public val placeId:Long;
@@ -114,7 +115,8 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
     //otherwise, look v and all its adjacent vertices
     //don't overwrite already taken keys
     private def processVertex(v:Int, placeId:Long, clusterId:Long, tx:Tx,
-            plh:PlaceLocalHandle[ClusteringState], result:GlobalRef[Result{self!=null}]{result.home==here}):Int {
+            plh:PlaceLocalHandle[ClusteringState], result:GlobalRef[Result{self!=null}]{result.home==here},
+            store:TxStore):Int {
         val state = plh();
         val graph = state.graph;
         val random = state.random;
@@ -139,11 +141,31 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
                 val vertices = map.getOrThrow(dest);
                 tx.asyncAt(dest, () => {
   				    val locked = new HashSet[Int]();
-                    for (s in vertices) {
+  				    var aimed:HashSet[Int];
+  				    if (READ_SUB_TX) {
+  				        try {
+     				        aimed = new HashSet[Int]();
+      				        val tx2 = store.makeTx();
+      				        finish {
+      				            Runtime.registerFinishTx(tx2, true);
+      				            for (s in vertices) {
+      				                val color = tx2.get(s);
+      				                if (color == null) {
+      				                    aimed.add(s);
+      				                }
+      				            }
+      				        } 
+  				        } catch (ex:Exception) {
+  				            aimed = vertices;
+  				        }
+  				    } else {
+  				        aimed = vertices;
+  				    }
+                    for (s in aimed) {
                         val color = tx.get(s);
                         if (color == null) {
                             tx.put(s, new Color(placeId, clusterId));
-	                        locked.add(s);
+                            locked.add(s);
                         }
                     }
                     val me = here.id;
@@ -189,7 +211,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
             if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] locked root ["+root+"] ");
             var nextV:Int = root;
             while (nextV != -1n) {
-                nextV = processVertex(nextV, placeId, clusterId, tx, plh, result);
+                nextV = processVertex(nextV, placeId, clusterId, tx, plh, result, store);
             }
             if (verbose > 1n) result().print(tx.id, placeId, clusterId);
         } //else: the root is taken, end this iteration 
