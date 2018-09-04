@@ -20,10 +20,13 @@ public class BenchRail {
             for (var i:Long = 0; i < size; i++) {
                 val dest = i / sizePerPlace;
                 val index = i;
-                at (Place(dest)) async {
-                    val v = tx.getRail(index) as Long;
-                    Console.OUT.println(here + " Rail["+index+"] = " + v);
-                    tx.putRail(index, v + 1);
+                finish {
+                    Runtime.registerFinishTx(tx, false);
+                    at (Place(dest)) async {
+                        val v = tx.getRail(index) as Long;
+                        Console.OUT.println(here + " Rail["+index+"] = " + v);
+                        tx.putRail(index, v + 1);
+                    }
                 }
             }
         }
