@@ -176,14 +176,20 @@ public class TxResilient extends Tx {
                     val log = plh().getMasterStore().getTxCommitLog(id);
                     val log1:HashMap[Any,Cloneable] = (storeType == TxLocalStore.KV_TYPE) ? log as HashMap[Any,Cloneable] : null;
                     val log2:HashMap[Long,Any] = (storeType == TxLocalStore.RAIL_TYPE) ? log as HashMap[Long,Any] : null;
+                    val writeLog = (storeType == TxLocalStore.KV_TYPE) ? (log1 != null && log1.size() > 0) : (log2 != null && log2.size() > 0) ;
                     ////////////////////////////////////////
                     plh().getMasterStore().commit(id); // we cannot commit before getting the logs
                     ///////////////////////////////////////
-                    at (Place(slave as Long)) @Immediate("slave_commit_local") async {
-                        plh().slaveStore.commit(id, log1, log2, ownerPlaceIndex);
-                        at (gr) @Immediate("slave_commit_local_response") async {
-                            (gr() as TxResilient).notifyAbortOrCommit(slave, SLAVE);
+                    if (writeLog) {
+                        at (Place(slave as Long)) @Immediate("slave_commit_local") async {
+                            plh().slaveStore.commit(id, log1, log2, ownerPlaceIndex);
+                            at (gr) @Immediate("slave_commit_local_response") async {
+                                (gr() as TxResilient).notifyAbortOrCommit(slave, SLAVE);
+                            }
                         }
+                    } else {
+                        pending = null;
+                        release();
                     }
                 } else {
                     ///////////////////////////////////////
