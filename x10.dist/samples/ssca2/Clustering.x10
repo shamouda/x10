@@ -30,7 +30,8 @@ import x10.util.GrowableRail;
 public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements MasterWorkerApp {
     public static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     public static val READ_SUB_TX = System.getenv("READ_SUB_TX") != null && System.getenv("READ_SUB_TX").equals("1");
-    
+    public static val ROOT_SUB_TX = System.getenv("ROOT_SUB_TX") != null && System.getenv("READ_SUB_TX").equals("1");
+        
     public static struct Color implements Cloneable {
         public val placeId:Long;
         public val clusterId:Long;
@@ -203,18 +204,36 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
     private def createCluster(store:TxStore, tx:Tx, root:Int, placeId:Long, clusterId:Long, 
             plh:PlaceLocalHandle[ClusteringState], verbose:Int) {
         val result = GlobalRef(new Result());
-        val color = tx.get(root);
-        if (color == null) {
-            //if the root is not taken, take it
-            tx.put(root, new Color(placeId, clusterId));
-            result().locked.add(root);
-            if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] locked root ["+root+"] ");
-            var nextV:Int = root;
-            while (nextV != -1n) {
-                nextV = processVertex(nextV, placeId, clusterId, tx, plh, result, store);
+        if (ROOT_SUB_TX) {
+            val tx2 = store.makeTx();
+            finish {
+                Runtime.registerFinishTx(tx2, true);
+                val color = tx2.get(root);
+                if (color == null) {
+                    //if the root is not taken, take it
+                    tx2.put(root, new Color(placeId, clusterId));
+                    result().locked.add(root);
+                    if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] locked root ["+root+"] ");
+                } else {//else: the root is taken, end this iteration
+                    return;
+                }
             }
-            if (verbose > 1n) result().print(tx.id, placeId, clusterId);
-        } //else: the root is taken, end this iteration 
+        } else {
+            val color = tx.get(root);
+            if (color == null) {
+                //if the root is not taken, take it
+                tx.put(root, new Color(placeId, clusterId));
+                result().locked.add(root);
+                if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] locked root ["+root+"] ");
+            } else {//else: the root is taken, end this iteration
+                return;
+            }
+        }
+        var nextV:Int = root;
+        while (nextV != -1n) {
+            nextV = processVertex(nextV, placeId, clusterId, tx, plh, result, store);
+        }
+        if (verbose > 1n) result().print(tx.id, placeId, clusterId);
     }
 
     private def execute(store:TxStore, state:ClusteringState, placeId:Long, workerId:Long, start:Int, end:Int, 
@@ -325,14 +344,15 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         val places = activePlaces.size();
         Console.OUT.println("==============  Collecting clusters  ===============");
         val map = new HashMap[Long,ArrayList[Int]]();
-        store.executeLockingTx(new Rail[Long](0),new Rail[Any](0), new Rail[Boolean](0), 0, (tx:TxLocking) => {
+        
+        store.executeTransaction((tx:Tx) => {
             for (var tmpP:Long = 0; tmpP < places; tmpP++) {
                 val localMap = at (activePlaces(tmpP)) {
                     val setIter = tx.keySet().iterator();                    
                     val pMap = new HashMap[Long,ArrayList[Int]]();
                     while (setIter.hasNext()) {
                         val vertex = setIter.next();
-                        val cl = tx.get(vertex);                        
+                        val cl = tx.get(vertex);
                         if (cl != null) {
                             val clusterId = ((cl as Color).placeId+1) * 1000000 + (cl as Color).clusterId;
                             var tmpList:ArrayList[Int] = pMap.getOrElse(clusterId, null);
