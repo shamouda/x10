@@ -134,11 +134,64 @@ public class TxResilient extends Tx {
         finalizeWithBackup(finObj, abort, -1n, false);
     }
     
-    public def finalizeLocalWithBackup(finObj:Releasable, abort:Boolean, backupId:Int) {
-        if (readOnly)
-            super.finalizeLocalWithBackup(finObj, abort, -1n);
-        else
-            finalizeWithBackup(finObj, abort, backupId, false);
+    public def finalizeLocal(finObj:Releasable, abort:Boolean) {
+        this.finishObj = finObj;
+        if (abort) {
+            plh().getMasterStore().abort(id);
+            release();
+        } else if (readOnly) { //validate and commit local
+            try {
+                if (TxConfig.VALIDATION_REQUIRED)
+                    plh().getMasterStore().validate(id);
+                plh().getMasterStore().commit(id);
+            } catch (e:Exception) {
+                addExceptionUnsafe(new TxStoreConflictException());
+            }
+            release();
+        } else { //validate and commit on the slave
+            try {
+                if (TxConfig.VALIDATION_REQUIRED)
+                    plh().getMasterStore().validate(id);
+                plh().getMasterStore().commit(id);
+                
+                masterSlave = plh().getMapping(members);
+                val slave = masterSlave.getOrThrow(here.id as Int);
+                pending = new HashMap[TxMember,Int]();
+                count = 0n;
+                var backupDo:Boolean = false;
+                lock.lock();
+                if (!Place(slave as Long).isDead()) {
+                    count++;
+                    FinishResilient.increment(pending, TxMember(slave, SLAVE));
+                    backupDo = true;
+                }
+                ph1Started = true;
+                ph2Started = true;
+                vote = true;
+                lock.unlock();
+                
+                if (backupDo) {
+                    val gr = this.gr;
+                    val ownerPlaceIndex = plh().virtualPlaceId;
+                    val storeType = plh().getMasterStore().getType();
+                    val log = plh().getMasterStore().getTxCommitLog(id);
+                    val log1:HashMap[Any,Cloneable] = (storeType == TxLocalStore.KV_TYPE) ? log as HashMap[Any,Cloneable] : null;
+                    val log2:HashMap[Long,Any] = (storeType == TxLocalStore.RAIL_TYPE) ? log as HashMap[Long,Any] : null;
+                    at (Place(slave as Long)) @Immediate("slave_commit_local") async {
+                        plh().slaveStore.commit(id, log1, log2, ownerPlaceIndex);
+                        at (gr) @Immediate("slave_commit_local_response") async {
+                            (gr() as TxResilient).notifyAbortOrCommit(slave, SLAVE);
+                        }
+                    }
+                } else {
+                    release();
+                }
+            } catch (e:Exception) {
+                vote = false;
+                addExceptionUnsafe(new TxStoreConflictException());
+                release();
+            }
+        }
     }
 
     public def resilient2PC(abort:Boolean, isRecovered:Boolean) {

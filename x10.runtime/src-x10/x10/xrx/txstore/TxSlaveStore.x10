@@ -87,6 +87,7 @@ public class TxSlaveStore[K] {K haszero} {
     public def commit(id:Long, transLog:HashMap[K,Cloneable], transLogRail:HashMap[Long,K], ownerPlaceIndex:Long) {
         try {
             slaveLock();
+            if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] Slave.localTxCommit ...");
             commitLockAcquired(new TxSlaveLog[K](id, ownerPlaceIndex, transLog, transLogRail));
         }
         finally {

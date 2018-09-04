@@ -207,7 +207,7 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
     /********** Finalizing a transaction **********/
     public def finalize(finObj:Releasable, abort:Boolean) {
         if (members.size() == 1 && members.iterator().next() == here.id as Int) {
-            finalizeLocalWithBackup(finObj, abort, -1n);
+            finalizeLocal(finObj, abort);
             return;
         }
         if (TxConfig.TM_DEBUG)
@@ -216,10 +216,12 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
         nonResilient2PC(abort);
     }
     
-    public def finalizeLocalWithBackup(finObj:Releasable, abort:Boolean, backupId:Int) {
+    public def finalizeLocal(finObj:Releasable, abort:Boolean) {
         if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] finalizeLocal abort="+abort+" ...");
         this.finishObj = finObj;
-        if (!abort) {
+        if (abort) {
+            plh().getMasterStore().abort(id);
+        } else {
             try {
                 if (TxConfig.VALIDATION_REQUIRED)
                     plh().getMasterStore().validate(id);
@@ -227,8 +229,6 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
             } catch (e:Exception) {
                 addExceptionUnsafe(new TxStoreConflictException());
             }
-        } else {
-            plh().getMasterStore().abort(id);
         }
         release();
     }

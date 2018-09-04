@@ -1381,7 +1381,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                         debug("==== Master.tryRelease(id="+id+").tryReleaseLocal finalizeLocal abort because["+s+"]");
                     }
                 }
-                tx.finalizeLocalWithBackup(this, abort, backupPlaceId);
+                tx.finalizeLocal(this, abort);
             }
             if (verbose>=1) debug("<<<< Root(id="+id+").tryReleaseLocal returning ");
         }

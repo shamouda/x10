@@ -388,8 +388,8 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
         }
         
         
-        static def p0FinalizeLocalTx(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState], tx:Tx, isRO:Boolean, excs:GrowableRail[CheckedThrowable]) {
-            at (place0) @Immediate("p0FinalizeLocalTx_to_zero") async {
+        static def p0FinalizeLocalWriteTx(id:Id, parentId:Id, gfs:GlobalRef[P0OptimisticMasterState], tx:Tx, isRO:Boolean, excs:GrowableRail[CheckedThrowable]) {
+            at (place0) @Immediate("p0FinalizeLocalWriteTx_to_zero") async {
                 try {
                     statesLock.lock();
                     if (Place(id.home).isDead()) {
@@ -1746,10 +1746,10 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                             debug("==== Root.tryReleaseLocal(id="+id+").tryReleaseLocal finalizeLocal abort because["+s+"]");
                         }
                     }
-        	        tx.finalizeLocalWithBackup(this, abort, -1n);
+        	        tx.finalizeLocal(this, abort);
         	    } else {
-        	        if (verbose>=1) debug("<<<< Root(id="+id+").tryReleaseLocal returning, calling State.p0FinalizeLocalTx()");
-        	        State.p0FinalizeLocalTx(id, parentId, ref, tx, txReadOnlyFlag, excs);
+        	        if (verbose>=1) debug("<<<< Root(id="+id+").tryReleaseLocal returning, calling State.p0FinalizeLocalWriteTx()");
+        	        State.p0FinalizeLocalWriteTx(id, parentId, ref, tx, txReadOnlyFlag, excs);
         	    }
         	}
         }
