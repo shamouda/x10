@@ -49,7 +49,7 @@ public class TxResilient extends Tx {
     private static val DEAD_SLAVE = -1n;
     
     public static struct TxMember(place:int,ptype:int) {
-        public def toString() = "<"+place+","+ptype+">";
+        public def toString() = "("+place+","+ptype+")";
     }
     
     public def this(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
@@ -152,7 +152,6 @@ public class TxResilient extends Tx {
             try {
                 if (TxConfig.VALIDATION_REQUIRED)
                     plh().getMasterStore().validate(id);
-                plh().getMasterStore().commit(id);
                 
                 masterSlave = plh().getMapping(members);
                 val slave = masterSlave.getOrThrow(here.id as Int);
@@ -177,6 +176,9 @@ public class TxResilient extends Tx {
                     val log = plh().getMasterStore().getTxCommitLog(id);
                     val log1:HashMap[Any,Cloneable] = (storeType == TxLocalStore.KV_TYPE) ? log as HashMap[Any,Cloneable] : null;
                     val log2:HashMap[Long,Any] = (storeType == TxLocalStore.RAIL_TYPE) ? log as HashMap[Long,Any] : null;
+                    ////////////////////////////////////////
+                    plh().getMasterStore().commit(id); // we cannot commit before getting the logs
+                    ///////////////////////////////////////
                     at (Place(slave as Long)) @Immediate("slave_commit_local") async {
                         plh().slaveStore.commit(id, log1, log2, ownerPlaceIndex);
                         at (gr) @Immediate("slave_commit_local_response") async {
@@ -184,6 +186,9 @@ public class TxResilient extends Tx {
                         }
                     }
                 } else {
+                    ///////////////////////////////////////
+                    plh().getMasterStore().commit(id);
+                    ///////////////////////////////////////
                     release();
                 }
             } catch (e:Exception) {

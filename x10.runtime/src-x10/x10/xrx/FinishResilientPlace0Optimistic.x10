@@ -1763,6 +1763,9 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
             else
                 notifyActivityTermination(here, ASYNC, false, false);
 
+            Runtime.activity().tx = false;
+            Runtime.activity().txReadOnly = true;
+            
             // If we haven't gone remote with this finish yet, see if this worker
             // can execute other asyncs that are governed by the finish before waiting on the latch.
             if ((!Runtime.STRICT_FINISH) && (Runtime.STATIC_THREADS || !strictFinish)) {

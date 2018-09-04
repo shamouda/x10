@@ -628,6 +628,9 @@ class FinishNonResilientCustom extends FinishState implements CustomSerializatio
             else
                 notifyActivityTermination(here);
             
+            Runtime.activity().tx = false;
+            Runtime.activity().txReadOnly = true;
+            
             if ((!Runtime.STRICT_FINISH) && (Runtime.STATIC_THREADS || remoteActivities == null)) {
                 Runtime.worker().join(latch);
             }

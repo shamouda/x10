@@ -1281,7 +1281,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
             val dstId = here.id as Int;
             if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") called");
             //no need to call notifyActivityCreation() since it does NOOP in Root finish
-            notifyActivityTermination(srcPlace, ASYNC, false, false);
+            notifyActivityTermination(srcPlace, ASYNC, false, false, null);
             if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityCreatedAndTerminated(srcId=" + srcId + ",dstId="+dstId+",kind="+ASYNC+") returning");
         }
         
@@ -1309,10 +1309,10 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
 
         def notifyActivityTermination(srcPlace:Place):void {
-            notifyActivityTermination(srcPlace, ASYNC, false, false);
+            notifyActivityTermination(srcPlace, ASYNC, false, false, null);
         }
         def notifyShiftedActivityCompletion(srcPlace:Place):void {
-            notifyActivityTermination(srcPlace, AT, false, false);
+            notifyActivityTermination(srcPlace, AT, false, false, null);
         }
         
         def setTxFlags(isTx:Boolean, isTxRO:Boolean) {
@@ -1337,27 +1337,35 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def notifyTxActivityTermination(srcPlace:Place, readOnly:Boolean, t:CheckedThrowable) {
-            notifyActivityTermination(srcPlace, ASYNC, true, readOnly);
+            notifyActivityTermination(srcPlace, ASYNC, true, readOnly, t);
         }
         
-        def notifyActivityTermination(srcPlace:Place, kind:Int, isTx:Boolean, isTxRO:Boolean):void {
+        def notifyActivityTermination(srcPlace:Place, kind:Int, isTx:Boolean, isTxRO:Boolean, t:CheckedThrowable):void {
             val srcId = srcPlace.id as Int; 
             val dstId = here.id as Int;
             if (isTx)
                 setTxFlags(isTx, isTxRO);
             val count = lc_decrementAndGet();
             if (verbose>=1) debug(">>>> Root(id="+id+").notifyActivityTermination(srcId="+srcId + " dstId="+dstId+",kind="+kind
-                    +",isTx="+isTx+",isTxRO="+isTxRO+") called, decremented localCount to "+count);
+                    +",isTx="+isTx+",isTxRO="+isTxRO+",t="+t+") called, decremented localCount to "+count);
             if (count > 0) {
+                if (t != null) {
+                    latch.lock();
+                    addExceptionUnsafe(t);
+                    latch.unlock();
+                }
                 return;
             }
             if (!isGlobal) { //only one activity is here, no need to lock/unlock latch
+                if (t != null) {
+                    addExceptionUnsafe(t);
+                }
                 if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(srcId="+srcId + " dstId="+dstId+",kind="+kind+") returning");
                 tryReleaseLocal();
                 return;
             }
             if (verbose>=1) debug("==== Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+",isRootTx="+isRootTx+", txFlag="+txFlag+", txReadOnlyFlag="+txReadOnlyFlag+") called");
-            val req = FinishRequest.makeOptTermRequest(id, parentId, srcId, dstId, kind, null, tx, isRootTx, txFlag, txReadOnlyFlag);
+            val req = FinishRequest.makeOptTermRequest(id, parentId, srcId, dstId, kind, t, tx, isRootTx, txFlag, txReadOnlyFlag);
             FinishReplicator.asyncExec(req, this);
             if (verbose>=1) debug("<<<< Root(id="+id+").notifyActivityTermination(parentId="+parentId+",srcId="+srcId + ",dstId="+dstId+",kind="+kind+") returning");
         }
@@ -1387,13 +1395,16 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
         }
         
         def waitForFinish():void {
-            if (verbose>=1) debug(">>>> Root(id="+id+").waitForFinish called, lc = " + lc );
-
+            if (verbose>=1) debug(">>>> Root(id="+id+").waitForFinish called, lc = " + lc + " activity["+Runtime.activity()+"] act.tx["+ Runtime.activity().tx
+                    +"] act.readOnly["+Runtime.activity().txReadOnly+"]");
             // terminate myself
             if (Runtime.activity().tx)
-                notifyActivityTermination(here, ASYNC, true, Runtime.activity().txReadOnly);
+                notifyActivityTermination(here, ASYNC, true, Runtime.activity().txReadOnly, null);
             else
-                notifyActivityTermination(here, ASYNC, false, false);
+                notifyActivityTermination(here, ASYNC, false, false, null);
+            
+            Runtime.activity().tx = false;
+            Runtime.activity().txReadOnly = true;
             
             // If we haven't gone remote with this finish yet, see if this worker
             // can execute other asyncs that are governed by the finish before waiting on the latch.

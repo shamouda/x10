@@ -80,6 +80,8 @@ public class Activity {
         this.atFinishState = FinishState.UNCOUNTED_FINISH;
         this.finishState = finishState;
         this.srcPlace = srcPlace;
+        tx = false;
+        txReadOnly = true;
     }
 
     /**
@@ -89,6 +91,8 @@ public class Activity {
              srcPlace:Place) {
         this(epoch, body, finishState, srcPlace);
         this.clockPhases = clockPhases;
+        tx = false;
+        txReadOnly = true;
     }
 
     /**
@@ -164,6 +168,8 @@ public class Activity {
             } else {
                 finishState.notifyActivityTermination(srcPlace, ex);
             }
+            tx = false;
+            txReadOnly = true;
         } catch (DeadPlaceException) {}
         if (DEALLOC_BODY) Unsafe.dealloc(body);
     }

@@ -208,12 +208,10 @@ public class TxLog[K] {K haszero} implements x10.io.Unserializable {
     
     public def reset() {
         val tmp = id;
-        //if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] TxLog.reset ");
         id = -1;
         keysList.clear();
         aborted = false;
         writeValidated = false;
-        //if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+tmp+"] " + TxManager.txIdToString(tmp) + " here["+here+"] TxLog.reset done ");
     }
 
     public def getValue(copy:Boolean, key:K) {
@@ -280,14 +278,15 @@ public class TxLog[K] {K haszero} implements x10.io.Unserializable {
     
     public def prepareCommitLog():HashMap[K,Cloneable] {
         val wtKeys = keysList.getWriteKeys();
-        if (wtKeys.size() == 0)
+        if (wtKeys.size() == 0) {
             return null;
-        //Console.OUT.println("prepareCommitLog readKeys {" + keysList.readKeysAsString() + "}  writeKeys {" + keysList.writeKeysAsString() + "} ");
+        }
+        //if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] prepareCommitLog readKeys {" + keysList.readKeysAsString() + "}  writeKeys {" + keysList.writeKeysAsString() + "} ");
         val map = new HashMap[K,Cloneable]();
         if (TxConfig.WRITE_BUFFERING) {
             for (var i:Long = 0 ; i < wtKeys.size(); i++) {
                 val log = wtKeys(i);
-                map.put( log.key() , log.getValue());   /*SS_CHECK  I don't clone the objects here, why I did so in the past???**/
+                map.put( log.key() , log.getValue());
             }
         }
         else {
@@ -304,7 +303,7 @@ public class TxLog[K] {K haszero} implements x10.io.Unserializable {
                     map.put(key, null);
                 }
                 else {
-                    map.put(key, memory.getValueLocked(false, key, id));   /*SS_CHECK  I don't clone the objects here, why I did so in the past???**/
+                    map.put(key, memory.getValueLocked(false, key, id)); 
                 }
             
             }
@@ -313,18 +312,15 @@ public class TxLog[K] {K haszero} implements x10.io.Unserializable {
     }
     
     public def lock(i:Long) {
-        //if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] ["+lock+"] <<LOCK>> "+i+"...");
         if (!TxConfig.LOCK_FREE) {
             if (!TxConfig.BUSY_LOCK)
                 lock.lock();
             else
                 busyLock();
         }
-        //if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] ["+lock+"] <<LOCK_DONE>> "+i+"...");
     }
     
     public def unlock(i:Long) {
-        //if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] ["+lock+"] <<UNLOCK>> "+i+"...");
         if (!TxConfig.LOCK_FREE) {
             if (!TxConfig.BUSY_LOCK)
                 lock.unlock();
@@ -332,7 +328,6 @@ public class TxLog[K] {K haszero} implements x10.io.Unserializable {
                 busyUnlock();
         }
         lastUsedMemoryUnit = null;
-        //if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] ["+lock+"] <<UNLOCK_DONE>> "+i+"...");
     }
     
     public def busyLock() {
@@ -361,7 +356,6 @@ public class TxLog[K] {K haszero} implements x10.io.Unserializable {
     }
     
     public def unlock(i:Long, tmpId:Long) {
-        //if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+tmpId+"] " + TxManager.txIdToString(tmpId) + " here["+here+"] ["+lock+"] <<UNLOCK>> "+i+"...");
         if (!TxConfig.LOCK_FREE) {
             if (!TxConfig.BUSY_LOCK)
                 lock.unlock();
@@ -369,7 +363,6 @@ public class TxLog[K] {K haszero} implements x10.io.Unserializable {
                 busyUnlock();
         }
         lastUsedMemoryUnit = null;
-        //if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+tmpId+"] " + TxManager.txIdToString(tmpId) + " here["+here+"] ["+lock+"] <<UNLOCK_DONE>> "+i+"...");
     }
     
     public def getWriteKeys() {

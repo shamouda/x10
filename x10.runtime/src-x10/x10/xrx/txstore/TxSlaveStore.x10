@@ -87,7 +87,7 @@ public class TxSlaveStore[K] {K haszero} {
     public def commit(id:Long, transLog:HashMap[K,Cloneable], transLogRail:HashMap[Long,K], ownerPlaceIndex:Long) {
         try {
             slaveLock();
-            if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] Slave.localTxCommit ...");
+            if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] Slave.localTxCommit transLog["+transLog+"] transLogRail["+transLogRail+"]...");
             commitLockAcquired(new TxSlaveLog[K](id, ownerPlaceIndex, transLog, transLogRail));
         }
         finally {
@@ -133,7 +133,7 @@ public class TxSlaveStore[K] {K haszero} {
                 }
             }
         }catch(ex:Exception){
-            if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] " + TxConfig.txIdToString (txLog.id)+ " here["+here+"] Slave.commitLockAcquired failed ex["+ex.getMessage()+"], masterStateRail="+masterStateRail+", transLogRail="+txLog.transLogRail+"...");
+            if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+txLog.id+"] " + TxConfig.txIdToString (txLog.id)+ " here["+here+"] Slave.commitLockAcquired failed ex["+ex.getMessage()+"],masterState="+masterState+" ,txLog="+txLog+" , masterStateRail="+masterStateRail+", transLogRail="+txLog.transLogRail+"...");
             throw ex;
         }
     }

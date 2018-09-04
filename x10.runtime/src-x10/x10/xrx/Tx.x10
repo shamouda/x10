@@ -161,12 +161,16 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
     /***************** Get ********************/
     public def get(key:Any):Cloneable {
         Runtime.activity().tx = true;
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] activity["+Runtime.activity()+"] act.tx["+
+                Runtime.activity().tx+"] act.readOnly["+Runtime.activity().txReadOnly+"]");
         return plh().getMasterStore().get(id, key);
     }
     
     
     public def getRail(index:Long):Any {
         Runtime.activity().tx = true;
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] activity["+Runtime.activity()+"] act.tx["+
+                Runtime.activity().tx+"] act.readOnly["+Runtime.activity().txReadOnly+"]");
         return (plh().getMasterStore() as TxMasterStoreForRail[Any]).getRail(id, index);
     }
     
@@ -174,12 +178,16 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
     public def put(key:Any, value:Cloneable):Cloneable {
         Runtime.activity().tx = true;
         Runtime.activity().txReadOnly = false;
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] activity["+Runtime.activity()+"] act.tx["+
+                Runtime.activity().tx+"] act.readOnly["+Runtime.activity().txReadOnly+"]");
         return plh().getMasterStore().put(id, key, value);
     }
     
     public def putRail(index:Long, value:Any) {
         Runtime.activity().tx = true;
         Runtime.activity().txReadOnly = false;
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] activity["+Runtime.activity()+"] act.tx["+
+                Runtime.activity().tx+"] act.readOnly["+Runtime.activity().txReadOnly+"]");
         (plh().getMasterStore() as TxMasterStoreForRail[Any]).putRail(id, index, value);
     }
     
@@ -187,6 +195,8 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
     public def delete(key:Any):Cloneable {
         Runtime.activity().tx = true;
         Runtime.activity().txReadOnly = false;
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] activity["+Runtime.activity()+"] act.tx["+
+                Runtime.activity().tx+"] act.readOnly["+Runtime.activity().txReadOnly+"]");
         return plh().getMasterStore().delete(id, key);
     }
     
