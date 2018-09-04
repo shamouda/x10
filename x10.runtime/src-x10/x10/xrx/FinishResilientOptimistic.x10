@@ -1369,7 +1369,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                 latch.release();
                 FinishReplicator.removeMaster(id);
             } else {
-                tx.addMember(here.id as Int, txReadOnlyFlag, 3n);
+                //tx.addMember(here.id as Int, txReadOnlyFlag, 3n);
                 var abort:Boolean = false;
                 if (excs != null && excs.size() > 0) {
                     abort = true;
@@ -1381,7 +1381,7 @@ class FinishResilientOptimistic extends FinishResilient implements CustomSeriali
                         debug("==== Master.tryRelease(id="+id+").tryReleaseLocal finalizeLocal abort because["+s+"]");
                     }
                 }
-                tx.finalizeLocal(this, abort);
+                tx.finalizeLocalWithBackup(this, abort, backupPlaceId);
             }
             if (verbose>=1) debug("<<<< Root(id="+id+").tryReleaseLocal returning ");
         }

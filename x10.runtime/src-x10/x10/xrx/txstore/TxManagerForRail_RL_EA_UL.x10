@@ -100,7 +100,7 @@ public class TxManagerForRail_RL_EA_UL[K] {K haszero} extends TxManagerForRail[K
         }
         try {
             log.lock(1);
-            log.commitRV_LA_WB(data);
+            log.commitRL_EA_UL(data);
             if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] commit succeeded ...");
         } finally {
             log.unlock(1);
@@ -117,7 +117,7 @@ public class TxManagerForRail_RL_EA_UL[K] {K haszero} extends TxManagerForRail[K
         }
         try {
             log.lock(1);
-            log.abortRV_LA_WB(data);
+            log.abortRL_EA_UL(data);
             if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] abort succeeded ...");
         } finally {
             log.unlock(1);

@@ -206,38 +206,35 @@ public class Tx(plh:PlaceLocalHandle[TxLocalStore[Any]], id:Long) {
     
     /********** Finalizing a transaction **********/
     public def finalize(finObj:Releasable, abort:Boolean) {
+        if (members.size() == 1 && members.iterator().next() == here.id as Int) {
+            finalizeLocalWithBackup(finObj, abort, -1n);
+            return;
+        }
         if (TxConfig.TM_DEBUG)
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] finalize abort="+abort+" ...");
         this.finishObj = finObj;
         nonResilient2PC(abort);
     }
     
-    public def finalizeLocal(finObj:Releasable, abort:Boolean) {
-        if (TxConfig.TM_DEBUG)
-            Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] finalizeLocal abort="+abort+" ...");
+    public def finalizeLocalWithBackup(finObj:Releasable, abort:Boolean, backupId:Int) {
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] obj["+this+"] finalizeLocal abort="+abort+" ...");
         this.finishObj = finObj;
-        nonResilientLocal(abort);
+        if (!abort) {
+            try {
+                if (TxConfig.VALIDATION_REQUIRED)
+                    plh().getMasterStore().validate(id);
+                plh().getMasterStore().commit(id);
+            } catch (e:Exception) {
+                addExceptionUnsafe(new TxStoreConflictException());
+            }
+        } else {
+            plh().getMasterStore().abort(id);
+        }
+        release();
     }
     
     public def finalizeWithBackup(finObj:Releasable, abort:Boolean, backupId:Int, isRecovered:Boolean) {
         finalize(finObj, abort);
-    }
-    
-    private def nonResilientLocal(abort:Boolean) {
-        var vote:Boolean = true;
-        if (!abort) {
-            try {
-                plh().getMasterStore().validate(id);
-                plh().getMasterStore().commit(id);
-            } catch (e:Exception) {
-                vote = false;
-                addExceptionUnsafe(new TxStoreConflictException());
-            }
-        }
-        if (abort || !vote) {
-            plh().getMasterStore().abort(id);
-        }
-        release();
     }
     
     private def nonResilient2PC(abort:Boolean) {

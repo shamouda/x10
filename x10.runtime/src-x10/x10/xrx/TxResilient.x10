@@ -121,12 +121,12 @@ public class TxResilient extends Tx {
     }
     
     public def finalizeWithBackup(finObj:Releasable, abort:Boolean, backupId:Int, isRecovered:Boolean) { 
-        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] backup["+backupId+"] finalize abort="+abort+" ...");
         this.finishObj = finObj;
-        if (FinishReplicator.PLACE0_BACKUP)
+        if (gcId.home != 0n || FinishReplicator.PLACE0_BACKUP)
         	this.backupId = backupId;
         else
         	this.backupId = -1n;
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " FID["+gcId+"] here["+here+"] backup["+backupId+"] finalize abort="+abort+" ...");
         resilient2PC(abort, isRecovered);
     }
     
@@ -134,16 +134,18 @@ public class TxResilient extends Tx {
         finalizeWithBackup(finObj, abort, -1n, false);
     }
     
-    public def finalizeLocal(finObj:Releasable, abort:Boolean) {
-        finalizeWithBackup(finObj, abort, -1n, false);
+    public def finalizeLocalWithBackup(finObj:Releasable, abort:Boolean, backupId:Int) {
+        if (readOnly)
+            super.finalizeLocalWithBackup(finObj, abort, -1n);
+        else
+            finalizeWithBackup(finObj, abort, backupId, false);
     }
 
     public def resilient2PC(abort:Boolean, isRecovered:Boolean) {
         if (isRecovered) {
             masterSlave = plh().getMapping(members); 
             commitOrAbort(false);//abort
-        }
-        else if (abort) {
+        } else if (abort) {
             //addExceptionUnsafe(new TxStoreConflictException());
             abortMastersOnly();
         } else {
@@ -350,12 +352,8 @@ public class TxResilient extends Tx {
                             else 
                                 localReadOnly = true;
                         }
-                        val isMasterRO = localReadOnly;
-                        val v = vote;
                         val masterId = here.id as Int;
-                        at (gr) @Immediate("prep_response_res12") async {
-                            (gr() as TxResilient).notifyPrepare(masterId, MASTER, v, isMasterRO);
-                        }
+                        ((gr as GlobalRef[Tx]{self.home == here})() as TxResilient).notifyPrepare(masterId, MASTER, vote, localReadOnly);
                     });
                 }
             }

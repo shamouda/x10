@@ -1734,8 +1734,23 @@ class FinishResilientPlace0Optimistic extends FinishResilient implements CustomS
                 if (verbose>=1) debug("<<<< Root(id="+id+").tryReleaseLocal returning, calling latch.release()");
         		latch.release();
         	} else {
-        	    if (verbose>=1) debug("<<<< Root(id="+id+").tryReleaseLocal returning, calling State.p0FinalizeLocalTx()");
-        	    State.p0FinalizeLocalTx(id, parentId, ref, tx, txReadOnlyFlag, excs);
+        	    if (txReadOnlyFlag) { //optimize local read only transactions
+        	        var abort:Boolean = false;
+                    if (excs != null && excs.size() > 0) {
+                        abort = true;
+                        if (verbose>=1) {
+                            var s:String = "";
+                            for (var i:Long = 0; i < excs.size(); i++) {
+                                s += excs(i) + ", ";
+                            }
+                            debug("==== Root.tryReleaseLocal(id="+id+").tryReleaseLocal finalizeLocal abort because["+s+"]");
+                        }
+                    }
+        	        tx.finalizeLocalWithBackup(this, abort, -1n);
+        	    } else {
+        	        if (verbose>=1) debug("<<<< Root(id="+id+").tryReleaseLocal returning, calling State.p0FinalizeLocalTx()");
+        	        State.p0FinalizeLocalTx(id, parentId, ref, tx, txReadOnlyFlag, excs);
+        	    }
         	}
         }
         
