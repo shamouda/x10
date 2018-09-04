@@ -30,7 +30,8 @@ import x10.util.GrowableRail;
 public final class ClusteringRail(plh:PlaceLocalHandle[ClusteringState]) implements MasterWorkerApp {
     public static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     public static val NO_COLOR = 0;
-    
+    public static val READ_SUB_TX = System.getenv("READ_SUB_TX") != null && System.getenv("READ_SUB_TX").equals("1");
+        
     public static def getColor(placeId:Long, clusterId:Long) {
         return (placeId+1) * 10000 + clusterId;
     }
@@ -107,7 +108,8 @@ public final class ClusteringRail(plh:PlaceLocalHandle[ClusteringState]) impleme
     //otherwise, look v and all its adjacent vertices
     //don't overwrite already taken keys
     private def processVertex(v:Int, placeId:Long, clusterId:Long, tx:Tx,
-            plh:PlaceLocalHandle[ClusteringState], result:GlobalRef[Result{self!=null}]{result.home==here}):Int {
+            plh:PlaceLocalHandle[ClusteringState], result:GlobalRef[Result{self!=null}]{result.home==here},
+            store:TxStore):Int {
         val state = plh();
         val graph = state.graph;
         val random = state.random;
@@ -132,11 +134,31 @@ public final class ClusteringRail(plh:PlaceLocalHandle[ClusteringState]) impleme
                 val vertices = map.getOrThrow(dest);
                 tx.asyncAt(dest, () => {
   				    val locked = new HashSet[Int]();
-                    for (s in vertices) {
+  				    var aimed:HashSet[Int];
+  				    if (READ_SUB_TX) {
+  				        try {
+     				        aimed = new HashSet[Int]();
+      				        val tx2 = store.makeTx();
+      				        finish {
+      				            Runtime.registerFinishTx(tx2, true);
+      				            for (s in vertices) {
+      				                val color = tx2.getRail(s) as Long;
+      				                if (color == NO_COLOR) {
+      				                    aimed.add(s);
+      				                }
+      				            }
+      				        } 
+  				        } catch (ex:Exception) {
+  				            aimed = vertices;
+  				        }
+  				    } else {
+  				        aimed = vertices;
+  				    }
+                    for (s in aimed) {
                         val color = tx.getRail(s) as Long;
                         if (color == NO_COLOR) {
                             tx.putRail(s, getColor(placeId, clusterId));
-	                        locked.add(s);
+                            locked.add(s);
                         }
                     }
                     val me = here.id;
@@ -182,7 +204,7 @@ public final class ClusteringRail(plh:PlaceLocalHandle[ClusteringState]) impleme
             if (verbose > 1n) Console.OUT.println(here + " cluster["+clusterId+"] locked root ["+root+"] ");
             var nextV:Int = root;
             while (nextV != -1n) {
-                nextV = processVertex(nextV, placeId, clusterId, tx, plh, result);
+                nextV = processVertex(nextV, placeId, clusterId, tx, plh, result, store);
             }
             if (verbose > 1n) result().print(tx.id, placeId, clusterId);
         } //else: the root is taken, end this iteration 
@@ -440,7 +462,6 @@ public final class ClusteringRail(plh:PlaceLocalHandle[ClusteringState]) impleme
         val app = new ClusteringRail(plh);
         var distTime:Double = 0;
         for (var i:Long = 0 ; i < iters; i++) {
-                                                
             val executor = MasterWorkerExecutor.makeRail(activePlaces, app, verticesPerPlace, (i:Long)=> {return 0;});
             if (i == 0)
                 distTime = (System.nanoTime()-time)/1e9;       
