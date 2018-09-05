@@ -80,20 +80,19 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
             assert (p * t == 1): "lock free mode can only be used with only 1 producer thread";
         }
         
-        val plh = PlaceLocalHandle.make[TxBenchState](Place.places(), ()=> new TxBenchState(here.id, r, u, n, p, t, w, d, h, o, g, s, f, vp, vt) );
-        val app = new ResilientTxBench(plh);
-        val executor = MasterWorkerExecutor.make(activePlaces, app);
-        if (i > 0.0F) {
-            val startInit = Timer.milliTime();
-            prepopulateKeys(executor.store(), r, i);
-            Console.OUT.println("Store initialization completed, elapsed time ["+(Timer.milliTime() - startInit)+"]  ms ");
-        }
-        
         val startWarmup = Timer.milliTime();
         if (w == -1) {
             Console.OUT.println("no warmpup");
         } else {
             Console.OUT.println("warmup started");
+            val plh = PlaceLocalHandle.make[TxBenchState](Place.places(), ()=> new TxBenchState(here.id, r, u, n, p, t, w, d, h, o, g, s, f, vp, vt) );
+            val app = new ResilientTxBench(plh);
+            val executor = MasterWorkerExecutor.make(activePlaces, app);
+            if (i > 0.0F) {
+                val startInit = Timer.milliTime();
+                prepopulateKeys(executor.store(), r, i);
+                Console.OUT.println("store initialization completed, elapsed time ["+(Timer.milliTime() - startInit)+"]  ms ");
+            }
             executor.run();
             val results = executor.workerResults();
             app.printThroughput(executor.store(), results, -1, h, o, p, t, true);
@@ -102,6 +101,16 @@ public class ResilientTxBench(plh:PlaceLocalHandle[TxBenchState]) implements Mas
         
         try {
             for (iter in 1..n) {
+                mgr.rebuildActivePlaces();
+                val activePlaces2 = mgr.activePlaces();
+                val plh = PlaceLocalHandle.make[TxBenchState](Place.places(), ()=> new TxBenchState(here.id, r, u, n, p, t, w, d, h, o, g, s, f, vp, vt) );
+                val app = new ResilientTxBench(plh);
+                val executor = MasterWorkerExecutor.make(activePlaces2, app);
+                if (i > 0.0F) {
+                    val startInit = Timer.milliTime();
+                    prepopulateKeys(executor.store(), r, i);
+                    Console.OUT.println("store initialization completed, elapsed time ["+(Timer.milliTime() - startInit)+"]  ms ");
+                }
                 val startIter = Timer.milliTime();
                 executor.run();
                 val results = executor.workerResults();
