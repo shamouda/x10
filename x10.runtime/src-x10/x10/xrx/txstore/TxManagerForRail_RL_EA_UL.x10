@@ -41,6 +41,7 @@ public class TxManagerForRail_RL_EA_UL[K] {K haszero} extends TxManagerForRail[K
             val location = log.getLastUsedLocation();
             if (added)
                 data.lockReadFast(id, index);
+            log.setLockedRead(location, true);
             val v = data.readLocked(index);
             if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] get rail["+index+"] returns "+v+" ...");
             return v;

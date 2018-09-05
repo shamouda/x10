@@ -268,7 +268,7 @@ public class TxLogForRail[K] {K haszero} implements x10.io.Unserializable {
                 if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] abortRL_EA_UL unlockWrite(index="+index+")");
             }
         }
-        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] abortRV_LA_WB returning, dump="+dump());
+        if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] abortRL_EA_UL returning, dump="+dump());
     }
     
     public def commitRL_EA_UL(data:TxRail[K]) {
