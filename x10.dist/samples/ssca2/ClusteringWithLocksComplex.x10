@@ -316,7 +316,7 @@ public final class ClusteringWithLocksComplex(plh:PlaceLocalHandle[ClusteringSta
             store:TxStore, plh:PlaceLocalHandle[ClusteringState], verbose:Int) {
         val time0 = System.currentTimeMillis();
         val all = end - start;
-        Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1));
+        //Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1));
         // Iterate over each of the vertices in my portion.
         var c:Long = 1;
         for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++c) { 
