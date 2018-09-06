@@ -212,6 +212,14 @@ public class TxResilient extends Tx {
         } else if (abort) {
             //addExceptionUnsafe(new TxStoreConflictException());
             abortMastersOnly();
+        } else if (readOnly && !TxConfig.VALIDATION_REQUIRED) {
+            vote = true;
+            ph1Started = true;
+            if (backupId != -1n) {
+                updateBackup();
+            } else {
+                commitOrAbort(vote);
+            }
         } else {
             prepare();
         }
