@@ -506,7 +506,6 @@ public final class ClusteringWithLocksComplex(plh:PlaceLocalHandle[ClusteringSta
         val plh = PlaceLocalHandle.make[ClusteringState](Place.places(), ()=>new ClusteringState(graph, places, workers, verbose, clusterSize, g, vp, vt));
         val app = new ClusteringWithLocksComplex(plh);
         val executor = MasterWorkerExecutor.make(activePlaces, app);
-        
         val distTime = (System.nanoTime()-time)/1e9;
         
         time = System.nanoTime();
@@ -514,9 +513,9 @@ public final class ClusteringWithLocksComplex(plh:PlaceLocalHandle[ClusteringSta
         time = System.nanoTime() - time;
         
         val results = executor.workerResults();
-        var retries:Long = 0;
+        var conflicts:Long = 0;
         for (entry in results.entries()) {
-            retries += entry.getValue() as Long;
+            conflicts += entry.getValue() as Long;
         }
         val procTime = time/1E9;
         val totalTime = distTime + procTime;
@@ -528,7 +527,7 @@ public final class ClusteringWithLocksComplex(plh:PlaceLocalHandle[ClusteringSta
             if (Place(i).isDead())
                 dead += "Place("+i+") ";
         }
-        Console.OUT.println("Places:" + places + ":N:" + plh().N + ":SetupInSeconds:" + distTime + ":ProcessingInSeconds:" + procTime + ":TotalInSeconds:" + totalTime + ":retries:"+retries+":(proc:" + procPct  + "%):dead:"+dead);
+        Console.OUT.println("Places:" + places + ":N:" + plh().N + ":SetupInSeconds:" + distTime + ":ProcessingInSeconds:" + procTime + ":TotalInSeconds:" + totalTime + ":conflicts:"+conflicts+":(proc:" + procPct  + "%):dead:"+dead);
     }
     
 }
