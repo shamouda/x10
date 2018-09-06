@@ -315,7 +315,6 @@ public final class ClusteringWithLocksComplex(plh:PlaceLocalHandle[ClusteringSta
     private def execute(state:ClusteringState, placeId:Long, workerId:Long, start:Int, end:Int, 
             store:TxStore, plh:PlaceLocalHandle[ClusteringState], verbose:Int) {
         val time0 = System.currentTimeMillis();
-        var totalFailedRetries:Long = 0;
         val all = end - start;
         Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1));
         // Iterate over each of the vertices in my portion.
@@ -323,13 +322,13 @@ public final class ClusteringWithLocksComplex(plh:PlaceLocalHandle[ClusteringSta
         for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++c) { 
             val s:Int = vertexIndex;
             val clusterId = vertexIndex;
-            totalFailedRetries += createCluster(store, s, placeId, clusterId, plh, verbose);
+            val conf = createCluster(store, s, placeId, clusterId, plh, verbose);
+            state.addConflicts(conf);
+            
             if (state.g > -1 && clusterId % state.g == 0) {
                 printProgress(here + ":worker:"+workerId+":progress -> " + c + "/" + all , time0);
             }
         }
-        Console.OUT.println(here + ":worker:"+workerId+":from:" + start + ":to:" + (end-1)+":totalRetries:"+totalFailedRetries);
-        state.addRetries(totalFailedRetries);
     }
     
     private def printProgress(message:String, time0:Long) {
@@ -361,9 +360,10 @@ public final class ClusteringWithLocksComplex(plh:PlaceLocalHandle[ClusteringSta
                 async execute(state, placeId, workerId, start, end2, store, plh, verbose);
             }
         }
-        val totalRetries = state.totalRetries;
-        Console.OUT.println(here + " ==> completed successfully ");
-        return totalRetries;
+        val totalConflicts = state.totalConflicts;
+        state.totalConflicts = 0;
+        //Console.OUT.println(here + " ==> completed successfully ");
+        return totalConflicts;
     }
     
     /**
@@ -546,7 +546,8 @@ class ClusteringState(N:Int) {
     val vt:String;
     val vp:String;
 
-    var totalRetries:Long = 0;
+    var totalConflicts:Long = 0;
+    val lock = new Lock();
     
     public def this(graph:Graph, places:Long, workersPerPlace:Long,
             verbose:Int, clusterSize:Long, g:Long, vp:String, vt:String) {
@@ -563,7 +564,18 @@ class ClusteringState(N:Int) {
         this.vt = vt;
     }
     
-    public def addRetries(r:Long) {
-        atomic { totalRetries += r; }
+    public def addConflicts(r:Long) {
+        lock.lock();
+        totalConflicts += r;
+        lock.unlock();
+    }
+    
+    
+    public def getConflicts() {
+        val v:Long;
+        lock.lock();
+        v = totalConflicts;
+        lock.unlock();
+        return v;
     }
 }
