@@ -23,6 +23,7 @@ import x10.xrx.TxStoreConflictException;
 import x10.xrx.TxStorePausedException;
 import x10.xrx.TxStoreFatalException;
 import x10.xrx.TxStoreAbortedException;
+import x10.xrx.TxCommitLog;
 
 public abstract class TxManager[K] {K haszero} {
 	public val data:TxMapData[K];
@@ -75,7 +76,7 @@ public abstract class TxManager[K] {K haszero} {
      * so that we transfer only the update operations.
      * Accordingly, read-only transactions incurs no replication overhead.
      */
-    public def getTxCommitLog(id:Long):HashMap[K,Cloneable] {
+    public def getTxCommitLog(id:Long):TxCommitLog {
         val log = txLogManager.searchTxLog(id);
         if (log == null || log.id() == -1) /*SS_CHECK  txLogManager.isAborted(log.id()) */
             return null;

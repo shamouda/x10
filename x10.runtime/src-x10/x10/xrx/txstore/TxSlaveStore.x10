@@ -18,13 +18,15 @@ import x10.compiler.Ifdef;
 import x10.util.concurrent.Lock;
 import x10.util.resilient.localstore.Cloneable;
 import x10.xrx.Runtime;
+import x10.util.HashSet;
 
 /* Slave methods are being called by only one place at a time,
  * either its master during normal execution, or the store coordinator during failure recovery */
 public class TxSlaveStore[K] {K haszero} {
     static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
-    private var masterState:HashMap[K,Cloneable];
+    private var masterState:HashMap[K,Cloneable]; //values
+    private var masterStateV:HashMap[K,Int]; //versions
     private var masterStateRail:Rail[K];
     
     private val storeType:Int;
@@ -37,8 +39,10 @@ public class TxSlaveStore[K] {K haszero} {
     public def this(storeType:Int, size:Long, init:(Long)=>K) {
         assert(resilient);
         this.storeType = storeType;
-        if (storeType == TxLocalStore.KV_TYPE)
+        if (storeType == TxLocalStore.KV_TYPE) {
             masterState = new HashMap[K,Cloneable]();
+            masterStateV = new HashMap[K,Int]();
+        }
         else 
             masterStateRail = new Rail[K](size, init);
         logs = new ArrayList[TxSlaveLog[K]]();
@@ -49,10 +53,11 @@ public class TxSlaveStore[K] {K haszero} {
         }
     }
     
-    public def this(state:HashMap[K,Cloneable], rail:Rail[K]) {
+    public def this(state:HashMap[K,Cloneable], stateV:HashMap[K,Int], rail:Rail[K]) {
         assert(resilient);
         if (state != null) {
             masterState = state;
+            masterStateV = stateV;
             storeType = TxLocalStore.KV_TYPE;
         } else {
             masterStateRail = rail;            
@@ -77,7 +82,9 @@ public class TxSlaveStore[K] {K haszero} {
     public def getSlaveMasterState():HashMap[K,Cloneable] {
         return masterState;
     }
-    
+    public def getSlaveMasterStateV():HashMap[K,Int] {
+        return masterStateV;
+    }
     public def getSlaveMasterStateRail():Rail[K] {
         return masterStateRail;
     }
@@ -88,7 +95,7 @@ public class TxSlaveStore[K] {K haszero} {
         try {
             slaveLock();
             if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] Slave.localTxCommit transLog["+transLog+"] transLogRail["+transLogRail+"]...");
-            commitLockAcquired(new TxSlaveLog[K](id, ownerPlaceIndex, transLog, transLogRail));
+            commitLockAcquired(new TxSlaveLog[K](id, ownerPlaceIndex, transLog, null, transLogRail));
         }
         finally {
             slaveUnlock();
@@ -102,6 +109,12 @@ public class TxSlaveStore[K] {K haszero} {
             slaveLock();
             val txLog = getLog(id);
             if (txLog != null) {
+                val set = getMismatchedKeys(txLog);
+                val delayedLogs = getDelayedCommitLogs(id, set);
+                for (dlog in delayedLogs) {
+                    commitLockAcquired(dlog);
+                    logs.remove(dlog);    
+                }
                 commitLockAcquired(txLog);
                 logs.remove(txLog);
             }
@@ -110,10 +123,44 @@ public class TxSlaveStore[K] {K haszero} {
         }
     }
     
+    private def getMismatchedKeys(txLog:TxSlaveLog[K]):HashSet[K] {
+        val set = new HashSet[K]();
+        if (storeType == TxLocalStore.KV_TYPE) {
+            val dataV = masterStateV;
+            val iter = txLog.transLog.keySet().iterator();
+            while (iter.hasNext()) {
+                val key = iter.next();
+                val version = txLog.transLogV.getOrThrow(key);
+                val realVersion = dataV.getOrElse(key, 0n);
+                if (version != realVersion)
+                    set.add(key);
+            }
+        }
+        return set;
+    }
+    
+    private def getDelayedCommitLogs(id:Long, set:HashSet[K]) {
+        val list = new ArrayList[TxSlaveLog[K]]();
+        for (log in logs){
+            if (log.id != id) {
+                val iter = log.transLog.keySet().iterator();
+                while (iter.hasNext()) {
+                    val key = iter.next();
+                    if (set.contains(key)) {
+                        list.add(log);
+                        break;
+                    }
+                }
+            }
+        }
+        return list;
+    }
+    
     private def commitLockAcquired(txLog:TxSlaveLog[K]) {
         try {
             if (storeType == TxLocalStore.KV_TYPE) {
                 val data = masterState;
+                val dataV = masterStateV;
                 val iter = txLog.transLog.keySet().iterator();
                 while (iter.hasNext()) {
                     val key = iter.next();
@@ -122,6 +169,7 @@ public class TxSlaveStore[K] {K haszero} {
                         data.delete(key);
                     else
                         data.put(key, value);
+                    dataV.put(key, txLog.transLogV.getOrElse(key, 0n));//update version
                 }
             } else {
                 val data = masterStateRail;
@@ -138,7 +186,7 @@ public class TxSlaveStore[K] {K haszero} {
         }
     }
     
-    public def prepare(id:Long, entries1:HashMap[K,Cloneable], entries2:HashMap[Long,K], ownerPlaceIndex:Long) {
+    public def prepare(id:Long, entries1:HashMap[K,Cloneable], entries1V:HashMap[K,Int], entries2:HashMap[Long,K], ownerPlaceIndex:Long) {
         if (TxConfig.TM_DEBUG) 
             Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] Slave.prepare ...");
         try {
@@ -149,9 +197,9 @@ public class TxSlaveStore[K] {K haszero} {
                 logs.add(txSlaveLog);
             }
             txSlaveLog.transLog = entries1;
+            txSlaveLog.transLogV = entries1V;
             txSlaveLog.transLogRail = entries2;
-        }
-        finally {
+        } finally {
             slaveUnlock();
         }
     }

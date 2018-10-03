@@ -18,7 +18,7 @@ import x10.util.resilient.localstore.Cloneable;
 import x10.util.HashSet;
 import x10.xrx.TxStorePausedException;
 import x10.xrx.TxStoreFatalException;
-
+import x10.xrx.TxCommitLog;
 /*
  * TxMapData may be accessed by different transactions at the same time.
  * We use a lock to synchronize access to the shared metadata hashmap.
@@ -33,7 +33,7 @@ public class TxMapData[K] {K haszero} {
         lock = new Lock();
     }
     
-    public def this(values:HashMap[K,Cloneable]) {
+    public def this(values:HashMap[K,Cloneable], versions:HashMap[K,Int]) {
         metadata = new HashMap[K,MemoryUnit[K]]();
         lock = new Lock();
         
@@ -41,26 +41,34 @@ public class TxMapData[K] {K haszero} {
         while (iter.hasNext()) {
             val k = iter.next();
             val v = values.getOrThrow(k);
-            metadata.put(k, new MemoryUnit[K](v));
+            val mu = new MemoryUnit[K](v);
+            mu.setInitialVersion(versions.getOrThrow(k));
+            metadata.put(k, mu);
         }
     }
     
     public def getMap() = metadata;
     
     public def getKeyValueMap() {
+        val result = new TxCommitLog[K]();
         try {
             lock(-1);
             val values = new HashMap[K,Cloneable]();
+            val versions = new HashMap[K,Int]();
             val iter = metadata.keySet().iterator();
             while (iter.hasNext()) {
                 val k = iter.next();
                 val memU = metadata.getOrThrow(k);
                 if (!memU.isDeleted()) {
-                    val v = metadata.getOrThrow(k).getValueLockedNoDebug(false, k, -1);
+                    val mu = metadata.getOrThrow(k);
+                    val v = mu.getValueLockedNoDebug(false, k, -1);
                     values.put(k, v);
+                    versions.put(k, mu.getVersionLocked());
                 }
             }
-            return values;
+            result.log1 = values;
+            result.log1V = versions;
+            return result;
             
         }finally {
             unlock(-1);

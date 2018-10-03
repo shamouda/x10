@@ -23,6 +23,7 @@ import x10.xrx.TxStoreConflictException;
 import x10.xrx.TxStorePausedException;
 import x10.xrx.TxStoreFatalException;
 import x10.xrx.TxStoreAbortedException;
+import x10.xrx.TxCommitLog;
 
 public abstract class TxManagerForRail[K] {K haszero} {
     protected static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
@@ -131,7 +132,7 @@ public abstract class TxManagerForRail[K] {K haszero} {
     public abstract def validate(id:Long):void ;
     public abstract def commit(id:Long):void ;
     public abstract def abort(id:Long):void;
-    public def getTxCommitLog(id:Long):Any { return null; } 
+    public def getTxCommitLog(id:Long):TxCommitLog { return null; } 
     public abstract def lockAll(id:Long, start:Long, opPerPlace:Long, indices:Rail[Long],readFlags:Rail[Boolean]):void;
     public abstract def unlockAll(id:Long, start:Long, opPerPlace:Long, indices:Rail[Long],readFlags:Rail[Boolean]):void;
     

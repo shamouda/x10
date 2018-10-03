@@ -69,6 +69,10 @@ public class MemoryUnit[K] {K haszero} {
         }
     }
     
+    public def setInitialVersion(v:Int) {
+        version = v;
+    }
+    
     public def rollbackValueLocked(oldValue:Cloneable, oldVersion:Int, key:K, txId:Long) {
         version = oldVersion; 
         value = oldValue;
@@ -177,6 +181,10 @@ public class MemoryUnit[K] {K haszero} {
         if (TxConfig.TM_DEBUG && print) 
             Console.OUT.println("Tx["+txId+"] " + TxManager.txIdToString(txId) + " here["+here+"] getvv key["+key+"] ver["+version+"] val["+v+"]");
         return v;
+    }
+    
+    public def getVersionLocked() {
+        return version;
     }
     
     public def getVersionLocked(copy:Boolean, key:K, txId:Long) {

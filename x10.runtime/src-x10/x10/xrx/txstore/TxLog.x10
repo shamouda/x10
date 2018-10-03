@@ -20,6 +20,7 @@ import x10.util.RailUtils;
 import x10.util.GrowableRail;
 import x10.xrx.Runtime;
 import x10.xrx.TxStoreFatalException;
+import x10.xrx.TxCommitLog;
 
 /*
  * The log to track actions done on a key. 
@@ -276,20 +277,21 @@ public class TxLog[K] {K haszero} implements x10.io.Unserializable {
         keysList.getOrThrow(key).setLockedRead(lr);
     }
     
-    public def prepareCommitLog():HashMap[K,Cloneable] {
+    public def prepareCommitLog():TxCommitLog[K] {
         val wtKeys = keysList.getWriteKeys();
         if (wtKeys.size() == 0) {
             return null;
         }
         //if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxManager.txIdToString(id) + " here["+here+"] prepareCommitLog readKeys {" + keysList.readKeysAsString() + "}  writeKeys {" + keysList.writeKeysAsString() + "} ");
         val map = new HashMap[K,Cloneable]();
+        val mapV = new HashMap[K,Int]();
         if (TxConfig.WRITE_BUFFERING) {
             for (var i:Long = 0 ; i < wtKeys.size(); i++) {
                 val log = wtKeys(i);
                 map.put( log.key() , log.getValue());
+                mapV.put( log.key() , log.getInitVersion());
             }
-        }
-        else {
+        } else {
             for (var i:Long = 0 ; i < wtKeys.size(); i++) {
                 val log = wtKeys(i);
                 val key = log.key();
@@ -305,10 +307,13 @@ public class TxLog[K] {K haszero} implements x10.io.Unserializable {
                 else {
                     map.put(key, memory.getValueLocked(false, key, id)); 
                 }
-            
+                mapV.put(key, log.getInitVersion());
             }
         }
-        return map;
+        val log = new TxCommitLog[K]();
+        log.log1 = map;
+        log.log1V = mapV;        
+        return log;
     }
     
     public def lock(i:Long) {

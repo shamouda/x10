@@ -321,13 +321,14 @@ public class TxStore {
         val storeType = plh().getMasterStore().getType();
         val rail = storeType == TxLocalStore.RAIL_TYPE ? plh().slaveStore.getSlaveMasterStateRail(): null;
         val map = storeType == TxLocalStore.KV_TYPE ? plh().slaveStore.getSlaveMasterState() : null;
+        val mapV = storeType == TxLocalStore.KV_TYPE ? plh().slaveStore.getSlaveMasterStateV() : null;
         if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Slave prepared a consistent master replica to the spare master spare=["+spare+"] ...");
         
         val deadPlaceSlave = here;
         at (spare) async {
             if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Spare received the master replica from slave ["+deadPlaceSlave+"] ...");
             if (storeType == TxLocalStore.KV_TYPE)
-                plh().setMasterStore (new TxMasterStore(map, plh().immediateRecovery));
+                plh().setMasterStore (new TxMasterStore(map, mapV, plh().immediateRecovery));
             else
                 plh().setMasterStore (new TxMasterStoreForRail(rail, plh().immediateRecovery));
             plh().getMasterStore().pausing();
@@ -352,13 +353,14 @@ public class TxStore {
         if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Master is paused ...");
         val recData = plh().getMasterStore().getDataForRecovery();
         val storeType = plh().getMasterStore().getType();
-        val state1:HashMap[Any,Cloneable] = (storeType == TxLocalStore.KV_TYPE)? recData as HashMap[Any,Cloneable]:null;
+        val state1:HashMap[Any,Cloneable] = (storeType == TxLocalStore.KV_TYPE)? (recData as TxCommitLog[Any]).log1 as HashMap[Any,Cloneable]:null;
+        val state1V:HashMap[Any,Int] = (storeType == TxLocalStore.KV_TYPE)? (recData as TxCommitLog[Any]).log1V as HashMap[Any,Int]:null;
         val state2:Rail[Any] = (storeType == TxLocalStore.RAIL_TYPE)? recData as Rail[Any]:null;
         if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Master prepared a consistent slave replica to the spare slave ...");
         val me = here;
         at (spare) async {
             if (TxConfig.TMREC_DEBUG) Console.OUT.println("Recovering " + here + " Spare received the slave replica from master ["+me+"] ...");    
-            plh().slaveStore = new TxSlaveStore(state1, state2);
+            plh().slaveStore = new TxSlaveStore[Any](state1, state1V, state2);
         }    
         }catch(ex:Exception) {
             ex.printStackTrace();

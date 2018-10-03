@@ -34,10 +34,10 @@ public class TxMasterStore[K] {K haszero} {
         this.txManager = null;
     }
     
-    public def this(masterMap:HashMap[K,Cloneable], immediateRecovery:Boolean) {
+    public def this(masterMap:HashMap[K,Cloneable], masterMapV:HashMap[K,Int], immediateRecovery:Boolean) {
         this.immediateRecovery = immediateRecovery;
         this.sequence = new AtomicInteger();
-        this.txManager = TxManager.make[K](new TxMapData[K](masterMap), immediateRecovery);
+        this.txManager = TxManager.make[K](new TxMapData[K](masterMap, masterMapV), immediateRecovery);
     }   
     
     public def getType():Int {
