@@ -40,17 +40,17 @@ public class ResilientCondition implements Unserializable {
         lock.unlock();
     }
     
-    public def await() {
+    public def await(incrPar:Boolean) {
         if (place.isDead()) {
             forceRelease();
             return;
         }
         
         try {
-        	if (Runtime.NUM_IMMEDIATE_THREADS == 0n) Runtime.increaseParallelism();
+        	if (incrPar) Runtime.increaseParallelism();
             (gr as GlobalRef[Condition]{self.home == here})().await();
         } finally {
-        	if (Runtime.NUM_IMMEDIATE_THREADS == 0n) Runtime.decreaseParallelism(1n);
+        	if (incrPar) Runtime.decreaseParallelism(1n);
         }
     }
     
@@ -58,9 +58,9 @@ public class ResilientCondition implements Unserializable {
         (gr as GlobalRef[Condition]{self.home == here})().release();
     }
     
-    public def run (immediateAsyncClosure:(gr:GlobalRef[Condition])=>void) {
+    public def run (immediateAsyncClosure:(gr:GlobalRef[Condition])=>void, incrPar:Boolean) {
         immediateAsyncClosure(gr); //this closure MUST release the condition 
-        await();
+        await(incrPar);
     }
     
     public static def notifyPlaceDeath() {

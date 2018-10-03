@@ -29,8 +29,63 @@ import x10.io.CustomSerialization;
 import x10.io.Deserializer;
 import x10.io.Serializer;
 
-abstract class FinishState {
+import x10.xrx.txstore.TxConfig;
+import x10.util.Set;
 
+public abstract class FinishState {
+    /*
+     * for debug
+     */
+    public static val verbose = isVerbosePlace()? 4 : getEnvLong("X10_RESILIENT_VERBOSE") ; // should be copied to subclass
+    protected static def getEnvLong(name:String) {
+        val env = System.getenv(name);
+        val v = (env!=null) ? Long.parseLong(env) : 0;
+        if (v>0 && here.id==0) Console.OUT.println(name + "=" + v);
+        return v;
+    }
+    protected static def debug(msg:String) {
+        val nsec = System.nanoTime();
+        val output = "[nsec=" + nsec + " place=" + here.id + " " + Runtime.activity() + "] " + msg;
+        Console.OUT.println(output); Console.OUT.flush();
+    }
+    protected static def dumpStack(msg:String) {
+        try { throw new Exception(msg); } catch (e:Exception) { e.printStackTrace(); }
+    }
+    
+    private static def isVerbosePlace() {
+        if (System.getenv("VERBOSE_PLACE") != null) {
+            val arr = System.getenv("VERBOSE_PLACE").split(";");
+            for (var i:Long = 0; i < arr.size; i++) {
+                if (Long.parseLong(arr(i)) == here.id)
+                    return true;
+            }
+        }
+        return false;
+    }
+    // TODO: We should empirically tune this size for performance.
+    //       Initially I am picking a size that will make it very likely
+    //       that we will use a mix of both direct and indirect protocols
+    //       for a large number of test cases to shake out mixed-mode problems.
+    protected static val ASYNC_SIZE_THRESHOLD = Long.parse(Runtime.env.getOrElse("X10_RESILIENT_FINISH_SMALL_ASYNC_SIZE", "0"));
+    
+    public static struct Id(home:int,id:int) {
+        public def toString() = "<"+home+","+id+">";
+    }
+    
+    public static val UNASSIGNED = Id(-1n,-1n);
+    
+    /* The implicit top finish is not replicated in the replication-based implementations.
+     * Place 0 starts the shutdown procedure when that finish is released, and sometimes, shutting down
+     * occurs while places are exchanging final replication messages. 
+     * This behaviour caused the programs to hang while shutting down. Therefore special termination logic
+     * is added for the TOP_FINISH in replication-based implementations */
+    public static val TOP_FINISH = Id(0n,0n);
+    
+    public static val AT = 0n;
+    public static val ASYNC = 1n;
+    
+    protected static val nextId = new AtomicInteger(); // per-place portion of unique id
+    
     // Turn this on to debug deadlocks within the finish implementation
     static VERBOSE = Configuration.envOrElse("X10_FINISH_VERBOSE", false);
     protected static REMOTE_GC = Configuration.envOrElse("X10_FINISH_REMOTE_GC", true);
@@ -151,14 +206,19 @@ abstract class FinishState {
     abstract def waitForFinish():void;
 
     /**
-     * Spawn a remote activity.
-     */
-    def spawnRemoteActivity(place:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
-        val fs = this;
-        val preSendAction = ()=>{ fs.notifySubActivitySpawn(place); };
-        x10.xrx.Runtime.x10rtSendAsync(place.id, body, fs, prof, preSendAction);
-    }
+     * Transactional Finish variables and functions
+     * */
+    protected transient var tx:Tx;
+    protected transient var isRootTx:Boolean; //flag to indicate whether this finish is responsible for commit
 
+    /**
+     * Must be called as a first statement in a finish block
+     * */
+    def registerFinishTx(tx:Tx, rootTx:Boolean):void { 
+        this.tx = tx;
+        this.isRootTx = rootTx;
+    }
+    
     def notifyActivityTermination(srcPlace:Place,t:CheckedThrowable):void {
         if (t != null) pushException(t);
         notifyActivityTermination(srcPlace);
@@ -171,7 +231,30 @@ abstract class FinishState {
         if (t != null) pushException(t);
         notifyShiftedActivityCompletion(srcPlace);
     }
-    
+    /**
+     * Spawn a remote activity.
+     */
+    def spawnRemoteActivity(place:Place, body:()=>void, prof:x10.xrx.Runtime.Profile):void {
+        val fs = this;
+        val preSendAction = ()=>{ fs.notifySubActivitySpawn(place); };
+        x10.xrx.Runtime.x10rtSendAsync(place.id, body, fs, prof, preSendAction);
+    }
+
+    /**
+     * Called to indicate that the currently executing activity 
+     * is a member in the finish transaction and that it 
+     * has terminated successfully.
+     *
+     * Scheduling note: Will only be called on a full-fledged worker thread;
+     *                  this method is allowed to block/pause.
+     */
+    def notifyTxActivityTermination(srcPlace:Place, readOnly:Boolean, t:CheckedThrowable) {
+        if (t != null)
+            notifyActivityTermination(srcPlace, t);
+        else
+            notifyActivityTermination(srcPlace);
+    }
+
     /***
      * Relevant only in optimistic counting
      */
@@ -568,9 +651,11 @@ abstract class FinishState {
             me.notifyActivityCreatedAndTerminated(srcPlace);
         }
         public def notifyActivityTermination(srcPlace:Place) { me.notifyActivityTermination(srcPlace); }
+        public def notifyTxActivityTermination(srcPlace:Place, readOnly:Boolean, t:CheckedThrowable) { me.notifyTxActivityTermination(srcPlace, readOnly, t); }
         public def notifyShiftedActivityCompletion(srcPlace:Place) { me.notifyShiftedActivityCompletion(srcPlace); }
         public def pushException(t:CheckedThrowable) { me.pushException(t); }
         public def waitForFinish() { me.waitForFinish(); }
+        public def registerFinishTx(tx:Tx, rootTx:Boolean):void { me.registerFinishTx(tx, rootTx); }
     }
 
     // the default finish implementation
@@ -587,7 +672,7 @@ abstract class FinishState {
         protected def this(ref:GlobalRef[FinishState]) {
             super(ref);
         }
-        private def this(ds:Deserializer) { 
+        private def this(ds:Deserializer) {
             super(ds.readAny() as GlobalRef[FinishState]);
             if (ref.home.id == Runtime.hereLong()) {
                 me = (ref as GlobalRef[FinishState]{home==here})();
@@ -598,7 +683,7 @@ abstract class FinishState {
         }
     }
 
-    static class RootFinish extends RootFinishSkeleton {
+    static class RootFinish extends RootFinishSkeleton implements Releasable {
         @Embed protected transient var latch:SimpleLatch;
         protected var count:Int = 1n; // locally created activities
         protected var exceptions:GrowableRail[CheckedThrowable]; // captured remote exceptions.  lazily initialized
@@ -640,12 +725,35 @@ abstract class FinishState {
             pushException(t);
             notifyActivityTermination(srcPlace);
         }
+        
         public def notifyActivityTermination(srcPlace:Place):void {
+            notifyTermination(srcPlace, false, false, null);
+        }
+        
+        public def notifyTxActivityTermination(srcPlace:Place, readOnly:Boolean, t:CheckedThrowable):void {
+            notifyTermination(srcPlace, true, readOnly, t);
+        }
+        
+        public def notifyTermination(srcPlace:Place, isTx:Boolean, readOnly:Boolean, t:CheckedThrowable):void {
             latch.lock();
+            if (t != null)
+                process(t);
+            
+            if (tx != null) {
+                if (isTx)
+                    tx.addMember(here.id as Int, readOnly, 20n);
+                //never called by an immediate thread
+                val subTxMem = Runtime.activity().subMembers;
+                if (subTxMem != null){
+                    tx.addSubMembers(subTxMem, Runtime.activity().subReadOnly, 2222n);
+                }
+            }
+            
             if (--count != 0n) {
                 latch.unlock();
                 return;
             }
+            
             if (remoteActivities != null && remoteActivities.size() != 0) {
                 for (entry in remoteActivities.entries()) {
                     if (entry.getValue() != 0n) {
@@ -655,8 +763,9 @@ abstract class FinishState {
                 }
             }
             latch.unlock();
-            latch.release();
+            tryRelease();
         }
+        
         public def notifyShiftedActivityCompletion(srcPlace:Place) {
             notifyActivityTermination(srcPlace);
         }
@@ -676,12 +785,19 @@ abstract class FinishState {
             latch.unlock();
         }
         public def waitForFinish():void {
-            notifyActivityTermination(here); // remove our own activity from count
+            // remove our own activity from count
+            if (Runtime.activity().tx)
+                notifyTxActivityTermination(here, Runtime.activity().txReadOnly, null);
+            else
+                notifyActivityTermination(here);
+            
             if ((!Runtime.STRICT_FINISH) && (Runtime.STATIC_THREADS || remoteActivities == null)) {
                 Runtime.worker().join(latch);
             }
             latch.await(); // sit here, waiting for all child activities to complete
 
+            saveSubTx();
+            
             if (REMOTE_GC) gc();
             
             // throw exceptions here if any were collected via the execution of child activities
@@ -691,22 +807,59 @@ abstract class FinishState {
             // if no exceptions, simply return
         }
         
+        public def saveSubTx() {
+            if (tx != null && !tx.isEmpty() ) {
+                if (!isRootTx)
+                    Runtime.activity().setSubTransaction(tx.getMembers(), tx.isReadOnly());
+                else
+                    Runtime.activity().setSubTransaction(null, true);
+            }
+        }
+        
+        public def registerFinishTx(old:Tx, rootTx:Boolean):void {
+            this.isRootTx = rootTx;
+            if (rootTx)
+                this.tx = old;
+            else
+                this.tx = Tx.clone(old);
+            this.tx.initialize(ref());
+        }
+        
         def gc() {
             // if there were remote activities spawned, clean up the RemoteFinish objects which tracked them
             if (remoteActivities != null && remoteActivities.size() != 0) {
                 val root = ref();
                 remoteActivities.remove(here.id);
-                for (placeId in remoteActivities.keySet()) {
-                    at(Place(placeId)) @Immediate("remoteFinishCleanup") async Runtime.finishStates.remove(root);
+                if (tx == null || tx.isEmpty()) {
+                    for (placeId in remoteActivities.keySet()) {
+                        at(Place(placeId)) @Immediate("remoteFinishCleanup1") async Runtime.finishStates.remove(root);
+                    }
+                } else {
+                    for (placeId in remoteActivities.keySet()) {
+                        if (tx.contains(placeId as Int))
+                            continue;
+                        at(Place(placeId)) @Immediate("remoteFinishCleanup2") async Runtime.finishStates.remove(root);
+                    }
                 }
             }
         }
 
-        protected def process(remoteMap:HashMap[Long, Int]):void {
+        protected def process(remoteMap:HashMap[Long, Int], isTx:Boolean, txRO:Boolean,
+                subMembers:Set[Int], subReadOnly:Boolean):void {
             ensureRemoteActivities();
+            var src:Int = -1n;
             // add the remote set of records to the local set
             for (remoteEntry in remoteMap.entries()) {
                 remoteActivities.put(remoteEntry.getKey(), remoteActivities.getOrElse(remoteEntry.getKey(), 0n)+remoteEntry.getValue());
+                if (remoteEntry.getValue() < 0) {
+                    src = remoteEntry.getKey() as Int;
+                }
+            }
+            if (tx != null) {
+                if (isTx)                
+                    tx.addMember(src, txRO, 21n);
+                if (subMembers != null)
+                    tx.addSubMembers(subMembers, subReadOnly, 9999n);
             }
         
             // add anything in the remote set which ran here to my local count, and remove from the remote set
@@ -722,29 +875,45 @@ abstract class FinishState {
             }
             
             // nothing is pending.  Release the latch
-            latch.release();
+            tryRelease();
         }
 
         def notify(remoteMapBytes:Rail[Byte]):void {
+            notify(remoteMapBytes, false, false, null, false);
+        }
+        
+        def notify(remoteMapBytes:Rail[Byte], isTx:Boolean, txRO:Boolean, subMembers:Set[Int], subReadOnly:Boolean):void {
             remoteMap:HashMap[Long, Int] = new x10.io.Deserializer(remoteMapBytes).readAny() as HashMap[Long, Int]; 
             latch.lock();
-            process(remoteMap);
+            process(remoteMap, isTx, txRO, subMembers, subReadOnly);
             latch.unlock();
         }
 
         def notify(remoteMapBytes:Rail[Byte], excs:Rail[CheckedThrowable]):void {
+            notify(remoteMapBytes, excs, false, false, null, false);
+        }
+        
+        def notify(remoteMapBytes:Rail[Byte], excs:Rail[CheckedThrowable], isTx:Boolean, txRO:Boolean, subMembers:Set[Int], subReadOnly:Boolean):void {
             remoteMap:HashMap[Long, Int] = new x10.io.Deserializer(remoteMapBytes).readAny() as HashMap[Long, Int];
             latch.lock();
             process(excs);
-            process(remoteMap);
+            process(remoteMap, isTx, txRO, subMembers, subReadOnly);
             latch.unlock();
         }
         
-        protected def process(remoteEntry:Pair[Long, Int]):void {
+        protected def process(remoteEntry:Pair[Long, Int], isTx:Boolean, txRO:Boolean, 
+                subMembers:Set[Int], subReadOnly:Boolean):void {
             ensureRemoteActivities();
             // add the remote record to the local set
             remoteActivities.put(remoteEntry.first, remoteActivities.getOrElse(remoteEntry.first, 0n)+remoteEntry.second);
         
+            if (tx != null) {
+                if (isTx)
+                    tx.addMember(remoteEntry.first as Int, txRO, 22n);
+                if (subMembers != null)
+                    tx.addSubMembers(subMembers, subReadOnly, 1111n);
+            }
+            
             // check if anything is pending locally
             if (count != 0n) return;
         
@@ -752,22 +921,53 @@ abstract class FinishState {
             for (entry in remoteActivities.entries()) {
                 if (entry.getValue() != 0n) return;
             }
-        
+
             // nothing is pending.  Release the latch
-            latch.release();
+            tryRelease();
         }
 
-        def notify(remoteEntry:Pair[Long, Int]):void {
+        def notify(remoteEntry:Pair[Long, Int]) {
+            notify(remoteEntry, false, false, null, false);
+        }
+        def notify(remoteEntry:Pair[Long, Int], isTx:Boolean, txRO:Boolean, subMembers:Set[Int], subReadOnly:Boolean):void {
             latch.lock();
-            process(remoteEntry);
+            process(remoteEntry, isTx, txRO, subMembers, subReadOnly);
             latch.unlock();
         }
-
-        def notify(remoteEntry:Pair[Long, Int], excs:Rail[CheckedThrowable]):void {
+        def notify(remoteEntry:Pair[Long, Int], excs:Rail[CheckedThrowable]) {
+            notify(remoteEntry, excs, false, false, null, false);
+        }
+        def notify(remoteEntry:Pair[Long, Int], excs:Rail[CheckedThrowable], isTx:Boolean, txRO:Boolean, subMembers:Set[Int], subReadOnly:Boolean):void {
             latch.lock();
             process(excs);
-            process(remoteEntry);
+            process(remoteEntry, isTx, txRO, subMembers, subReadOnly);
             latch.unlock();
+        }
+        
+        public def releaseFinish(excs:GrowableRail[CheckedThrowable]) {
+            if (excs != null) {
+                for (t in excs.toRail())
+                    process(t);
+            }
+            latch.release();
+        }
+        
+        def tryRelease() {
+            if (tx == null || tx.isEmpty() || !isRootTx) {
+                releaseFinish(null);
+            } else {
+                var abort:Boolean = false;
+                if (exceptions != null && exceptions.size() > 0) {
+                    abort = true;
+                    if (TxConfig.TM_DEBUG) {
+                        var str:String = "";
+                        for (var m:Long = 0; m < exceptions.size(); m++)
+                            str += exceptions(m).getMessage() + " , ";
+                        Console.OUT.println("Tx["+tx.id+"] " + TxConfig.txIdToString (tx.id)+ " here["+here+"] finalize with abort because ["+str+"] ");
+                    }
+                }
+                tx.finalize(this, abort);
+            }
         }
     }
 
@@ -777,7 +977,10 @@ abstract class FinishState {
         protected var count:Int = 0n;
         protected var remoteActivities:HashMap[Long,Int]; // key is place id, value is count for that place.
         @Embed protected val local = @Embed new AtomicInteger(0n); // local count
-
+        
+        private var tx:Boolean = false;
+        private var txReadOnly:Boolean = true;
+        
         def this(ref:GlobalRef[FinishState]) {
             super(ref);
         }
@@ -825,12 +1028,29 @@ abstract class FinishState {
             lock.unlock();
         }
         public def notifyActivityTermination(srcPlace:Place):void {
+            notifyTermination(srcPlace, false, false, null);
+        }
+        public def notifyTxActivityTermination(srcPlace:Place, readOnly:Boolean, t:CheckedThrowable):void {
+            notifyTermination(srcPlace, true, readOnly, t);
+        }
+        public def notifyTermination(srcPlace:Place, isTx:Boolean, readOnly:Boolean, t:CheckedThrowable):void {
             lock.lock();
+            if (t != null) {
+                if (null == exceptions) exceptions = new GrowableRail[CheckedThrowable]();
+                exceptions.add(t);
+            }
+            tx = tx | isTx;
+            txReadOnly = txReadOnly & readOnly;
             count--;
             if (local.decrementAndGet() > 0) {
                 lock.unlock();
                 return;
             }
+            val cTx = tx;
+            val cTxReadyOnly = txReadOnly;
+            
+            val subTxMem = Runtime.activity() == null? null : Runtime.activity().subMembers;
+            val subTxRO = Runtime.activity() == null? true : Runtime.activity().subReadOnly;
             val excs = exceptions == null || exceptions.isEmpty() ? null : exceptions.toRail();
             exceptions = null;
             val ref = this.ref();
@@ -844,21 +1064,22 @@ abstract class FinishState {
                 count = 0n;
                 lock.unlock();
                 if (null != excs) {
-                    at(ref.home) @Immediate("notifyActivityTermination_1") async deref[RootFinish](ref).notify(serializedTable, excs);
+                    at(ref.home) @Immediate("notifyActivityTermination_1") async deref[RootFinish](ref).notify(serializedTable, excs, cTx, cTxReadyOnly, subTxMem, subTxRO);
                 } else {
-                    at(ref.home) @Immediate("notifyActivityTermination_2") async deref[RootFinish](ref).notify(serializedTable);
+                    at(ref.home) @Immediate("notifyActivityTermination_2") async deref[RootFinish](ref).notify(serializedTable, cTx, cTxReadyOnly, subTxMem, subTxRO);
                 }
             } else {
                 val message = new Pair[Long, Int](here.id, count);
                 count = 0n;
                 lock.unlock();
                 if (null != excs) {
-                    at(ref.home) @Immediate("notifyActivityTermination_3") async deref[RootFinish](ref).notify(message, excs);
+                    at(ref.home) @Immediate("notifyActivityTermination_3") async deref[RootFinish](ref).notify(message, excs, cTx, cTxReadyOnly, subTxMem, subTxRO);
                 } else {
-                    at(ref.home) @Immediate("notifyActivityTermination_4") async deref[RootFinish](ref).notify(message);
+                    at(ref.home) @Immediate("notifyActivityTermination_4") async deref[RootFinish](ref).notify(message, cTx, cTxReadyOnly, subTxMem, subTxRO);
                 }
             }
         }
+        
         public def notifyShiftedActivityCompletion(srcPlace:Place) {
             notifyActivityTermination(srcPlace);
         }
@@ -1069,13 +1290,13 @@ abstract class FinishState {
             remoteMap:HashMap[Long, Int] = new x10.io.Deserializer(remoteMapBytes).readAny() as HashMap[Long, Int];
             latch.lock();
             sr.accept(v);
-            process(remoteMap);
+            process(remoteMap, false, false, null, false);
             latch.unlock();
         }
         def notifyValue(remoteEntry:Pair[Long, Int], v:T):void {
             latch.lock();
             sr.accept(v);
-            process(remoteEntry);
+            process(remoteEntry, false, false, null, false);
             latch.unlock();
         }
         final public def waitForFinishExpr():T {

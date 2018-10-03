@@ -22,47 +22,6 @@ import x10.util.HashSet;
  * Common abstract class for Resilient Finish
  */
 public abstract class FinishResilient extends FinishState {
-    /*
-     * for debug
-     */
-    public static val verbose = getEnvLong("X10_RESILIENT_VERBOSE"); // should be copied to subclass
-    protected static def getEnvLong(name:String) {
-        val env = System.getenv(name);
-        val v = (env!=null) ? Long.parseLong(env) : 0;
-        if (v>0 && here.id==0) Console.OUT.println(name + "=" + v);
-        return v;
-    }
-    protected static def debug(msg:String) {
-        val nsec = System.nanoTime();
-        val output = "[nsec=" + nsec + " place=" + here.id + " " + Runtime.activity() + "] " + msg;
-        Console.OUT.println(output); Console.OUT.flush();
-    }
-    protected static def dumpStack(msg:String) {
-        try { throw new Exception(msg); } catch (e:Exception) { e.printStackTrace(); }
-    }
-    
-    // TODO: We should empirically tune this size for performance.
-    //       Initially I am picking a size that will make it very likely
-    //       that we will use a mix of both direct and indirect protocols
-    //       for a large number of test cases to shake out mixed-mode problems.
-    protected static val ASYNC_SIZE_THRESHOLD = Long.parse(Runtime.env.getOrElse("X10_RESILIENT_FINISH_SMALL_ASYNC_SIZE", "0"));
-    
-    public static struct Id(home:int,id:int) {
-        public def toString() = "<"+home+","+id+">";
-    }
-    
-    public static val UNASSIGNED = Id(-1n,-1n);
-    
-    /* The implicit top finish is not replicated in the replication-based implementations.
-     * Place 0 starts the shutdown procedure when that finish is released, and sometimes, shutting down
-     * occurs while places are exchanging final replication messages. 
-     * This behaviour caused the programs to hang while shutting down. Therefore special termination logic
-     * is added for the TOP_FINISH in replication-based implementations */
-    public static val TOP_FINISH = Id(0n,0n);
-    
-    public static val AT = 0n;
-    public static val ASYNC = 1n;
-
     public static struct Task(place:Int, kind:Int) {
         public def toString() {
             if (Runtime.RESILIENT_MODE == Configuration.RESILIENT_MODE_DIST_OPTIMISTIC ||
@@ -100,7 +59,9 @@ public abstract class FinishResilient extends FinishState {
         public def toString() = "<ChildrenQueryId parentId=" + parentId + " dead="+dead+" src=" + src +">";
     }
     
-    protected static val nextId = new AtomicInteger(); // per-place portion of unique id
+    public static struct DeniableTask(id:Id, src:Int) {
+        public def toString() = "<DeniableTask id="+id+",src="+ src+">";
+    }
     
     /*
      * Static methods to be implemented in subclasses
@@ -137,45 +98,52 @@ public abstract class FinishResilient extends FinishState {
     static def make(parent:FinishState):FinishState { // parent may be null
         var fs:FinishState;
         switch (Runtime.RESILIENT_MODE) {
-        case Configuration.RESILIENT_MODE_DEFAULT:
-        case Configuration.RESILIENT_MODE_PLACE0:
-        {
-            val p = (parent!=null) ? parent : getCurrentFS();
-            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
-            fs = FinishResilientPlace0.make(p);
-            break;
-        }
-        case Configuration.RESILIENT_MODE_DIST_OPTIMISTIC:
-        {
-            val p = (parent!=null) ? parent : getCurrentFS();
-            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
-            fs = FinishResilientOptimistic.make(p);
-            break;
-        }
-        case Configuration.RESILIENT_MODE_DIST_PESSIMISTIC:
-        {
-            val p = (parent!=null) ? parent : getCurrentFS();
-            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
-            fs = FinishResilientPessimistic.make(p);
-            break;
-        }
-        case Configuration.RESILIENT_MODE_PLACE0_OPTIMISTIC:
-        {
-            val p = (parent!=null) ? parent : getCurrentFS();
-            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
-            fs = FinishResilientPlace0Optimistic.make(p);
-            break;
-        }
-        case Configuration.RESILIENT_MODE_HC:
-        {
-           val p = (parent!=null) ? parent : getCurrentFS();
-           if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
-           val o = p as Any;
-           fs = makeFinishResilientHCLocal(o);
-           break;
-        }
-        default:
-            throw new UnsupportedOperationException("Unsupported RESILIENT_MODE " + Runtime.RESILIENT_MODE);
+	        case Configuration.RESILIENT_MODE_DEFAULT:
+	        case Configuration.RESILIENT_MODE_PLACE0:
+	        {
+	            val p = (parent!=null) ? parent : getCurrentFS();
+	            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
+	            fs = FinishResilientPlace0.make(p);
+	            break;
+	        }
+	        case Configuration.NON_RESILIENT_CUSTOM:
+	        {
+	            val p = (parent!=null) ? parent : getCurrentFS();
+	            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
+	            fs = FinishNonResilientCustom.make(p);
+	            break;
+	        }
+	        case Configuration.RESILIENT_MODE_DIST_OPTIMISTIC:
+	        {
+	            val p = (parent!=null) ? parent : getCurrentFS();
+	            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
+	            fs = FinishResilientOptimistic.make(p);
+	            break;
+	        }
+	        case Configuration.RESILIENT_MODE_DIST_PESSIMISTIC:
+	        {
+	            val p = (parent!=null) ? parent : getCurrentFS();
+	            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
+	            fs = FinishResilientPessimistic.make(p);
+	            break;
+	        }
+	        case Configuration.RESILIENT_MODE_PLACE0_OPTIMISTIC:
+	        {
+	            val p = (parent!=null) ? parent : getCurrentFS();
+	            if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
+	            fs = FinishResilientPlace0Optimistic.make(p);
+	            break;
+	        }
+	        case Configuration.RESILIENT_MODE_HC:
+	        {
+	           val p = (parent!=null) ? parent : getCurrentFS();
+	           if (verbose>=1) debug("FinishResilient.make called, parent=" + parent + " p=" + p);
+	           val o = p as Any;
+	           fs = makeFinishResilientHCLocal(o);
+	           break;
+	        }
+	        default:
+	            throw new UnsupportedOperationException("Unsupported RESILIENT_MODE " + Runtime.RESILIENT_MODE);
         }
         if (verbose>=1) debug("FinishResilient.make returning, fs=" + fs);
         return fs;
@@ -290,4 +258,5 @@ class GetNewMasterResponse {
     var found:Boolean = false;
     var newMasterPlace:Int = -1n;
     var newMasterId:FinishResilient.Id = FinishResilient.UNASSIGNED;
+    var ignoreRequest:Boolean = false; //only if it's a RemoveGhost request
 }

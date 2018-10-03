@@ -30,6 +30,7 @@ import x10.util.concurrent.Monitor;
 import x10.util.concurrent.SimpleLatch;
 import x10.util.resilient.concurrent.ResilientCondition;
 import x10.util.resilient.concurrent.LowLevelFinish;
+import x10.util.ArrayList;
 
 /**
  * XRX invocation protocol:
@@ -588,6 +589,12 @@ public final class Runtime {
         return watcher;
     }
 
+    public static def registerFinishTx(tx:Tx, rootTx:Boolean):void {
+        val a = activity();
+        val state = a.finishState();
+        state.registerFinishTx(tx, rootTx);
+    }
+    
     // asyncat, async, at statement, and at expression implementation
     // at is implemented using asyncat
     // asyncat and at must make a copy of the closure parameter (local or remote)
@@ -1002,7 +1009,9 @@ public final class Runtime {
             };
             
             if (verbose>=4) debug("---- runImmediateAt waiting for cond");
-            rCond.run(closure);
+            if (NUM_IMMEDIATE_THREADS == 0n) increaseParallelism();
+            rCond.run(closure, false);
+            if (NUM_IMMEDIATE_THREADS == 0n) decreaseParallelism(1n);
             if (verbose>=4) debug("---- runImmediateAt released from cond");
             rCond.forget();
             exc.forget();
@@ -1278,7 +1287,9 @@ public final class Runtime {
         };
         
         if (verbose>=4) debug("---- evalImmediateAt waiting for cond");
-        rCond.run(closure);
+        if (NUM_IMMEDIATE_THREADS == 0n) increaseParallelism();
+        rCond.run(closure, false);
+        if (NUM_IMMEDIATE_THREADS == 0n) decreaseParallelism(1n);
         if (verbose>=4) debug("---- evalImmediateAt released from cond");
         
         val t = exc()();
@@ -1393,11 +1404,16 @@ public final class Runtime {
             // The launcher is responsible for tear-down in the case of place death, nothing we need to do.
         } else if (RESILIENT_MODE == Configuration.RESILIENT_MODE_X10RT_ONLY) {
             // Nothing to do at the XRX level in this mode.
+        } else if (RESILIENT_MODE == Configuration.NON_RESILIENT_CUSTOM) {
+            // Nothing to do. Technically non-resilient.
         } else {
-            FinishResilient.notifyPlaceDeath();
-            GetRegistry.notifyPlaceDeath();
             ResilientCondition.notifyPlaceDeath();
             LowLevelFinish.notifyPlaceDeath();
+            FinishResilient.notifyPlaceDeath();
+            GetRegistry.notifyPlaceDeath();
+            for (store in txStores) {
+                store.asyncRecover();
+            }
         }
     }
 
@@ -1571,6 +1587,13 @@ public final class Runtime {
             return true;
         } catch (e:InterruptedException) {
             return false;
+        }
+    }
+
+    static txStores = new ArrayList[TxStore]();
+    public static def addTxStore(store:TxStore) {
+        atomic {
+            txStores.add(store);
         }
     }
 }

@@ -11,6 +11,7 @@
 package x10.xrx.freq;
 
 import x10.xrx.FinishResilient;
+import x10.xrx.Tx;
 
 public class TransitRequestOpt extends FinishRequest {
     public val srcId:Int;
@@ -18,15 +19,25 @@ public class TransitRequestOpt extends FinishRequest {
     public val kind:Int;
     
     public var transitSubmitDPE:Boolean;
+    public val tx:Tx;
+    public val rootTx:Boolean;
 
-    public def this(id:FinishResilient.Id, masterPlaceId:Int, parentId:FinishResilient.Id, srcId:Int, dstId:Int, kind:Int) {
+    public def this(id:FinishResilient.Id, masterPlaceId:Int, parentId:FinishResilient.Id, 
+            srcId:Int, dstId:Int, kind:Int, tx:Tx, rootTx:Boolean) {
         super(id, masterPlaceId, parentId);
         this.srcId = srcId;
         this.dstId = dstId;
         this.kind = kind;
+        this.tx = tx;
+        this.rootTx = rootTx;
     }
+    
     public def setSubmitDPE(r:Boolean) {
         this.transitSubmitDPE = r;
     }
+
     public def gc():Boolean = true;
+    
+    public def getTx() = tx;
+    public def isRootTx():Boolean = rootTx;
 }

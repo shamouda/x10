@@ -11,12 +11,18 @@
 package x10.xrx.freq;
 
 import x10.xrx.FinishResilient;
+import x10.util.Set;
 
 public class RemoveGhostChildRequestOpt extends FinishRequest {
     public var childId:FinishResilient.Id;
+    public var subMembers:Set[Int] = null;
+    public var subReadOnly:Boolean = true;
 
-    public def this(id:FinishResilient.Id, masterPlaceId:Int, childId:FinishResilient.Id) {
+    public def this(id:FinishResilient.Id, masterPlaceId:Int, childId:FinishResilient.Id,
+            subMembers:Set[Int], subReadOnly:Boolean) {
         super(id, masterPlaceId, FinishResilient.UNASSIGNED);
         this.childId = childId;
+        this.subMembers = subMembers;
+        this.subReadOnly = subReadOnly;
     }
 }

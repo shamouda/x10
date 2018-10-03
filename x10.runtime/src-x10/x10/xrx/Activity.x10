@@ -11,6 +11,8 @@
 
 package x10.xrx;
 
+import x10.util.Set;
+
 /**
  * Runtime representation of an async. Only to be used in the runtime implementation.
  */
@@ -62,6 +64,13 @@ public class Activity {
      * */
     public val srcPlace:Place;
 
+    public var tx:Boolean = false;
+    public var txReadOnly:Boolean = true;
+    
+    //sub transaction
+    public var subMembers:Set[Int] = null;
+    public var subReadOnly:Boolean = true;
+    
     /**
      * Create activity.
      */
@@ -71,6 +80,8 @@ public class Activity {
         this.atFinishState = FinishState.UNCOUNTED_FINISH;
         this.finishState = finishState;
         this.srcPlace = srcPlace;
+        tx = false;
+        txReadOnly = true;
     }
 
     /**
@@ -80,6 +91,8 @@ public class Activity {
              srcPlace:Place) {
         this(epoch, body, finishState, srcPlace);
         this.clockPhases = clockPhases;
+        tx = false;
+        txReadOnly = true;
     }
 
     /**
@@ -150,9 +163,22 @@ public class Activity {
         }
         if (null != clockPhases) clockPhases.drop();
         try {
-            finishState.notifyActivityTermination(srcPlace, ex);
+            if (tx) {
+                finishState.notifyTxActivityTermination(srcPlace, txReadOnly, ex);
+            } else {
+                finishState.notifyActivityTermination(srcPlace, ex);
+            }
+            tx = false;
+            txReadOnly = true;
         } catch (DeadPlaceException) {}
         if (DEALLOC_BODY) Unsafe.dealloc(body);
+    }
+    
+    public def setSubTransaction(subMembers:Set[Int], subReadOnly:Boolean) {
+        if (subMembers != null) {
+            this.subMembers = subMembers;
+            this.subReadOnly = subReadOnly;
+        }
     }
 }
 
