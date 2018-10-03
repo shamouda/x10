@@ -76,7 +76,7 @@ public abstract class TxManager[K] {K haszero} {
      * so that we transfer only the update operations.
      * Accordingly, read-only transactions incurs no replication overhead.
      */
-    public def getTxCommitLog(id:Long):TxCommitLog {
+    public def getTxCommitLog(id:Long):TxCommitLog[K] {
         val log = txLogManager.searchTxLog(id);
         if (log == null || log.id() == -1) /*SS_CHECK  txLogManager.isAborted(log.id()) */
             return null;

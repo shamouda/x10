@@ -372,12 +372,13 @@ public class TxResilient extends Tx {
                                 val ownerPlaceIndex = plh().virtualPlaceId;
                                 val storeType = plh().getMasterStore().getType();
                                 val log = plh().getMasterStore().getTxCommitLog(id);
-                                val log1:HashMap[Any,Cloneable] = (storeType == TxLocalStore.KV_TYPE) ? log as HashMap[Any,Cloneable] : null;
+                                val log1:HashMap[Any,Cloneable] = (storeType == TxLocalStore.KV_TYPE) ? (log as TxCommitLog[Any]).log1 as HashMap[Any,Cloneable] : null;
+                                val log1V:HashMap[Any,Int] = (storeType == TxLocalStore.KV_TYPE) ? (log as TxCommitLog[Any]).log1V as HashMap[Any,Int] : null;
                                 val log2:HashMap[Long,Any] = (storeType == TxLocalStore.RAIL_TYPE) ? log as HashMap[Long,Any] : null;
                                 val writeLog = (storeType == TxLocalStore.KV_TYPE) ? (log1 != null && log1.size() > 0) : (log2 != null && log2.size() > 0) ; 
                                 if (writeLog) {
                                     at (Place(slaveId as Long)) @Immediate("slave_prep111") async {
-                                        plh().slaveStore.prepare(id, log1, log2, ownerPlaceIndex);
+                                        plh().slaveStore.prepare(id, log1, log1V, log2, ownerPlaceIndex);
                                         at (gr) @Immediate("slave_prep_response111") async {
                                             (gr() as TxResilient).notifyPrepare(slaveId, SLAVE, true /*vote*/, false /*is master RO*/); 
                                         }
@@ -410,12 +411,13 @@ public class TxResilient extends Tx {
                             val ownerPlaceIndex = plh().virtualPlaceId;
                             val storeType = plh().getMasterStore().getType();
                             val log = plh().getMasterStore().getTxCommitLog(id);
-                            val log1:HashMap[Any,Cloneable] = (storeType == TxLocalStore.KV_TYPE) ? log as HashMap[Any,Cloneable] : null;
+                            val log1:HashMap[Any,Cloneable] = (storeType == TxLocalStore.KV_TYPE) ? (log as TxCommitLog[Any]).log1 as HashMap[Any,Cloneable] : null;
+                            val log1V:HashMap[Any,Int] = (storeType == TxLocalStore.KV_TYPE) ? (log as TxCommitLog[Any]).log1V as HashMap[Any,Int] : null;
                             val log2:HashMap[Long,Any] = (storeType == TxLocalStore.RAIL_TYPE) ? log as HashMap[Long,Any] : null;
                             val writeLog = (storeType == TxLocalStore.KV_TYPE) ? (log1 != null && log1.size() > 0) : (log2 != null && log2.size() > 0) ; 
                             if (writeLog) {
                                 at (Place(slaveId as Long)) @Immediate("slave_prep11") async {
-                                    plh().slaveStore.prepare(id, log1, log2, ownerPlaceIndex);
+                                    plh().slaveStore.prepare(id, log1, log1V, log2, ownerPlaceIndex);
                                     at (gr) @Immediate("slave_prep_response11") async {
                                         (gr() as TxResilient).notifyPrepare(slaveId, SLAVE, true /*vote*/, false /*is master RO*/); 
                                     }

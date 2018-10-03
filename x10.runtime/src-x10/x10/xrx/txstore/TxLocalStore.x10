@@ -71,7 +71,7 @@ public class TxLocalStore[K] {K haszero} {
             if (storeType == RAIL_TYPE)
                 masterStore = new TxMasterStoreForRail[K](size, init, immediateRecovery);
             else
-                masterStore = new TxMasterStore[K](new HashMap[K,Cloneable](), immediateRecovery);
+                masterStore = new TxMasterStore[K](new HashMap[K,Cloneable](), new HashMap[K,Int](), immediateRecovery);
             if (resilient && !TxConfig.DISABLE_SLAVE) {
                 slaveStore = new TxSlaveStore[K](storeType, size, init);
                 slave = active.next(here);

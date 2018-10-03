@@ -128,7 +128,7 @@ public class TxManagerForRail_RV_LA_WB[K] {K haszero} extends TxManagerForRail[K
             txLogManager.deleteAbortedTxLog(log);
         }
     }
-
+/*
     public def getTxCommitLog(id:Long):HashMap[Long,K] {
         if (TxConfig.TM_DEBUG) Console.OUT.println("Tx["+id+"] " + TxConfig.txIdToString (id)+ " here["+here+"] getTxCommitLog ...");
         val log = txLogManager.searchTxLog(id);
@@ -142,7 +142,7 @@ public class TxManagerForRail_RV_LA_WB[K] {K haszero} extends TxManagerForRail[K
         }
         return l;
     }
-    
+*/    
     public def lockAll(id:Long, start:Long, opPerPlace:Long, indices:Rail[Long],readFlags:Rail[Boolean]):void {
         throw new Exception("operation not supported for baseline tx manager");
     }

@@ -132,7 +132,7 @@ public abstract class TxManagerForRail[K] {K haszero} {
     public abstract def validate(id:Long):void ;
     public abstract def commit(id:Long):void ;
     public abstract def abort(id:Long):void;
-    public def getTxCommitLog(id:Long):TxCommitLog { return null; } 
+    public def getTxCommitLog(id:Long):TxCommitLog[K] { return null; } 
     public abstract def lockAll(id:Long, start:Long, opPerPlace:Long, indices:Rail[Long],readFlags:Rail[Boolean]):void;
     public abstract def unlockAll(id:Long, start:Long, opPerPlace:Long, indices:Rail[Long],readFlags:Rail[Boolean]):void;
     
