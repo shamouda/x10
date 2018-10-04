@@ -32,7 +32,7 @@ To use locking, we needed to handle the following:
  - avoid locking the same key twice by remembering all acquired keys
  - maintain the list of acquired keys in the application to unlock them
 */
-public final class ClusteringWithLocksComplex(plh:PlaceLocalHandle[ClusteringState]) implements MasterWorkerApp {
+public final class SSCA2ClusteringLocks(plh:PlaceLocalHandle[ClusteringState]) implements MasterWorkerApp {
     public static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     
     public static struct Color implements Cloneable {
@@ -504,7 +504,7 @@ public final class ClusteringWithLocksComplex(plh:PlaceLocalHandle[ClusteringSta
         val N = graph.numVertices();
 
         val plh = PlaceLocalHandle.make[ClusteringState](Place.places(), ()=>new ClusteringState(graph, places, workers, verbose, clusterSize, g, vp, vt));
-        val app = new ClusteringWithLocksComplex(plh);
+        val app = new SSCA2ClusteringLocks(plh);
         val executor = MasterWorkerExecutor.make(activePlaces, app);
         val distTime = (System.nanoTime()-time)/1e9;
         

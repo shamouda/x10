@@ -27,7 +27,7 @@ import x10.util.GrowableRail;
 //graph generated using the R-MAT algorithm
 //all edge costs are considered equal
 //test command: X10_RESILIENT_VERBOSE=0 TM_DEBUG=0 CONFLICT_SLEEP_MS=0 X10_NUM_IMMEDIATE_THREADS=1 TM=locking X10_RESILIENT_MODE=14 X10_NTHREADS=1 X10_NPLACES=5 ./a.out -w 1 -n 10 -vp 3,1 -sp 2 -vt 0.25,0.8 -vg 1
-public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements MasterWorkerApp {
+public final class SSCA2ClusteringTx(plh:PlaceLocalHandle[SSCA2ClusteringTxState]) implements MasterWorkerApp {
     public static val resilient = x10.xrx.Runtime.RESILIENT_MODE > 0;
     public static val READ_SUB_TX = System.getenv("READ_SUB_TX") != null && System.getenv("READ_SUB_TX").equals("1");
     
@@ -115,7 +115,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
     //otherwise, look v and all its adjacent vertices
     //don't overwrite already taken keys
     private def processVertex(v:Int, placeId:Long, clusterId:Long, tx:Tx,
-            plh:PlaceLocalHandle[ClusteringState], result:GlobalRef[Result{self!=null}]{result.home==here},
+            plh:PlaceLocalHandle[SSCA2ClusteringTxState], result:GlobalRef[Result{self!=null}]{result.home==here},
             store:TxStore):Int {
         val state = plh();
         val graph = state.graph;
@@ -201,7 +201,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
     }
 
     private def createCluster(store:TxStore, tx:Tx, root:Int, placeId:Long, clusterId:Long, 
-            plh:PlaceLocalHandle[ClusteringState], verbose:Int) {
+            plh:PlaceLocalHandle[SSCA2ClusteringTxState], verbose:Int) {
         val result = GlobalRef(new Result());
         val color = tx.get(root);
         if (color == null) {
@@ -217,8 +217,8 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         } //else: the root is taken, end this iteration 
     }
 
-    private def execute(store:TxStore, state:ClusteringState, placeId:Long, workerId:Long, start:Int, end:Int, 
-            plh:PlaceLocalHandle[ClusteringState], verbose:Int, killG:Double) {
+    private def execute(store:TxStore, state:SSCA2ClusteringTxState, placeId:Long, workerId:Long, start:Int, end:Int, 
+            plh:PlaceLocalHandle[SSCA2ClusteringTxState], verbose:Int, killG:Double) {
         val time0 = System.currentTimeMillis();
         val all = end - start;
         if (killG != -1.0)
@@ -460,8 +460,8 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
         }
         graph.compress();
         val N = graph.numVertices();
-        val plh = PlaceLocalHandle.make[ClusteringState](Place.places(), ()=>new ClusteringState(graph, places, workers, verbose, clusterSize, g, vp, vt, vg));
-        val app = new Clustering(plh);
+        val plh = PlaceLocalHandle.make[SSCA2ClusteringTxState](Place.places(), ()=>new SSCA2ClusteringTxState(graph, places, workers, verbose, clusterSize, g, vp, vt, vg));
+        val app = new SSCA2ClusteringTx(plh);
         val executor = MasterWorkerExecutor.make(activePlaces, app);
         val distTime = (System.nanoTime()-time)/1e9;
         
@@ -489,7 +489,7 @@ public final class Clustering(plh:PlaceLocalHandle[ClusteringState]) implements 
     }
 }
 
-class ClusteringState(N:Int) {
+class SSCA2ClusteringTxState(N:Int) {
     val graph:Graph;
     val verbose:Int;
     val places:Long;
