@@ -252,12 +252,14 @@ public final class SSCA2ClusteringLocks(plh:PlaceLocalHandle[ClusteringState]) i
                 if (Place(dest).id == here.id) {
                     for (k in keys) {
                         if (verbose > 1n) Console.OUT.println(here + " Tx["+tx.id+"] dest["+dest+"] key["+k+"]");
+                        if (!success) tx.put(k, null);
                         tx.unlockWrite(k);
                     }
                 } else {
                     at (Place(dest)) async {
                         for (k in keys) {
                             if (verbose > 1n) Console.OUT.println(here + " Tx["+tx.id+"] dest["+dest+"] key["+k+"]");
+                            if (!success) tx.put(k, null);
                             tx.unlockWrite(k);
                         }
                     }
