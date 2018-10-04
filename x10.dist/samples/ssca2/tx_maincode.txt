@@ -1,0 +1,80 @@
+    private def processVertex(v:Int, placeId:Long, clusterId:Long, tx:Tx,
+            plh:PlaceLocalHandle[ClusteringState], result:GlobalRef[Result{self!=null}]{result.home==here}, store:TxStore):Int {
+        val state = plh();
+        val graph = state.graph;
+        val random = state.random;
+        val edgeStart:Int = graph.begin(v);
+        val edgeEnd:Int = graph.end(v);
+        val edgeCount:Int = edgeEnd-edgeStart ;
+        val verticesPerPlace = state.verticesPerPlace;
+        val map = getAdjacentVertecesPlaces(v, edgeStart, edgeEnd, verticesPerPlace, graph, result);
+        finish {
+            Runtime.registerFinishTx(tx, false);
+            val iter = map.keySet().iterator();
+            while (iter.hasNext()) {
+                val dest = iter.next();
+                val vertices = map.getOrThrow(dest);
+                tx.asyncAt(dest, () => {
+                    val locked = new HashSet[Int]();
+                    for (s in vertices) {
+                        val color = tx.get(s);
+                        if (color == null) {
+                            tx.put(s, new Color(placeId, clusterId));
+                            locked.add(s);
+                        }
+                    }
+                    val me = here.id;
+                    at (result) async {
+                        result().addToLockedLast(locked);
+                    }
+                });
+            }
+        }
+        return chooseNextVertex(state.clusterSize, state.random, state.verbose, result, tx.id);
+    }
+    private def chooseNextVertex(clusterSize:Long, random:Random, verbose:Int, 
+            result:GlobalRef[Result{self!=null}]{result.home==here}, txId:Long):Int {
+        var nextV:Int = -1n;
+        val total = result().locked.size() + result().lockedLast.size();
+        if (total < clusterSize && result().lockedLast.size() > 0) {
+            val indx = Math.abs(random.nextInt()) % result().lockedLast.size();
+            var i:Long = 0;
+            for (x in result().lockedLast) {
+                if (i == indx) {
+                    nextV = x;
+                    break;
+                }
+                i++;
+            }
+        }
+        result().merge();
+        return nextV;
+    }
+    private def createCluster(store:TxStore, tx:Tx, root:Int, placeId:Long, clusterId:Long, 
+            plh:PlaceLocalHandle[ClusteringState], verbose:Int) {
+        val result = GlobalRef(new Result());
+        val color = tx.get(root);
+        if (color == null) {
+            tx.put(root, new Color(placeId, clusterId));
+            result().locked.add(root);
+            var nextV:Int = root;
+            while (nextV != -1n) {
+                nextV = processVertex(nextV, placeId, clusterId, tx, plh, result, store);
+            }
+        } //else: the root is taken, end this iteration 
+    }
+    private def execute(store:TxStore, state:ClusteringState, placeId:Long, workerId:Long, start:Int, end:Int, 
+            plh:PlaceLocalHandle[ClusteringState], verbose:Int, killG:Double) {
+        val time0 = System.currentTimeMillis();
+        val all = end - start;
+        var c:Long = 1;
+        for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++c) { 
+            val s = vertexIndex;
+            val clusterId = vertexIndex as Long;
+            val closure = (tx:Tx) => {
+                createCluster(store, tx, s, placeId, clusterId, plh, verbose);
+            };
+            val conf = store.executeTransaction(closure);
+            state.addConflicts(conf);
+        }
+    }

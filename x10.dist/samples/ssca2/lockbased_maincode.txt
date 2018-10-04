@@ -1,0 +1,171 @@
+    private def processVertex(v:Int, placeId:Long, clusterId:Long, tx:TxLocking, 
+            plh:PlaceLocalHandle[ClusteringState], result:GlobalRef[Result{self!=null}]{result.home==here}):Int {
+        val state = plh();
+        val graph = state.graph;
+        val random = state.random;        
+        val edgeStart:Int = graph.begin(v);
+        val edgeEnd:Int = graph.end(v);
+        val edgeCount:Int = edgeEnd-edgeStart ;
+        val verticesPerPlace = state.verticesPerPlace;
+        val map = getAdjacentVertecesPlaces(v, edgeStart, edgeEnd, verticesPerPlace, graph, result);
+        finish {
+            val iter = map.keySet().iterator();
+            while (iter.hasNext()) {
+                val dest = iter.next();
+                val vertices = map.getOrThrow(dest);
+                tx.asyncAt(dest, () => {
+                    var success:Boolean = true;
+                    val locked = new HashSet[Int]();
+                    var failedV:Int = 0n;
+                    for (s in vertices) {
+                        if (!tx.tryLockRead(s)) {
+                            success = false;
+                            failedV = s;
+                            break;
+                        }
+                        val color = tx.get(s);
+                        if (color == null) {
+                            tx.unlockRead(s);
+                            if (!tx.tryLockWrite(s)) {
+                                success = false;
+                                failedV = s;                                
+                                break;
+                            }
+                            val color2 = tx.get(s);
+                            if (color2 == null) {
+                                tx.put(s, new Color(placeId, clusterId));
+                                locked.add(s);                                
+                            } else {
+                                tx.unlockWrite(s);
+                            }
+                        } else {
+                            tx.unlockRead(s);
+                        }
+                    }
+                    if (!success) {
+                        for (s in locked) {
+                            tx.put(s, null);
+                            tx.unlockWrite(s);
+                        }
+                        throw new TxStoreConflictException("["+here+"] failed to lock key["+failedV+"]", here);
+                    } else {
+                        val me = here.id;
+                        at (result) async {
+                            if (locked.size() > 0 ) {
+                                atomic {
+                                    result().lockedLast.put(me, locked);
+                                    result().lockedLastTotal += locked.size();
+                                    result().total += locked.size();
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+        return chooseNextVertex(state.clusterSize, state.random, state.verbose, result, tx.id);
+    }
+    private def chooseNextVertex(clusterSize:Long, random:Random, verbose:Int, 
+            result:GlobalRef[Result{self!=null}]{result.home==here}, txId:Long):Int {
+        var nextV:Int = -1n;
+        if (result().total < clusterSize && result().lockedLastTotal > 0) {
+            val plIndx = Math.abs(random.nextInt()) % result().lockedLast.size();
+            var i:Long = 0;
+            for (e in result().lockedLast.entries()) {
+                if (i == plIndx) {
+                    val tmpLocked = e.getValue();
+                    val indx = Math.abs(random.nextInt()) % tmpLocked.size(); //we pick a random adjacent node
+                    var m:Long = 0;
+                    for (x in tmpLocked) {
+                        if (m == indx) {
+                            nextV = x;
+                            break;
+                        }
+                        m++;
+                    }
+                    break;
+                }
+                i++;
+            }
+        } 
+        result().merge();
+        return nextV;
+    }
+    private def unlockObtainedKeys(result:Result, tx:TxLocking, success:Boolean, verbose:Int) {
+        result.merge();
+        finish {
+            for (e in result.locked.entries()) {
+                val dest = e.getKey(); //physical key
+                val keys = e.getValue();
+                var str:String = "";
+                for (tmp in keys) {
+                    str += tmp + "-";
+                }
+                if (Place(dest).id == here.id) {
+                    for (k in keys) {
+                        if (!success) tx.put(k, null);
+                        tx.unlockWrite(k);
+                    }
+                } else {
+                    at (Place(dest)) async {
+                        for (k in keys) {
+                            if (!success) tx.put(k, null);
+                            tx.unlockWrite(k);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    private def createCluster(store:TxStore, root:Int, placeId:Long, clusterId:Long, 
+            plh:PlaceLocalHandle[ClusteringState], verbose:Int):Long {
+        var success:Boolean = false;
+        var retryCount:Long = 0;
+        while (!success) {
+            val result = GlobalRef(new Result());
+            val tx = store.makeLockingTx();
+            try {
+                if (!tx.tryLockRead(root))
+                    throw new TxStoreConflictException("Failed to lock root ["+root+"]", here); // retry
+                val color = tx.get(root);
+                if (color == null) {
+                    tx.unlockRead(root);
+                    if (!tx.tryLockWrite(root))
+                        throw new TxStoreConflictException("Failed to lock root ["+root+"]", here); // retry
+                    tx.put(root, new Color(placeId, clusterId));
+                    val k = new HashSet[Int]();
+                    k.add(root);
+                    result().locked.put(here.id, k);
+                    result().total = 1;
+                } else {
+                    tx.unlockRead(root); 
+                    return retryCount; //if the root is taken, end this iteration
+                }
+                var nextV:Int = root;
+                while (nextV != -1n) {
+                    nextV = processVertex(nextV, placeId, clusterId, tx, plh, result);
+                }
+                success = true;                
+            } catch (ex:Exception) {
+                success = false;
+                if (TxConfig.CONFLICT_SLEEP_MS > 0){
+                    System.threadSleep(TxConfig.CONFLICT_SLEEP_MS);
+                }
+            }
+            unlockObtainedKeys(result(), tx, success, verbose);
+            retryCount++;
+        }
+        return retryCount;
+    }
+    private def execute(state:ClusteringState, placeId:Long, workerId:Long, start:Int, end:Int, 
+            store:TxStore, plh:PlaceLocalHandle[ClusteringState], verbose:Int) {
+        val time0 = System.currentTimeMillis();
+        val all = end - start;
+        var c:Long = 1;
+        for(var vertexIndex:Int=start; vertexIndex<end; ++vertexIndex, ++c) { 
+            val s:Int = vertexIndex;
+            val clusterId = vertexIndex;
+            val conf = createCluster(store, s, placeId, clusterId, plh, verbose);
+            state.addConflicts(conf);
+        }
+    }
