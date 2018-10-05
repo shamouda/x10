@@ -1,0 +1,131 @@
+public class PageRank implements SPMDResilientIterativeApp {
+    static val CHECKPOINT_INPUT_MATRIX = System.getenv("CHECKPOINT_INPUT_MATRIX") != null && System.getenv("CHECKPOINT_INPUT_MATRIX").equals("1");
+    private val executor:IterativeExecutor;
+    private var plh:PlaceLocalHandle[AppTempData];
+    public def this(
+        this.executor = executor;
+        this.places = executor.activePlaces();
+        this.team = executor.team();
+    }
+    public def getCheckpointData_local():HashMap[String,Cloneable] {
+        val map = new HashMap[String,Cloneable]();
+        if (CHECKPOINT_INPUT_MATRIX && plh().iter == 0) {
+            map.put("G", G.makeSnapshot_local());
+        }
+        map.put("P", P.makeSnapshot_local());
+        map.put("app", plh().makeSnapshot_local());
+        return map;
+    }
+    public def restore_local(restoreDataMap:HashMap[String,Cloneable], lastCheckpointIter:Long) {
+        if (CHECKPOINT_INPUT_MATRIX) {
+            G.restoreSnapshot_local(restoreDataMap.getOrThrow("G"));
+        }
+        P.restoreSnapshot_local(restoreDataMap.getOrThrow("P"));
+        plh().restoreSnapshot_local(restoreDataMap.getOrThrow("app"));
+        if (VERBOSE) Console.OUT.println(here + "Restore succeeded. Restarting from iteration["+plh().iter+"] maxDelta["+plh().maxDelta+"] ...");
+    }
+    public def remake(changes:ChangeDescription, newTeam:Team) {
+        this.places = changes.newActivePlaces;
+        this.team = newTeam;
+        val newRowPs = changes.newActivePlaces.size();
+        val newColPs = 1;
+        G.remake(newRowPs, newColPs, changes.newActivePlaces, newTeam, changes.addedPlaces);
+        P.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
+        GP.remake(G.getAggRowBs(), changes.newActivePlaces, newTeam, changes.addedPlaces);
+        for (sparePlace in changes.addedPlaces) {
+            PlaceLocalHandle.addPlace[AppTempData](plh, sparePlace, ()=>new AppTempData());
+        }
+        if (!CHECKPOINT_INPUT_MATRIX) {
+            if (this.nzd > 0.0f) {
+                G.allocSparseBlocks(this.nzd, changes.addedPlaces);
+                initRandom(G, this.places);
+            } else {
+                initLogRandom(G, this.outDegree, this.places);
+            }
+        }
+    }
+    class AppTempData implements Cloneable, Snapshottable {
+        public var iter:Long;
+        public var maxDelta:ElemType = 1.0 as ElemType;
+        public def this() { }
+        public def this(iter:Long, maxDelta:ElemType) { 
+            this.iter = iter;
+            this.maxDelta = maxDelta;
+        }
+        public def clone():Cloneable {
+            return new AppTempData(iter, maxDelta);
+        }
+        public def makeSnapshot_local() = this;
+        public def restoreSnapshot_local(o:Cloneable) {        
+            val other = o as AppTempData;
+            this.iter = other.iter;
+            this.maxDelta = other.maxDelta;
+        }
+    }
+}
+
+========================No warmpup================================================
+Creating filelist for folder
+Categorizing files.
+Finding a working MD5 command....
+Found a working MD5 command.
+Computing results.
+
+
+SLOC    Directory   SLOC-by-Language (Sorted)
+383     folder          java=383
+
+
+Totals grouped by language (dominant language first):
+java:           383 (100.00%)
+
+
+
+
+Total Physical Source Lines of Code (SLOC)                = 383
+Development Effort Estimate, Person-Years (Person-Months) = 0.07 (0.88)
+ (Basic COCOMO model, Person-Months = 2.4 * (KSLOC**1.05))
+Schedule Estimate, Years (Months)                         = 0.20 (2.38)
+ (Basic COCOMO model, Months = 2.5 * (person-months**0.38))
+Estimated Average Number of Developers (Effort/Schedule)  = 0.37
+Total Estimated Cost to Develop                           = $ 9,863
+ (average salary = $56,286/year, overhead = 2.40).
+SLOCCount, Copyright (C) 2001-2004 David A. Wheeler
+SLOCCount is Open Source Software/Free Software, licensed under the GNU GPL.
+SLOCCount comes with ABSOLUTELY NO WARRANTY, and you are welcome to
+redistribute it under certain conditions as specified by the GNU GPL license;
+see the documentation for details.
+Please credit this data as "generated using David A. Wheeler's 'SLOCCount'."
+
+===================with warmpup==========================================
+Creating filelist for folder
+Categorizing files.
+Finding a working MD5 command....
+Found a working MD5 command.
+Computing results.
+
+
+SLOC    Directory   SLOC-by-Language (Sorted)
+424     folder          java=424
+
+
+Totals grouped by language (dominant language first):
+java:           424 (100.00%)
+
+
+
+
+Total Physical Source Lines of Code (SLOC)                = 424
+Development Effort Estimate, Person-Years (Person-Months) = 0.08 (0.97)
+ (Basic COCOMO model, Person-Months = 2.4 * (KSLOC**1.05))
+Schedule Estimate, Years (Months)                         = 0.21 (2.48)
+ (Basic COCOMO model, Months = 2.5 * (person-months**0.38))
+Estimated Average Number of Developers (Effort/Schedule)  = 0.39
+Total Estimated Cost to Develop                           = $ 10,974
+ (average salary = $56,286/year, overhead = 2.40).
+SLOCCount, Copyright (C) 2001-2004 David A. Wheeler
+SLOCCount is Open Source Software/Free Software, licensed under the GNU GPL.
+SLOCCount comes with ABSOLUTELY NO WARRANTY, and you are welcome to
+redistribute it under certain conditions as specified by the GNU GPL license;
+see the documentation for details.
+Please credit this data as "generated using David A. Wheeler's 'SLOCCount'."

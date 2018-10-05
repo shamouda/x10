@@ -1,0 +1,151 @@
+public class LinearRegression implements SPMDResilientIterativeApp {
+    static val CHECKPOINT_INPUT_MATRIX = System.getenv("CHECKPOINT_INPUT_MATRIX") != null && System.getenv("CHECKPOINT_INPUT_MATRIX").equals("1");
+    var lastCheckpointNorm:ElemType;
+    private val executor:IterativeExecutor;
+    private var plh:PlaceLocalHandle[AppTempData];
+    public def this(X:DistBlockMatrix, y:DistVector(X.M), it:Long, tolerance:Float, 
+        this.executor = executor;
+        this.places = executor.activePlaces();
+        this.team = executor.team();
+    }
+    public def getCheckpointData_local():HashMap[String,Cloneable] {
+        val map = new HashMap[String,Cloneable]();
+        if (CHECKPOINT_INPUT_MATRIX && plh().iter == 0) {
+            map.put("X", X.makeSnapshot_local());
+        }
+        map.put("d_p", d_p.makeSnapshot_local());
+        map.put("d_q", d_q.makeSnapshot_local());
+        map.put("d_r", d_r.makeSnapshot_local());
+        map.put("d_w", d_w.makeSnapshot_local());
+        map.put("app", plh().makeSnapshot_local());
+        return map;
+    }
+    public def restore_local(restoreDataMap:HashMap[String,Cloneable], lastCheckpointIter:Long) {
+        if (CHECKPOINT_INPUT_MATRIX) {
+            X.restoreSnapshot_local(restoreDataMap.getOrThrow("X"));
+        }
+        d_p.restoreSnapshot_local(restoreDataMap.getOrThrow("d_p"));
+        d_q.restoreSnapshot_local(restoreDataMap.getOrThrow("d_q"));
+        d_r.restoreSnapshot_local(restoreDataMap.getOrThrow("d_r"));
+        d_w.restoreSnapshot_local(restoreDataMap.getOrThrow("d_w"));
+        plh().restoreSnapshot_local(restoreDataMap.getOrThrow("app"));        
+    }
+    public def remake(changes:ChangeDescription, newTeam:Team) {
+        this.team = newTeam;
+        this.places = changes.newActivePlaces;
+        val newRowPs = changes.newActivePlaces.size();
+        val newColPs = 1;
+        X.remake(newRowPs, newColPs, changes.newActivePlaces, newTeam, changes.addedPlaces);
+        d_p.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
+        d_q.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
+        d_r.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
+        d_w.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
+        Xp.remake(X.getAggRowBs(), changes.newActivePlaces, newTeam, changes.addedPlaces);
+        y.remake(X.getAggRowBs(), changes.newActivePlaces, newTeam, changes.addedPlaces);
+        for (sparePlace in changes.addedPlaces){
+            if (VERBOSE) Console.OUT.println("Adding place["+sparePlace+"] to plh ...");
+            PlaceLocalHandle.addPlace[AppTempData](plh, sparePlace, ()=>new AppTempData());
+        }
+        if (!CHECKPOINT_INPUT_MATRIX) {
+            if (featuresFile == null){
+                if (this.nzd < LinearRegression.MAX_SPARSE_DENSITY) {
+                    X.allocSparseBlocks(this.nzd, changes.addedPlaces);
+                } else {
+                    X.allocDenseBlocks(changes.addedPlaces);
+                }
+                initRandom(X, y, places);
+            } else {
+                initFromFile(X, y, null, featuresFile, labelsFile, places);
+            }
+        }
+    }
+    class AppTempData implements Cloneable, Snapshottable {
+        public var norm_r2:ElemType = 1.0 as ElemType;
+        public var norm_r2_initial:ElemType;
+        public var norm_r2_target:ElemType = 0.0 as ElemType;
+        public var iter:Long;
+        public def this() { }
+        def this(norm_r2:ElemType, norm_r2_initial:ElemType, norm_r2_target:ElemType, iter:Long) {
+            this.norm_r2 = norm_r2;
+            this.norm_r2_initial = norm_r2_initial;
+            this.norm_r2_target = norm_r2_target;
+            this.iter = iter;
+        }
+        public def clone():Cloneable {
+            return new AppTempData(norm_r2, norm_r2_initial, norm_r2_target, iter);
+        }
+        public def makeSnapshot_local() = this;
+        public def restoreSnapshot_local(o:Cloneable) {
+            val other = o as AppTempData;
+            this.norm_r2 = other.norm_r2;
+            this.norm_r2_initial = other.norm_r2_initial;
+            this.norm_r2_target = other.norm_r2_target;
+            this.iter = other.iter;
+        }
+    }
+}
+==================no warmup===================================
+Creating filelist for folder
+Categorizing files.
+Finding a working MD5 command....
+Found a working MD5 command.
+Computing results.
+
+
+SLOC    Directory   SLOC-by-Language (Sorted)
+414     folder          java=414
+
+
+Totals grouped by language (dominant language first):
+java:           414 (100.00%)
+
+
+
+
+Total Physical Source Lines of Code (SLOC)                = 414
+Development Effort Estimate, Person-Years (Person-Months) = 0.08 (0.95)
+ (Basic COCOMO model, Person-Months = 2.4 * (KSLOC**1.05))
+Schedule Estimate, Years (Months)                         = 0.20 (2.45)
+ (Basic COCOMO model, Months = 2.5 * (person-months**0.38))
+Estimated Average Number of Developers (Effort/Schedule)  = 0.39
+Total Estimated Cost to Develop                           = $ 10,703
+ (average salary = $56,286/year, overhead = 2.40).
+SLOCCount, Copyright (C) 2001-2004 David A. Wheeler
+SLOCCount is Open Source Software/Free Software, licensed under the GNU GPL.
+SLOCCount comes with ABSOLUTELY NO WARRANTY, and you are welcome to
+redistribute it under certain conditions as specified by the GNU GPL license;
+see the documentation for details.
+Please credit this data as "generated using David A. Wheeler's 'SLOCCount'."
+
+=================with warmpup=================================
+Creating filelist for folder
+Categorizing files.
+Finding a working MD5 command....
+Found a working MD5 command.
+Computing results.
+
+
+SLOC    Directory   SLOC-by-Language (Sorted)
+455     folder          java=455
+
+
+Totals grouped by language (dominant language first):
+java:           455 (100.00%)
+
+
+
+
+Total Physical Source Lines of Code (SLOC)                = 455
+Development Effort Estimate, Person-Years (Person-Months) = 0.09 (1.05)
+ (Basic COCOMO model, Person-Months = 2.4 * (KSLOC**1.05))
+Schedule Estimate, Years (Months)                         = 0.21 (2.55)
+ (Basic COCOMO model, Months = 2.5 * (person-months**0.38))
+Estimated Average Number of Developers (Effort/Schedule)  = 0.41
+Total Estimated Cost to Develop                           = $ 11,818
+ (average salary = $56,286/year, overhead = 2.40).
+SLOCCount, Copyright (C) 2001-2004 David A. Wheeler
+SLOCCount is Open Source Software/Free Software, licensed under the GNU GPL.
+SLOCCount comes with ABSOLUTELY NO WARRANTY, and you are welcome to
+redistribute it under certain conditions as specified by the GNU GPL license;
+see the documentation for details.
+Please credit this data as "generated using David A. Wheeler's 'SLOCCount'."

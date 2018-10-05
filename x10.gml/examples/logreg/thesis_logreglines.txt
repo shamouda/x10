@@ -1,0 +1,177 @@
+public class LogisticRegression(N:Long /*nrow (X)*/, D:Long /*ncol (X)*/) implements SPMDResilientIterativeApp {
+    static val CHECKPOINT_INPUT_MATRIX = System.getenv("CHECKPOINT_INPUT_MATRIX") != null && System.getenv("CHECKPOINT_INPUT_MATRIX").equals("1");
+    private var plh:PlaceLocalHandle[AppTempData];
+    private val executor:IterativeExecutor;
+    public def this(N:Long, D:Long, x_:DistBlockMatrix, y:DistVector, it:Int, nit:Int, nzd:Float, reg:Float, bias:Boolean, 
+        this.executor = executor;
+        this.places = executor.activePlaces();
+        this.team = executor.team();
+    }
+    public def getCheckpointData_local() {
+        val map = new HashMap[String,Cloneable]();
+        if (plh().iter == 1) {
+            if (CHECKPOINT_INPUT_MATRIX){
+                map.put("X", X.makeSnapshot_local());
+            }
+            map.put("y", y.makeSnapshot_local());
+            map.put("lambda", lambda.makeSnapshot_local());
+        }
+        map.put("B", B.makeSnapshot_local());
+        map.put("P", P.makeSnapshot_local());
+        map.put("Grad", Grad.makeSnapshot_local());
+        map.put("app", plh().makeSnapshot_local());
+        return map;
+    }
+    public def restore_local(restoreDataMap:HashMap[String,Cloneable], lastCheckpointIter:Long) {
+        if (CHECKPOINT_INPUT_MATRIX) {
+            X.restoreSnapshot_local(restoreDataMap.getOrThrow("X"));
+        }
+        y.restoreSnapshot_local(restoreDataMap.getOrThrow("y"));
+        lambda.restoreSnapshot_local(restoreDataMap.getOrThrow("lambda"));
+        B.restoreSnapshot_local(restoreDataMap.getOrThrow("B"));
+        P.restoreSnapshot_local(restoreDataMap.getOrThrow("P"));
+        Grad.restoreSnapshot_local(restoreDataMap.getOrThrow("Grad"));
+        plh().restoreSnapshot_local(restoreDataMap.getOrThrow("app"));
+    }
+    public def remake(changes:ChangeDescription, newTeam:Team) {
+        this.team = newTeam;
+        this.places = changes.newActivePlaces;
+        val newRowPs = changes.newActivePlaces.size();        
+        val newColPs = 1;
+        X.remake(newRowPs, newColPs, changes.newActivePlaces, newTeam, changes.addedPlaces);
+        val rowBs = X.getAggRowBs();
+        B.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
+        tmpDup.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
+        lambda.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
+        Grad.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
+        S.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
+        R.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
+        V.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
+        HV.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
+        Snew.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
+        Bnew.remake(changes.newActivePlaces, newTeam, changes.addedPlaces);
+        y.remake(rowBs, changes.newActivePlaces, newTeam, changes.addedPlaces);
+        Q.remake(rowBs, changes.newActivePlaces, newTeam, changes.addedPlaces); 
+        P.remake(rowBs, changes.newActivePlaces, newTeam, changes.addedPlaces);
+        Pnew.remake(rowBs, changes.newActivePlaces, newTeam, changes.addedPlaces); 
+        tmpDist.remake(rowBs, changes.newActivePlaces, newTeam, changes.addedPlaces); 
+        LT1.remake(rowBs, changes.newActivePlaces, newTeam, changes.addedPlaces); 
+        LT2.remake(rowBs, changes.newActivePlaces, newTeam, changes.addedPlaces); 
+        for (sparePlace in changes.addedPlaces){
+            PlaceLocalHandle.addPlace[AppTempData](plh, sparePlace, ()=>new AppTempData());
+        }
+        if (!CHECKPOINT_INPUT_MATRIX) {
+            if (featuresFile == null){
+                if (this.nzd < LogisticRegression.MAX_SPARSE_DENSITY) {
+                    X.allocSparseBlocks(this.nzd, changes.addedPlaces);
+                } else {
+                    X.allocDenseBlocks(changes.addedPlaces);
+                }
+                initRandom(X, y, places);
+            } else {
+                initFromFile(X, y, null, featuresFile, labelsFile, places);
+            }
+        }
+    }
+    class AppTempData implements Cloneable, Snapshottable {
+        public var delta:ElemType;
+        public var obj:ElemType;
+        public var norm_Grad:ElemType;
+        public var norm_Grad_initial:ElemType;
+        public var norm_R2:ElemType;
+        public var iter:Long;        
+        public var converge:Boolean;
+        public def this() { 
+        }
+        def this(delta:ElemType, iter:Long, obj:ElemType, norm_Grad:ElemType, norm_Grad_initial:ElemType, norm_R2:ElemType, converge:Boolean) {
+            this.delta = delta;
+            this.iter = iter;
+            this.obj = obj;
+            this.norm_Grad = norm_Grad;
+            this.norm_Grad_initial = norm_Grad_initial;
+            this.norm_R2 = norm_R2;
+            this.converge = converge;
+        }
+        public def clone():Cloneable {
+            return new AppTempData(delta, iter, obj, norm_Grad, norm_Grad_initial, norm_R2, converge);
+        }
+        public def makeSnapshot_local() = this;
+        public def restoreSnapshot_local(o:Cloneable) {
+            val other = o as AppTempData;
+            this.delta = other.delta;
+            this.iter = other.iter;
+            this.obj = other.obj;
+            this.norm_Grad = other.norm_Grad;
+            this.norm_Grad_initial = other.norm_Grad_initial;
+            this.norm_R2 = other.norm_R2;
+            this.converge = other.converge;
+        }
+    }
+}
+
+===================== no warmpup ============================
+Creating filelist for folder
+Categorizing files.
+Finding a working MD5 command....
+Found a working MD5 command.
+Computing results.
+
+
+SLOC    Directory   SLOC-by-Language (Sorted)
+585     folder          java=585
+
+
+Totals grouped by language (dominant language first):
+java:           585 (100.00%)
+
+
+
+
+Total Physical Source Lines of Code (SLOC)                = 585
+Development Effort Estimate, Person-Years (Person-Months) = 0.11 (1.37)
+ (Basic COCOMO model, Person-Months = 2.4 * (KSLOC**1.05))
+Schedule Estimate, Years (Months)                         = 0.23 (2.82)
+ (Basic COCOMO model, Months = 2.5 * (person-months**0.38))
+Estimated Average Number of Developers (Effort/Schedule)  = 0.49
+Total Estimated Cost to Develop                           = $ 15,387
+ (average salary = $56,286/year, overhead = 2.40).
+SLOCCount, Copyright (C) 2001-2004 David A. Wheeler
+SLOCCount is Open Source Software/Free Software, licensed under the GNU GPL.
+SLOCCount comes with ABSOLUTELY NO WARRANTY, and you are welcome to
+redistribute it under certain conditions as specified by the GNU GPL license;
+see the documentation for details.
+Please credit this data as "generated using David A. Wheeler's 'SLOCCount'."
+
+
+================with warmpup=============================
+Creating filelist for folder
+Categorizing files.
+Finding a working MD5 command....
+Found a working MD5 command.
+Computing results.
+
+
+SLOC    Directory   SLOC-by-Language (Sorted)
+626     folder          java=626
+
+
+Totals grouped by language (dominant language first):
+java:           626 (100.00%)
+
+
+
+
+Total Physical Source Lines of Code (SLOC)                = 626
+Development Effort Estimate, Person-Years (Person-Months) = 0.12 (1.47)
+ (Basic COCOMO model, Person-Months = 2.4 * (KSLOC**1.05))
+Schedule Estimate, Years (Months)                         = 0.24 (2.89)
+ (Basic COCOMO model, Months = 2.5 * (person-months**0.38))
+Estimated Average Number of Developers (Effort/Schedule)  = 0.51
+Total Estimated Cost to Develop                           = $ 16,521
+ (average salary = $56,286/year, overhead = 2.40).
+SLOCCount, Copyright (C) 2001-2004 David A. Wheeler
+SLOCCount is Open Source Software/Free Software, licensed under the GNU GPL.
+SLOCCount comes with ABSOLUTELY NO WARRANTY, and you are welcome to
+redistribute it under certain conditions as specified by the GNU GPL license;
+see the documentation for details.
+Please credit this data as "generated using David A. Wheeler's 'SLOCCount'."
